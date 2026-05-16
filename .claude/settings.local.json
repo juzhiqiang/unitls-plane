@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun install *)",
+      "Bash(bunx turbo *)",
+      "Bash(bun run *)",
+      "Bash(docker compose up *)",
+      "Bash(docker compose ps *)"
+    ]
+  }
+}

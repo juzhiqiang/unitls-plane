@@ -1,0 +1,13 @@
+{
+  "name": "@utils-plane/validators",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "clean": "rm -rf dist"
+  }
+}

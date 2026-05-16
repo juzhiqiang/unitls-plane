@@ -11,7 +11,7 @@
 | 类别 | 选型 | 理由 |
 |------|------|------|
 | 工具 | **Turborepo** | 增量构建、任务编排、缓存最优 |
-| 包管理 | **pnpm** | Workspace 原生支持、节省磁盘 |
+| 包管理 | **Bun** | 内建 workspace 支持、安装速度最快、统一运行时 |
 
 ### 前端 (apps/web)
 
@@ -110,8 +110,7 @@ utils-plane/
 │   └── utils/                      # 通用工具函数
 │
 ├── turbo.json
-├── pnpm-workspace.yaml
-└── package.json
+└── package.json                # workspaces 字段定义 monorepo 结构
 ```
 
 ---
@@ -266,7 +265,7 @@ tasks: {
 ## 六、实施计划
 
 ### Phase 1: Monorepo + 基础设施 (2天)
-- [ ] 初始化 Turborepo + pnpm workspace
+- [ ] 初始化 Turborepo + Bun workspace
 - [ ] 创建 packages/db — Drizzle Schema + migration
 - [ ] 创建 packages/validators — Zod schemas
 - [ ] 配置共享 TypeScript、ESLint、Prettier
@@ -322,7 +321,7 @@ tasks: {
 
 | 层级 | 技术 |
 |------|------|
-| Monorepo | Turborepo + pnpm |
+| Monorepo | Turborepo + Bun workspaces |
 | 前端框架 | Next.js 15 + React 19 |
 | UI | Tailwind CSS 4 + shadcn/ui |
 | 状态管理 | Zustand |

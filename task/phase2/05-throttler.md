@@ -1,12 +1,12 @@
 # 05 - Rate Limiting (Throttler)
 
-> 依赖：01-nestjs-init、Phase 1 / 06-upstash
+> 依赖：01-nestjs-init、Phase 1 / 05-docker-services
 > 预估：1.5h
 > 可并行：与 02/03/04/06/08 同时执行
 
 ## 目标
 
-使用 @nestjs/throttler + Upstash Redis 实现 API 限流，按 IP + User ID 双维度。
+使用 @nestjs/throttler + 本地 Redis 实现 API 限流，按 IP + User ID 双维度。
 
 ## 步骤
 
@@ -32,8 +32,7 @@ export const throttleConfig = ThrottlerModule.forRootAsync({
       { name: 'authenticated', ttl: 60_000, limit: 60 },
     ],
     storage: new ThrottlerStorageRedisService(
-      new Redis(process.env.UPSTASH_REDIS_URL!, {
-        tls: {},
+      new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
         maxRetriesPerRequest: 3,
       }),
     ),
@@ -89,4 +88,4 @@ export class AppModule {}
 - [ ] 匿名超过 10 次/分钟 → 429
 - [ ] 登录用户超过 60 次/分钟 → 429
 - [ ] 限流 Header 正确返回
-- [ ] Upstash Redis 中能看到限流 key
+- [ ] 本地 Redis 中能看到限流 key（`docker exec utils-redis redis-cli KEYS '*'`）

@@ -1,12 +1,12 @@
-# 04 - Supabase JWT Auth Guard
+# 04 - Better-Auth 集成（Auth Guard）
 
-> 依赖：01-nestjs-init
+> 依赖：01-nestjs-init、Phase 1 / 06-better-auth
 > 预估：2h
 > 可并行：与 02/03/05/06/08 同时执行
 
 ## 目标
 
-实现 Auth Guard 验证前端传来的 Supabase JWT，注入 user 到 request。
+在 NestJS 集成 Better-Auth：暴露 auth handler 路由、实现 Guard 验证 session。
 
 ## 步骤
 
@@ -14,29 +14,58 @@
 
 ```bash
 cd apps/api
-bun add @supabase/supabase-js
+bun add better-auth @utils-plane/auth
 ```
 
-### 4.2 创建 Supabase 客户端
+### 4.2 暴露 Better-Auth Handler
 
-`apps/api/src/lib/supabase.ts`:
+Better-Auth 把所有 auth 路由统一挂在 `/api/auth/*`，由后端转发给 better-auth 处理。
+
+`apps/api/src/modules/auth/auth.controller.ts`:
 ```typescript
-import { createClient } from '@supabase/supabase-js';
+import { All, Controller, Req, Res } from '@nestjs/common';
+import { Request, Response } from 'express';
+import { auth } from '@utils-plane/auth';
+import { Public } from '../../common/decorators/public.decorator';
 
-export const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } },
-);
+@Controller('api/auth')
+@Public()
+export class AuthController {
+  @All('*')
+  async handle(@Req() req: Request, @Res() res: Response) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const request = new Request(url, {
+      method: req.method,
+      headers: req.headers as any,
+      body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body),
+    });
+
+    const response = await auth.handler(request);
+
+    // 转发响应
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.status(response.status);
+    const body = await response.text();
+    res.send(body);
+  }
+}
 ```
 
-### 4.3 创建 Auth Guard
+`apps/api/src/modules/auth/auth.module.ts`:
+```typescript
+@Module({
+  controllers: [AuthController],
+})
+export class AuthModule {}
+```
+
+### 4.3 实现 AuthGuard
 
 `apps/api/src/common/guards/auth.guard.ts`:
 ```typescript
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { supabase } from '../../lib/supabase';
+import { auth } from '@utils-plane/auth';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
@@ -50,32 +79,28 @@ export class AuthGuard implements CanActivate {
     ]);
 
     const request = context.switchToHttp().getRequest();
-    const token = this.extractToken(request);
 
-    // 匿名访问支持（部分接口允许）
-    if (!token) {
+    // 将 express headers 转成 Headers 对象
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (typeof value === 'string') headers.set(key, value);
+    }
+
+    const session = await auth.api.getSession({ headers });
+
+    if (!session) {
       if (isPublic) return true;
-      throw new UnauthorizedException('Missing token');
+      throw new UnauthorizedException('Not authenticated');
     }
 
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data.user) {
-      if (isPublic) return true;  // public 接口即使 token 无效也放行
-      throw new UnauthorizedException('Invalid token');
-    }
-
-    request.user = data.user;
+    request.user = session.user;
+    request.session = session.session;
     return true;
-  }
-
-  private extractToken(request: any): string | undefined {
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
-    return type === 'Bearer' ? token : undefined;
   }
 }
 ```
 
-### 4.4 创建 @Public 装饰器
+### 4.4 @Public 装饰器
 
 `apps/api/src/common/decorators/public.decorator.ts`:
 ```typescript
@@ -84,28 +109,28 @@ export const IS_PUBLIC_KEY = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 ```
 
-### 4.5 创建 @CurrentUser 装饰器
+### 4.5 @CurrentUser 装饰器
 
-`apps/api/src/common/decorators/current-user.decorator.ts`:
 ```typescript
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { User } from '@utils-plane/auth';
 
 export const CurrentUser = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
-    return request.user;  // 可能为 undefined（匿名）
+  (data: unknown, ctx: ExecutionContext): User | undefined => {
+    return ctx.switchToHttp().getRequest().user;
   },
 );
 ```
 
-### 4.6 全局应用 Guard
+### 4.6 全局注册
 
 `apps/api/src/app.module.ts`:
 ```typescript
 import { APP_GUARD } from '@nestjs/core';
-import { AuthGuard } from './common/guards/auth.guard';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, /* ... */],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
@@ -113,9 +138,25 @@ import { AuthGuard } from './common/guards/auth.guard';
 export class AppModule {}
 ```
 
+### 4.7 CORS 配置（重要）
+
+Better-Auth 用 cookie 鉴权，前端跨域请求必须带 cookie：
+
+`apps/api/src/main.ts`:
+```typescript
+app.enableCors({
+  origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
+  credentials: true,  // ★ 必须
+});
+```
+
+前端调 fetch 时也必须 `credentials: 'include'`。
+
 ## 验收标准
 
-- [ ] 无 token 访问受保护接口 → 401
-- [ ] 无效 token → 401
-- [ ] 有效 token → request.user 可用
+- [ ] `POST /api/auth/sign-up/email` 创建用户成功
+- [ ] `POST /api/auth/sign-in/email` 返回 session cookie
+- [ ] 受保护接口无 cookie → 401
+- [ ] 携带 session cookie 访问 → 返回用户数据
 - [ ] @Public() 装饰的接口允许匿名访问
+- [ ] OAuth redirect 流程能完整跑通

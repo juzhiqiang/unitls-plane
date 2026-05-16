@@ -1,6 +1,6 @@
 # Utils-Plane 工具平台架构设计
 
-> Monorepo + React 19 + NestJS + Bun
+> Monorepo + React 19 + NestJS + Bun + 全本地化
 
 ---
 
@@ -20,7 +20,7 @@
 | 框架 | **Next.js 15 (App Router)** | React 19 原生支持 Server Components |
 | UI | **Tailwind CSS 4 + shadcn/ui** | 高定制性 |
 | 状态 | **Zustand** | 轻量 |
-| 部署 | **Vercel** | Next.js 原生支持 |
+| 部署 | **自托管 (Docker)** | 灵活、无 vendor lock-in |
 
 ### 后端 (apps/api)
 
@@ -29,13 +29,13 @@
 | 框架 | **NestJS** | 模块化、DI、Guards、Swagger 自动生成 |
 | 运行时 | **Bun** | 启动快 4-5x、原生 TS、内建测试 |
 | ORM | **Drizzle ORM** | 轻量、类型安全 |
-| 数据库 | **PostgreSQL (Supabase)** | 免费 tier + 存储 |
-| 认证 | **Supabase Auth** | OAuth 支持 |
-| 文件存储 | **Supabase Storage** | S3 兼容、CDN 加速 |
-| 任务队列 | **Bull/BullMQ** | NestJS 原生集成、自托管 Redis |
-| 缓存/限流 | **Upstash Redis** | Serverless Redis、免费 tier |
+| 数据库 | **PostgreSQL 16 (本地 Docker)** | 自托管、零成本、完全可控 |
+| 认证 | **Better-Auth** | TS 原生、内建 OAuth、Drizzle 适配 |
+| 文件存储 | **MinIO (本地 Docker)** | S3 兼容、自托管、可与 SDK 复用 |
+| 任务队列 | **Bull/BullMQ** | NestJS 原生集成 |
+| 缓存/限流 | **Redis 7 (本地 Docker)** | 自托管、零成本 |
 | API 文档 | **Swagger** | NestJS 自动生成 |
-| 部署 | **Railway** | 长驻进程、Docker 支持、无执行时间限制 |
+| 部署 | **Docker Compose** | 一键启停、生产可用 |
 
 ### 文件处理引擎
 
@@ -54,7 +54,7 @@
 ```
 utils-plane/
 ├── apps/
-│   ├── web/                        # Next.js 15 前端 (Vercel)
+│   ├── web/                        # Next.js 15 前端
 │   │   └── src/
 │   │       ├── app/
 │   │       │   ├── (marketing)/        # 落地页（SEO）
@@ -63,54 +63,48 @@ utils-plane/
 │   │       │   │   ├── pdf/
 │   │       │   │   ├── font/
 │   │       │   │   └── dashboard/
-│   │       │   └── api/auth/           # Auth callback
+│   │       │   ├── (auth)/             # 登录/注册
+│   │       │   └── api/auth/[...all]/  # Better-Auth handler
 │   │       ├── components/
-│   │       │   ├── ui/                 # shadcn 组件
-│   │       │   ├── tools/              # 工具专用组件
-│   │       │   └── layout/
 │   │       ├── lib/
-│   │       │   ├── supabase.ts         # Supabase 客户端
+│   │       │   ├── auth.ts             # Better-Auth client
 │   │       │   ├── api-client.ts       # 后端 API 封装
 │   │       │   └── processing/         # 客户端文件处理
 │   │       └── hooks/
 │   │
-│   └── api/                        # NestJS 后端 (Bun, Railway)
+│   └── api/                        # NestJS 后端 (Bun)
 │       └── src/
-│           ├── main.ts                 # Bun 入口
-│           ├── app.module.ts           # 根模块
+│           ├── main.ts
+│           ├── app.module.ts
 │           ├── common/
 │           │   ├── guards/auth.guard.ts
-│           │   ├── interceptors/
 │           │   └── filters/http-exception.filter.ts
 │           ├── modules/
-│           │   ├── files/              # 文件模块
-│           │   │   ├── files.module.ts
+│           │   ├── auth/               # Better-Auth handler 路由
+│           │   ├── files/              # 文件 + MinIO
 │           │   │   ├── files.controller.ts
 │           │   │   ├── files.service.ts
-│           │   │   └── dto/
-│           │   ├── tasks/              # 任务模块
-│           │   │   ├── tasks.module.ts
-│           │   │   ├── tasks.controller.ts
+│           │   │   └── minio.service.ts
+│           │   ├── tasks/              # 任务 + BullMQ
 │           │   │   ├── tasks.service.ts
-│           │   │   └── processors/     # Bull 处理器
-│           │   │       ├── image.processor.ts
-│           │   │       ├── pdf.processor.ts
-│           │   │       └── font.processor.ts
-│           │   ├── users/              # 用户模块
-│           │   └── health/             # 健康检查
+│           │   │   └── processors/
+│           │   ├── users/
+│           │   └── health/
 │           └── config/
-│               ├── supabase.config.ts
+│               ├── auth.config.ts      # Better-Auth 配置
 │               ├── bull.config.ts
 │               └── throttle.config.ts
 │
 ├── packages/
 │   ├── db/                         # Drizzle Schema + migrations
-│   ├── validators/                 # Zod schemas（前后端共享）
-│   ├── api-client/                 # 类型安全 API 客户端（openapi-fetch）
-│   └── utils/                      # 通用工具函数
+│   ├── auth/                       # Better-Auth 配置共享
+│   ├── validators/                 # Zod schemas
+│   ├── api-client/                 # 类型安全 API 客户端
+│   └── utils/                      # 通用工具
 │
+├── docker-compose.yml              # 本地 PG + Redis + MinIO
 ├── turbo.json
-└── package.json                # workspaces 字段定义 monorepo 结构
+└── package.json                    # workspaces 字段
 ```
 
 ---
@@ -119,41 +113,44 @@ utils-plane/
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│              Next.js 15 (Vercel)                         │
+│              Next.js 15 (Docker / Vercel)                │
 │  ┌───────────────────────────────────────────────────┐  │
-│  │  Server Components — 页面渲染、SEO、数据预取       │  │
+│  │  Server Components — 页面渲染、SEO                 │  │
 │  └───────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  Client Components — 工具 UI、客户端处理（< 5MB）  │  │
+│  └───────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Better-Auth Client (cookie-based session)        │  │
 │  └───────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────┘
                          │ packages/api-client (类型安全)
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              NestJS + Bun (Railway)                      │
+│              NestJS + Bun (Docker)                       │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │  │ Auth Guard  │  │ Throttler   │  │ CORS        │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘    │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │  Modules: Files / Tasks / Users / Health        │    │
+│  │  Modules: Auth / Files / Tasks / Users / Health │    │
 │  └─────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │  Services: Sharp, pdf-lib, fonteditor-core      │    │
 │  └─────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │  Bull/BullMQ Processors (异步重计算)             │    │
+│  │  Bull/BullMQ Processors                          │    │
 │  └─────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │  Swagger (自动 API 文档)                         │    │
+│  │  Swagger (自动 API 文档)                          │    │
 │  └─────────────────────────────────────────────────┘    │
-└───────────┬──────────────┬──────────────┬───────────────┘
-            │              │              │
-            ▼              ▼              ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Supabase   │  │  Supabase   │  │  Upstash    │
-│  Auth       │  │  DB + Store │  │  Redis      │
-│  (OAuth)    │  │  (PG + S3)  │  │(限流+队列) │
-└─────────────┘  └─────────────┘  └─────────────┘
+└──────┬──────────────┬─────────────────┬─────────────────┘
+       │              │                  │
+       ▼              ▼                  ▼
+┌────────────┐  ┌────────────┐  ┌────────────┐
+│ PostgreSQL │  │  Redis 7   │  │   MinIO    │
+│  16 (Docker│  │  (Docker)  │  │  (Docker)  │
+│  Volume)   │  │  限流+队列 │  │ S3 兼容存储│
+└────────────┘  └────────────┘  └────────────┘
 ```
 
 ---
@@ -165,16 +162,16 @@ utils-plane/
 | 文件大小 | 处理方式 | 优势 |
 |----------|----------|------|
 | < 5MB | **客户端优先** | 即时响应、无需上传、隐私保护 |
-| 5-50MB | **用户选择** | 客户端省流量 vs 服务端更专业压缩 |
+| 5-50MB | **用户选择** | 客户端省流量 vs 服务端更专业 |
 | > 50MB | **强制服务端** | 浏览器内存限制、稳定性 |
 
-### 2. 任务队列设计 (Bull/BullMQ)
+### 2. 任务队列设计 (Bull/BullMQ + 本地 Redis)
 
 ```
 用户上传文件 → 客户端切片/压缩 →
   ├─ 小文件: 本地处理 → 完成
-  └─ 大文件: 上传至 Supabase Storage →
-              创建 Bull Job (image-queue / pdf-queue / font-queue) →
+  └─ 大文件: 上传至 MinIO →
+              创建 Bull Job (image/pdf/font queue) →
               Processor 处理 →
               进度上报 (job.progress()) →
               前端轮询状态 →
@@ -187,22 +184,33 @@ utils-plane/
 - 定时清理：Repeatable Job 每小时清理过期文件
 ```
 
-### 3. Rate Limiting
+### 3. 认证方案 (Better-Auth)
 
 ```
-- @nestjs/throttler + Upstash Redis 存储
+- Email/Password 注册 + 邮箱验证
+- OAuth: Google, GitHub
+- 会话存储：cookie (httpOnly, secure)
+- 会话数据：本地 PostgreSQL（与业务数据同库）
+- 前端：useSession hook
+- 后端：JWT 或 session cookie 验证（Guard 拦截）
+```
+
+### 4. Rate Limiting
+
+```
+- @nestjs/throttler + 本地 Redis 存储
 - 匿名用户：10 次/分钟，单文件 ≤ 10MB
 - 登录用户：60 次/分钟，单文件 ≤ 50MB
 - 按 IP + User ID 双维度限流
 ```
 
-### 4. 文件清理策略
+### 5. 文件清理策略
 
 ```
 - 匿名上传：expires_at = created_at + 24h
 - 登录用户：永久保存（除非手动删除）
 - Bull Repeatable Job：每小时扫描 expires_at < now()
-  → 删除 Supabase Storage 文件 + 更新 DB 记录
+  → 删除 MinIO 对象 + 更新 DB 记录
 ```
 
 ---
@@ -212,28 +220,33 @@ utils-plane/
 ```typescript
 // packages/db/schema.ts (Drizzle ORM)
 
-// 用户表
+// 用户表（Better-Auth 管理）
 users: {
-  id: uuid (PK)
-  email: string (UNIQUE, NOT NULL)
-  name: string
-  avatar_url: string?
-  plan: 'free' | 'pro'              // 预留付费
-  created_at: timestamp
-  updated_at: timestamp
+  id: text (PK, cuid)
+  email: text (UNIQUE, NOT NULL)
+  emailVerified: boolean
+  name: text
+  image: text?
+  plan: 'free' | 'pro'              // 业务字段
+  role: 'user' | 'admin'
+  createdAt: timestamp
+  updatedAt: timestamp
 }
+
+// Better-Auth 还会自动创建：sessions, accounts, verifications 表
 
 // 文件表
 files: {
   id: uuid (PK)
-  user_id: uuid? (FK → users)       // 匿名上传为 null
+  user_id: text? (FK → users)       // 匿名上传为 null
   filename: string (NOT NULL)
   original_size: bigint
-  storage_key: string (NOT NULL)     // Supabase Storage 路径
+  storage_key: string (NOT NULL)     // MinIO object key
+  bucket: string (DEFAULT 'uploads')
   mime_type: string (NOT NULL)
-  metadata: jsonb                    // 图片尺寸、PDF页数等
-  expires_at: timestamp?             // 匿名文件过期时间 (24h)
-  deleted_at: timestamp?             // 软删除
+  metadata: jsonb
+  expires_at: timestamp?
+  deleted_at: timestamp?
   created_at: timestamp
   updated_at: timestamp
 }
@@ -243,14 +256,14 @@ files: {
 // 任务表
 tasks: {
   id: uuid (PK)
-  user_id: uuid? (FK → users)
+  user_id: text? (FK → users)
   type: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'font_convert'
   status: 'pending' | 'processing' | 'completed' | 'failed'
-  input_file_ids: uuid[]             // 支持多文件输入（PDF合并等）
-  input_config: jsonb                // 处理参数
+  input_file_ids: uuid[]
+  input_config: jsonb
   output_file_id: uuid? (FK → files)
   progress: smallint (0-100)
-  error_code: string?                // 结构化错误码（前端可国际化）
+  error_code: string?
   error_message: string?
   retry_count: smallint DEFAULT 0
   created_at: timestamp
@@ -262,62 +275,112 @@ tasks: {
 
 ---
 
-## 六、实施计划
+## 六、本地开发环境（docker-compose.yml）
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: utils
+      POSTGRES_PASSWORD: utils
+      POSTGRES_DB: utils_plane
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U utils"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
+```
+
+启停命令：
+```bash
+docker compose up -d           # 启动
+docker compose down            # 停止
+docker compose down -v         # 停止并清除数据
+```
+
+---
+
+## 七、实施计划
 
 ### Phase 1: Monorepo + 基础设施 (2天)
 - [ ] 初始化 Turborepo + Bun workspace
+- [ ] 配置共享 TypeScript、ESLint、Prettier
 - [ ] 创建 packages/db — Drizzle Schema + migration
 - [ ] 创建 packages/validators — Zod schemas
-- [ ] 配置共享 TypeScript、ESLint、Prettier
-- [ ] 配置 Supabase 项目（Auth + Database + Storage）
-- [ ] 配置 Upstash Redis
+- [ ] 配置 docker-compose（PG + Redis + MinIO）
+- [ ] 配置 Better-Auth + packages/auth
 
 ### Phase 2: 后端服务搭建 (3-4天)
 - [ ] 搭建 apps/api（NestJS + Bun）
-- [ ] 配置 Swagger（@nestjs/swagger）
-- [ ] 实现 Auth Guard（验证 Supabase JWT）
-- [ ] 实现文件上传/下载模块（FilesModule）
-- [ ] 集成 BullMQ 任务队列（@nestjs/bullmq）
-- [ ] 配置 Throttler 限流（@nestjs/throttler）
-- [ ] 配置 CORS + Exception Filters
-- [ ] 部署到 Railway
-- [ ] 生成 packages/api-client（openapi-fetch）
+- [ ] 配置 Swagger
+- [ ] 实现 Better-Auth 集成 (Guard + session 校验)
+- [ ] 实现文件模块（MinIO SDK）
+- [ ] 集成 BullMQ（本地 Redis）
+- [ ] 配置 Throttler（本地 Redis）
+- [ ] CORS + Exception Filters
+- [ ] Dockerfile + docker-compose 集成
+- [ ] 生成 packages/api-client
 
 ### Phase 3: 前端基础搭建 (2-3天)
 - [ ] 搭建 apps/web（Next.js 15 + Tailwind 4 + shadcn/ui）
-- [ ] 实现 Layout（侧边栏导航 + 响应式）
-- [ ] 集成 Supabase Auth（登录/注册/OAuth）
-- [ ] 对接 packages/api-client 调用后端
+- [ ] Layout（侧边栏导航 + 响应式）
+- [ ] Better-Auth 前端集成（登录/注册/OAuth）
+- [ ] 对接 packages/api-client
 
 ### Phase 4: 图片工具 MVP (3天)
-- [ ] 客户端图片压缩（browser-image-compression）
-- [ ] 服务端 Sharp 压缩（image.processor.ts）
-- [ ] 图片格式转换（PNG/JPEG/WebP/AVIF）
-- [ ] UI：拖拽上传 + 参数配置 + 预览对比
-- [ ] 任务进度轮询（Bull progress events）
+- [ ] 客户端图片压缩
+- [ ] 服务端 Sharp 处理
+- [ ] 图片格式转换
+- [ ] UI：拖拽 + 配置 + 预览对比
+- [ ] 任务进度轮询
 
 ### Phase 5: PDF + 字体工具 (4-5天)
-- [ ] PDF 合并/拆分（pdf-lib）
-- [ ] PDF 页面预览（pdfjs-dist）
-- [ ] 字体格式转换（TTF/OTF/WOFF/WOFF2）
+- [ ] PDF 合并/拆分
+- [ ] PDF 预览
+- [ ] 字体格式转换
 - [ ] 字体预览
 
 ### Phase 6: 用户功能 + 打磨 (3天)
 - [ ] 文件管理（我的文件 + 回收站）
-- [ ] 任务历史 + Bull Board 集成
-- [ ] 暗色模式 + 响应式适配
+- [ ] 任务历史 + Bull Board
+- [ ] 暗色模式 + 响应式
 - [ ] PWA 配置
 
 ### Phase 7: 监控 + 优化 (1-2天)
-- [ ] Sentry 错误追踪（NestJS + Next.js）
-- [ ] Vercel Analytics
-- [ ] 性能优化（图片懒加载、代码分割）
+- [ ] Sentry 错误追踪
+- [ ] 性能优化（懒加载、代码分割）
+- [ ] 生产 Docker Compose（含反向代理）
 
 **总计：18-22天**
 
 ---
 
-## 七、技术栈汇总
+## 八、技术栈汇总
 
 | 层级 | 技术 |
 |------|------|
@@ -327,42 +390,49 @@ tasks: {
 | 状态管理 | Zustand |
 | 后端框架 | NestJS |
 | 运行时 | Bun |
-| 数据库 | PostgreSQL (Supabase) |
+| 数据库 | **PostgreSQL 16（Docker）** |
 | ORM | Drizzle ORM |
-| 认证 | Supabase Auth |
-| 存储 | Supabase Storage |
+| 认证 | **Better-Auth** |
+| 文件存储 | **MinIO（Docker，S3 兼容）** |
 | 任务队列 | Bull/BullMQ |
-| 缓存/限流 | Upstash Redis |
-| API 文档 | Swagger (自动生成) |
-| 图片处理 | Sharp (服务端) + browser-image-compression (客户端) |
+| 缓存/限流 | **Redis 7（Docker）** |
+| API 文档 | Swagger |
+| 图片处理 | Sharp + browser-image-compression |
 | PDF 处理 | pdf-lib + @pdfium.js/pdfium |
 | 字体处理 | fonteditor-core + opentype.js |
-| 部署 | Vercel (前端) + Railway (后端) |
-| 监控 | Sentry + Bull Board + Vercel Analytics |
+| 本地开发 | Docker Compose |
+| 监控 | Sentry + Bull Board |
 
 ---
 
-## 八、关键架构决策记录
+## 九、关键架构决策记录
 
 ### 为什么独立后端而非 Next.js API Routes？
-- Serverless 执行时间限制（10s/60s），文件处理易超时
-- 内存限制 1024MB，Sharp 处理大图可能 OOM
+- Serverless 执行时间/内存限制，文件处理易超时/OOM
 - 前后端独立扩缩容（文件处理是 CPU 密集型）
 - 未来多端复用（移动端、第三方 API）
 
 ### 为什么 NestJS 而非 Hono？
 - 模块系统适合按工具类型拆分
 - Guards/Pipes/Interceptors 比手写中间件更结构化
-- Bull/BullMQ 原生集成，无需第三方任务队列服务费
-- Swagger 自动生成，API 文档零成本维护
+- Bull/BullMQ 原生集成
+- Swagger 自动生成
 
 ### 为什么 Bun 而非 Node.js？
-- 启动速度快 4-5x，开发体验好
+- 启动速度快 4-5x
 - 原生 TypeScript 支持
-- 风险：Sharp 等 native addon 偶有兼容问题，备选回退 Node.js
+- 风险：Sharp 等 native addon 偶有兼容问题
 
-### 为什么 Bull/BullMQ 而非 Inngest？
-- NestJS 原生集成（@nestjs/bullmq）
-- 自托管 Redis，无额外 SaaS 费用
-- 更成熟，社区更大
-- Bull Board 提供可视化监控面板
+### 为什么全本地化（PG + Redis + MinIO）而非 Supabase？
+- 零成本（无 SaaS 费用）
+- 完全可控（数据主权、配置自由）
+- 一键启停（docker compose up）
+- 生产可继续用同套 Docker 部署
+- 离线开发友好
+
+### 为什么 Better-Auth 而非 NextAuth/Lucia？
+- Lucia 已停止维护，作者推荐 Better-Auth
+- TypeScript 原生，类型推断完整
+- Drizzle ORM 一等公民支持
+- 内建 OAuth、邮箱验证、2FA、组织、impersonation
+- NestJS/Next.js 双端友好

@@ -52,18 +52,18 @@
 | 01-nestjs-init.md | 初始化 NestJS + Bun | Phase 1 | 2h |
 | 02-cors-exception.md | CORS + Exception Filters | 01 | 1h |
 | 03-swagger.md | Swagger 自动文档 | 01 | 1h |
-| 04-auth-guard.md | Supabase JWT Auth Guard | 01 | 2h |
-| 05-throttler.md | Rate Limiting | 01, P1-06 | 1.5h |
-| 06-bullmq.md | BullMQ 集成 | 01, P1-06 | 2h |
-| 07-files-module.md | 文件上传/下载模块 | 04, P1-05 | 3h |
+| 04-auth-guard.md | Better-Auth Guard + Handler | 01, P1-06 | 2h |
+| 05-throttler.md | Rate Limiting（本地 Redis）| 01, P1-05 | 1.5h |
+| 06-bullmq.md | BullMQ 集成（本地 Redis）| 01, P1-05 | 2h |
+| 07-files-module.md | 文件模块（MinIO）| 04, P1-05 | 3h |
 | 08-tasks-module.md | 任务 CRUD 模块 | 01, P1-03 | 2.5h |
 | 09-api-client.md | 生成 openapi-fetch 客户端 | 03, 07, 08 | 1.5h |
-| 10-railway-deploy.md | Railway 部署配置 | 全部 | 1.5h |
+| 10-docker-deploy.md | Docker Compose 生产部署 | 全部 | 1.5h |
 
 ## 前置依赖
 
 需要 Phase 1 全部完成：
-- packages/db 可用
+- packages/db 可用（业务表已迁移）
+- packages/auth 可用（Better-Auth 配置）
 - packages/validators 可用
-- Supabase 已配置（DATABASE_URL, SUPABASE_*）
-- Upstash Redis 已配置（UPSTASH_REDIS_URL, TOKEN）
+- 本地 PG/Redis/MinIO 已启动（`docker compose up -d`）

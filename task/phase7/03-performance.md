@@ -132,7 +132,7 @@ async headers() {
 }
 ```
 
-`apps/api` 静态资源（Supabase Storage 通过 CDN）已自动加速。
+`apps/api` 文件下载通过 MinIO 签名 URL 直接返回（生产环境建议在 MinIO 前加 CDN，如 Cloudflare）。
 
 ### 3.9 后端性能
 

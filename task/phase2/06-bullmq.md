@@ -1,12 +1,12 @@
 # 06 - BullMQ 任务队列集成
 
-> 依赖：01-nestjs-init、Phase 1 / 06-upstash
+> 依赖：01-nestjs-init、Phase 1 / 05-docker-services
 > 预估：2h
 > 可并行：与 02/03/04/05/08 同时执行
 
 ## 目标
 
-集成 @nestjs/bullmq，定义 image/pdf/font 三个队列，配置 Redis 连接。
+集成 @nestjs/bullmq，定义 image/pdf/font 三个队列，连接本地 Redis。
 
 ## 步骤
 
@@ -26,8 +26,7 @@ import { BullModule } from '@nestjs/bullmq';
 export const bullConfig = BullModule.forRootAsync({
   useFactory: () => ({
     connection: {
-      url: process.env.UPSTASH_REDIS_URL!,
-      tls: {},
+      url: process.env.REDIS_URL ?? 'redis://localhost:6379',
       maxRetriesPerRequest: null,  // BullMQ 要求
     },
     defaultJobOptions: {

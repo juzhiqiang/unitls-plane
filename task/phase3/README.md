@@ -35,7 +35,7 @@
 |------|------|------|------|
 | 01-nextjs-init.md | Next.js + Tailwind + shadcn 初始化 | Phase 1 | 2h |
 | 02-layout.md | 主布局 + 侧边栏 + 响应式 | 01 | 2.5h |
-| 03-supabase-auth.md | Supabase Auth 集成（登录/注册/OAuth）| 01 | 2.5h |
+| 03-better-auth-client.md | Better-Auth 前端集成 | 01, P1-06 | 2.5h |
 | 04-marketing-page.md | 落地页（SEO）| 02 | 2h |
 | 05-api-client-integration.md | API Client 封装 + Provider | 01, P2-09 | 1.5h |
 

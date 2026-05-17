@@ -4,6 +4,13 @@
 > 预估：2.5h
 > 可并行：与 02/05 同时执行
 
+> **🎨 UI 设计要求**：登录/注册页是产品门面，**必须**：
+> 1. 先读 [`task/design-system.md`](../design-system.md)
+> 2. 调用 `frontend-design` skill 产出登录/注册/邮箱验证三个页面方案
+> 3. 极简卡片（1px 边框、无阴影）、左对齐表单、mono 等宽字体的小标记
+> 4. OAuth 按钮使用 1px 边框 + brand 图标（Lucide stroke 1.5）
+> 5. 双主题适配
+
 ## 目标
 
 在 Next.js 前端集成 Better-Auth：登录、注册、OAuth、session 管理。

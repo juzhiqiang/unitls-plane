@@ -3,6 +3,18 @@
 > 依赖：Phase 4 完成
 > 预估：2h
 
+> **🎨 UI 设计要求**：任务历史是数据密集页面，**必须**：
+> 1. 先读 [`task/design-system.md`](../design-system.md)
+> 2. 调用 `frontend-design` skill 产出方案
+> 3. 状态徽章用"1px 边框 + mono 字体 + 全大写"风格，**禁止圆角填充 pill**
+>    - completed: `[ DONE ]` accent 色
+>    - processing: `[ ... ]` accent 色 + 闪烁
+>    - failed: `[ FAIL ]` destructive 色
+>    - pending: `[ WAIT ]` muted-foreground
+> 4. 进度用 2px 高水平条，宽度填充对应单元格
+> 5. 时间戳用 mono 字体（`2026-05-17 14:23`）
+> 6. 展开详情用 1px 顶部分隔线扩展同一行下方区域，不要弹 Modal
+
 ## 目标
 
 展示用户所有任务的历史记录，支持过滤、重试、查看详情。

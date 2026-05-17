@@ -3,6 +3,15 @@
 > 依赖：01-client-compress、03-format-convert、05-progress-poll
 > 预估：4h
 
+> **🎨 UI 设计要求**：工具操作界面，**必须**：
+> 1. 先读 [`task/design-system.md`](../design-system.md)
+> 2. 调用 `frontend-design` skill 产出工具页方案（含 dropzone、配置面板、对比预览）
+> 3. Dropzone：1px 虚线边框 + 极大内 padding，hover 时变 muted 背景
+> 4. 参数面板：左对齐表单、mono 字体显示数值（如 `1920px / 80%`）
+> 5. 进度条：2px 高水平线条，**禁止 spinning circle**
+> 6. 预览对比：水平/垂直拖拽 slider，文件大小用 mono 字体显示
+> 7. 双主题适配
+
 ## 目标
 
 实现图片工具的完整 UI：拖拽上传、参数配置、本地/服务端切换、预览对比、下载。

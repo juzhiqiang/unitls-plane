@@ -26,7 +26,7 @@
 | 01-file-management.md | 文件管理（我的文件 + 回收站）| Phase 4 完成 | 3h |
 | 02-task-history.md | 任务历史页面 + API | Phase 4 完成 | 2h |
 | 03-bull-board.md | Bull Board 集成保护 | Phase 2 | 1h |
-| 04-dark-mode.md | 暗色模式完善 | Phase 3 | 1.5h |
+| 04-theme-system.md | 双主题系统（日夜切换）| Phase 3 | 2h |
 | 05-responsive.md | 响应式适配审计 | Phase 3 | 2h |
 | 06-pwa.md | PWA 配置 | Phase 3 | 2h |
 

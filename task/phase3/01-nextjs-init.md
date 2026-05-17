@@ -4,6 +4,8 @@
 > 预估：2h
 > 阻塞：Phase 3 所有后续任务
 
+> **🎨 UI 设计要求**：本任务初始化 UI 技术栈，必须按 [`task/design-system.md`](../design-system.md) 配置 Tailwind 主题（CSS 变量、字体、色板、双主题）。后续 UI 任务统一使用 `frontend-design` skill 生成视觉方案。
+
 ## 目标
 
 在 `apps/web` 创建 Next.js 15 项目，集成 Tailwind CSS 4 + shadcn/ui。

@@ -3,6 +3,14 @@
 > 依赖：Phase 3 完成
 > 预估：1.5h
 
+> **🎨 UI 设计要求**：字体本身就是设计主体，预览区**必须**：
+> 1. 先读 [`task/design-system.md`](../design-system.md)
+> 2. 调用 `frontend-design` skill 产出方案
+> 3. 字体信息卡：mono 字体 + tracking-wider 全大写标签（如 `FONT NAME / GLYPHS`）
+> 4. 预览文本区：纯净大留白，**字体本身是英雄**，背景极简
+> 5. 字号 Slider：1px 轨道、2px 圆点，无填充色，仅 accent 描边
+> 6. 字形网格：8 列网格，每格 1px 边框，hover 显示 Unicode 编号
+
 ## 目标
 
 实现前端字体预览组件，加载用户字体文件，展示字体效果。

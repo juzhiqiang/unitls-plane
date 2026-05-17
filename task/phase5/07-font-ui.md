@@ -3,6 +3,13 @@
 > 依赖：06-font-preview
 > 预估：2h
 
+> **🎨 UI 设计要求**：字体工具页面，**必须**：
+> 1. 先读 [`task/design-system.md`](../design-system.md)
+> 2. 调用 `frontend-design` skill 产出方案
+> 3. 配置面板与预览区水平分栏（桌面），sm 下垂直堆叠
+> 4. 格式选择用 segmented control 风格（1px 边框、活跃项无填充、底部 2px accent 线）
+> 5. 子集化输入区：大号 mono 字体 textarea，placeholder 用 muted-foreground
+
 ## 目标
 
 实现字体工具页面：上传 → 预览 → 选择目标格式 → 转换 → 下载。

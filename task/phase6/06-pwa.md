@@ -4,6 +4,12 @@
 > 预估：2h
 > 可并行：所有任务
 
+> **🎨 UI 设计要求**：PWA 图标和 manifest 配色**必须**与 [`task/design-system.md`](../design-system.md) 一致：
+> - `theme_color`: 暗模式 background 色 (`oklch(0.12 0.005 240)` → hex 约 `#0a0a0c`)
+> - `background_color`: 同上
+> - 图标设计调用 `frontend-design` skill — 极简单色 logo，禁止使用渐变和拟物效果
+> - 安装提示卡片：1px 边框、左对齐、无圆角阴影
+
 ## 目标
 
 将应用配置为 PWA，支持离线访问、安装到桌面。
@@ -45,11 +51,11 @@ export default withPWA({
 {
   "name": "Utils-Plane",
   "short_name": "UtilsPlane",
-  "description": "免费在线工具平台",
+  "description": "未来感工具平台",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0a0a0c",
   "orientation": "any",
   "icons": [
     {
@@ -67,18 +73,20 @@ export default withPWA({
   ],
   "shortcuts": [
     {
-      "name": "图片压缩",
+      "name": "Image",
       "url": "/image/compress",
       "icons": [{ "src": "/icons/image-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "PDF 合并",
+      "name": "PDF",
       "url": "/pdf/merge",
       "icons": [{ "src": "/icons/pdf-96.png", "sizes": "96x96" }]
     }
   ]
 }
 ```
+
+> 颜色来自 design-system.md 暗模式 background。如需根据主题切换，可在客户端注入 `<meta name="theme-color" content="...">`。
 
 ### 6.4 生成图标
 

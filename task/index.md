@@ -2,6 +2,9 @@
 
 > Monorepo + React 19 + NestJS + Bun + 全本地化
 
+> **🎨 UI 设计风格**：**未来感 · 暗黑 · 极简 · 拒绝 AI 通货审美 · 日夜切换**。
+> 所有 UI 任务必须遵循 [`design-system.md`](./design-system.md) 并调用 **`frontend-design`** skill 完成视觉方案。
+
 ---
 
 ## 一、技术选型
@@ -346,29 +349,31 @@ docker compose down -v         # 停止并清除数据
 - [ ] Dockerfile + docker-compose 集成
 - [ ] 生成 packages/api-client
 
-### Phase 3: 前端基础搭建 (2-3天)
+### Phase 3: 前端基础搭建 (2-3天) 🎨 frontend-design
 - [ ] 搭建 apps/web（Next.js 15 + Tailwind 4 + shadcn/ui）
 - [ ] Layout（侧边栏导航 + 响应式）
 - [ ] Better-Auth 前端集成（登录/注册/OAuth）
 - [ ] 对接 packages/api-client
+- [ ] **遵循 [`design-system.md`](./design-system.md)**
 
-### Phase 4: 图片工具 MVP (3天)
+### Phase 4: 图片工具 MVP (3天) 🎨 frontend-design
 - [ ] 客户端图片压缩
 - [ ] 服务端 Sharp 处理
 - [ ] 图片格式转换
 - [ ] UI：拖拽 + 配置 + 预览对比
 - [ ] 任务进度轮询
 
-### Phase 5: PDF + 字体工具 (4-5天)
+### Phase 5: PDF + 字体工具 (4-5天) 🎨 frontend-design
 - [ ] PDF 合并/拆分
 - [ ] PDF 预览
 - [ ] 字体格式转换
 - [ ] 字体预览
 
-### Phase 6: 用户功能 + 打磨 (3天)
+### Phase 6: 用户功能 + 打磨 (3天) 🎨 frontend-design
 - [ ] 文件管理（我的文件 + 回收站）
 - [ ] 任务历史 + Bull Board
-- [ ] 暗色模式 + 响应式
+- [ ] 双主题系统（日夜切换，未来感暗黑极简）
+- [ ] 响应式适配审计
 - [ ] PWA 配置
 
 ### Phase 7: 监控 + 优化 (1-2天)

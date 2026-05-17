@@ -3,6 +3,14 @@
 > 依赖：01-pdf-merge、02-pdf-split、03-pdf-preview
 > 预估：4h
 
+> **🎨 UI 设计要求**：PDF 操作复杂，需 UI 引导，**必须**：
+> 1. 先读 [`task/design-system.md`](../design-system.md)
+> 2. 调用 `frontend-design` skill 产出方案
+> 3. 文件排序：拖拽手柄使用 1px 线条图标，拖拽中显示 ghost 轮廓（不要 scale）
+> 4. PDF 页面缩略图网格：1px 边框、轻微 muted 背景，选中态左侧 2px accent 竖线
+> 5. 拆分模式切换：tab 设计，下方 1px underline 标识当前 tab
+> 6. 不要使用大圆角卡片堆叠，缩略图直接平铺在网格中
+
 ## 目标
 
 实现 PDF 合并/拆分的完整 UI，支持拖拽排序、可视化选择。

@@ -33,6 +33,8 @@ module.exports = [
         require: 'readonly',
         exports: 'readonly',
         global: 'readonly',
+        React: 'readonly',
+        JSX: 'readonly',
       },
     },
     plugins: {
@@ -58,13 +60,18 @@ module.exports = [
   },
   {
     ignores: [
-      'node_modules/**',
-      'dist/**',
-      'build/**',
-      '.next/**',
-      'coverage/**',
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.next/**',
+      '**/.turbo/**',
+      '**/coverage/**',
       '*.config.js',
       '*.config.ts',
+      'apps/web/.next/**',
+      'apps/api/dist/**',
+      'packages/*/dist/**',
+      'packages/*/.turbo/**',
     ],
   },
 ];

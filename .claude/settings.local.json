@@ -5,7 +5,9 @@
       "Bash(bunx turbo *)",
       "Bash(bun run *)",
       "Bash(bun add *)",
-      "Bash(bunx tsc *)"
+      "Bash(bunx tsc *)",
+      "Bash(bunx eslint *)",
+      "Bash(bunx prettier *)"
     ]
   }
 }

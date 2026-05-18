@@ -4,6 +4,7 @@
 > 预估：4h
 
 > **🎨 UI 设计要求**：工具操作界面，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出工具页方案（含 dropzone、配置面板、对比预览）
 > 3. Dropzone：1px 虚线边框 + 极大内 padding，hover 时变 muted 背景
@@ -30,15 +31,12 @@ src/app/(app)/image/
 ### 4.2 拖拽上传组件
 
 `src/components/tools/file-dropzone.tsx`:
+
 ```tsx
 'use client';
 import { useDropzone } from 'react-dropzone';
 
-export function FileDropzone({
-  accept,
-  maxSize,
-  onDrop,
-}: Props) {
+export function FileDropzone({ accept, maxSize, onDrop }: Props) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept,
     maxSize,
@@ -46,7 +44,10 @@ export function FileDropzone({
   });
 
   return (
-    <div {...getRootProps()} className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:bg-muted/50">
+    <div
+      {...getRootProps()}
+      className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:bg-muted/50"
+    >
       <input {...getInputProps()} />
       {isDragActive ? '放开以上传' : '点击或拖拽图片到此处'}
     </div>
@@ -61,6 +62,7 @@ bun add react-dropzone
 ### 4.3 参数配置面板
 
 `src/components/tools/image-compress-options.tsx`:
+
 - 质量 Slider (1-100)
 - 最大尺寸 Input
 - 输出格式 Select
@@ -69,6 +71,7 @@ bun add react-dropzone
 ### 4.4 预览对比组件
 
 `src/components/tools/image-compare.tsx`:
+
 - 左右分栏：原图 vs 处理后
 - 显示文件大小、尺寸、压缩比
 - 可选：滑动对比（react-compare-slider）
@@ -84,7 +87,10 @@ bun add react-compare-slider
 export default function CompressPage() {
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [resultFile, setResultFile] = useState<File | null>(null);
-  const [options, setOptions] = useState<CompressOptions>({ quality: 80, format: 'jpeg' });
+  const [options, setOptions] = useState<CompressOptions>({
+    quality: 80,
+    format: 'jpeg',
+  });
   const [mode, setMode] = useState<'local' | 'server'>('local');
 
   const handleProcess = async () => {
@@ -111,11 +117,16 @@ export default function CompressPage() {
 
   return (
     <div>
-      <FileDropzone accept={{'image/*': []}} onDrop={(files) => setOriginalFile(files[0])} />
+      <FileDropzone
+        accept={{ 'image/*': [] }}
+        onDrop={files => setOriginalFile(files[0])}
+      />
       <ImageCompressOptions value={options} onChange={setOptions} />
       <ModeToggle value={mode} onChange={setMode} />
       <Button onClick={handleProcess}>开始压缩</Button>
-      {resultFile && <ImageCompare original={originalFile!} result={resultFile} />}
+      {resultFile && (
+        <ImageCompare original={originalFile!} result={resultFile} />
+      )}
       {resultFile && <DownloadButton file={resultFile} />}
     </div>
   );
@@ -129,6 +140,7 @@ export default function CompressPage() {
 ### 4.7 工具首页
 
 `src/app/(app)/image/page.tsx`:
+
 - 卡片列表：压缩、格式转换
 - 点击卡片跳转对应子页面
 

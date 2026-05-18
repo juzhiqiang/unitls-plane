@@ -4,6 +4,7 @@
 > 预估：2h
 
 > **🎨 UI 设计要求**：落地页是品牌核心展示，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出落地页方案
 > 3. Hero 区高度 ≥ 80vh，**左对齐 + 大留白**，禁止居中堆叠的通货模板
@@ -21,6 +22,7 @@
 ### 4.1 创建 (marketing) 布局
 
 `src/app/(marketing)/layout.tsx`:
+
 - 顶部导航：Logo + 工具入口 + "登录/注册"按钮
 - 底部 footer：版权、链接
 
@@ -29,6 +31,7 @@
 `src/app/(marketing)/page.tsx`:
 
 模块：
+
 1. **Hero**: 标题、副标题、CTA 按钮（"开始使用"→ /image）
 2. **功能展示**: 三栏（图片/PDF/字体），每栏带图标 + 简介
 3. **特点**: 客户端处理 / 隐私保护 / 高性能 / 免费使用
@@ -37,6 +40,7 @@
 ### 4.3 SEO Metadata
 
 `src/app/(marketing)/page.tsx`:
+
 ```typescript
 export const metadata: Metadata = {
   title: 'Utils-Plane - 免费在线工具平台',
@@ -49,6 +53,7 @@ export const metadata: Metadata = {
 ### 4.4 添加 sitemap & robots
 
 `src/app/sitemap.ts`:
+
 ```typescript
 import { MetadataRoute } from 'next';
 
@@ -63,6 +68,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 ```
 
 `src/app/robots.ts`:
+
 ```typescript
 export default function robots(): MetadataRoute.Robots {
   return {

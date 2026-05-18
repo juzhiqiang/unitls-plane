@@ -22,6 +22,7 @@ bun add sharp
 ### 2.2 创建 ImageService
 
 `apps/api/src/modules/tasks/services/image.service.ts`:
+
 ```typescript
 import sharp from 'sharp';
 
@@ -41,7 +42,9 @@ export class ImageService {
 
     switch (opts.format ?? 'jpeg') {
       case 'jpeg':
-        return pipeline.jpeg({ quality: opts.quality ?? 80, mozjpeg: true }).toBuffer();
+        return pipeline
+          .jpeg({ quality: opts.quality ?? 80, mozjpeg: true })
+          .toBuffer();
       case 'webp':
         return pipeline.webp({ quality: opts.quality ?? 80 }).toBuffer();
       case 'avif':
@@ -69,14 +72,17 @@ export interface CompressOptions {
 ### 2.3 实现 ImageProcessor
 
 `apps/api/src/modules/tasks/processors/image.processor.ts`:
+
 ```typescript
 @Processor('image-queue', { concurrency: 3 })
 export class ImageProcessor extends WorkerHost {
   constructor(
     private readonly imageService: ImageService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService,
-  ) { super(); }
+    private readonly tasksService: TasksService
+  ) {
+    super();
+  }
 
   async process(job: Job<{ taskId: string }>): Promise<unknown> {
     const { taskId } = job.data;
@@ -87,22 +93,28 @@ export class ImageProcessor extends WorkerHost {
 
       // 1. 下载输入文件
       const inputFile = await this.filesService.getById(task.input_file_ids[0]);
-      const inputBuffer = await this.filesService.download(inputFile.storage_key);
+      const inputBuffer = await this.filesService.download(
+        inputFile.storage_key
+      );
       await job.updateProgress(20);
 
       // 2. 处理
       const outputBuffer = await this.imageService.compress(
         inputBuffer,
-        task.input_config,
+        task.input_config
       );
       await job.updateProgress(70);
 
       // 3. 上传结果
-      const outputFile = await this.filesService.upload(outputBuffer, {
-        filename: `compressed-${inputFile.filename}`,
-        mimeType: getMimeType(task.input_config.format),
-        size: outputBuffer.length,
-      }, task.user_id);
+      const outputFile = await this.filesService.upload(
+        outputBuffer,
+        {
+          filename: `compressed-${inputFile.filename}`,
+          mimeType: getMimeType(task.input_config.format),
+          size: outputBuffer.length,
+        },
+        task.user_id
+      );
       await job.updateProgress(95);
 
       // 4. 更新任务
@@ -114,9 +126,9 @@ export class ImageProcessor extends WorkerHost {
       await this.tasksService.markFailed(
         taskId,
         'IMAGE_PROCESSING_FAILED',
-        (err as Error).message,
+        (err as Error).message
       );
-      throw err;  // 让 Bull 重试
+      throw err; // 让 Bull 重试
     }
   }
 }
@@ -126,12 +138,7 @@ export class ImageProcessor extends WorkerHost {
 
 ```typescript
 @Module({
-  providers: [
-    TasksService,
-    FilesService,
-    ImageService,
-    ImageProcessor,
-  ],
+  providers: [TasksService, FilesService, ImageService, ImageProcessor],
 })
 export class TasksModule {}
 ```
@@ -139,6 +146,7 @@ export class TasksModule {}
 ### 2.5 配置内存限制
 
 Sharp 处理大图时设置：
+
 ```typescript
 sharp.cache(false);
 sharp.concurrency(1); // 限制单图并发，配合 Processor concurrency

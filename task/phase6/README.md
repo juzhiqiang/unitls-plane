@@ -15,20 +15,21 @@
 ## 并行执行策略
 
 所有任务彼此独立，可同时执行。建议按优先级和影响范围排序：
+
 - 用户感知最强：01, 02, 04
 - 体验细节：05, 06
 - 运维相关：03
 
 ## 文件列表
 
-| 文件 | 任务 | 依赖 | 预估 |
-|------|------|------|------|
-| 01-file-management.md | 文件管理（我的文件 + 回收站）| Phase 4 完成 | 3h |
-| 02-task-history.md | 任务历史页面 + API | Phase 4 完成 | 2h |
-| 03-bull-board.md | Bull Board 集成保护 | Phase 2 | 1h |
-| 04-theme-system.md | 双主题系统（日夜切换）| Phase 3 | 2h |
-| 05-responsive.md | 响应式适配审计 | Phase 3 | 2h |
-| 06-pwa.md | PWA 配置 | Phase 3 | 2h |
+| 文件                  | 任务                          | 依赖         | 预估 |
+| --------------------- | ----------------------------- | ------------ | ---- |
+| 01-file-management.md | 文件管理（我的文件 + 回收站） | Phase 4 完成 | 3h   |
+| 02-task-history.md    | 任务历史页面 + API            | Phase 4 完成 | 2h   |
+| 03-bull-board.md      | Bull Board 集成保护           | Phase 2      | 1h   |
+| 04-theme-system.md    | 双主题系统（日夜切换）        | Phase 3      | 2h   |
+| 05-responsive.md      | 响应式适配审计                | Phase 3      | 2h   |
+| 06-pwa.md             | PWA 配置                      | Phase 3      | 2h   |
 
 ## 前置依赖
 

@@ -34,6 +34,7 @@
 ### 2.2 apps/web/tsconfig.json
 
 继承根配置，添加 Next.js 特有选项：
+
 - `"jsx": "preserve"`
 - `"module": "esnext"`
 - `"moduleResolution": "bundler"`
@@ -42,6 +43,7 @@
 ### 2.3 apps/api/tsconfig.json
 
 继承根配置，添加 NestJS/Bun 选项：
+
 - `"module": "esnext"`
 - `"moduleResolution": "bundler"`
 - `"target": "esnext"`
@@ -51,6 +53,7 @@
 ### 2.4 ESLint 配置 (eslint.config.mjs)
 
 使用 flat config 格式：
+
 - `@typescript-eslint/eslint-plugin`
 - `eslint-plugin-import`
 - 各 app 可扩展（Next.js 用 `eslint-config-next`）

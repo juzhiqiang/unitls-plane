@@ -20,6 +20,7 @@ bun add @nestjs/swagger
 ### 3.2 配置 Swagger
 
 `apps/api/src/main.ts`:
+
 ```typescript
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
@@ -47,14 +48,17 @@ bun add class-validator class-transformer
 ```
 
 `apps/api/src/main.ts`:
+
 ```typescript
 import { ValidationPipe } from '@nestjs/common';
 
-app.useGlobalPipes(new ValidationPipe({
-  transform: true,
-  whitelist: true,
-  forbidNonWhitelisted: true,
-}));
+app.useGlobalPipes(
+  new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  })
+);
 ```
 
 ### 3.4 配置 DTO Schema 自动推断
@@ -64,15 +68,18 @@ bun add -d @nestjs/swagger/plugin
 ```
 
 修改 `nest-cli.json`:
+
 ```json
 {
   "compilerOptions": {
-    "plugins": [{
-      "name": "@nestjs/swagger",
-      "options": {
-        "introspectComments": true
+    "plugins": [
+      {
+        "name": "@nestjs/swagger",
+        "options": {
+          "introspectComments": true
+        }
       }
-    }]
+    ]
   }
 }
 ```
@@ -80,6 +87,7 @@ bun add -d @nestjs/swagger/plugin
 ### 3.5 添加导出脚本
 
 `apps/api/package.json`:
+
 ```json
 {
   "scripts": {
@@ -89,6 +97,7 @@ bun add -d @nestjs/swagger/plugin
 ```
 
 `apps/api/src/scripts/export-openapi.ts`:
+
 ```typescript
 // 仅启动应用、生成文档、写入文件、退出
 ```

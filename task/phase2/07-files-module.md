@@ -21,6 +21,7 @@ bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
 ### 7.2 创建 MinioService
 
 `apps/api/src/modules/files/minio.service.ts`:
+
 ```typescript
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
@@ -61,19 +62,23 @@ export class MinioService implements OnModuleInit {
   }
 
   async upload(key: string, body: Buffer, mimeType: string): Promise<void> {
-    await this.client.send(new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      Body: body,
-      ContentType: mimeType,
-    }));
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: mimeType,
+      })
+    );
   }
 
   async download(key: string): Promise<Buffer> {
-    const response = await this.client.send(new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    }));
+    const response = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      })
+    );
     return Buffer.from(await response.Body!.transformToByteArray());
   }
 
@@ -81,7 +86,7 @@ export class MinioService implements OnModuleInit {
     return getSignedUrl(
       this.client,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      { expiresIn },
+      { expiresIn }
     );
   }
 
@@ -89,15 +94,17 @@ export class MinioService implements OnModuleInit {
     return getSignedUrl(
       this.client,
       new PutObjectCommand({ Bucket: this.bucket, Key: key }),
-      { expiresIn },
+      { expiresIn }
     );
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.send(new DeleteObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    }));
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      })
+    );
   }
 }
 ```
@@ -105,6 +112,7 @@ export class MinioService implements OnModuleInit {
 ### 7.3 创建 FilesModule
 
 `apps/api/src/modules/files/files.module.ts`:
+
 ```typescript
 @Module({
   controllers: [FilesController],
@@ -117,6 +125,7 @@ export class FilesModule {}
 ### 7.4 实现 FilesService
 
 `apps/api/src/modules/files/files.service.ts` 方法：
+
 - `upload(file: Buffer, meta: UploadMeta, userId?: string): Promise<File>`
   - 生成 storage_key：`{userId ?? 'anonymous'}/{fileId}/{filename}`
   - 上传到 MinIO
@@ -130,6 +139,7 @@ export class FilesModule {}
 ### 7.5 实现 FilesController
 
 `apps/api/src/modules/files/files.controller.ts`:
+
 ```typescript
 @Controller('files')
 @ApiTags('files')
@@ -166,9 +176,11 @@ export class FilesController {
 ### 7.7 公共 URL（可选）
 
 如果 bucket 设为公开（docker-compose 中 `mc anonymous set download local/uploads`），可直接通过：
+
 ```
 http://localhost:9000/uploads/{storage_key}
 ```
+
 访问，无需签名。生产环境建议保留签名机制。
 
 ## 验收标准

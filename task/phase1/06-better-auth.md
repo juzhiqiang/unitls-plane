@@ -20,6 +20,7 @@ bun add @utils-plane/db   # workspace 引用
 ### 6.2 创建 Better-Auth 实例
 
 `packages/auth/src/index.ts`:
+
 ```typescript
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -54,8 +55,8 @@ export const auth = betterAuth({
   },
 
   session: {
-    expiresIn: 60 * 60 * 24 * 7,   // 7 天
-    updateAge: 60 * 60 * 24,        // 1 天刷新一次
+    expiresIn: 60 * 60 * 24 * 7, // 7 天
+    updateAge: 60 * 60 * 24, // 1 天刷新一次
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60,
@@ -91,6 +92,7 @@ bunx @better-auth/cli@latest generate --output ../db/src/schema/auth.ts
 ```
 
 生成的表：
+
 - `user` — 主用户表
 - `session` — 会话
 - `account` — OAuth 关联
@@ -99,8 +101,9 @@ bunx @better-auth/cli@latest generate --output ../db/src/schema/auth.ts
 ### 6.4 集成到 packages/db schema
 
 `packages/db/src/schema/index.ts`:
+
 ```typescript
-export * from './auth';      // Better-Auth 生成的表
+export * from './auth'; // Better-Auth 生成的表
 export * from './files';
 export * from './tasks';
 ```
@@ -135,12 +138,14 @@ openssl rand -base64 32
 ### 6.7 配置 OAuth Provider
 
 #### Google OAuth
+
 1. https://console.cloud.google.com → 创建 OAuth 2.0 Client
 2. Authorized redirect URIs:
    - `http://localhost:3000/api/auth/callback/google`
    - 生产域名相应路径
 
 #### GitHub OAuth
+
 1. https://github.com/settings/developers → OAuth Apps → New
 2. Authorization callback URL:
    - `http://localhost:3000/api/auth/callback/github`
@@ -150,6 +155,7 @@ openssl rand -base64 32
 ### 6.8 导出辅助类型
 
 `packages/auth/src/index.ts`:
+
 ```typescript
 // 供 NestJS 后端使用
 export async function verifySession(headers: Headers) {

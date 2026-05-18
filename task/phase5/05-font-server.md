@@ -20,6 +20,7 @@ bun add fonteditor-core wawoff2
 ### 5.2 创建 FontService
 
 `apps/api/src/modules/tasks/services/font.service.ts`:
+
 ```typescript
 import { Font } from 'fonteditor-core';
 import wawoff2 from 'wawoff2';
@@ -86,6 +87,7 @@ export interface FontConvertOptions {
 ### 5.3 实现 FontProcessor
 
 `apps/api/src/modules/tasks/processors/font.processor.ts`:
+
 ```typescript
 @Processor('font-queue', { concurrency: 2 })
 export class FontProcessor extends WorkerHost {
@@ -97,16 +99,23 @@ export class FontProcessor extends WorkerHost {
     const inputBuffer = await this.filesService.download(inputFile.storage_key);
     await job.updateProgress(20);
 
-    const output = await this.fontService.convert(inputBuffer, task.input_config);
+    const output = await this.fontService.convert(
+      inputBuffer,
+      task.input_config
+    );
     await job.updateProgress(80);
 
     const ext = task.input_config.toFormat;
     const baseName = inputFile.filename.replace(/\.[^.]+$/, '');
-    const outputFile = await this.filesService.upload(output, {
-      filename: `${baseName}.${ext}`,
-      mimeType: `font/${ext}`,
-      size: output.length,
-    }, task.user_id);
+    const outputFile = await this.filesService.upload(
+      output,
+      {
+        filename: `${baseName}.${ext}`,
+        mimeType: `font/${ext}`,
+        size: output.length,
+      },
+      task.user_id
+    );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
     await job.updateProgress(100);
@@ -119,6 +128,7 @@ export class FontProcessor extends WorkerHost {
 ### 5.4 字体元信息提取
 
 提供 `getFontInfo` 方法（供前端预览使用）：
+
 ```typescript
 async getFontInfo(input: Buffer): Promise<FontInfo> {
   const font = Font.create(input, { type: this.detectType(input) });

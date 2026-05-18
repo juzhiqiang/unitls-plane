@@ -36,20 +36,20 @@
 
 ## 并行执行策略
 
-| 时间段 | 执行者 A (代码) | 执行者 B (基础设施) |
-|--------|----------------|-------------------|
-| T1 | 01-monorepo | 05-docker-services |
-| T2 | 02-shared-config | — |
-| T3 | 03-db ‖ 04-validators | — |
-| T4 | 06-better-auth (依赖 03 + 05) | — |
+| 时间段 | 执行者 A (代码)               | 执行者 B (基础设施) |
+| ------ | ----------------------------- | ------------------- |
+| T1     | 01-monorepo                   | 05-docker-services  |
+| T2     | 02-shared-config              | —                   |
+| T3     | 03-db ‖ 04-validators         | —                   |
+| T4     | 06-better-auth (依赖 03 + 05) | —                   |
 
 ## 文件列表
 
-| 文件 | 任务 | 依赖 | 预估 |
-|------|------|------|------|
-| 01-monorepo.md | 初始化 Turborepo + Bun workspace | 无 | 2h |
-| 02-shared-config.md | 共享 TS/ESLint/Prettier 配置 | 01 | 1.5h |
-| 03-db.md | packages/db (Drizzle Schema) | 02 | 3h |
-| 04-validators.md | packages/validators (Zod) | 02 | 1.5h |
-| 05-docker-services.md | docker-compose: PG + Redis + MinIO | 无 | 1.5h |
-| 06-better-auth.md | Better-Auth 配置（packages/auth）| 03, 05 | 2h |
+| 文件                  | 任务                               | 依赖   | 预估 |
+| --------------------- | ---------------------------------- | ------ | ---- |
+| 01-monorepo.md        | 初始化 Turborepo + Bun workspace   | 无     | 2h   |
+| 02-shared-config.md   | 共享 TS/ESLint/Prettier 配置       | 01     | 1.5h |
+| 03-db.md              | packages/db (Drizzle Schema)       | 02     | 3h   |
+| 04-validators.md      | packages/validators (Zod)          | 02     | 1.5h |
+| 05-docker-services.md | docker-compose: PG + Redis + MinIO | 无     | 1.5h |
+| 06-better-auth.md     | Better-Auth 配置（packages/auth）  | 03, 05 | 2h   |

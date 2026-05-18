@@ -5,6 +5,7 @@
 > 可并行：与 02/05 同时执行
 
 > **🎨 UI 设计要求**：登录/注册页是产品门面，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出登录/注册/邮箱验证三个页面方案
 > 3. 极简卡片（1px 边框、无阴影）、左对齐表单、mono 等宽字体的小标记
@@ -27,6 +28,7 @@ bun add better-auth @utils-plane/auth
 ### 3.2 创建 Auth Client
 
 `src/lib/auth-client.ts`:
+
 ```typescript
 'use client';
 import { createAuthClient } from 'better-auth/react';
@@ -35,18 +37,13 @@ export const authClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
 });
 
-export const {
-  signIn,
-  signUp,
-  signOut,
-  useSession,
-  getSession,
-} = authClient;
+export const { signIn, signUp, signOut, useSession, getSession } = authClient;
 ```
 
 ### 3.3 配置 middleware
 
 `src/middleware.ts`:
+
 ```typescript
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -61,9 +58,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'));
+  const isPublic = PUBLIC_PATHS.some(
+    p => pathname === p || pathname.startsWith(p + '/')
+  );
   if (!sessionToken && !isPublic && !pathname.startsWith('/api/')) {
-    return NextResponse.redirect(new URL('/login?redirect=' + pathname, request.url));
+    return NextResponse.redirect(
+      new URL('/login?redirect=' + pathname, request.url)
+    );
   }
 
   return NextResponse.next();
@@ -85,6 +86,7 @@ src/app/(auth)/
 ```
 
 #### login/page.tsx
+
 ```tsx
 'use client';
 import { signIn } from '@/lib/auth-client';
@@ -112,16 +114,32 @@ export default function LoginPage() {
 
   return (
     <Card>
-      <CardHeader><CardTitle>登录</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>登录</CardTitle>
+      </CardHeader>
       <CardContent>
         <form onSubmit={handleEmailLogin}>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Button type="submit" disabled={loading}>登录</Button>
+          <Input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
+          <Input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
+          <Button type="submit" disabled={loading}>
+            登录
+          </Button>
         </form>
         <Separator />
-        <Button variant="outline" onClick={() => handleOAuth('google')}>Google 登录</Button>
-        <Button variant="outline" onClick={() => handleOAuth('github')}>GitHub 登录</Button>
+        <Button variant="outline" onClick={() => handleOAuth('google')}>
+          Google 登录
+        </Button>
+        <Button variant="outline" onClick={() => handleOAuth('github')}>
+          GitHub 登录
+        </Button>
       </CardContent>
     </Card>
   );
@@ -129,6 +147,7 @@ export default function LoginPage() {
 ```
 
 #### register/page.tsx
+
 类似 login，调用 `signUp.email({ email, password, name })`。注册后跳转到 `/verify-email`。
 
 ### 3.5 useSession 使用
@@ -148,6 +167,7 @@ export function UserAvatar() {
 ### 3.6 Server Component 中获取 session
 
 `src/lib/auth-server.ts`:
+
 ```typescript
 import { auth } from '@utils-plane/auth';
 import { headers } from 'next/headers';
@@ -158,6 +178,7 @@ export async function getServerSession() {
 ```
 
 使用：
+
 ```tsx
 export default async function DashboardPage() {
   const session = await getServerSession();

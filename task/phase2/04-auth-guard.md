@@ -22,6 +22,7 @@ bun add better-auth @utils-plane/auth
 Better-Auth 把所有 auth 路由统一挂在 `/api/auth/*`，由后端转发给 better-auth 处理。
 
 `apps/api/src/modules/auth/auth.controller.ts`:
+
 ```typescript
 import { All, Controller, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
@@ -37,7 +38,9 @@ export class AuthController {
     const request = new Request(url, {
       method: req.method,
       headers: req.headers as any,
-      body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body),
+      body: ['GET', 'HEAD'].includes(req.method)
+        ? undefined
+        : JSON.stringify(req.body),
     });
 
     const response = await auth.handler(request);
@@ -52,6 +55,7 @@ export class AuthController {
 ```
 
 `apps/api/src/modules/auth/auth.module.ts`:
+
 ```typescript
 @Module({
   controllers: [AuthController],
@@ -62,8 +66,14 @@ export class AuthModule {}
 ### 4.3 实现 AuthGuard
 
 `apps/api/src/common/guards/auth.guard.ts`:
+
 ```typescript
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { auth } from '@utils-plane/auth';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -103,6 +113,7 @@ export class AuthGuard implements CanActivate {
 ### 4.4 @Public 装饰器
 
 `apps/api/src/common/decorators/public.decorator.ts`:
+
 ```typescript
 import { SetMetadata } from '@nestjs/common';
 export const IS_PUBLIC_KEY = 'isPublic';
@@ -118,22 +129,21 @@ import type { User } from '@utils-plane/auth';
 export const CurrentUser = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): User | undefined => {
     return ctx.switchToHttp().getRequest().user;
-  },
+  }
 );
 ```
 
 ### 4.6 全局注册
 
 `apps/api/src/app.module.ts`:
+
 ```typescript
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
-  imports: [AuthModule, /* ... */],
-  providers: [
-    { provide: APP_GUARD, useClass: AuthGuard },
-  ],
+  imports: [AuthModule /* ... */],
+  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}
 ```
@@ -143,10 +153,11 @@ export class AppModule {}
 Better-Auth 用 cookie 鉴权，前端跨域请求必须带 cookie：
 
 `apps/api/src/main.ts`:
+
 ```typescript
 app.enableCors({
   origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
-  credentials: true,  // ★ 必须
+  credentials: true, // ★ 必须
 });
 ```
 

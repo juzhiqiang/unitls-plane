@@ -5,6 +5,7 @@
 > 可并行：所有任务
 
 > **🎨 UI 设计要求**：PWA 图标和 manifest 配色**必须**与 [`task/design-system.md`](../design-system.md) 一致：
+>
 > - `theme_color`: 暗模式 background 色 (`oklch(0.12 0.005 240)` → hex 约 `#0a0a0c`)
 > - `background_color`: 同上
 > - 图标设计调用 `frontend-design` skill — 极简单色 logo，禁止使用渐变和拟物效果
@@ -47,6 +48,7 @@ export default withPWA({
 ### 6.3 创建 Manifest
 
 `apps/web/public/manifest.json`:
+
 ```json
 {
   "name": "Utils-Plane",
@@ -91,6 +93,7 @@ export default withPWA({
 ### 6.4 生成图标
 
 使用 https://realfavicongenerator.net/ 或 ImageMagick 生成：
+
 - 192x192、512x512（必需）
 - 16x16、32x32（favicon）
 - apple-touch-icon (180x180)
@@ -101,6 +104,7 @@ export default withPWA({
 ### 6.5 添加 manifest meta
 
 `src/app/layout.tsx`:
+
 ```tsx
 export const metadata: Metadata = {
   manifest: '/manifest.json',
@@ -115,6 +119,7 @@ export const metadata: Metadata = {
 ### 6.6 离线 fallback 页
 
 `src/app/_offline/page.tsx`:
+
 ```tsx
 export default function OfflinePage() {
   return (
@@ -138,6 +143,7 @@ export default function OfflinePage() {
 ### 6.7 安装提示
 
 `src/components/pwa/install-prompt.tsx`:
+
 ```tsx
 'use client';
 export function InstallPrompt() {
@@ -161,7 +167,9 @@ export function InstallPrompt() {
       <CardContent className="pt-6 flex gap-4 items-center">
         <p className="text-sm">安装到桌面，离线也能用</p>
         <Button onClick={() => deferredPrompt.prompt()}>安装</Button>
-        <Button variant="ghost" onClick={() => setShow(false)}>×</Button>
+        <Button variant="ghost" onClick={() => setShow(false)}>
+          ×
+        </Button>
       </CardContent>
     </Card>
   );

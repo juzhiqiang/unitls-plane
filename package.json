@@ -10,6 +10,9 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "lint:fix": "turbo lint:fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "clean": "turbo clean",
     "services:up": "docker compose up -d",
     "services:down": "docker compose down",
@@ -17,8 +20,16 @@
     "services:logs": "docker compose logs -f"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "eslint": "^10.4.0",
+    "eslint-config-next": "^16.2.6",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.3",
+    "tsx": "^4.7.0",
     "turbo": "^2",
-    "typescript": "^5.7",
-    "tsx": "^4.7.0"
+    "typescript": "^5.7"
   }
 }

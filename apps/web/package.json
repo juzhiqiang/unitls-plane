@@ -6,6 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "start": "next start",
     "clean": "rm -rf .next"
   },

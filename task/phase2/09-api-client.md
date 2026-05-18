@@ -36,11 +36,15 @@ bun add -d openapi-typescript
 ### 9.3 创建客户端
 
 `packages/api-client/src/index.ts`:
+
 ```typescript
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
 
-export function createApiClient(baseUrl: string, getToken?: () => Promise<string | null>) {
+export function createApiClient(
+  baseUrl: string,
+  getToken?: () => Promise<string | null>
+) {
   const client = createClient<paths>({ baseUrl });
 
   client.use({
@@ -72,6 +76,7 @@ cd packages/api-client && bun run generate
 ### 9.5 集成到 Turborepo
 
 `turbo.json` 添加任务依赖：
+
 ```json
 {
   "tasks": {
@@ -92,7 +97,9 @@ cd packages/api-client && bun run generate
 import { createApiClient } from '@utils-plane/api-client';
 
 const api = createApiClient(process.env.NEXT_PUBLIC_API_URL!, async () => {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   return session?.access_token ?? null;
 });
 

@@ -4,13 +4,8 @@
       "Bash(bun install *)",
       "Bash(bunx turbo *)",
       "Bash(bun run *)",
-      "Bash(docker compose up *)",
-      "Bash(docker compose ps *)",
-      "Bash(docker compose logs *)",
-      "Bash(docker *)",
-      "Bash(findstr \"9000\\\\|9001\")",
-      "Bash(netstat -ano)",
-      "Bash(findstr \":9000\\\\|:9001\")"
+      "Bash(bun add *)",
+      "Bash(bunx tsc *)"
     ]
   }
 }

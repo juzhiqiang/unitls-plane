@@ -20,20 +20,21 @@ bun add browser-image-compression
 ### 1.2 创建客户端处理 lib
 
 `src/lib/processing/image-client.ts`:
+
 ```typescript
 import imageCompression from 'browser-image-compression';
 
 export interface CompressOptions {
-  maxSizeMB?: number;            // 目标大小
-  maxWidthOrHeight?: number;     // 最大边长
-  quality?: number;              // 0-1
+  maxSizeMB?: number; // 目标大小
+  maxWidthOrHeight?: number; // 最大边长
+  quality?: number; // 0-1
   outputType?: 'image/jpeg' | 'image/webp' | 'image/png';
   onProgress?: (progress: number) => void;
 }
 
 export async function compressImage(
   file: File,
-  options: CompressOptions = {},
+  options: CompressOptions = {}
 ): Promise<File> {
   return imageCompression(file, {
     maxSizeMB: options.maxSizeMB ?? 1,
@@ -46,7 +47,7 @@ export async function compressImage(
 }
 
 export function shouldProcessLocally(file: File): boolean {
-  return file.size < 5 * 1024 * 1024;  // < 5MB 优先本地
+  return file.size < 5 * 1024 * 1024; // < 5MB 优先本地
 }
 
 export interface ImageMeta {
@@ -80,6 +81,7 @@ export async function getImageMeta(file: File): Promise<ImageMeta> {
 ### 1.3 创建格式转换工具
 
 `src/lib/processing/image-convert-client.ts`:
+
 ```typescript
 export async function convertImageFormat(
   file: File,
@@ -113,6 +115,7 @@ async function loadImage(file: File): Promise<HTMLImageElement> { ... }
 ### 1.4 单元测试
 
 `src/lib/processing/__tests__/image-client.test.ts`:
+
 - 测试 shouldProcessLocally 边界
 - 测试 getImageMeta 返回正确元数据
 

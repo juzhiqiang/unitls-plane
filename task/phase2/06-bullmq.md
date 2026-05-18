@@ -20,6 +20,7 @@ bun add @nestjs/bullmq bullmq ioredis
 ### 6.2 配置 BullModule
 
 `apps/api/src/config/bull.config.ts`:
+
 ```typescript
 import { BullModule } from '@nestjs/bullmq';
 
@@ -27,7 +28,7 @@ export const bullConfig = BullModule.forRootAsync({
   useFactory: () => ({
     connection: {
       url: process.env.REDIS_URL ?? 'redis://localhost:6379',
-      maxRetriesPerRequest: null,  // BullMQ 要求
+      maxRetriesPerRequest: null, // BullMQ 要求
     },
     defaultJobOptions: {
       attempts: 3,
@@ -45,6 +46,7 @@ export const bullConfig = BullModule.forRootAsync({
 ### 6.3 注册队列
 
 `apps/api/src/modules/tasks/tasks.module.ts`:
+
 ```typescript
 import { BullModule } from '@nestjs/bullmq';
 
@@ -53,7 +55,7 @@ import { BullModule } from '@nestjs/bullmq';
     BullModule.registerQueue(
       { name: 'image-queue' },
       { name: 'pdf-queue' },
-      { name: 'font-queue' },
+      { name: 'font-queue' }
     ),
   ],
 })
@@ -63,6 +65,7 @@ export class TasksModule {}
 ### 6.4 创建 Processor 骨架（不实现具体逻辑）
 
 `apps/api/src/modules/tasks/processors/image.processor.ts`:
+
 ```typescript
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
@@ -94,6 +97,7 @@ bun add @bull-board/express @bull-board/api @bull-board/nestjs
 ```
 
 `apps/api/src/app.module.ts`:
+
 ```typescript
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
@@ -117,6 +121,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 ### 6.6 创建定时清理 Job
 
 `apps/api/src/modules/tasks/processors/cleanup.processor.ts`:
+
 ```typescript
 @Processor('cleanup-queue')
 export class CleanupProcessor extends WorkerHost {

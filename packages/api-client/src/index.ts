@@ -1,4 +1,4 @@
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data: T;
   success: boolean;
   message?: string;
@@ -51,14 +51,14 @@ export class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async put<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: JSON.stringify(data),

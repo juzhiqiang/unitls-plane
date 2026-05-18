@@ -13,6 +13,7 @@
 ### 5.1 创建 useTaskProgress hook
 
 `src/hooks/api/use-task-progress.ts`:
+
 ```typescript
 'use client';
 import { useQuery } from '@tanstack/react-query';
@@ -26,11 +27,14 @@ export interface TaskProgress {
   errorMessage?: string;
 }
 
-export function useTaskProgress(taskId: string | null, options?: {
-  pollingInterval?: number;
-  onCompleted?: (outputFileId: string) => void;
-  onFailed?: (error: { code: string; message: string }) => void;
-}) {
+export function useTaskProgress(
+  taskId: string | null,
+  options?: {
+    pollingInterval?: number;
+    onCompleted?: (outputFileId: string) => void;
+    onFailed?: (error: { code: string; message: string }) => void;
+  }
+) {
   const interval = options?.pollingInterval ?? 1000;
 
   return useQuery({
@@ -44,11 +48,11 @@ export function useTaskProgress(taskId: string | null, options?: {
       return data as TaskProgress;
     },
     enabled: !!taskId,
-    refetchInterval: (query) => {
+    refetchInterval: query => {
       const data = query.state.data;
       if (!data) return interval;
       if (data.status === 'completed' || data.status === 'failed') {
-        return false;  // 停止轮询
+        return false; // 停止轮询
       }
       return interval;
     },
@@ -84,14 +88,18 @@ export function useTaskProgress(...) {
 ### 5.3 提供 waitForTask 工具函数
 
 `src/lib/api/wait-for-task.ts`:
+
 ```typescript
 import { api } from '@/lib/api-client';
 
-export async function waitForTask(taskId: string, options?: {
-  timeoutMs?: number;
-  pollingInterval?: number;
-  onProgress?: (progress: number) => void;
-}): Promise<{ outputFileId: string }> {
+export async function waitForTask(
+  taskId: string,
+  options?: {
+    timeoutMs?: number;
+    pollingInterval?: number;
+    onProgress?: (progress: number) => void;
+  }
+): Promise<{ outputFileId: string }> {
   const startedAt = Date.now();
   const timeout = options?.timeoutMs ?? 5 * 60 * 1000;
   const interval = options?.pollingInterval ?? 1000;
@@ -123,6 +131,7 @@ export async function waitForTask(taskId: string, options?: {
 ### 5.4 SSE 版本（可选优化）
 
 如果后端实现了 `/tasks/:id/progress` SSE 端点：
+
 ```typescript
 export function useTaskProgressSSE(taskId: string | null) {
   const [progress, setProgress] = useState<TaskProgress | null>(null);
@@ -130,7 +139,7 @@ export function useTaskProgressSSE(taskId: string | null) {
   useEffect(() => {
     if (!taskId) return;
     const eventSource = new EventSource(`${API_URL}/tasks/${taskId}/progress`);
-    eventSource.onmessage = (e) => setProgress(JSON.parse(e.data));
+    eventSource.onmessage = e => setProgress(JSON.parse(e.data));
     return () => eventSource.close();
   }, [taskId]);
 
@@ -141,6 +150,7 @@ export function useTaskProgressSSE(taskId: string | null) {
 ### 5.5 单元测试
 
 `src/hooks/api/__tests__/use-task-progress.test.ts`:
+
 - 轮询间隔正确
 - completed 状态停止轮询
 - failed 状态停止轮询并触发回调

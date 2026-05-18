@@ -13,6 +13,7 @@
 ### 5.1 创建 docker-compose.yml
 
 `<repo-root>/docker-compose.yml`:
+
 ```yaml
 services:
   postgres:
@@ -20,7 +21,7 @@ services:
     container_name: utils-pg
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       POSTGRES_USER: utils
       POSTGRES_PASSWORD: utils
@@ -28,7 +29,7 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U utils -d utils_plane"]
+      test: ['CMD-SHELL', 'pg_isready -U utils -d utils_plane']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -38,12 +39,12 @@ services:
     container_name: utils-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory-policy noeviction
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -53,8 +54,8 @@ services:
     container_name: utils-minio
     restart: unless-stopped
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web Console
+      - '9000:9000' # S3 API
+      - '9001:9001' # Web Console
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -62,7 +63,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ['CMD', 'mc', 'ready', 'local']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -114,6 +115,7 @@ docker exec -it utils-redis redis-cli ping
 ### 5.4 创建 .env.example
 
 `<repo-root>/.env.example`:
+
 ```env
 # Database
 DATABASE_URL=postgresql://utils:utils@localhost:5432/utils_plane
@@ -152,6 +154,7 @@ NODE_ENV=development
 ### 5.5 添加 .gitignore
 
 确保以下条目存在：
+
 ```
 .env
 .env.local
@@ -161,6 +164,7 @@ NODE_ENV=development
 ### 5.6 提供启停脚本（可选）
 
 `<repo-root>/package.json` 根 scripts：
+
 ```json
 {
   "scripts": {

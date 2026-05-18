@@ -18,6 +18,7 @@ bun add -d @next/bundle-analyzer
 ```
 
 `next.config.ts`:
+
 ```typescript
 import bundleAnalyzer from '@next/bundle-analyzer';
 
@@ -61,6 +62,7 @@ const FontPreview = dynamic(() => import('@/components/tools/font-preview'), {
 #### 落地页图片
 
 所有 `<img>` 替换为 `<Image>`：
+
 ```tsx
 <Image src="/hero.png" alt="Hero" width={1200} height={600} priority />
 ```
@@ -87,15 +89,17 @@ export default function RootLayout({ children }) {
 ### 3.5 第三方脚本优化
 
 使用 `next/script`：
+
 ```tsx
 import Script from 'next/script';
 
-<Script src="..." strategy="lazyOnload" />
+<Script src="..." strategy="lazyOnload" />;
 ```
 
 ### 3.6 React Query 缓存策略
 
 `src/components/providers/query-provider.tsx`:
+
 ```typescript
 new QueryClient({
   defaultOptions: {
@@ -112,6 +116,7 @@ new QueryClient({
 ### 3.7 数据库查询优化
 
 审计后端 query：
+
 - N+1 问题：使用 Drizzle 的 `with` 预加载
 - 添加必要索引（已在 Phase 1 / 03-db 设计）
 - 大数据集分页（默认 limit 20）
@@ -119,6 +124,7 @@ new QueryClient({
 ### 3.8 CDN + Cache Headers
 
 `apps/web/next.config.ts`:
+
 ```typescript
 async headers() {
   return [
@@ -143,6 +149,7 @@ async headers() {
 ### 3.10 监控验证
 
 部署后用 PageSpeed Insights / WebPageTest 测试：
+
 - 首页 LCP < 2.5s
 - 工具页 TTI < 3s
 - Lighthouse Performance > 90

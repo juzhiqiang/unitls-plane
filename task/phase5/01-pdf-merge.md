@@ -20,6 +20,7 @@ bun add pdf-lib
 ### 1.2 创建 PdfService
 
 `apps/api/src/modules/tasks/services/pdf.service.ts`:
+
 ```typescript
 import { PDFDocument } from 'pdf-lib';
 
@@ -42,6 +43,7 @@ export class PdfService {
 ### 1.3 扩展 PdfProcessor
 
 `apps/api/src/modules/tasks/processors/pdf.processor.ts`:
+
 ```typescript
 @Processor('pdf-queue', { concurrency: 2 })
 export class PdfProcessor extends WorkerHost {
@@ -67,7 +69,9 @@ export class PdfProcessor extends WorkerHost {
       const file = await this.filesService.getById(task.input_file_ids[i]);
       const buffer = await this.filesService.download(file.storage_key);
       inputs.push(buffer);
-      await job.updateProgress(Math.floor((i + 1) / task.input_file_ids.length * 40));
+      await job.updateProgress(
+        Math.floor(((i + 1) / task.input_file_ids.length) * 40)
+      );
     }
 
     // 2. 合并
@@ -75,11 +79,15 @@ export class PdfProcessor extends WorkerHost {
     await job.updateProgress(80);
 
     // 3. 上传
-    const outputFile = await this.filesService.upload(merged, {
-      filename: task.input_config.outputFilename ?? 'merged.pdf',
-      mimeType: 'application/pdf',
-      size: merged.length,
-    }, task.user_id);
+    const outputFile = await this.filesService.upload(
+      merged,
+      {
+        filename: task.input_config.outputFilename ?? 'merged.pdf',
+        mimeType: 'application/pdf',
+        size: merged.length,
+      },
+      task.user_id
+    );
     await job.updateProgress(95);
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -93,6 +101,7 @@ export class PdfProcessor extends WorkerHost {
 ### 1.4 排序支持
 
 如果 `input_config.order` 提供，按指定顺序合并：
+
 ```typescript
 const orderedIds = task.input_config.order ?? task.input_file_ids;
 ```

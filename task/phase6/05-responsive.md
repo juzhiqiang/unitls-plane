@@ -67,6 +67,7 @@ xl: 1280px  - 桌面
 ### Chrome DevTools
 
 测试设备：
+
 - iPhone SE (375px)
 - iPhone 12 Pro (390px)
 - iPad (768px)
@@ -76,6 +77,7 @@ xl: 1280px  - 桌面
 ### Playwright 自动化测试
 
 `tests/responsive.spec.ts`:
+
 ```typescript
 const viewports = [
   { width: 375, height: 667, name: 'mobile' },

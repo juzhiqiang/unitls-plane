@@ -4,6 +4,7 @@
 > 预估：2h
 
 > **🎨 UI 设计要求**：字体工具页面，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出方案
 > 3. 配置面板与预览区水平分栏（桌面），sm 下垂直堆叠
@@ -33,7 +34,9 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 
 export default function FontPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [toFormat, setToFormat] = useState<'ttf' | 'otf' | 'woff' | 'woff2'>('woff2');
+  const [toFormat, setToFormat] = useState<'ttf' | 'otf' | 'woff' | 'woff2'>(
+    'woff2'
+  );
   const [subsetText, setSubsetText] = useState('');
   const [enableSubset, setEnableSubset] = useState(false);
 
@@ -69,7 +72,7 @@ export default function FontPage() {
             'font/woff2': ['.woff2'],
             'application/octet-stream': ['.ttf', '.otf', '.woff', '.woff2'],
           }}
-          onDrop={(files) => setFile(files[0])}
+          onDrop={files => setFile(files[0])}
         />
       )}
 
@@ -78,12 +81,19 @@ export default function FontPage() {
           <FontPreview file={file} />
 
           <Card>
-            <CardHeader><CardTitle>转换设置</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>转换设置</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label>目标格式</Label>
-                <Select value={toFormat} onValueChange={(v) => setToFormat(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={toFormat}
+                  onValueChange={v => setToFormat(v as any)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ttf">TTF</SelectItem>
                     <SelectItem value="otf">OTF</SelectItem>
@@ -95,19 +105,25 @@ export default function FontPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Checkbox checked={enableSubset} onCheckedChange={(v) => setEnableSubset(!!v)} />
+                  <Checkbox
+                    checked={enableSubset}
+                    onCheckedChange={v => setEnableSubset(!!v)}
+                  />
                   <Label>启用子集化（仅保留指定字符）</Label>
                 </div>
                 {enableSubset && (
                   <Textarea
                     placeholder="输入要保留的字符，例如：你好世界 ABC 123"
                     value={subsetText}
-                    onChange={(e) => setSubsetText(e.target.value)}
+                    onChange={e => setSubsetText(e.target.value)}
                   />
                 )}
               </div>
 
-              <Button onClick={handleConvert} disabled={!file || createTask.isPending}>
+              <Button
+                onClick={handleConvert}
+                disabled={!file || createTask.isPending}
+              >
                 开始转换
               </Button>
             </CardContent>
@@ -134,6 +150,7 @@ export default function FontPage() {
 ### 7.3 添加字体管理功能（可选）
 
 侧栏添加 "我的字体" 入口，列出用户上传过的字体：
+
 - 字体名 + 缩略预览
 - 收藏/取消收藏
 - 删除
@@ -141,6 +158,7 @@ export default function FontPage() {
 ### 7.4 LocalFont API 支持（可选）
 
 在支持的浏览器中，允许选择系统已安装字体：
+
 ```typescript
 if ('queryLocalFonts' in window) {
   const fonts = await (window as any).queryLocalFonts();

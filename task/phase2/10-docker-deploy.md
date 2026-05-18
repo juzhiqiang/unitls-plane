@@ -76,7 +76,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    ports: ["3001:3001"]
+    ports: ['3001:3001']
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -89,7 +89,7 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET: uploads
-      S3_FORCE_PATH_STYLE: "true"
+      S3_FORCE_PATH_STYLE: 'true'
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       CORS_ORIGIN: ${WEB_URL}
@@ -99,7 +99,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    ports: ["3000:3000"]
+    ports: ['3000:3000']
     depends_on:
       api: { condition: service_started }
     environment:
@@ -112,8 +112,8 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -145,6 +145,7 @@ volumes:
 ### 10.5 健康检查端点
 
 `apps/api/src/modules/health/health.controller.ts`:
+
 ```typescript
 @Controller('health')
 @Public()
@@ -183,12 +184,14 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 ### 10.7 备份策略
 
 PostgreSQL：
+
 ```bash
 # 定时备份脚本（cron）
 docker exec utils-pg pg_dump -U utils utils_plane | gzip > backup_$(date +%F).sql.gz
 ```
 
 MinIO：
+
 - 启用 versioning
 - 配置异地复制（mirror 到另一个 MinIO 实例或 S3）
 

@@ -4,6 +4,7 @@
 > 预估：4h
 
 > **🎨 UI 设计要求**：PDF 操作复杂，需 UI 引导，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出方案
 > 3. 文件排序：拖拽手柄使用 1px 线条图标，拖拽中显示 ghost 轮廓（不要 scale）
@@ -29,6 +30,7 @@ src/app/(app)/pdf/
 ### 4.2 合并 UI (merge/page.tsx)
 
 功能：
+
 1. 多文件上传（FileDropzone，multiple=true）
 2. 文件列表 + 缩略图预览（每个 PDF 显示第一页）
 3. 拖拽排序（dnd-kit Sortable）
@@ -47,7 +49,9 @@ export default function MergePage() {
   const { data: progress } = useTaskProgress(taskId);
 
   const handleMerge = async () => {
-    const uploaded = await Promise.all(files.map(f => uploadFiles.mutateAsync(f)));
+    const uploaded = await Promise.all(
+      files.map(f => uploadFiles.mutateAsync(f))
+    );
     const task = await createTask.mutateAsync({
       type: 'pdf_merge',
       inputFileIds: uploaded.map(u => u.id),
@@ -58,13 +62,26 @@ export default function MergePage() {
 
   return (
     <div>
-      <FileDropzone accept={{'application/pdf': []}} multiple onDrop={(f) => setFiles([...files, ...f])} />
+      <FileDropzone
+        accept={{ 'application/pdf': [] }}
+        multiple
+        onDrop={f => setFiles([...files, ...f])}
+      />
 
-      <SortableFileList files={files} onReorder={setFiles} onRemove={(i) => setFiles(files.filter((_, idx) => idx !== i))} />
+      <SortableFileList
+        files={files}
+        onReorder={setFiles}
+        onRemove={i => setFiles(files.filter((_, idx) => idx !== i))}
+      />
 
-      <Input value={outputFilename} onChange={(e) => setOutputFilename(e.target.value)} />
+      <Input
+        value={outputFilename}
+        onChange={e => setOutputFilename(e.target.value)}
+      />
 
-      <Button onClick={handleMerge} disabled={files.length < 2}>合并 PDF</Button>
+      <Button onClick={handleMerge} disabled={files.length < 2}>
+        合并 PDF
+      </Button>
 
       {progress && progress.status === 'processing' && (
         <Progress value={progress.progress} />
@@ -81,6 +98,7 @@ export default function MergePage() {
 ### 4.3 SortableFileList 组件
 
 `src/components/tools/sortable-file-list.tsx`:
+
 - 使用 @dnd-kit/sortable
 - 每项显示：PDF 缩略图（第一页）+ 文件名 + 删除按钮
 - 拖拽时显示拖拽手柄
@@ -88,6 +106,7 @@ export default function MergePage() {
 ### 4.4 拆分 UI (split/page.tsx)
 
 功能：
+
 1. 单文件上传
 2. PDF 全页预览（PdfPreview 组件）
 3. 三种拆分模式选择：
@@ -106,6 +125,7 @@ const [selection, setSelection] = useState<any>({});
 ### 4.5 工具首页
 
 `src/app/(app)/pdf/page.tsx`:
+
 - 卡片：合并、拆分
 - 预留：旋转、加密（未来）
 

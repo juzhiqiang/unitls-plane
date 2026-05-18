@@ -5,6 +5,7 @@
 > 可并行：与 03/05 同时执行
 
 > **🎨 UI 设计要求**：本任务为 UI 开发，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)（未来感 / 暗黑极简 / 日夜切换）
 > 2. 调用 `frontend-design` skill 产出视觉方案
 > 3. 侧边栏遵循"活跃项左侧 2px accent 竖线 + 无背景填充"
@@ -59,6 +60,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 ### 2.3 实现 AppSidebar
 
 `src/components/layout/app-sidebar.tsx`:
+
 - 使用 shadcn `<Sidebar>` 组件
 - 导航项：图片工具、PDF 工具、字体工具、我的文件、任务历史
 - 当前路由高亮（usePathname）
@@ -67,6 +69,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 ### 2.4 实现 AppHeader
 
 `src/components/layout/app-header.tsx`:
+
 - 左侧：SidebarTrigger（移动端切换）+ 面包屑
 - 右侧：主题切换、用户头像 dropdown（资料、登出）
 - 未登录时显示"登录"按钮
@@ -86,6 +89,7 @@ bunx shadcn@latest add sidebar breadcrumb
 ### 2.7 暗色模式预留
 
 引入 `next-themes`：
+
 ```bash
 bun add next-themes
 ```

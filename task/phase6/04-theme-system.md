@@ -5,6 +5,7 @@
 > 可并行：所有任务
 
 > **🎨 UI 设计要求**：本任务**实现** [`task/design-system.md`](../design-system.md) 第二、七章定义的双主题系统。两套主题**不是简单反色**，而是独立调色：
+>
 > - **暗模式**：冷色、低对比、矩阵绿 accent（默认）
 > - **亮模式**：纸感、温和、灰阶为主
 >
@@ -19,17 +20,21 @@
 ### 4.1 next-themes 配置（Phase 3 已引入）
 
 `src/components/providers/theme-provider.tsx`:
+
 ```tsx
 'use client';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
-export function ThemeProvider({ children, ...props }: React.ComponentProps<typeof NextThemesProvider>) {
+export function ThemeProvider({
+  children,
+  ...props
+}: React.ComponentProps<typeof NextThemesProvider>) {
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="dark"           // 默认暗（design-system 第二章）
+      defaultTheme="dark" // 默认暗（design-system 第二章）
       enableSystem
-      disableTransitionOnChange     // 切换无闪烁
+      disableTransitionOnChange // 切换无闪烁
       {...props}
     >
       {children}
@@ -41,6 +46,7 @@ export function ThemeProvider({ children, ...props }: React.ComponentProps<typeo
 ### 4.2 三态切换按钮
 
 `src/components/layout/theme-toggle.tsx`:
+
 ```tsx
 'use client';
 import { useTheme } from 'next-themes';
@@ -77,6 +83,7 @@ export function ThemeToggle() {
 ### 4.3 CSS 变量（按 design-system.md 第二章）
 
 `src/app/globals.css`:
+
 ```css
 @layer base {
   :root {
@@ -112,7 +119,7 @@ export function ThemeToggle() {
   body {
     background-color: oklch(var(--background));
     color: oklch(var(--foreground));
-    font-feature-settings: "ss01", "cv11";  /* Geist 高级字体特性 */
+    font-feature-settings: 'ss01', 'cv11'; /* Geist 高级字体特性 */
   }
 }
 ```
@@ -120,13 +127,18 @@ export function ThemeToggle() {
 ### 4.4 字体加载（Geist）
 
 `src/app/layout.tsx`:
+
 ```tsx
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html
+      lang="zh-CN"
+      suppressHydrationWarning
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+    >
       <body className="font-sans antialiased">
         <ThemeProvider>{children}</ThemeProvider>
       </body>

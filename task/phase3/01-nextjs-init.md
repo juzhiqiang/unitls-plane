@@ -38,8 +38,9 @@ bun create next-app . --typescript --tailwind --app --src-dir --import-alias "@/
 ### 1.3 配置 Tailwind CSS 4
 
 `apps/web/src/app/globals.css`:
+
 ```css
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-background: hsl(0 0% 100%);
@@ -48,8 +49,12 @@ bun create next-app . --typescript --tailwind --app --src-dir --import-alias "@/
 }
 
 @layer base {
-  :root { /* ... */ }
-  .dark { /* ... */ }
+  :root {
+    /* ... */
+  }
+  .dark {
+    /* ... */
+  }
 }
 ```
 
@@ -60,11 +65,13 @@ bunx shadcn@latest init
 ```
 
 选项：
+
 - Style: New York
 - Base color: Slate
 - CSS variables: yes
 
 生成 `components.json`：
+
 ```json
 {
   "style": "new-york",

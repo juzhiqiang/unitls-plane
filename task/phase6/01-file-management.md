@@ -4,6 +4,7 @@
 > 预估：3h
 
 > **🎨 UI 设计要求**：文件管理是常用页面，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出方案
 > 3. 文件列表用"去边框表格" — 仅水平 1px 分隔行、表头全大写 + tracking-wider
@@ -21,6 +22,7 @@
 ### 1.1 后端 API 扩展
 
 `apps/api/src/modules/files/files.controller.ts` 新增：
+
 - `GET /files` — 分页列表，支持过滤（mimeType、createdAt 范围）
 - `GET /files/trash` — 已软删除文件列表
 - `DELETE /files/:id` — 软删除（设置 deleted_at）
@@ -31,17 +33,20 @@
 ### 1.2 前端页面
 
 `src/app/(app)/dashboard/files/page.tsx`:
+
 - 顶部：搜索框、类型过滤、视图切换（网格/列表）
 - 中部：文件卡片网格
 - 右上：批量操作菜单（删除、下载）
 
 `src/app/(app)/dashboard/files/trash/page.tsx`:
+
 - 类似列表，每项有 "恢复" / "永久删除" 按钮
 - 顶部提示："文件将在 30 天后永久删除"
 
 ### 1.3 文件卡片组件
 
 `src/components/dashboard/file-card.tsx`:
+
 - 缩略图（图片直接显示，PDF 显示首页，字体显示字体名）
 - 文件名（可重命名）
 - 元信息（大小、上传时间、类型）

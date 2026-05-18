@@ -13,11 +13,13 @@
 ### 3.1 添加管理员标识
 
 `packages/db/src/schema.ts` users 表添加：
+
 ```typescript
 role: text('role', { enum: ['user', 'admin'] }).default('user').notNull(),
 ```
 
 生成 migration：
+
 ```bash
 cd packages/db
 bunx drizzle-kit generate
@@ -27,6 +29,7 @@ bunx drizzle-kit migrate
 ### 3.2 创建 AdminGuard
 
 `apps/api/src/common/guards/admin.guard.ts`:
+
 ```typescript
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -49,6 +52,7 @@ export class AdminGuard implements CanActivate {
 修改 BullBoardModule 配置，添加 Basic Auth 或在 reverse proxy 层处理。
 
 或者用 NestJS middleware：
+
 ```typescript
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 
@@ -63,6 +67,7 @@ export class AppModule implements NestModule {
 ```
 
 `apps/api/src/common/middleware/basic-auth.middleware.ts`:
+
 ```typescript
 @Injectable()
 export class BasicAuthMiddleware implements NestMiddleware {
@@ -71,8 +76,13 @@ export class BasicAuthMiddleware implements NestMiddleware {
     if (!auth?.startsWith('Basic ')) {
       return this.unauthorized(res);
     }
-    const [user, pass] = Buffer.from(auth.slice(6), 'base64').toString().split(':');
-    if (user !== process.env.ADMIN_USER || pass !== process.env.ADMIN_PASSWORD) {
+    const [user, pass] = Buffer.from(auth.slice(6), 'base64')
+      .toString()
+      .split(':');
+    if (
+      user !== process.env.ADMIN_USER ||
+      pass !== process.env.ADMIN_PASSWORD
+    ) {
       return this.unauthorized(res);
     }
     next();
@@ -95,6 +105,7 @@ ADMIN_PASSWORD=<强密码>
 ### 3.5 监控指标
 
 确保 Bull Board 展示：
+
 - 各队列 active/waiting/completed/failed 数量
 - 失败任务详情
 - 重试历史

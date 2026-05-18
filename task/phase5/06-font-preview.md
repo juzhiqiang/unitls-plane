@@ -4,6 +4,7 @@
 > 预估：1.5h
 
 > **🎨 UI 设计要求**：字体本身就是设计主体，预览区**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出方案
 > 3. 字体信息卡：mono 字体 + tracking-wider 全大写标签（如 `FONT NAME / GLYPHS`）
@@ -27,6 +28,7 @@ bun add opentype.js
 ### 6.2 创建字体加载工具
 
 `src/lib/processing/font-client.ts`:
+
 ```typescript
 import opentype from 'opentype.js';
 
@@ -65,10 +67,15 @@ export async function loadFontAsCSS(file: File): Promise<string> {
 ### 6.3 字体预览组件
 
 `src/components/tools/font-preview.tsx`:
+
 ```tsx
 'use client';
 import { useEffect, useState } from 'react';
-import { loadFontAsCSS, loadFontInfo, type FontInfo } from '@/lib/processing/font-client';
+import {
+  loadFontAsCSS,
+  loadFontInfo,
+  type FontInfo,
+} from '@/lib/processing/font-client';
 
 export function FontPreview({ file }: { file: File }) {
   const [fontFamily, setFontFamily] = useState<string | null>(null);
@@ -89,7 +96,9 @@ export function FontPreview({ file }: { file: File }) {
       setFontFamily(name);
       setInfo(fontInfo);
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [file]);
 
   return (
@@ -98,27 +107,43 @@ export function FontPreview({ file }: { file: File }) {
         <Card>
           <CardHeader>
             <CardTitle>{info.fullName}</CardTitle>
-            <CardDescription>{info.fontFamily} - {info.fontSubfamily}</CardDescription>
+            <CardDescription>
+              {info.fontFamily} - {info.fontSubfamily}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <p>字形数：{info.glyphCount} · 单位：{info.unitsPerEm}</p>
+            <p>
+              字形数：{info.glyphCount} · 单位：{info.unitsPerEm}
+            </p>
           </CardContent>
         </Card>
       )}
 
       <div>
         <Label>预览文本</Label>
-        <Textarea value={previewText} onChange={(e) => setPreviewText(e.target.value)} />
+        <Textarea
+          value={previewText}
+          onChange={e => setPreviewText(e.target.value)}
+        />
       </div>
 
       <div>
         <Label>字号 ({fontSize}px)</Label>
-        <Slider value={[fontSize]} min={12} max={96} onValueChange={([v]) => setFontSize(v)} />
+        <Slider
+          value={[fontSize]}
+          min={12}
+          max={96}
+          onValueChange={([v]) => setFontSize(v)}
+        />
       </div>
 
       <div
         className="border rounded p-6 whitespace-pre-wrap"
-        style={{ fontFamily: fontFamily ?? 'inherit', fontSize: `${fontSize}px`, lineHeight: 1.5 }}
+        style={{
+          fontFamily: fontFamily ?? 'inherit',
+          fontSize: `${fontSize}px`,
+          lineHeight: 1.5,
+        }}
       >
         {previewText}
       </div>
@@ -130,10 +155,14 @@ export function FontPreview({ file }: { file: File }) {
 ### 6.4 字形网格组件（可选）
 
 显示前 N 个字形预览：
+
 ```tsx
 <div className="grid grid-cols-8 gap-2">
   {glyphs.slice(0, 64).map(g => (
-    <div className="border aspect-square flex items-center justify-center" style={{ fontFamily }}>
+    <div
+      className="border aspect-square flex items-center justify-center"
+      style={{ fontFamily }}
+    >
       {String.fromCodePoint(g.unicode)}
     </div>
   ))}

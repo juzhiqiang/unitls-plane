@@ -20,6 +20,7 @@ bun add pdfjs-dist
 ### 3.2 配置 PDF.js worker
 
 `src/lib/processing/pdf-client.ts`:
+
 ```typescript
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -28,7 +29,9 @@ if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 }
 
-export async function loadPdf(file: File | Blob): Promise<pdfjsLib.PDFDocumentProxy> {
+export async function loadPdf(
+  file: File | Blob
+): Promise<pdfjsLib.PDFDocumentProxy> {
   const arrayBuffer = await file.arrayBuffer();
   return pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 }
@@ -36,7 +39,7 @@ export async function loadPdf(file: File | Blob): Promise<pdfjsLib.PDFDocumentPr
 export async function renderPdfPage(
   pdf: pdfjsLib.PDFDocumentProxy,
   pageNumber: number,
-  scale: number = 1,
+  scale: number = 1
 ): Promise<HTMLCanvasElement> {
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale });
@@ -54,6 +57,7 @@ export async function renderPdfPage(
 ### 3.3 复制 worker 文件
 
 `postinstall.sh` 或 `package.json` script：
+
 ```json
 {
   "scripts": {
@@ -65,12 +69,19 @@ export async function renderPdfPage(
 ### 3.4 创建 PdfPreview 组件
 
 `src/components/tools/pdf-preview.tsx`:
+
 ```tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { loadPdf, renderPdfPage } from '@/lib/processing/pdf-client';
 
-export function PdfPreview({ file, scale = 0.5 }: { file: File; scale?: number }) {
+export function PdfPreview({
+  file,
+  scale = 0.5,
+}: {
+  file: File;
+  scale?: number;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pageCount, setPageCount] = useState(0);
 
@@ -94,7 +105,9 @@ export function PdfPreview({ file, scale = 0.5 }: { file: File; scale?: number }
     }
 
     render();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file, scale]);
 
   return (
@@ -109,6 +122,7 @@ export function PdfPreview({ file, scale = 0.5 }: { file: File; scale?: number }
 ### 3.5 创建可拖拽页面组件（供拆分 UI 使用）
 
 `src/components/tools/pdf-page-card.tsx`:
+
 - 单页缩略图 + 页码标签
 - 支持选中（checkbox）
 - 支持拖拽排序（使用 dnd-kit）

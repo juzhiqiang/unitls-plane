@@ -20,6 +20,7 @@ bun add @nestjs/throttler @nest-lab/throttler-storage-redis ioredis
 ### 5.2 配置 ThrottlerModule
 
 `apps/api/src/config/throttle.config.ts`:
+
 ```typescript
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
@@ -34,7 +35,7 @@ export const throttleConfig = ThrottlerModule.forRootAsync({
     storage: new ThrottlerStorageRedisService(
       new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
         maxRetriesPerRequest: 3,
-      }),
+      })
     ),
   }),
 });
@@ -43,6 +44,7 @@ export const throttleConfig = ThrottlerModule.forRootAsync({
 ### 5.3 自定义 Throttler Guard
 
 `apps/api/src/common/guards/custom-throttler.guard.ts`:
+
 ```typescript
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Injectable, ExecutionContext } from '@nestjs/common';
@@ -64,6 +66,7 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
 ### 5.4 注册全局 Guard
 
 `apps/api/src/app.module.ts`:
+
 ```typescript
 import { APP_GUARD } from '@nestjs/core';
 import { throttleConfig } from './config/throttle.config';
@@ -72,7 +75,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 @Module({
   imports: [throttleConfig],
   providers: [
-    { provide: APP_GUARD, useClass: AuthGuard },        // 先 Auth
+    { provide: APP_GUARD, useClass: AuthGuard }, // 先 Auth
     { provide: APP_GUARD, useClass: CustomThrottlerGuard }, // 再 Throttle
   ],
 })

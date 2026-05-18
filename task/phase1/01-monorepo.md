@@ -22,10 +22,7 @@ mkdir -p apps/web apps/api packages/db packages/validators packages/api-client p
 {
   "name": "utils-plane",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",

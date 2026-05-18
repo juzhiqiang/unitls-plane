@@ -9,24 +9,33 @@ export function validateEmail(email: string): ValidationResult {
 
   return {
     isValid,
-    errors: isValid ? [] : ['Invalid email format']
+    errors: isValid ? [] : ['Invalid email format'],
   };
 }
 
-export function validateRequired(value: any, fieldName: string): ValidationResult {
+export function validateRequired(
+  value: unknown,
+  fieldName: string
+): ValidationResult {
   const isValid = value !== null && value !== undefined && value !== '';
 
   return {
     isValid,
-    errors: isValid ? [] : [`${fieldName} is required`]
+    errors: isValid ? [] : [`${fieldName} is required`],
   };
 }
 
-export function validateMinLength(value: string, minLength: number, fieldName: string): ValidationResult {
+export function validateMinLength(
+  value: string,
+  minLength: number,
+  fieldName: string
+): ValidationResult {
   const isValid = Boolean(value && value.length >= minLength);
 
   return {
     isValid,
-    errors: isValid ? [] : [`${fieldName} must be at least ${minLength} characters`]
+    errors: isValid
+      ? []
+      : [`${fieldName} must be at least ${minLength} characters`],
   };
 }

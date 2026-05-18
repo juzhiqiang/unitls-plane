@@ -13,6 +13,7 @@
 ### 2.1 扩展 PdfService
 
 `apps/api/src/modules/tasks/services/pdf.service.ts`:
+
 ```typescript
 async split(input: Buffer, opts: SplitOptions): Promise<Buffer[]> {
   const src = await PDFDocument.load(input);

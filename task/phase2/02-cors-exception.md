@@ -13,6 +13,7 @@
 ### 2.1 启用 CORS
 
 `apps/api/src/main.ts`:
+
 ```typescript
 app.enableCors({
   origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
@@ -23,8 +24,15 @@ app.enableCors({
 ### 2.2 创建全局异常过滤器
 
 `apps/api/src/common/filters/http-exception.filter.ts`:
+
 ```typescript
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Logger } from '@nestjs/common';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 
 @Catch()
@@ -41,14 +49,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const errorResponse = isHttp ? exception.getResponse() : null;
 
     const body = {
-      code: typeof errorResponse === 'object' ? (errorResponse as any).code ?? 'INTERNAL_ERROR' : 'INTERNAL_ERROR',
-      message: typeof errorResponse === 'string' ? errorResponse : (errorResponse as any)?.message ?? 'Internal server error',
+      code:
+        typeof errorResponse === 'object'
+          ? ((errorResponse as any).code ?? 'INTERNAL_ERROR')
+          : 'INTERNAL_ERROR',
+      message:
+        typeof errorResponse === 'string'
+          ? errorResponse
+          : ((errorResponse as any)?.message ?? 'Internal server error'),
       timestamp: new Date().toISOString(),
       path: request.url,
     };
 
     if (!isHttp) {
-      this.logger.error(`Unhandled exception: ${exception}`, (exception as Error).stack);
+      this.logger.error(
+        `Unhandled exception: ${exception}`,
+        (exception as Error).stack
+      );
     }
 
     response.status(status).json(body);
@@ -59,6 +76,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 ### 2.3 注册全局过滤器
 
 `apps/api/src/main.ts`:
+
 ```typescript
 app.useGlobalFilters(new AllExceptionsFilter());
 ```
@@ -66,6 +84,7 @@ app.useGlobalFilters(new AllExceptionsFilter());
 ### 2.4 创建错误码常量
 
 `apps/api/src/common/errors/error-codes.ts`:
+
 ```typescript
 export const ErrorCodes = {
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',

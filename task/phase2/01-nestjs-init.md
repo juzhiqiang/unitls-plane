@@ -37,6 +37,7 @@ bun add -d @nestjs/cli typescript @types/node
 ### 1.3 创建入口文件
 
 `apps/api/src/main.ts`:
+
 ```typescript
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -49,14 +50,13 @@ bootstrap();
 ```
 
 `apps/api/src/app.module.ts`:
+
 ```typescript
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-  ],
+  imports: [ConfigModule.forRoot({ isGlobal: true })],
 })
 export class AppModule {}
 ```
@@ -64,6 +64,7 @@ export class AppModule {}
 ### 1.4 tsconfig.json
 
 继承根 tsconfig，添加：
+
 - `emitDecoratorMetadata: true`
 - `experimentalDecorators: true`
 - `target: "esnext"`

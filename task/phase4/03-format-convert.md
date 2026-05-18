@@ -12,6 +12,7 @@
 ### 3.1 扩展 ImageService
 
 `apps/api/src/modules/tasks/services/image.service.ts`:
+
 ```typescript
 async convert(input: Buffer, opts: ConvertOptions): Promise<Buffer> {
   const pipeline = sharp(input, { failOn: 'truncated' });
@@ -65,6 +66,7 @@ export interface ConvertOptions {
 ### 3.2 扩展 ImageProcessor
 
 在 `image.processor.ts` 中根据 task.type 分发：
+
 ```typescript
 async process(job: Job<{ taskId: string }>): Promise<unknown> {
   const task = await this.tasksService.getById(job.data.taskId);
@@ -87,6 +89,7 @@ private async handleConvert(task: Task, job: Job): Promise<unknown> {
 ### 3.3 输入格式检测
 
 在处理前检测输入是否为支持的图片：
+
 ```typescript
 const meta = await this.imageService.getMetadata(inputBuffer);
 if (!meta.format) {
@@ -100,6 +103,7 @@ if (!meta.format) {
 ### 3.4 批量转换（可选）
 
 如果 input_file_ids 是多个，循环处理后打包成 ZIP：
+
 ```bash
 bun add archiver
 ```

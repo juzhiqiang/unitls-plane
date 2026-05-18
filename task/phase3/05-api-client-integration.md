@@ -21,6 +21,7 @@ bun add -d @tanstack/react-query-devtools
 ### 5.2 创建 QueryProvider
 
 `src/components/providers/query-provider.tsx`:
+
 ```tsx
 'use client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -28,15 +29,18 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useState } from 'react';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
-  const [client] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 30_000,
-        retry: 1,
-        refetchOnWindowFocus: false,
-      },
-    },
-  }));
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
 
   return (
     <QueryClientProvider client={client}>
@@ -50,6 +54,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
 ### 5.3 创建 API Client 实例
 
 `src/lib/api-client.ts`:
+
 ```typescript
 import { createApiClient } from '@utils-plane/api-client';
 import { createClient } from './supabase/client';
@@ -58,32 +63,35 @@ export const api = createApiClient(
   process.env.NEXT_PUBLIC_API_URL!,
   async () => {
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session?.access_token ?? null;
-  },
+  }
 );
 ```
 
 服务端版本 `src/lib/api-client-server.ts`：
+
 ```typescript
 import { createApiClient } from '@utils-plane/api-client';
 import { createClient } from './supabase/server';
 
 export async function getApiClient() {
-  return createApiClient(
-    process.env.NEXT_PUBLIC_API_URL!,
-    async () => {
-      const supabase = await createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.access_token ?? null;
-    },
-  );
+  return createApiClient(process.env.NEXT_PUBLIC_API_URL!, async () => {
+    const supabase = await createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  });
 }
 ```
 
 ### 5.4 创建通用 hooks
 
 `src/hooks/api/use-files.ts`:
+
 ```typescript
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
@@ -105,7 +113,9 @@ export function useUploadFile() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      const { data, error } = await api.POST('/files/upload', { body: formData as any });
+      const { data, error } = await api.POST('/files/upload', {
+        body: formData as any,
+      });
       if (error) throw error;
       return data;
     },
@@ -119,6 +129,7 @@ export function useUploadFile() {
 ### 5.5 集成到根 layout
 
 `src/app/layout.tsx`:
+
 ```tsx
 import { QueryProvider } from '@/components/providers/query-provider';
 import { Toaster } from '@/components/ui/sonner';
@@ -142,6 +153,7 @@ export default function RootLayout({ children }) {
 ### 5.6 错误处理 + Toast
 
 创建 `src/lib/api-error.ts`:
+
 ```typescript
 import { toast } from 'sonner';
 

@@ -4,6 +4,7 @@
 > 预估：2h
 
 > **🎨 UI 设计要求**：任务历史是数据密集页面，**必须**：
+>
 > 1. 先读 [`task/design-system.md`](../design-system.md)
 > 2. 调用 `frontend-design` skill 产出方案
 > 3. 状态徽章用"1px 边框 + mono 字体 + 全大写"风格，**禁止圆角填充 pill**
@@ -24,12 +25,14 @@
 ### 2.1 后端 API
 
 `apps/api/src/modules/tasks/tasks.controller.ts` 扩展：
+
 - `GET /tasks` 已存在，确保支持 query：status、type、createdAt 范围
 - `POST /tasks/:id/retry` — 失败任务重试（创建新任务）
 
 ### 2.2 前端页面
 
 `src/app/(app)/dashboard/tasks/page.tsx`:
+
 - 表格展示：类型、状态、创建时间、耗时、操作
 - 顶部过滤：状态 (全部/失败/完成)、类型 (图片/PDF/字体)
 - 每行点击展开详情：输入文件、输出文件、错误信息
@@ -37,6 +40,7 @@
 ### 2.3 任务行组件
 
 `src/components/dashboard/task-row.tsx`:
+
 - 状态徽章（pending: 灰、processing: 蓝带动画、completed: 绿、failed: 红）
 - 操作菜单：
   - 完成的任务：下载结果、重新处理
@@ -60,6 +64,7 @@ export function useRetryTask() { ... }
 ### 2.5 错误信息友好化
 
 `src/lib/error-codes.ts`:
+
 ```typescript
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   IMAGE_PROCESSING_FAILED: '图片处理失败，请检查文件是否损坏',

@@ -6,5 +6,5 @@ export default function Home() {
         <p className="mt-4 text-xl">Welcome to your monorepo!</p>
       </div>
     </main>
-  )
+  );
 }

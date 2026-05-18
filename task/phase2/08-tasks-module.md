@@ -13,22 +13,18 @@
 ### 8.1 创建 TasksModule
 
 `apps/api/src/modules/tasks/tasks.module.ts`:
+
 ```typescript
 @Module({
   imports: [
     BullModule.registerQueue(
       { name: 'image-queue' },
       { name: 'pdf-queue' },
-      { name: 'font-queue' },
+      { name: 'font-queue' }
     ),
   ],
   controllers: [TasksController],
-  providers: [
-    TasksService,
-    ImageProcessor,
-    PdfProcessor,
-    FontProcessor,
-  ],
+  providers: [TasksService, ImageProcessor, PdfProcessor, FontProcessor],
 })
 export class TasksModule {}
 ```
@@ -36,6 +32,7 @@ export class TasksModule {}
 ### 8.2 实现 TasksService
 
 `apps/api/src/modules/tasks/tasks.service.ts`:
+
 ```typescript
 @Injectable()
 export class TasksService {
@@ -82,6 +79,7 @@ export class TasksService {
 ### 8.3 实现 TasksController
 
 `apps/api/src/modules/tasks/tasks.controller.ts`:
+
 ```typescript
 @Controller('tasks')
 @ApiTags('tasks')
@@ -108,6 +106,7 @@ export class TasksController {
 ### 8.4 创建 DTOs
 
 `apps/api/src/modules/tasks/dto/`:
+
 - `create-task.dto.ts` (用 @utils-plane/validators 的 schema)
 - `task-query.dto.ts`
 - `task-response.dto.ts`
@@ -115,6 +114,7 @@ export class TasksController {
 ### 8.5 实时进度更新（可选）
 
 如果要支持 SSE 推送进度，添加：
+
 ```typescript
 @Sse(':id/progress')
 progress(@Param('id') id: string): Observable<MessageEvent> {

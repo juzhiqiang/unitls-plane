@@ -40,7 +40,12 @@
       "Bash(docker exec utils-redis *)",
       "Bash(npx eslint *)",
       "Bash(S3_ENDPOINT=http://localhost:9000 bun dev)",
-      "Bash(pkill -f \"next\")"
+      "Bash(pkill -f \"next\")",
+      "Bash(npm view *)",
+      "Bash(bunx shadcn@latest add sidebar breadcrumb dropdown-menu avatar separator -y)",
+      "Bash(bunx shadcn@latest add sidebar breadcrumb dropdown-menu sheet -y)",
+      "Bash(find src/app -name \"page.tsx\")",
+      "Bash(dir /s /b src\\\\app\\\\page.tsx)"
     ]
   }
 }

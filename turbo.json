@@ -19,6 +19,10 @@
     "clean": {
       "cache": false
     },
+    "@utils-plane/api#openapi:export": {
+      "cache": false,
+      "outputs": ["openapi.json"]
+    },
     "@utils-plane/api-client#generate": {
       "dependsOn": ["@utils-plane/api#openapi:export"],
       "cache": false

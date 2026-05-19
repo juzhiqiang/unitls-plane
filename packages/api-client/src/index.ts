@@ -5,7 +5,11 @@ export function createApiClient(
   baseUrl: string,
   getToken?: () => Promise<string | null>
 ) {
-  const client = createClient<paths>({ baseUrl });
+  const client = createClient<paths>({
+    baseUrl,
+    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+      fetch(input, { ...init, credentials: 'include' }),
+  });
 
   client.use({
     async onRequest({ request }) {

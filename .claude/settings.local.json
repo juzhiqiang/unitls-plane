@@ -45,7 +45,8 @@
       "Bash(bunx shadcn@latest add sidebar breadcrumb dropdown-menu avatar separator -y)",
       "Bash(bunx shadcn@latest add sidebar breadcrumb dropdown-menu sheet -y)",
       "Bash(find src/app -name \"page.tsx\")",
-      "Bash(dir /s /b src\\\\app\\\\page.tsx)"
+      "Bash(dir /s /b src\\\\app\\\\page.tsx)",
+      "Skill(superpowers:systematic-debugging)"
     ]
   }
 }

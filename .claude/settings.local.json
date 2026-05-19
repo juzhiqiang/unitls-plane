@@ -39,7 +39,8 @@
       "Bash(curl *)",
       "Bash(docker exec utils-redis *)",
       "Bash(npx eslint *)",
-      "Bash(S3_ENDPOINT=http://localhost:9000 bun dev)"
+      "Bash(S3_ENDPOINT=http://localhost:9000 bun dev)",
+      "Bash(pkill -f \"next\")"
     ]
   }
 }

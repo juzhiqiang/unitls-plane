@@ -17,12 +17,18 @@ export class MinioService implements OnModuleInit {
   private bucket = process.env.S3_BUCKET ?? 'uploads';
 
   constructor() {
+    const accessKey = process.env.S3_ACCESS_KEY;
+    const secretKey = process.env.S3_SECRET_KEY;
+    const endpoint = process.env.S3_ENDPOINT;
+
+    this.logger.log(`S3_CONFIG: endpoint=${endpoint}, accessKey=${accessKey ? 'set' : 'NOT SET'}, secretKey=${secretKey ? 'set' : 'NOT SET'}`);
+
     this.client = new S3Client({
-      endpoint: process.env.S3_ENDPOINT,
+      endpoint: endpoint,
       region: process.env.S3_REGION ?? 'us-east-1',
       credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY!,
-        secretAccessKey: process.env.S3_SECRET_KEY!,
+        accessKeyId: accessKey || 'minioadmin',
+        secretAccessKey: secretKey || 'minioadmin',
       },
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
     });

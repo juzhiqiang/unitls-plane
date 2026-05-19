@@ -46,7 +46,11 @@
       "Bash(bunx shadcn@latest add sidebar breadcrumb dropdown-menu sheet -y)",
       "Bash(find src/app -name \"page.tsx\")",
       "Bash(dir /s /b src\\\\app\\\\page.tsx)",
-      "Skill(superpowers:systematic-debugging)"
+      "Skill(superpowers:systematic-debugging)",
+      "Bash(timeout 15 bun src/main.ts)",
+      "Bash(/Users/mac/.bun/bin/bun install *)",
+      "Bash(/Users/mac/.bun/bin/bun pm *)",
+      "Bash(docker compose *)"
     ]
   }
 }

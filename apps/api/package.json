@@ -31,6 +31,8 @@
     "@nestjs/core": "^11.1.21",
     "@nestjs/platform-express": "^11.1.21",
     "@nestjs/swagger": "^11.4.3",
+    "@nestjs/throttler": "^6.4.0",
+    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@utils-plane/auth": "workspace:*",
     "@utils-plane/db": "workspace:*",
     "@utils-plane/validators": "workspace:*",

@@ -20,7 +20,24 @@
       "Bash(timeout 10 bun dev)",
       "Bash(bun dev *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)",
-      "Bash(pkill -f \"bun --hot\")"
+      "Bash(pkill -f \"bun --hot\")",
+      "Bash(npx nest *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3001)",
+      "Bash(taskkill *)",
+      "Bash(curl -s -I -X OPTIONS -H \"Origin: http://localhost:3000\" http://localhost:3001/)",
+      "Bash(curl -s http://localhost:3001/)",
+      "Bash(curl -s http://localhost:3001/docs)",
+      "Bash(pkill -f \"bun\")",
+      "Bash(node -e \"require\\('./src/common/errors/error-codes.ts'\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(bun x *)",
+      "Bash(curl -s -I http://localhost:3001/tasks)",
+      "Bash(curl -s http://localhost:3001/admin/queues)",
+      "Bash(redis-cli KEYS \"*queue*\")",
+      "Bash(docker port utils-redis *)",
+      "Bash(curl *)",
+      "Bash(docker exec utils-redis *)"
     ]
   }
 }

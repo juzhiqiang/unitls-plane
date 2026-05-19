@@ -2,15 +2,37 @@
 
 > 基于 Monorepo 架构的现代化文件处理工具平台，支持图片压缩、PDF 操作、字体转换等功能
 
-## 🚀 技术栈
+## 🚀 技术栈与版本
 
-- **架构**: Turborepo + Bun Workspaces
-- **前端**: Next.js 15 + React 19 + Tailwind CSS 4 + shadcn/ui
-- **后端**: NestJS + Bun Runtime
-- **数据库**: PostgreSQL 16 + Drizzle ORM
-- **认证**: Better-Auth
+### 核心框架
+- **运行时**: Bun 1.3+
+- **构建工具**: Turborepo 2.x
+- **语言**: TypeScript 5.7+
+
+### 前端 (apps/web)
+- **框架**: Next.js 14.x (App Router)
+- **UI**: React 18.x + Tailwind CSS 4
+- **类型检查**: TypeScript
+
+### 后端 (apps/api)
+- **框架**: NestJS 11.x
+- **运行时**: Bun
+- **ORM**: Drizzle ORM 0.45.x
+- **数据库**: PostgreSQL 16 (Docker)
+- **认证**: Better-Auth 1.4.x
+- **任务队列**: BullMQ 5.x + Redis 7
 - **文件存储**: MinIO (S3 兼容)
-- **任务队列**: Bull/BullMQ + Redis 7
+- **API 文档**: Swagger (NestJS)
+
+### 包 (packages/)
+- **db**: Drizzle ORM + postgres
+- **auth**: Better-Auth 配置
+- **validators**: Zod 3.x
+- **api-client**: 类型安全 API 客户端
+- **utils**: 通用工具函数
+
+### 开发工具
+- **代码检查**: ESLint 10.x + Prettier 3.x
 - **容器化**: Docker Compose
 
 ## 📁 项目结构
@@ -18,17 +40,53 @@
 ```
 utils-plane/
 ├── apps/
-│   ├── web/                    # Next.js 15 前端应用
-│   └── api/                    # NestJS 后端 API
+│   ├── web/                    # Next.js 14 前端应用 (Port 3000)
+│   │   ├── app/                # App Router 页面
+│   │   ├── components/         # React 组件
+│   │   └── lib/                # 工具库
+│   │
+│   └── api/                    # NestJS 11 后端 API (Port 3001)
+│       ├── src/
+│       │   ├── common/         # 公共模块 (guards, decorators, filters)
+│       │   ├── modules/        # 功能模块 (auth, tasks, files)
+│       │   ├── config/         # 配置文件
+│       │   └── main.ts         # 入口文件
+│       └── nest-cli.json
+│
 ├── packages/
-│   ├── db/                     # Drizzle Schema + migrations
-│   ├── auth/                   # Better-Auth 配置共享
-│   ├── validators/             # Zod schemas
+│   ├── db/                     # Drizzle ORM Schema + Migrations
+│   │   ├── src/
+│   │   │   ├── schema/         # 数据库表定义 (files, tasks)
+│   │   │   ├── client.ts       # 数据库连接
+│   │   │   └── index.ts        # 导出
+│   │   ├── drizzle/            # 迁移文件
+│   │   └── drizzle.config.ts
+│   │
+│   ├── auth/                   # Better-Auth 配置
+│   │   └── src/
+│   │       └── index.ts        # auth 实例导出
+│   │
+│   ├── validators/             # Zod 数据验证 schemas
+│   │   └── src/
+│   │       └── index.ts
+│   │
 │   ├── api-client/             # 类型安全 API 客户端
+│   │   └── src/
+│   │       └── index.ts
+│   │
 │   └── utils/                  # 通用工具函数
-├── task/                       # 项目任务和开发计划
+│       └── src/
+│           └── index.ts
+│
+├── task/                       # 项目任务文档
+│   ├── phase1/                 # Phase 1: 基础设施
+│   ├── phase2/                 # Phase 2: 后端服务
+│   └── ...
+│
 ├── docker-compose.yml          # 本地开发环境
-└── turbo.json                  # Turborepo 配置
+├── turbo.json                  # Turborepo 配置
+├── package.json                # Root workspace 配置
+└── tsconfig.json               # TypeScript 基础配置
 ```
 
 ## 🛠️ 核心功能
@@ -50,11 +108,18 @@ utils-plane/
 
 ### 环境要求
 
-- Node.js 18+ 或 Bun 1.3+
-- Docker & Docker Compose
-- Git
+- **运行时**: Bun 1.3+ (推荐) 或 Node.js 18+
+- **容器**: Docker & Docker Compose
+- **Git**: 已安装
 
-### 安装依赖
+### 1. 克隆项目
+
+```bash
+git clone <repository-url>
+cd utils-plane
+```
+
+### 2. 安装依赖
 
 ```bash
 # 使用 Bun (推荐)
@@ -64,36 +129,96 @@ bun install
 npm install
 ```
 
-### 启动本地服务
+### 3. 启动基础服务
 
 ```bash
-# 启动数据库、Redis、MinIO 等基础服务
+# 启动 PostgreSQL + Redis + MinIO
 bun run services:up
 
-# 启动开发服务器
-bun run dev
+# 查看服务状态
+docker compose ps
 ```
 
-### 访问应用
+### 4. 配置环境变量
 
-- 🌐 **前端应用**: http://localhost:3000
-- 🔧 **API 文档**: http://localhost:3001/api/docs
-- 🗄️ **MinIO 控制台**: http://localhost:9001 (minioadmin/minioadmin)
+```bash
+# 复制环境变量模板
+cp .env.example .env.local
+
+# 编辑 .env.local 配置必要的环境变量
+```
+
+### 5. 启动开发服务器
+
+```bash
+# 启动所有应用 (Web + API)
+bun run dev
+
+# 或分别启动
+bun run dev --filter=@utils-plane/web    # 前端 http://localhost:3000
+bun run dev --filter=@utils-plane/api    # 后端 http://localhost:3001
+```
+
+### 6. 数据库迁移 (首次)
+
+```bash
+cd packages/db
+
+# 生成迁移文件
+bun run db:generate
+
+# 应用迁移
+bun run db:migrate
+
+# 或者直接推送 schema
+bun run db:push
+```
+
+### 访问服务
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 前端 | http://localhost:3000 | Next.js 应用 |
+| API | http://localhost:3001 | NestJS 后端 |
+| API 文档 | http://localhost:3001/docs | Swagger API 文档 |
+| MinIO Console | http://localhost:9001 | 文件存储管理 (minioadmin/minioadmin) |
+| Queue Dashboard | http://localhost:3001/admin/queues | BullMQ 任务队列管理 |
 
 ## 📋 可用脚本
 
+### 开发脚本
 ```bash
-# 开发
-bun run dev              # 启动所有应用的开发模式
+bun run dev              # 启动所有应用的开发模式 (并行)
 bun run build            # 构建所有应用
 bun run lint             # 代码检查
+bun run lint:fix         # 自动修复代码问题
+bun run format           # 代码格式化
+bun run format:check     # 检查代码格式
 bun run clean            # 清理构建产物
+```
 
-# 服务管理
+### 服务管理脚本
+```bash
 bun run services:up      # 启动基础服务 (PostgreSQL, Redis, MinIO)
 bun run services:down    # 停止基础服务
-bun run services:reset   # 重置服务数据
+bun run services:reset   # 重置服务数据 (清除 volumes)
 bun run services:logs    # 查看服务日志
+```
+
+### 数据库脚本 (packages/db)
+```bash
+cd packages/db
+bun run db:generate      # 生成数据库迁移文件
+bun run db:migrate       # 应用数据库迁移
+bun run db:push          # 推送 schema 到数据库 (开发用)
+```
+
+### API 服务脚本 (apps/api)
+```bash
+cd apps/api
+bun run dev              # 启动 API 开发服务器 (热重载)
+bun run build            # 构建 API 应用
+bun run start            # 生产环境启动
 ```
 
 ## 🏗️ 架构设计
@@ -102,7 +227,7 @@ bun run services:logs    # 查看服务日志
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│              Next.js 15 (Docker / Vercel)                │
+│              Next.js 14 (App Router)                    │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  Server Components — 页面渲染、SEO                 │  │
 │  └───────────────────────────────────────────────────┘  │
@@ -113,10 +238,10 @@ bun run services:logs    # 查看服务日志
 │  │  Better-Auth Client (cookie-based session)        │  │
 │  └───────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────┘
-                         │ packages/api-client (类型安全)
+                         │ @utils-plane/api-client
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              NestJS + Bun (Docker)                       │
+│              NestJS 11 + Bun Runtime                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │  │ Auth Guard  │  │ Throttler   │  │ CORS        │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘    │
@@ -127,7 +252,7 @@ bun run services:logs    # 查看服务日志
 │  │  Services: Sharp, pdf-lib, fonteditor-core      │    │
 │  └─────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │  Bull/BullMQ Processors                          │    │
+│  │  BullMQ Processors (Redis 7)                     │    │
 │  └─────────────────────────────────────────────────┘    │
 └──────┬──────────────┬─────────────────┬─────────────────┘
        │              │                  │
@@ -194,7 +319,25 @@ cp .env.example .env.local
 项目采用分阶段开发模式，详细的开发计划和任务分解请查看 `task/` 目录：
 
 - ✅ **Phase 1**: Monorepo + 基础设施搭建
+  - ✅ 01 - Monorepo 初始化 (Turborepo + Bun)
+  - ✅ 02 - 共享配置 (TypeScript/ESLint/Prettier)
+  - ✅ 03 - 数据库 Drizzle Schema + Migration
+  - ✅ 04 - Validators (Zod)
+  - ✅ 05 - Docker Services (PostgreSQL + Redis + MinIO)
+  - ✅ 06 - Better-Auth 配置
+
 - 🚧 **Phase 2**: 后端服务开发
+  - ✅ 01 - NestJS 初始化
+  - ✅ 02 - CORS + Exception Filters
+  - ✅ 03 - Swagger 自动文档
+  - ✅ 04 - Better-Auth Guard + Handler
+  - ⏳ 05 - Throttler (Rate Limiting)
+  - ⏳ 06 - BullMQ 集成
+  - ⏳ 07 - Files Module (MinIO)
+  - ⏳ 08 - Tasks Module
+  - ⏳ 09 - API Client
+  - ⏳ 10 - Docker Deploy
+
 - ⏳ **Phase 3**: 前端基础搭建
 - ⏳ **Phase 4**: 图片工具 MVP
 - ⏳ **Phase 5**: PDF + 字体工具

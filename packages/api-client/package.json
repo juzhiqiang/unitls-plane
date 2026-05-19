@@ -1,16 +1,23 @@
 {
   "name": "@utils-plane/api-client",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
+    "generate": "openapi-typescript ../../apps/api/openapi.json -o ./src/schema.ts",
     "build": "tsc",
     "dev": "tsc --watch",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
   }
 }

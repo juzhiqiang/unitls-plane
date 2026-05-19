@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779122991540,
+      "tag": "0000_kind_santa_claus",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779153725376,
+      "tag": "0001_known_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779154066370,
+      "tag": "0002_foamy_fixer",
+      "breakpoints": true
+    }
+  ]
+}

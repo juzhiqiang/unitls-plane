@@ -1,71 +1,27 @@
-export interface ApiResponse<T = unknown> {
-  data: T;
-  success: boolean;
-  message?: string;
-}
+import createClient from 'openapi-fetch';
+import type { paths } from './schema';
 
-export interface ApiError {
-  message: string;
-  status: number;
-  code?: string;
-}
+export function createApiClient(
+  baseUrl: string,
+  getToken?: () => Promise<string | null>
+) {
+  const client = createClient<paths>({
+    baseUrl,
+    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+      fetch(input, { ...init, credentials: 'include' }),
+  });
 
-export class ApiClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string = 'http://localhost:3001') {
-    this.baseUrl = baseUrl;
-  }
-
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${endpoint}`;
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        ...options,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'API request failed');
+  client.use({
+    async onRequest({ request }) {
+      const token = await getToken?.();
+      if (token) {
+        request.headers.set('Authorization', `Bearer ${token}`);
       }
+      return request;
+    },
+  });
 
-      return data;
-    } catch (error) {
-      throw {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        status: 500,
-      } as ApiError;
-    }
-  }
-
-  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'GET' });
-  }
-
-  async post<T>(endpoint: string, data: unknown): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async put<T>(endpoint: string, data: unknown): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
-  }
+  return client;
 }
+
+export type { paths, components } from './schema';

@@ -1,0 +1,15 @@
+# Caddy 反向代理配置
+# 自动 HTTPS
+
+{$DOMAIN} {
+    handle /api/* {
+        reverse_proxy api:3001
+    }
+    handle {
+        reverse_proxy web:3000
+    }
+}
+
+{$S3_DOMAIN} {
+    reverse_proxy minio:9000
+}

@@ -7,7 +7,16 @@
       "Bash(bun add *)",
       "Bash(bunx tsc *)",
       "Bash(bunx eslint *)",
-      "Bash(bunx prettier *)"
+      "Bash(bunx prettier *)",
+      "Bash(docker compose ps *)",
+      "Bash(DATABASE_URL=\"postgresql://utils:utils@localhost:5433/utils_plane\" bunx drizzle-kit *)",
+      "Bash(bun -e ' *)",
+      "Bash(bunx @better-auth/cli@latest generate --output ../db/src/schema/auth.ts)",
+      "Bash(export DATABASE_URL=\"postgresql://utils:utils@localhost:5432/utils_plane\")",
+      "Bash(bunx drizzle-kit *)",
+      "Bash(docker exec utils-pg *)",
+      "Bash(openssl rand *)",
+      "Bash(powershell -Command \"[Convert]::ToBase64String\\(\\(1..32 | ForEach-Object { [byte]\\(Get-Random -Maximum 256\\) }\\)\\)\")"
     ]
   }
 }

@@ -1,3 +1,6 @@
+// Test import from @utils-plane/db
+import type { File, Task } from '@utils-plane/db';
+
 export interface ApiResponse<T = unknown> {
   data: T;
   success: boolean;

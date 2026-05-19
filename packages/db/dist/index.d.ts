@@ -1,25 +1,7 @@
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-export interface DatabaseConfig {
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  password: string;
-}
-export declare class Database {
-  private config;
-  constructor(config: DatabaseConfig);
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  findUserById(_id: string): Promise<User | null>;
-  createUser(
-    userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>
-  ): Promise<User>;
-}
+export * from './schema';
+export * from './client';
+import { db } from './client';
+import { files, tasks, type File, type NewFile, type Task, type NewTask } from './schema';
+export type { File, NewFile, Task, NewTask };
+export { db, files, tasks };
 //# sourceMappingURL=index.d.ts.map

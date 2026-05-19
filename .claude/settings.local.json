@@ -16,7 +16,11 @@
       "Bash(bunx drizzle-kit *)",
       "Bash(docker exec utils-pg *)",
       "Bash(openssl rand *)",
-      "Bash(powershell -Command \"[Convert]::ToBase64String\\(\\(1..32 | ForEach-Object { [byte]\\(Get-Random -Maximum 256\\) }\\)\\)\")"
+      "Bash(powershell -Command \"[Convert]::ToBase64String\\(\\(1..32 | ForEach-Object { [byte]\\(Get-Random -Maximum 256\\) }\\)\\)\")",
+      "Bash(timeout 10 bun dev)",
+      "Bash(bun dev *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)",
+      "Bash(pkill -f \"bun --hot\")"
     ]
   }
 }

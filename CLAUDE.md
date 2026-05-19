@@ -9,31 +9,7 @@
 - **Monorepo**: Turborepo + Bun Workspace
 - **代码规范**: ESLint + Prettier + TypeScript strict
 
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| 前端 | Next.js 14 (App Router) |
-| 后端 | NestJS 11 |
-| 认证 | Better-Auth |
-| 数据库 | PostgreSQL 16 + Drizzle ORM |
-| 缓存/队列 | Redis 7 + BullMQ |
-| 对象存储 | MinIO |
-
-## 项目结构
-
-```
-apps/
-├── api/          # NestJS 后端 (端口 3001)
-└── web/          # Next.js 前端 (端口 3000)
-
-packages/
-├── auth/         # Better-Auth 配置
-├── db/           # Drizzle Schema
-├── utils/        # 工具函数
-├── validators/   # Zod 验证器
-└── api-client/   # API 客户端
-```
+详细技术栈、项目结构、环境配置请参考 **[PROJECT_SPECS.md](./PROJECT_SPECS.md)**
 
 ## 快速开始
 
@@ -61,20 +37,6 @@ BETTER_AUTH_SECRET=<通过 openssl rand -base64 32 生成>
 BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
-
-## 关键配置
-
-### 数据库
-
-- PostgreSQL: 端口 5432
-- 连接字符串: `postgresql://utils:utils@localhost:5432/utils_plane`
-- 管理工具: `docker exec -it utils-pg psql -U utils -d utils_plane`
-
-### API 服务
-
-- 端口: 3001
-- Swagger: http://localhost:3001/docs
-- OpenAPI JSON: `apps/api/openapi.json`
 
 ## 常用命令
 
@@ -117,20 +79,6 @@ cd apps/api && bun run openapi:export         # 导出 OpenAPI
 └── postgres
 ```
 
-## 数据库 Schema
-
-### 业务表
-
-- **files**: 文件存储 (userId FK → user.id)
-- **tasks**: 任务表 (userId FK → user.id, taskType/taskStatus 枚举)
-
-### Auth 表 (Better-Auth)
-
-- **user**: 用户 (含 plan, role 额外字段)
-- **session**: 会话
-- **account**: OAuth 账户
-- **verification**: 邮箱验证
-
 ## 开发规范
 
 ### 文件命名
@@ -164,13 +112,6 @@ docs: 文档
 test: 测试
 ```
 
-## 注意事项
-
-1. **不要提交 .env.local** - 已配置 .gitignore
-2. **修改 schema 后执行 migration** - `bunx drizzle-kit migrate`
-3. **API 修改后重新导出 OpenAPI** - `bun run openapi:export`
-4. **Windows 开发** - 使用 Git Bash 或 WSL
-
 ## 调试技巧
 
 ```bash
@@ -189,9 +130,15 @@ docker exec -it utils-redis redis-cli ping
 cd apps/api && bun run dev
 ```
 
+## 注意事项
+
+1. **不要提交 .env.local** - 已配置 .gitignore
+2. **修改 schema 后执行 migration** - `bunx drizzle-kit migrate`
+3. **API 修改后重新导出 OpenAPI** - `bun run openapi:export`
+4. **Windows 开发** - 使用 Git Bash 或 WSL
+
 ## 参考文档
 
-- [设计文档](./design-system.md)
-- [任务文档](./task/)
-- [Better-Auth 文档](https://www.better-auth.com/)
-- [Drizzle ORM 文档](https://orm.drizzle.team/)
+- [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 完整项目规范
+- [design-system.md](./design-system.md) - 设计系统
+- [任务文档](./task/) - phase1-7 任务说明

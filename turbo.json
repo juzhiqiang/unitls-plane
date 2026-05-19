@@ -18,6 +18,13 @@
     },
     "clean": {
       "cache": false
+    },
+    "@utils-plane/api-client#generate": {
+      "dependsOn": ["@utils-plane/api#openapi:export"],
+      "cache": false
+    },
+    "@utils-plane/api-client#build": {
+      "dependsOn": ["generate"]
     }
   }
 }

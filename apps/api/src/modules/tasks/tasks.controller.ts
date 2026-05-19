@@ -8,7 +8,12 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
 import {
   CreateTaskDto,
@@ -31,20 +36,31 @@ export class TasksController {
   @Post()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new task' })
-  @ApiResponse({ status: 201, description: 'Task created', type: TaskResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Task created',
+    type: TaskResponseDto,
+  })
   async create(@Body() dto: CreateTaskDto, @Req() req: AuthenticatedRequest) {
     const userId = req.user?.id;
-    return this.tasksService.create({
-      type: dto.type,
-      inputFileIds: dto.inputFileIds,
-      inputConfig: dto.inputConfig ?? {},
-    }, userId);
+    return this.tasksService.create(
+      {
+        type: dto.type,
+        inputFileIds: dto.inputFileIds,
+        inputConfig: dto.inputConfig ?? {},
+      },
+      userId
+    );
   }
 
   @Get(':id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get task by ID' })
-  @ApiResponse({ status: 200, description: 'Task details', type: TaskResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Task details',
+    type: TaskResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Task not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async getOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {

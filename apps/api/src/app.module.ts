@@ -8,6 +8,7 @@ import { bullConfig } from './config/bull.config';
 import { throttleConfig } from './config/throttle.config';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { FilesModule } from './modules/files/files.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 
@@ -18,6 +19,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
     bullConfig,
     TasksModule,
     AuthModule,
+    FilesModule,
     BullBoardModule.forRoot({
       route: '/admin/queues',
       adapter: ExpressAdapter,
@@ -26,7 +28,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
       { name: 'image-queue', adapter: BullMQAdapter },
       { name: 'pdf-queue', adapter: BullMQAdapter },
       { name: 'font-queue', adapter: BullMQAdapter },
-      { name: 'cleanup-queue', adapter: BullMQAdapter },
+      { name: 'cleanup-queue', adapter: BullMQAdapter }
     ),
   ],
   providers: [

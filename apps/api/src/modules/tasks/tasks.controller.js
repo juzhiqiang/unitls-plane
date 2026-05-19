@@ -12,7 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 import * as openapi from "@nestjs/swagger";
 import { Controller, Post, Get, Param, Body, Query, Req, } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, TaskQueryDto, TaskResponseDto, TaskStatusDto, } from './dto/tasks.dto';
 let TasksController = class TasksController {
@@ -57,7 +57,11 @@ __decorate([
     Post(),
     ApiBearerAuth(),
     ApiOperation({ summary: 'Create a new task' }),
-    ApiResponse({ status: 201, description: 'Task created', type: TaskResponseDto }),
+    ApiResponse({
+        status: 201,
+        description: 'Task created',
+        type: TaskResponseDto,
+    }),
     __param(0, Body()),
     __param(1, Req()),
     __metadata("design:type", Function),
@@ -68,7 +72,11 @@ __decorate([
     Get(':id'),
     ApiBearerAuth(),
     ApiOperation({ summary: 'Get task by ID' }),
-    ApiResponse({ status: 200, description: 'Task details', type: TaskResponseDto }),
+    ApiResponse({
+        status: 200,
+        description: 'Task details',
+        type: TaskResponseDto,
+    }),
     ApiResponse({ status: 404, description: 'Task not found' }),
     ApiResponse({ status: 403, description: 'Access denied' }),
     __param(0, Param('id')),

@@ -1,10 +1,18 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { db, tasks } from '@utils-plane/db';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import type { Task, NewTask } from '@utils-plane/db';
-import type { CreateTaskInput, TaskType, TaskStatus } from '@utils-plane/validators';
+import type {
+  CreateTaskInput,
+  TaskType,
+  TaskStatus,
+} from '@utils-plane/validators';
 import { ErrorCodes } from '../../common/errors/error-codes';
 
 @Injectable()
@@ -12,7 +20,7 @@ export class TasksService {
   constructor(
     @InjectQueue('image-queue') private imageQueue: Queue,
     @InjectQueue('pdf-queue') private pdfQueue: Queue,
-    @InjectQueue('font-queue') private fontQueue: Queue,
+    @InjectQueue('font-queue') private fontQueue: Queue
   ) {}
 
   async create(input: CreateTaskInput, userId?: string): Promise<Task> {
@@ -114,7 +122,11 @@ export class TasksService {
       .where(eq(tasks.id, id));
   }
 
-  async markFailed(id: string, errorCode: string, errorMessage: string): Promise<void> {
+  async markFailed(
+    id: string,
+    errorCode: string,
+    errorMessage: string
+  ): Promise<void> {
     await db
       .update(tasks)
       .set({

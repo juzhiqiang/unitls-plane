@@ -14,6 +14,7 @@ import { bullConfig } from './config/bull.config';
 import { throttleConfig } from './config/throttle.config';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { FilesModule } from './modules/files/files.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 let AppModule = class AppModule {
@@ -26,6 +27,7 @@ AppModule = __decorate([
             bullConfig,
             TasksModule,
             AuthModule,
+            FilesModule,
             BullBoardModule.forRoot({
                 route: '/admin/queues',
                 adapter: ExpressAdapter,

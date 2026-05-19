@@ -37,7 +37,8 @@
       "Bash(redis-cli KEYS \"*queue*\")",
       "Bash(docker port utils-redis *)",
       "Bash(curl *)",
-      "Bash(docker exec utils-redis *)"
+      "Bash(docker exec utils-redis *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

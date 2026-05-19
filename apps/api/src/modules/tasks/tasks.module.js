@@ -21,7 +21,14 @@ TasksModule = __decorate([
             BullModule.registerQueue({ name: 'image-queue' }, { name: 'pdf-queue' }, { name: 'font-queue' }, { name: 'cleanup-queue' }),
         ],
         controllers: [TasksController],
-        providers: [TasksService, ImageProcessor, PdfProcessor, FontProcessor, CleanupProcessor, CleanupScheduler],
+        providers: [
+            TasksService,
+            ImageProcessor,
+            PdfProcessor,
+            FontProcessor,
+            CleanupProcessor,
+            CleanupScheduler,
+        ],
         exports: [TasksService],
     })
 ], TasksModule);

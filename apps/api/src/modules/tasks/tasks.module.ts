@@ -18,7 +18,14 @@ import { CleanupScheduler } from './processors/cleanup.scheduler';
     ),
   ],
   controllers: [TasksController],
-  providers: [TasksService, ImageProcessor, PdfProcessor, FontProcessor, CleanupProcessor, CleanupScheduler],
+  providers: [
+    TasksService,
+    ImageProcessor,
+    PdfProcessor,
+    FontProcessor,
+    CleanupProcessor,
+    CleanupScheduler,
+  ],
   exports: [TasksService],
 })
 export class TasksModule {}

@@ -5,7 +5,7 @@ import { Queue } from 'bullmq';
 @Injectable()
 export class CleanupScheduler implements OnModuleInit {
   constructor(
-    @InjectQueue('cleanup-queue') private readonly cleanupQueue: Queue,
+    @InjectQueue('cleanup-queue') private readonly cleanupQueue: Queue
   ) {}
 
   async onModuleInit() {
@@ -14,7 +14,7 @@ export class CleanupScheduler implements OnModuleInit {
       {},
       {
         repeat: { pattern: '0 * * * *' },
-      },
+      }
     );
   }
 }

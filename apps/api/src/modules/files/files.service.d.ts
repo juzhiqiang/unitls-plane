@@ -11,6 +11,7 @@ export declare class FilesService {
     constructor(minioService: MinioService);
     upload(file: Buffer, meta: UploadMeta, userId?: string): Promise<File>;
     getById(id: string, userId?: string): Promise<File>;
+    download(storageKey: string): Promise<Buffer>;
     getSignedUrl(id: string, userId?: string): Promise<string>;
     listByUser(userId: string, options?: {
         page?: number;

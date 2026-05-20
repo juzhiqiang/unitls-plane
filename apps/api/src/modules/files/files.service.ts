@@ -122,6 +122,10 @@ export class FilesService {
     return file;
   }
 
+  async download(storageKey: string): Promise<Buffer> {
+    return this.minioService.download(storageKey);
+  }
+
   async getSignedUrl(id: string, userId?: string): Promise<string> {
     const file = await this.getById(id, userId);
     return this.minioService.getSignedDownloadUrl(file.storageKey);

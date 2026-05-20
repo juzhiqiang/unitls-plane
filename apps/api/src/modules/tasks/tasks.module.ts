@@ -7,9 +7,12 @@ import { PdfProcessor } from './processors/pdf.processor';
 import { FontProcessor } from './processors/font.processor';
 import { CleanupProcessor } from './processors/cleanup.processor';
 import { CleanupScheduler } from './processors/cleanup.scheduler';
+import { ImageService } from './services/image.service';
+import { FilesModule } from '../files/files.module';
 
 @Module({
   imports: [
+    FilesModule,
     BullModule.registerQueue(
       { name: 'image-queue' },
       { name: 'pdf-queue' },
@@ -20,6 +23,7 @@ import { CleanupScheduler } from './processors/cleanup.scheduler';
   controllers: [TasksController],
   providers: [
     TasksService,
+    ImageService,
     ImageProcessor,
     PdfProcessor,
     FontProcessor,

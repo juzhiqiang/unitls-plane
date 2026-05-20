@@ -22,6 +22,7 @@ export interface TaskResponseDto {
 export interface TaskStatusDto {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
+  outputFileId?: string;
   errorCode?: string;
   errorMessage?: string;
 }

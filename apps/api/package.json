@@ -25,6 +25,7 @@
     "@bull-board/api": "^7.1.5",
     "@bull-board/express": "^7.1.5",
     "@bull-board/nestjs": "^7.1.5",
+    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.21",
     "@nestjs/config": "^4.0.4",
@@ -32,7 +33,6 @@
     "@nestjs/platform-express": "^11.1.21",
     "@nestjs/swagger": "^11.4.3",
     "@nestjs/throttler": "^6.4.0",
-    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@utils-plane/auth": "workspace:*",
     "@utils-plane/db": "workspace:*",
     "@utils-plane/validators": "workspace:*",
@@ -47,6 +47,7 @@
     "postgres": "^3.4.6",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "^0.34.5",
     "zod": "^3.24.5"
   }
 }

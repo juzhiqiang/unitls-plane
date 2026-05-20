@@ -102,6 +102,9 @@ let FilesService = FilesService_1 = class FilesService {
         }
         return file;
     }
+    async download(storageKey) {
+        return this.minioService.download(storageKey);
+    }
     async getSignedUrl(id, userId) {
         const file = await this.getById(id, userId);
         return this.minioService.getSignedDownloadUrl(file.storageKey);

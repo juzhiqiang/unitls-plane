@@ -8,16 +8,17 @@ export const auth = betterAuth({
     provider: 'pg',
   }),
   secret: process.env.BETTER_AUTH_SECRET!,
-  baseURL: process.env.BETTER_AUTH_URL!,
+  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:3001',
+  basePath: '/api/auth',
   trustedOrigins: [
     process.env.NEXT_PUBLIC_API_URL!,
     'http://localhost:3000',
     'http://localhost:3001',
-  ],
+  ].filter(Boolean),
 
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    requireEmailVerification: process.env.NODE_ENV === 'production',
     sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
       if (process.env.NODE_ENV === 'development') {
         console.log(`[Verify Email] ${user.email}: ${url}`);
@@ -57,6 +58,12 @@ export const auth = betterAuth({
         type: 'string',
         defaultValue: 'user',
       },
+    },
+  },
+
+  advanced: {
+    database: {
+      generateId: false,
     },
   },
 });

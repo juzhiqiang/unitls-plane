@@ -1,7 +1,7 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { ImageService, type CompressOptions } from '../services/image.service';
+import { ImageService, type CompressOptions, type ConvertOptions } from '../services/image.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 
@@ -37,37 +37,14 @@ export class ImageProcessor extends WorkerHost {
     try {
       await this.tasksService.markProcessing(taskId);
 
-      // 1. 下载输入文件
-      const fileId = task.inputFileIds?.[0];
-      if (!fileId) throw new Error('No input file specified');
-      const inputFile = await this.filesService.getById(fileId);
-      const inputBuffer = await this.filesService.download(
-        inputFile.storageKey,
-      );
-      await job.updateProgress(20);
-
-      // 2. 处理
-      const opts = task.inputConfig as CompressOptions;
-      const outputBuffer = await this.imageService.compress(inputBuffer, opts);
-      await job.updateProgress(70);
-
-      // 3. 上传结果
-      const outputFile = await this.filesService.upload(
-        outputBuffer,
-        {
-          filename: `compressed-${inputFile.filename}`,
-          mimeType: getMimeType(opts.format),
-          size: outputBuffer.length,
-        },
-        task.userId ?? undefined,
-      );
-      await job.updateProgress(95);
-
-      // 4. 更新任务
-      await this.tasksService.markCompleted(taskId, outputFile.id);
-      await job.updateProgress(100);
-
-      return { outputFileId: outputFile.id };
+      switch (task.type) {
+        case 'compress':
+          return await this.handleCompress(task, job);
+        case 'convert':
+          return await this.handleConvert(task, job);
+        default:
+          throw new Error(`Unknown image task type: ${task.type}`);
+      }
     } catch (err) {
       await this.tasksService.markFailed(
         taskId,
@@ -76,6 +53,66 @@ export class ImageProcessor extends WorkerHost {
       );
       throw err;
     }
+  }
+
+  private async handleCompress(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+    const inputFile = await this.filesService.getById(fileId);
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await job.updateProgress(20);
+
+    const opts = task.inputConfig as CompressOptions;
+    const outputBuffer = await this.imageService.compress(inputBuffer, opts);
+    await job.updateProgress(70);
+
+    const outputFile = await this.filesService.upload(
+      outputBuffer,
+      {
+        filename: `compressed-${inputFile.filename}`,
+        mimeType: getMimeType(opts.format),
+        size: outputBuffer.length,
+      },
+      task.userId ?? undefined,
+    );
+    await job.updateProgress(95);
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await job.updateProgress(100);
+    return { outputFileId: outputFile.id };
+  }
+
+  private async handleConvert(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+    const inputFile = await this.filesService.getById(fileId);
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await job.updateProgress(20);
+
+    const opts = task.inputConfig as ConvertOptions;
+    const meta = await this.imageService.getMetadata(inputBuffer);
+    if (!meta.format) throw new Error('File is not a valid image');
+    await job.updateProgress(30);
+
+    const outputBuffer = await this.imageService.convert(inputBuffer, opts);
+    await job.updateProgress(70);
+
+    const ext = opts.toFormat;
+    const newFilename = inputFile.filename.replace(/\.[^.]+$/, `.${ext}`);
+    const outputFile = await this.filesService.upload(
+      outputBuffer,
+      {
+        filename: newFilename,
+        mimeType: getMimeType(ext),
+        size: outputBuffer.length,
+      },
+      task.userId ?? undefined,
+    );
+    await job.updateProgress(95);
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await job.updateProgress(100);
+    return { outputFileId: outputFile.id };
   }
 
   @OnWorkerEvent('failed')

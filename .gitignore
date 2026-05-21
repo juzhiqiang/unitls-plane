@@ -9,9 +9,19 @@ node_modules/
 # ==========================================
 # 2. Monorepo / 工具链自身的缓存
 # ==========================================
-.turbo/           
+.turbo/
 dist/
 build/
+
+# 防止 tsc 输出物混进源码目录
+apps/*/src/**/*.js
+apps/*/src/**/*.js.map
+apps/*/src/**/*.d.ts
+apps/*/src/**/*.d.ts.map
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
 
 # ==========================================
 # 3. Next.js 核心忽略项（关键：匹配所有子包）

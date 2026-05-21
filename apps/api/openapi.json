@@ -548,6 +548,10 @@
             "minimum": 0,
             "maximum": 100
           },
+          "outputFileId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "errorCode": {
             "type": "string"
           },

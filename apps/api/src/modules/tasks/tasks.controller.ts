@@ -77,6 +77,7 @@ export class TasksController {
     return {
       status: task.status,
       progress: task.progress,
+      outputFileId: task.outputFileId,
       errorCode: task.errorCode,
       errorMessage: task.errorMessage,
     };

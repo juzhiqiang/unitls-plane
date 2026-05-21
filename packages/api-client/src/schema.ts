@@ -193,6 +193,8 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
             progress: number;
+            /** Format: uuid */
+            outputFileId?: string;
             errorCode?: string;
             errorMessage?: string;
         };

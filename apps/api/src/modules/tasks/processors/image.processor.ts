@@ -55,16 +55,23 @@ export class ImageProcessor extends WorkerHost {
     }
   }
 
+  private async reportProgress(taskId: string, job: Job, value: number) {
+    await Promise.all([
+      job.updateProgress(value),
+      this.tasksService.updateProgress(taskId, value),
+    ]);
+  }
+
   private async handleCompress(task: any, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
     const inputFile = await this.filesService.getById(fileId);
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
-    await job.updateProgress(20);
+    await this.reportProgress(task.id, job, 20);
 
     const opts = task.inputConfig as CompressOptions;
     const outputBuffer = await this.imageService.compress(inputBuffer, opts);
-    await job.updateProgress(70);
+    await this.reportProgress(task.id, job, 70);
 
     const outputFile = await this.filesService.upload(
       outputBuffer,
@@ -75,7 +82,7 @@ export class ImageProcessor extends WorkerHost {
       },
       task.userId ?? undefined,
     );
-    await job.updateProgress(95);
+    await this.reportProgress(task.id, job, 95);
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
     await job.updateProgress(100);
@@ -87,15 +94,15 @@ export class ImageProcessor extends WorkerHost {
     if (!fileId) throw new Error('No input file specified');
     const inputFile = await this.filesService.getById(fileId);
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
-    await job.updateProgress(20);
+    await this.reportProgress(task.id, job, 20);
 
     const opts = task.inputConfig as ConvertOptions;
     const meta = await this.imageService.getMetadata(inputBuffer);
     if (!meta.format) throw new Error('File is not a valid image');
-    await job.updateProgress(30);
+    await this.reportProgress(task.id, job, 30);
 
     const outputBuffer = await this.imageService.convert(inputBuffer, opts);
-    await job.updateProgress(70);
+    await this.reportProgress(task.id, job, 70);
 
     const ext = opts.toFormat;
     const newFilename = inputFile.filename.replace(/\.[^.]+$/, `.${ext}`);
@@ -108,7 +115,7 @@ export class ImageProcessor extends WorkerHost {
       },
       task.userId ?? undefined,
     );
-    await job.updateProgress(95);
+    await this.reportProgress(task.id, job, 95);
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
     await job.updateProgress(100);

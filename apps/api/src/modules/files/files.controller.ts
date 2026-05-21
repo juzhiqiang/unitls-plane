@@ -80,13 +80,23 @@ export class FilesController {
   async download(
     @Param('id') id: string,
     @CurrentUser() user?: User,
-    @Res() res?: Response
+    @Res() res?: Response,
   ) {
-    const url = await this.filesService.getSignedUrl(id, user?.id);
-    if (res) {
-      return res.redirect(url);
+    const file = await this.filesService.getById(id, user?.id);
+    const buffer = await this.filesService.download(file.storageKey);
+
+    if (!res) {
+      return { url: await this.filesService.getSignedUrl(id, user?.id) };
     }
-    return { url };
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', buffer.length.toString());
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(file.filename)}"`,
+    );
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.end(buffer);
   }
 
   @Get()

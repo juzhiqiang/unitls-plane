@@ -105,6 +105,9 @@ export class TaskStatusDto {
   @ApiProperty({ minimum: 0, maximum: 100 })
   progress!: number;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  outputFileId?: string;
+
   @ApiPropertyOptional()
   errorCode?: string;
 

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "bun --hot src/main.ts",
+    "dev": "nodemon --signal SIGTERM --watch src --ext ts --exec 'bun src/main.ts'",
     "build": "nest build",
     "start": "bun dist/main.js",
     "openapi:export": "bun src/scripts/export-openapi.ts",
@@ -17,6 +17,7 @@
     "@nestjs/cli": "^11.0.21",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.9.0",
+    "nodemon": "^3.1.14",
     "typescript": "^6.0.3"
   },
   "dependencies": {

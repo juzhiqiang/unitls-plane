@@ -18,10 +18,10 @@ export interface ConvertOptions {
 export class ImageService implements OnModuleInit {
   onModuleInit() {
     sharp.cache(false);
-    sharp.concurrency(1);
   }
   async compress(input: Buffer, opts: CompressOptions): Promise<Buffer> {
-    let pipeline = sharp(input, { failOn: 'truncated' });
+    const buf = Buffer.from(input);
+    let pipeline = sharp(buf, { failOn: 'truncated' });
 
     if (opts.maxWidth || opts.maxHeight) {
       pipeline = pipeline.resize({

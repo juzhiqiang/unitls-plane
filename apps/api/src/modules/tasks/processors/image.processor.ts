@@ -18,7 +18,10 @@ function getMimeType(format?: string): string {
   }
 }
 
-@Processor('image-queue', { concurrency: 3 })
+@Processor('image-queue', {
+  concurrency: 2,
+  lockDuration: 300000,
+})
 export class ImageProcessor extends WorkerHost {
   private readonly logger = new Logger(ImageProcessor.name);
 
@@ -32,6 +35,7 @@ export class ImageProcessor extends WorkerHost {
 
   async process(job: Job<{ taskId: string }>): Promise<unknown> {
     const { taskId } = job.data;
+    this.logger.log(`[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`);
     const task = await this.tasksService.getById(taskId);
 
     try {
@@ -46,11 +50,15 @@ export class ImageProcessor extends WorkerHost {
           throw new Error(`Unknown image task type: ${task.type}`);
       }
     } catch (err) {
-      await this.tasksService.markFailed(
-        taskId,
-        'IMAGE_PROCESSING_FAILED',
-        (err as Error).message,
-      );
+      try {
+        await this.tasksService.markFailed(
+          taskId,
+          'IMAGE_PROCESSING_FAILED',
+          (err as Error).message,
+        );
+      } catch (dbErr) {
+        this.logger.error(`Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`);
+      }
       throw err;
     }
   }
@@ -65,12 +73,16 @@ export class ImageProcessor extends WorkerHost {
   private async handleCompress(task: any, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
+    this.logger.log(`[compress] taskId=${task.id} downloading fileId=${fileId}`);
     const inputFile = await this.filesService.getById(fileId);
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    this.logger.log(`[compress] taskId=${task.id} downloaded ${inputBuffer.length} bytes`);
     await this.reportProgress(task.id, job, 20);
 
     const opts = task.inputConfig as CompressOptions;
+    this.logger.log(`[compress] taskId=${task.id} starting sharp, format=${opts.format}`);
     const outputBuffer = await this.imageService.compress(inputBuffer, opts);
+    this.logger.log(`[compress] taskId=${task.id} sharp done, output=${outputBuffer.length} bytes`);
     await this.reportProgress(task.id, job, 70);
 
     const outputFile = await this.filesService.upload(
@@ -123,7 +135,22 @@ export class ImageProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('failed')
-  onFailed(job: Job, err: Error) {
-    this.logger.error(`Job ${job.id} failed: ${err.message}`);
+  async onFailed(job: Job, err: Error) {
+    this.logger.error(`Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`);
+    const attemptsMade = job.attemptsMade;
+    const maxAttempts = job.opts?.attempts ?? 3;
+    if (attemptsMade >= maxAttempts) {
+      const { taskId } = job.data as { taskId: string };
+      await this.tasksService.markFailed(
+        taskId,
+        'IMAGE_PROCESSING_FAILED',
+        err.message,
+      );
+    }
+  }
+
+  @OnWorkerEvent('stalled')
+  onStalled(jobId: string) {
+    this.logger.warn(`Job ${jobId} stalled — will be retried by BullMQ`);
   }
 }

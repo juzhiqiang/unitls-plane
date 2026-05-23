@@ -11,7 +11,7 @@ function getDatabaseUrl(): string {
 
 const connectionString = getDatabaseUrl();
 
-const client = postgres(connectionString, { max: 10 });
+const client = postgres(connectionString, { max: 20 });
 
 export const db = drizzle(client, { schema });
 

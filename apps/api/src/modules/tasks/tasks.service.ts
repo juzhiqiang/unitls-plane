@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -17,6 +18,8 @@ import { ErrorCodes } from '../../common/errors/error-codes';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     @InjectQueue('image-queue') private imageQueue: Queue,
     @InjectQueue('pdf-queue') private pdfQueue: Queue,
@@ -40,7 +43,10 @@ export class TasksService {
     }
 
     const queue = this.getQueue(input.type);
-    await queue.add(input.type, { taskId: task.id }, { jobId: task.id });
+    const job = await queue.add(input.type, { taskId: task.id });
+    this.logger.log(
+      `Job added: jobId=${job?.id}, taskId=${task.id}, queue=${queue.name}, waiting=${await queue.getWaitingCount()}, active=${await queue.getActiveCount()}`,
+    );
 
     return task;
   }

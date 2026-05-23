@@ -14,6 +14,7 @@ import {
   ApiOperation,
   ApiResponse,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { TasksService } from './tasks.service';
 import {
   CreateTaskDto,
@@ -21,6 +22,7 @@ import {
   TaskResponseDto,
   TaskStatusDto,
 } from './dto/tasks.dto';
+import { Public } from '../../common/decorators';
 import type { User } from '@utils-plane/db';
 import type { Request } from 'express';
 
@@ -69,7 +71,8 @@ export class TasksController {
   }
 
   @Get(':id/status')
-  @ApiBearerAuth()
+  @Public()
+  @SkipThrottle()
   @ApiOperation({ summary: 'Get task status (lightweight)' })
   @ApiResponse({ status: 200, description: 'Task status', type: TaskStatusDto })
   async getStatus(@Param('id') id: string) {

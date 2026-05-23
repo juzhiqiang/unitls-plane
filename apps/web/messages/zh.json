@@ -103,6 +103,7 @@
     "logOut": "退出登录",
     "settings": "设置",
     "toggleTheme": "切换主题",
+    "toggleNavigation": "切换导航",
     "defaultUser": "用户"
   },
   "Dashboard": {

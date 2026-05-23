@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import {
   Image,
@@ -20,12 +20,12 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 
 const navigation = [
-  { name: "Image Tools", href: "/image", icon: Image },
-  { name: "PDF Tools", href: "/pdf", icon: FileType },
-  { name: "Font Tools", href: "/font", icon: Type },
-  { name: "My Files", href: "/files", icon: FolderOpen },
-  { name: "Task History", href: "/tasks", icon: History },
-];
+  { key: "imageTools", href: "/image", icon: Image },
+  { key: "pdfTools", href: "/pdf", icon: FileType },
+  { key: "fontTools", href: "/font", icon: Type },
+  { key: "myFiles", href: "/files", icon: FolderOpen },
+  { key: "taskHistory", href: "/tasks", icon: History },
+] as const;
 
 interface AppSidebarProps {
   className?: string;
@@ -33,6 +33,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname();
+  const tNav = useTranslations("Nav");
+  const tLayout = useTranslations("AppLayout");
   const [open, setOpen] = React.useState(false);
 
   const NavContent = () => (
@@ -46,9 +48,10 @@ export function AppSidebar({ className }: AppSidebarProps) {
       <nav className="flex-1 space-y-1 p-2">
         {navigation.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const name = tNav(item.key);
           return (
             <Link
-              key={item.name}
+              key={item.key}
               href={item.href}
               onClick={() => setOpen(false)}
               className={cn(
@@ -62,7 +65,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 bg-accent rounded-r" />
               )}
               <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
-              <span>{item.name}</span>
+              <span>{name}</span>
             </Link>
           );
         })}
@@ -77,7 +80,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
         <SheetTrigger asChild className="lg:hidden">
           <Button variant="ghost" size="icon" className="shrink-0">
             <Menu className="h-5 w-5" strokeWidth={1.5} />
-            <span className="sr-only">Toggle navigation</span>
+            <span className="sr-only">{tLayout("toggleNavigation")}</span>
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-60 p-0 border-r">

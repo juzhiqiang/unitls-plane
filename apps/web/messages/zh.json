@@ -1,0 +1,211 @@
+{
+  "Common": {
+    "units": {
+      "b": "B",
+      "kb": "KB",
+      "mb": "MB",
+      "gb": "GB"
+    },
+    "meta": {
+      "title": "Utils Plane - 免费在线工具平台",
+      "description": "图片压缩、PDF处理、字体转换，一站式工具平台。客户端处理保护隐私，高性能免费使用。",
+      "ogDescription": "图片压缩、PDF处理、字体转换，一站式工具平台"
+    }
+  },
+  "Nav": {
+    "dashboard": "仪表盘",
+    "imageTools": "图片工具",
+    "pdfTools": "PDF 工具",
+    "fontTools": "字体工具",
+    "myFiles": "我的文件",
+    "taskHistory": "任务记录"
+  },
+  "Marketing": {
+    "nav": {
+      "tools": "工具",
+      "login": "登录",
+      "getStarted": "开始使用"
+    },
+    "footer": {
+      "docs": "文档",
+      "github": "GitHub",
+      "terms": "服务条款",
+      "privacy": "隐私政策"
+    },
+    "hero": {
+      "titleLine1": "你的桌面",
+      "titleLine2": "工具箱",
+      "subtitle": "图片压缩、PDF处理、字体转换。所有操作在浏览器本地完成，保护你的隐私。",
+      "ctaPrimary": "开始使用",
+      "ctaSecondary": "查看文档"
+    },
+    "features": {
+      "label": "功能",
+      "heading": "一切皆可处理",
+      "image": {
+        "title": "图片工具",
+        "description": "支持 PNG、JPG、WebP、GIF 格式，无损压缩、智能转换"
+      },
+      "pdf": {
+        "title": "PDF 工具",
+        "description": "合并、拆分、提取页面，在线处理无需安装软件"
+      },
+      "font": {
+        "title": "字体转换",
+        "description": "TTF、OTF、WOFF 之间转换，批量处理更高效"
+      }
+    },
+    "highlights": {
+      "label": "特点",
+      "heading": "为何选择我们",
+      "performance": {
+        "title": "高性能",
+        "description": "客户端处理，原地上传无需等待"
+      },
+      "privacy": {
+        "title": "隐私保护",
+        "description": "文件仅在浏览器中处理，不上传服务器"
+      },
+      "free": {
+        "title": "免费使用",
+        "description": "无需注册，所有功能完全免费"
+      }
+    },
+    "cta": {
+      "heading": "立即开始使用",
+      "description": "无需注册，直接使用。所有功能免费，隐私保护无忧。",
+      "button": "立即体验"
+    }
+  },
+  "Auth": {
+    "loginTitle": "登录",
+    "loginButton": "登录",
+    "signingIn": "登录中...",
+    "registerTitle": "注册",
+    "registerButton": "注册",
+    "signingUp": "注册中...",
+    "email": "邮箱",
+    "password": "密码",
+    "username": "用户名",
+    "noAccount": "还没有账号？",
+    "hasAccount": "已有账号？",
+    "registerLink": "注册",
+    "loginLink": "登录",
+    "verifyEmailTitle": "验证邮箱",
+    "verifyEmailBody": "我们已向您的邮箱发送了一封验证邮件。请查收并点击链接完成验证。",
+    "verifyEmailSpam": "如果没有收到邮件，请检查垃圾邮件文件夹。",
+    "backToLogin": "返回登录",
+    "loading": "加载中..."
+  },
+  "AppLayout": {
+    "home": "首页",
+    "signIn": "登录",
+    "logOut": "退出登录",
+    "settings": "设置",
+    "toggleTheme": "切换主题",
+    "defaultUser": "用户"
+  },
+  "Dashboard": {
+    "title": "仪表盘",
+    "welcome": "欢迎使用 Utils Plane",
+    "totalFiles": "文件总数",
+    "activeTasks": "进行中的任务",
+    "completed": "已完成"
+  },
+  "ImageTool": {
+    "title": "图片工具",
+    "description": "选择一个工具开始处理图片",
+    "tools": {
+      "compress": {
+        "title": "图片压缩",
+        "description": "减小图片文件大小，保持视觉质量"
+      },
+      "convert": {
+        "title": "格式转换",
+        "description": "在 JPEG / PNG / WebP / AVIF 之间互转"
+      }
+    }
+  },
+  "ImageCompress": {
+    "title": "图片压缩",
+    "description": "支持批量上传，多文件以 ZIP 打包下载",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，单文件最大 50MB",
+    "quality": "质量",
+    "size": "尺寸",
+    "widthPx": "宽 (px)",
+    "heightPx": "高 (px)",
+    "originalHint": "不缩放，保持图片原始宽高",
+    "outputFormat": "输出格式",
+    "start": "开始压缩",
+    "startWithCount": "开始压缩 ({count} 张)",
+    "processing": "处理中...",
+    "presets": {
+      "original": "原始尺寸",
+      "desktop": "电脑",
+      "mobile": "手机",
+      "id1": "一寸照",
+      "id2": "二寸照",
+      "custom": "自定义"
+    }
+  },
+  "ImageConvert": {
+    "title": "格式转换",
+    "description": "在 JPEG / PNG / WebP 之间相互转换",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，最大 50MB",
+    "selected": "已选择: {filename} ({size})",
+    "targetFormat": "目标格式",
+    "quality": "质量",
+    "start": "开始转换",
+    "processing": "处理中..."
+  },
+  "PdfTool": {
+    "title": "PDF 工具",
+    "comingSoon": "PDF 处理工具即将上线。"
+  },
+  "FontTool": {
+    "title": "字体工具",
+    "comingSoon": "字体处理工具即将上线。"
+  },
+  "FilesTool": {
+    "title": "我的文件",
+    "empty": "您的文件将显示在这里。"
+  },
+  "TasksTool": {
+    "title": "任务记录",
+    "empty": "您的任务记录将显示在这里。"
+  },
+  "ToolsShared": {
+    "download": "下载",
+    "zipBuilding": "打包中...",
+    "downloadZipCount": "下载 ZIP ({count})",
+    "processing": "处理中",
+    "dropzoneRelease": "松开以上传",
+    "dropzonePrompt": "点击或拖拽文件到此处",
+    "fileList": {
+      "filename": "文件名",
+      "original": "原始",
+      "compressed": "压缩后",
+      "saved": "节省"
+    },
+    "compare": {
+      "original": "原始",
+      "result": "结果",
+      "ratio": "压缩比",
+      "beforeLabel": "原图",
+      "afterLabel": "处理后"
+    },
+    "mode": {
+      "label": "处理位置",
+      "local": "本地",
+      "server": "服务端",
+      "recommended": "推荐"
+    }
+  },
+  "Format": {},
+  "Errors": {},
+  "LocaleSwitcher": {
+    "label": "语言",
+    "zh": "中文",
+    "en": "English"
+  }
+}

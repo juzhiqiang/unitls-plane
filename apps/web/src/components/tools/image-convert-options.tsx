@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { ImageOutputType } from '@/lib/processing/image-convert-client';
 
 export interface ImageConvertOptionsState {
@@ -24,6 +25,7 @@ export function ImageConvertOptions({
   onChange,
   disabled,
 }: ImageConvertOptionsProps) {
+  const t = useTranslations('ImageConvert');
   const supportsQuality =
     value.toFormat === 'image/jpeg' || value.toFormat === 'image/webp';
 
@@ -31,7 +33,7 @@ export function ImageConvertOptions({
     <div className="space-y-6">
       <div className="space-y-2">
         <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-          目标格式
+          {t('targetFormat')}
         </div>
         <div className="inline-flex border border-border rounded-md p-0.5">
           {(Object.keys(FORMAT_LABELS) as ImageOutputType[]).map((fmt) => (
@@ -59,7 +61,7 @@ export function ImageConvertOptions({
               htmlFor="conv-quality"
               className="text-xs font-mono text-muted-foreground uppercase tracking-wider"
             >
-              质量
+              {t('quality')}
             </label>
             <span className="text-xs font-mono tabular-nums">
               {value.quality}%

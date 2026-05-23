@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import JSZip from 'jszip';
+import { useTranslations } from 'next-intl';
 
 export interface ZipDownloadButtonProps {
   files: File[];
@@ -18,6 +19,7 @@ export function ZipDownloadButton({
   disabled,
 }: ZipDownloadButtonProps) {
   const [building, setBuilding] = useState(false);
+  const t = useTranslations('ToolsShared');
 
   const handleDownload = async () => {
     if (files.length === 0 || building) return;
@@ -57,7 +59,7 @@ export function ZipDownloadButton({
       className={`inline-flex items-center gap-2 px-4 h-9 text-sm font-mono bg-foreground text-background rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 ${className ?? ''}`}
     >
       <Download className="h-4 w-4" strokeWidth={1.5} />
-      {building ? '打包中...' : `下载 ZIP (${files.length})`}
+      {building ? t('zipBuilding') : t('downloadZipCount', { count: files.length })}
     </button>
   );
 }

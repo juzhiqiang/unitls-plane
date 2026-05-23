@@ -5,12 +5,8 @@ import {
   ReactCompareSliderImage,
 } from 'react-compare-slider';
 import { useEffect, useState } from 'react';
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
+import { useLocale, useTranslations } from 'next-intl';
+import { formatBytes } from '@/lib/format';
 
 export interface ImageCompareProps {
   original: File;
@@ -18,6 +14,9 @@ export interface ImageCompareProps {
 }
 
 export function ImageCompare({ original, result }: ImageCompareProps) {
+  const t = useTranslations('ToolsShared');
+  const tUnits = useTranslations('Common.units');
+  const locale = useLocale();
   const [originalUrl, setOriginalUrl] = useState('');
   const [resultUrl, setResultUrl] = useState('');
 
@@ -41,23 +40,23 @@ export function ImageCompare({ original, result }: ImageCompareProps) {
       <div className="flex items-center gap-6 text-xs font-mono">
         <div className="space-y-1">
           <span className="text-muted-foreground uppercase tracking-wider">
-            原始
+            {t('compare.original')}
           </span>
           <div className="text-foreground tabular-nums">
-            {formatSize(original.size)}
+            {formatBytes(original.size, tUnits, locale)}
           </div>
         </div>
         <div className="space-y-1">
           <span className="text-muted-foreground uppercase tracking-wider">
-            结果
+            {t('compare.result')}
           </span>
           <div className="text-foreground tabular-nums">
-            {formatSize(result.size)}
+            {formatBytes(result.size, tUnits, locale)}
           </div>
         </div>
         <div className="space-y-1">
           <span className="text-muted-foreground uppercase tracking-wider">
-            压缩比
+            {t('compare.ratio')}
           </span>
           <div className="text-foreground tabular-nums">{ratio}%</div>
         </div>
@@ -74,8 +73,8 @@ export function ImageCompare({ original, result }: ImageCompareProps) {
       </div>
 
       <div className="flex justify-between text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-1">
-        <span>原图</span>
-        <span>处理后</span>
+        <span>{t('compare.beforeLabel')}</span>
+        <span>{t('compare.afterLabel')}</span>
       </div>
     </div>
   );

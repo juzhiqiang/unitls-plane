@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { CompressOptions } from '@/lib/processing/image-client';
 
 export type CompressFormat = 'image/jpeg' | 'image/webp' | 'image/png';
@@ -13,18 +14,17 @@ export type SizePreset =
   | 'custom';
 
 interface PresetMeta {
-  label: string;
   width?: number;
   height?: number;
 }
 
 export const SIZE_PRESETS: Record<SizePreset, PresetMeta> = {
-  original: { label: '原始尺寸' },
-  desktop: { label: '电脑', width: 1920, height: 1080 },
-  mobile: { label: '手机', width: 750, height: 480 },
-  id1: { label: '一寸照', width: 295, height: 413 },
-  id2: { label: '二寸照', width: 413, height: 579 },
-  custom: { label: '自定义' },
+  original: {},
+  desktop: { width: 1920, height: 1080 },
+  mobile: { width: 750, height: 480 },
+  id1: { width: 295, height: 413 },
+  id2: { width: 413, height: 579 },
+  custom: {},
 };
 
 export interface ImageCompressOptionsState {
@@ -91,6 +91,7 @@ export function ImageCompressOptions({
   onChange,
   disabled,
 }: ImageCompressOptionsProps) {
+  const t = useTranslations('ImageCompress');
   const isCustom = value.sizePreset === 'custom';
   const isOriginal = value.sizePreset === 'original';
 
@@ -103,7 +104,7 @@ export function ImageCompressOptions({
             htmlFor="quality"
             className="text-xs font-mono text-muted-foreground uppercase tracking-wider"
           >
-            质量
+            {t('quality')}
           </label>
           <span className="text-xs font-mono tabular-nums">
             {value.quality}%
@@ -126,11 +127,10 @@ export function ImageCompressOptions({
       {/* Size preset */}
       <div className="space-y-2">
         <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-          尺寸
+          {t('size')}
         </div>
         <div className="grid grid-cols-3 gap-1.5">
           {PRESET_ORDER.map((preset) => {
-            const meta = SIZE_PRESETS[preset];
             const sub = presetSubLabel(preset);
             const active = value.sizePreset === preset;
             return (
@@ -145,7 +145,7 @@ export function ImageCompressOptions({
                     : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/40'
                 }`}
               >
-                <div>{meta.label}</div>
+                <div>{t(`presets.${preset}`)}</div>
                 {sub && (
                   <div className="text-[10px] opacity-70 tabular-nums mt-0.5">
                     {sub}
@@ -164,7 +164,7 @@ export function ImageCompressOptions({
                 htmlFor="customWidth"
                 className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider"
               >
-                宽 (px)
+                {t('widthPx')}
               </label>
               <input
                 id="customWidth"
@@ -187,7 +187,7 @@ export function ImageCompressOptions({
                 htmlFor="customHeight"
                 className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider"
               >
-                高 (px)
+                {t('heightPx')}
               </label>
               <input
                 id="customHeight"
@@ -210,7 +210,7 @@ export function ImageCompressOptions({
 
         {isOriginal && (
           <p className="text-[10px] font-mono text-muted-foreground pt-1">
-            不缩放，保持图片原始宽高
+            {t('originalHint')}
           </p>
         )}
       </div>
@@ -218,7 +218,7 @@ export function ImageCompressOptions({
       {/* Output format */}
       <div className="space-y-2">
         <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-          输出格式
+          {t('outputFormat')}
         </div>
         <div className="inline-flex border border-border rounded-md p-0.5">
           {(Object.keys(FORMAT_LABELS) as CompressFormat[]).map((fmt) => (

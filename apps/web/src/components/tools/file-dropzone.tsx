@@ -2,6 +2,7 @@
 
 import { useDropzone, type Accept } from 'react-dropzone';
 import { Upload } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 export interface FileDropzoneProps {
@@ -23,6 +24,7 @@ export function FileDropzone({
   className,
   hint,
 }: FileDropzoneProps) {
+  const t = useTranslations('ToolsShared');
   const { getRootProps, getInputProps, isDragActive, fileRejections } =
     useDropzone({
       accept,
@@ -48,7 +50,7 @@ export function FileDropzone({
         <input {...getInputProps()} />
         <Upload className="h-6 w-6 text-muted-foreground" strokeWidth={1.5} />
         <div className="text-sm text-foreground">
-          {isDragActive ? '松开以上传' : '点击或拖拽文件到此处'}
+          {isDragActive ? t('dropzoneRelease') : t('dropzonePrompt')}
         </div>
         {hint && (
           <div className="text-xs font-mono text-muted-foreground">{hint}</div>

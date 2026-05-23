@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 export type ProcessMode = 'local' | 'server';
@@ -17,10 +18,11 @@ export function ModeToggle({
   recommendation,
   disabled,
 }: ModeToggleProps) {
+  const t = useTranslations('ToolsShared');
   return (
     <div className="space-y-2">
       <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-        处理位置
+        {t('mode.label')}
       </div>
       <div className="inline-flex border border-border rounded-md p-0.5">
         {(['local', 'server'] as const).map((m) => (
@@ -37,9 +39,11 @@ export function ModeToggle({
               disabled && 'opacity-50 cursor-not-allowed',
             )}
           >
-            {m === 'local' ? '本地' : '服务端'}
+            {m === 'local' ? t('mode.local') : t('mode.server')}
             {recommendation === m && (
-              <span className="ml-1.5 text-[10px] opacity-70">推荐</span>
+              <span className="ml-1.5 text-[10px] opacity-70">
+                {t('mode.recommended')}
+              </span>
             )}
           </button>
         ))}

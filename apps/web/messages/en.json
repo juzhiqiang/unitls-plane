@@ -1,0 +1,211 @@
+{
+  "Common": {
+    "units": {
+      "b": "B",
+      "kb": "KB",
+      "mb": "MB",
+      "gb": "GB"
+    },
+    "meta": {
+      "title": "Utils Plane - Free Online Toolkit",
+      "description": "Image compression, PDF processing, and font conversion in one place. Privacy-first client-side processing, fast and free.",
+      "ogDescription": "Image compression, PDF processing, and font conversion in one place"
+    }
+  },
+  "Nav": {
+    "dashboard": "Dashboard",
+    "imageTools": "Image Tools",
+    "pdfTools": "PDF Tools",
+    "fontTools": "Font Tools",
+    "myFiles": "My Files",
+    "taskHistory": "Task History"
+  },
+  "Marketing": {
+    "nav": {
+      "tools": "Tools",
+      "login": "Sign in",
+      "getStarted": "Get started"
+    },
+    "footer": {
+      "docs": "Docs",
+      "github": "GitHub",
+      "terms": "Terms",
+      "privacy": "Privacy"
+    },
+    "hero": {
+      "titleLine1": "Your desktop",
+      "titleLine2": "toolbox",
+      "subtitle": "Image compression, PDF processing, font conversion. Everything runs locally in your browser to keep your data private.",
+      "ctaPrimary": "Get started",
+      "ctaSecondary": "Read the docs"
+    },
+    "features": {
+      "label": "Features",
+      "heading": "Everything you need",
+      "image": {
+        "title": "Image tools",
+        "description": "PNG, JPG, WebP, and GIF support with lossless compression and smart conversion"
+      },
+      "pdf": {
+        "title": "PDF tools",
+        "description": "Merge, split, and extract pages online with no install required"
+      },
+      "font": {
+        "title": "Font conversion",
+        "description": "Convert between TTF, OTF, and WOFF with efficient batch processing"
+      }
+    },
+    "highlights": {
+      "label": "Highlights",
+      "heading": "Why choose us",
+      "performance": {
+        "title": "High performance",
+        "description": "Client-side processing means no waiting on uploads"
+      },
+      "privacy": {
+        "title": "Privacy first",
+        "description": "Files are processed in your browser and never uploaded to a server"
+      },
+      "free": {
+        "title": "Free to use",
+        "description": "No signup required and every feature is free"
+      }
+    },
+    "cta": {
+      "heading": "Start using it now",
+      "description": "No signup, just open it and go. Every feature is free, and your privacy is protected.",
+      "button": "Try it now"
+    }
+  },
+  "Auth": {
+    "loginTitle": "Sign in",
+    "loginButton": "Sign in",
+    "signingIn": "Signing in...",
+    "registerTitle": "Create account",
+    "registerButton": "Create account",
+    "signingUp": "Creating account...",
+    "email": "Email",
+    "password": "Password",
+    "username": "Username",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "registerLink": "Sign up",
+    "loginLink": "Sign in",
+    "verifyEmailTitle": "Verify your email",
+    "verifyEmailBody": "We've sent a verification email to your inbox. Please check it and click the link to complete verification.",
+    "verifyEmailSpam": "If you don't see it, please check your spam folder.",
+    "backToLogin": "Back to sign in",
+    "loading": "Loading..."
+  },
+  "AppLayout": {
+    "home": "Home",
+    "signIn": "Sign in",
+    "logOut": "Log out",
+    "settings": "Settings",
+    "toggleTheme": "Toggle theme",
+    "defaultUser": "User"
+  },
+  "Dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome to Utils Plane",
+    "totalFiles": "Total Files",
+    "activeTasks": "Active Tasks",
+    "completed": "Completed"
+  },
+  "ImageTool": {
+    "title": "Image tools",
+    "description": "Pick a tool to start working with your images",
+    "tools": {
+      "compress": {
+        "title": "Compress",
+        "description": "Shrink file size while preserving visual quality"
+      },
+      "convert": {
+        "title": "Convert format",
+        "description": "Convert between JPEG, PNG, WebP, and AVIF"
+      }
+    }
+  },
+  "ImageCompress": {
+    "title": "Compress images",
+    "description": "Upload in batches — multiple files are bundled into a ZIP",
+    "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB per file",
+    "quality": "Quality",
+    "size": "Size",
+    "widthPx": "Width (px)",
+    "heightPx": "Height (px)",
+    "originalHint": "No resizing — keep the original dimensions",
+    "outputFormat": "Output format",
+    "start": "Compress",
+    "startWithCount": "Compress {count} images",
+    "processing": "Processing…",
+    "presets": {
+      "original": "Original",
+      "desktop": "Desktop",
+      "mobile": "Mobile",
+      "id1": "1-inch photo",
+      "id2": "2-inch photo",
+      "custom": "Custom"
+    }
+  },
+  "ImageConvert": {
+    "title": "Convert format",
+    "description": "Convert between JPEG, PNG, and WebP",
+    "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB",
+    "selected": "Selected: {filename} ({size})",
+    "targetFormat": "Target format",
+    "quality": "Quality",
+    "start": "Convert",
+    "processing": "Processing…"
+  },
+  "PdfTool": {
+    "title": "PDF Tools",
+    "comingSoon": "PDF processing tools coming soon."
+  },
+  "FontTool": {
+    "title": "Font Tools",
+    "comingSoon": "Font processing tools coming soon."
+  },
+  "FilesTool": {
+    "title": "My Files",
+    "empty": "Your files will appear here."
+  },
+  "TasksTool": {
+    "title": "Task History",
+    "empty": "Your task history will appear here."
+  },
+  "ToolsShared": {
+    "download": "Download",
+    "zipBuilding": "Zipping...",
+    "downloadZipCount": "Download ZIP ({count})",
+    "processing": "Processing",
+    "dropzoneRelease": "Release to upload",
+    "dropzonePrompt": "Click or drag files here",
+    "fileList": {
+      "filename": "Filename",
+      "original": "Original",
+      "compressed": "Compressed",
+      "saved": "Saved"
+    },
+    "compare": {
+      "original": "Original",
+      "result": "Result",
+      "ratio": "Ratio",
+      "beforeLabel": "Before",
+      "afterLabel": "After"
+    },
+    "mode": {
+      "label": "Process where",
+      "local": "Local",
+      "server": "Server",
+      "recommended": "Recommended"
+    }
+  },
+  "Format": {},
+  "Errors": {},
+  "LocaleSwitcher": {
+    "label": "Language",
+    "zh": "中文",
+    "en": "English"
+  }
+}

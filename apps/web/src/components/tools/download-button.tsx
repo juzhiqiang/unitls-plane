@@ -1,6 +1,7 @@
 'use client';
 
 import { Download } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 export interface DownloadButtonProps {
   file: File;
@@ -8,6 +9,8 @@ export interface DownloadButtonProps {
 }
 
 export function DownloadButton({ file, className }: DownloadButtonProps) {
+  const t = useTranslations('ToolsShared');
+
   const handleDownload = () => {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
@@ -24,7 +27,7 @@ export function DownloadButton({ file, className }: DownloadButtonProps) {
       className={`inline-flex items-center gap-2 px-4 h-9 text-sm font-mono bg-foreground text-background rounded-md hover:opacity-90 transition-opacity ${className ?? ''}`}
     >
       <Download className="h-4 w-4" strokeWidth={1.5} />
-      下载
+      {t('download')}
     </button>
   );
 }

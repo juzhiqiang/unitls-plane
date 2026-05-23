@@ -4,18 +4,57 @@ import type { CompressOptions } from '@/lib/processing/image-client';
 
 export type CompressFormat = 'image/jpeg' | 'image/webp' | 'image/png';
 
+export type SizePreset =
+  | 'original'
+  | 'desktop'
+  | 'mobile'
+  | 'id1'
+  | 'id2'
+  | 'custom';
+
+interface PresetMeta {
+  label: string;
+  width?: number;
+  height?: number;
+}
+
+export const SIZE_PRESETS: Record<SizePreset, PresetMeta> = {
+  original: { label: '原始尺寸' },
+  desktop: { label: '电脑', width: 1920, height: 1080 },
+  mobile: { label: '手机', width: 750, height: 480 },
+  id1: { label: '一寸照', width: 295, height: 413 },
+  id2: { label: '二寸照', width: 413, height: 579 },
+  custom: { label: '自定义' },
+};
+
 export interface ImageCompressOptionsState {
   quality: number; // 1-100
-  maxWidthOrHeight: number;
+  sizePreset: SizePreset;
+  customWidth: number;
+  customHeight: number;
   outputType: CompressFormat;
+}
+
+export function resolveSize(state: ImageCompressOptionsState): {
+  width?: number;
+  height?: number;
+} {
+  if (state.sizePreset === 'original') return {};
+  if (state.sizePreset === 'custom') {
+    return { width: state.customWidth, height: state.customHeight };
+  }
+  const preset = SIZE_PRESETS[state.sizePreset];
+  return { width: preset.width, height: preset.height };
 }
 
 export function toCompressOptions(
   state: ImageCompressOptionsState,
 ): CompressOptions {
+  const { width, height } = resolveSize(state);
   return {
     quality: state.quality / 100,
-    maxWidthOrHeight: state.maxWidthOrHeight,
+    ...(width !== undefined && { maxWidth: width }),
+    ...(height !== undefined && { maxHeight: height }),
     outputType: state.outputType,
   };
 }
@@ -32,11 +71,29 @@ const FORMAT_LABELS: Record<CompressFormat, string> = {
   'image/png': 'PNG',
 };
 
+const PRESET_ORDER: SizePreset[] = [
+  'original',
+  'desktop',
+  'mobile',
+  'id1',
+  'id2',
+  'custom',
+];
+
+function presetSubLabel(preset: SizePreset): string | null {
+  const meta = SIZE_PRESETS[preset];
+  if (meta.width && meta.height) return `${meta.width}×${meta.height}`;
+  return null;
+}
+
 export function ImageCompressOptions({
   value,
   onChange,
   disabled,
 }: ImageCompressOptionsProps) {
+  const isCustom = value.sizePreset === 'custom';
+  const isOriginal = value.sizePreset === 'original';
+
   return (
     <div className="space-y-6">
       {/* Quality */}
@@ -66,35 +123,96 @@ export function ImageCompressOptions({
         />
       </div>
 
-      {/* Max dimension */}
+      {/* Size preset */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label
-            htmlFor="maxDim"
-            className="text-xs font-mono text-muted-foreground uppercase tracking-wider"
-          >
-            最大边长
-          </label>
-          <span className="text-xs font-mono tabular-nums">
-            {value.maxWidthOrHeight}px
-          </span>
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+          尺寸
         </div>
-        <input
-          id="maxDim"
-          type="number"
-          min={64}
-          max={8192}
-          step={64}
-          value={value.maxWidthOrHeight}
-          disabled={disabled}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              maxWidthOrHeight: Number(e.target.value) || 1920,
-            })
-          }
-          className="w-full h-9 px-3 bg-transparent border border-border rounded-md text-sm font-mono focus:outline-none focus:border-accent"
-        />
+        <div className="grid grid-cols-3 gap-1.5">
+          {PRESET_ORDER.map((preset) => {
+            const meta = SIZE_PRESETS[preset];
+            const sub = presetSubLabel(preset);
+            const active = value.sizePreset === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange({ ...value, sizePreset: preset })}
+                className={`px-2 py-1.5 text-xs font-mono transition-colors rounded-md border ${
+                  active
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/40'
+                }`}
+              >
+                <div>{meta.label}</div>
+                {sub && (
+                  <div className="text-[10px] opacity-70 tabular-nums mt-0.5">
+                    {sub}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom width / height inputs */}
+        {isCustom && (
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="space-y-1">
+              <label
+                htmlFor="customWidth"
+                className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider"
+              >
+                宽 (px)
+              </label>
+              <input
+                id="customWidth"
+                type="number"
+                min={1}
+                max={8192}
+                value={value.customWidth}
+                disabled={disabled}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    customWidth: Number(e.target.value) || 0,
+                  })
+                }
+                className="w-full h-9 px-3 bg-transparent border border-border rounded-md text-sm font-mono focus:outline-none focus:border-accent"
+              />
+            </div>
+            <div className="space-y-1">
+              <label
+                htmlFor="customHeight"
+                className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider"
+              >
+                高 (px)
+              </label>
+              <input
+                id="customHeight"
+                type="number"
+                min={1}
+                max={8192}
+                value={value.customHeight}
+                disabled={disabled}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    customHeight: Number(e.target.value) || 0,
+                  })
+                }
+                className="w-full h-9 px-3 bg-transparent border border-border rounded-md text-sm font-mono focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+        )}
+
+        {isOriginal && (
+          <p className="text-[10px] font-mono text-muted-foreground pt-1">
+            不缩放，保持图片原始宽高
+          </p>
+        )}
       </div>
 
       {/* Output format */}

@@ -3,81 +3,154 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
+import { api } from '@/lib/api-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   ImageCompressOptions,
   type ImageCompressOptionsState,
+  type CompressFormat,
   toCompressOptions,
+  resolveSize,
 } from '@/components/tools/image-compress-options';
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ImageCompare } from '@/components/tools/image-compare';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ZipDownloadButton } from '@/components/tools/zip-download-button';
+import { FileList, type FileItem } from '@/components/tools/file-list';
 import {
   compressImage,
   shouldProcessLocally,
 } from '@/lib/processing/image-client';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
-import { useTaskProgress } from '@/hooks/api/use-task-progress';
+
+const SUPPORTED_OUTPUT_TYPES = new Set<CompressFormat>([
+  'image/jpeg',
+  'image/webp',
+  'image/png',
+]);
+
+function detectOutputType(file: File): CompressFormat | null {
+  const t = file.type as CompressFormat;
+  if (SUPPORTED_OUTPUT_TYPES.has(t)) return t;
+  if (file.type === 'image/jpg') return 'image/jpeg';
+  return null;
+}
+
+function compressedName(file: File, outputType: CompressFormat): string {
+  const extMap: Record<CompressFormat, string> = {
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/png': 'png',
+  };
+  const ext = extMap[outputType];
+  const dot = file.name.lastIndexOf('.');
+  const base = dot > 0 ? file.name.slice(0, dot) : file.name;
+  return `compressed-${base}.${ext}`;
+}
+
+async function processOnServer(
+  file: File,
+  config: Record<string, unknown>,
+  uploadMutate: (file: File) => Promise<unknown>,
+  createTaskMutate: (input: any) => Promise<{ id: string }>,
+  outputType: CompressFormat,
+): Promise<File> {
+  const uploaded = (await uploadMutate(file)) as { id: string };
+  const task = await createTaskMutate({
+    type: 'compress',
+    inputFileIds: [uploaded.id],
+    inputConfig: config,
+  });
+
+  while (true) {
+    const { data, error } = await api.GET('/tasks/{id}/status', {
+      params: { path: { id: task.id } },
+    });
+    if (error) throw new Error('Failed to poll task status');
+    if (data?.status === 'completed') {
+      const outputFileId = (data as any).outputFileId as string;
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
+        { credentials: 'include' },
+      );
+      if (!response.ok) throw new Error('Failed to download result');
+      const blob = await response.blob();
+      return new File([blob], compressedName(file, outputType), {
+        type: blob.type,
+      });
+    }
+    if (data?.status === 'failed') {
+      throw new Error(
+        (data as any).errorMessage ?? 'Task failed',
+      );
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
 
 export default function CompressPage() {
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [resultFile, setResultFile] = useState<File | null>(null);
+  const [items, setItems] = useState<FileItem[]>([]);
   const [options, setOptions] = useState<ImageCompressOptionsState>({
     quality: 80,
-    maxWidthOrHeight: 1920,
+    sizePreset: 'desktop',
+    customWidth: 1920,
+    customHeight: 1080,
     outputType: 'image/jpeg',
   });
   const [mode, setMode] = useState<ProcessMode>('local');
   const [progress, setProgress] = useState(0);
   const [processing, setProcessing] = useState(false);
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
-  const taskQuery = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' },
-      );
-      const blob = await response.blob();
-      const file = new File([blob], `compressed-${originalFile?.name}`, {
-        type: blob.type,
-      });
-      setResultFile(file);
-      setProcessing(false);
-      setTaskId(null);
-    },
-    onFailed: (err) => {
-      setError(err.message);
-      setProcessing(false);
-      setTaskId(null);
-    },
-  });
-
-  const recommendation: ProcessMode = originalFile
-    ? shouldProcessLocally(originalFile)
-      ? 'local'
-      : 'server'
-    : 'local';
+  const recommendation: ProcessMode =
+    items.length > 0
+      ? items.every((it) => shouldProcessLocally(it.file))
+        ? 'local'
+        : 'server'
+      : 'local';
 
   const handleDrop = (files: File[]) => {
-    if (files[0]) {
-      setOriginalFile(files[0]);
-      setResultFile(null);
-      setError(null);
-      setProgress(0);
-    }
+    if (files.length === 0) return;
+
+    const newItems: FileItem[] = files.map((file) => ({
+      file,
+      status: 'pending' as const,
+    }));
+
+    setItems((prev) => {
+      // First batch ever: auto-detect output type from the first file
+      if (prev.length === 0 && files[0]) {
+        const detected = detectOutputType(files[0]);
+        if (detected) {
+          setOptions((o) => ({ ...o, outputType: detected }));
+        }
+      }
+      return [...prev, ...newItems];
+    });
+
+    setGlobalError(null);
+    setProgress(0);
+  };
+
+  const handleRemove = (index: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateItem = (index: number, patch: Partial<FileItem>) => {
+    setItems((prev) =>
+      prev.map((it, i) => (i === index ? { ...it, ...patch } : it)),
+    );
   };
 
   const handleProcess = async () => {
-    if (!originalFile) return;
+    if (items.length === 0) return;
 
     if (mode === 'server' && !sessionLoading && !session) {
       const next = encodeURIComponent('/image/compress');
@@ -85,70 +158,114 @@ export default function CompressPage() {
       return;
     }
 
-    setProcessing(true);
-    setError(null);
-    setProgress(0);
-    setResultFile(null);
+    const indicesToProcess = items
+      .map((it, i) => (it.status === 'done' && it.result ? -1 : i))
+      .filter((i) => i >= 0);
 
-    try {
-      if (mode === 'local') {
-        const result = await compressImage(originalFile, {
-          ...toCompressOptions(options),
-          onProgress: (p) => setProgress(p),
-        });
-        setResultFile(result);
-        setProcessing(false);
-      } else {
-        const uploaded = await uploadFile.mutateAsync(originalFile);
-        const formatMap: Record<string, string> = {
-          'image/jpeg': 'jpeg',
-          'image/webp': 'webp',
-          'image/png': 'png',
-        };
-        const task = await createTask.mutateAsync({
-          type: 'compress',
-          inputFileIds: [(uploaded as any).id],
-          inputConfig: {
+    if (indicesToProcess.length === 0) return;
+
+    setProcessing(true);
+    setGlobalError(null);
+    setProgress(0);
+    setItems((prev) =>
+      prev.map((it) =>
+        it.status === 'done' && it.result
+          ? it
+          : { file: it.file, status: 'pending' as const },
+      ),
+    );
+
+    const fileProgress: number[] = items.map((it) =>
+      it.status === 'done' && it.result ? 100 : 0,
+    );
+    const updateOverall = () => {
+      const sum = fileProgress.reduce((a, b) => a + b, 0);
+      setProgress(Math.round(sum / items.length));
+    };
+    updateOverall();
+
+    const formatMap: Record<CompressFormat, string> = {
+      'image/jpeg': 'jpeg',
+      'image/webp': 'webp',
+      'image/png': 'png',
+    };
+    const { width, height } = resolveSize(options);
+
+    const tasks = indicesToProcess.map(async (i) => {
+      const item = items[i]!;
+      updateItem(i, { status: 'processing' });
+      try {
+        let result: File;
+        if (mode === 'local') {
+          result = await compressImage(item.file, {
+            ...toCompressOptions(options),
+            onProgress: (p) => {
+              fileProgress[i] = p;
+              updateOverall();
+            },
+          });
+        } else {
+          const config: Record<string, unknown> = {
             format: formatMap[options.outputType] ?? 'jpeg',
             quality: options.quality,
-            maxWidth: options.maxWidthOrHeight,
-            maxHeight: options.maxWidthOrHeight,
-          },
-        });
-        setTaskId(task.id);
+            ...(width !== undefined && { maxWidth: width }),
+            ...(height !== undefined && { maxHeight: height }),
+          };
+          result = await processOnServer(
+            item.file,
+            config,
+            (f) => uploadFile.mutateAsync(f),
+            (input) => createTask.mutateAsync(input) as Promise<{ id: string }>,
+            options.outputType,
+          );
+          fileProgress[i] = 100;
+          updateOverall();
+        }
+        updateItem(i, { result, status: 'done' });
+      } catch (err) {
+        const message = (err as Error).message;
+        updateItem(i, { status: 'failed', error: message });
+        fileProgress[i] = 100;
+        updateOverall();
       }
-    } catch (err) {
-      setError((err as Error).message);
-      setProcessing(false);
-    }
+    });
+
+    await Promise.all(tasks);
+    setProcessing(false);
   };
 
-  const serverProgress = taskQuery.data?.progress ?? 0;
-  const currentProgress = mode === 'local' ? progress : serverProgress;
+  const isSingle = items.length === 1;
+  const singleItem = isSingle ? items[0] : null;
+  const successResults = items
+    .filter((it) => it.status === 'done' && it.result)
+    .map((it) => it.result as File);
+  const hasAnyResult = successResults.length > 0;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8">
       <div>
         <h1 className="text-lg font-medium">图片压缩</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          减小图片文件大小，支持 JPEG / WebP / PNG
+          支持批量上传，多文件以 ZIP 打包下载
         </p>
       </div>
 
       <FileDropzone
         accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
         maxSize={50 * 1024 * 1024}
+        multiple
         onDrop={handleDrop}
         disabled={processing}
-        hint="支持 JPG / PNG / WebP / AVIF，最大 50MB"
+        hint="支持 JPG / PNG / WebP / AVIF，单文件最大 50MB"
       />
 
-      {originalFile && (
+      {items.length > 0 && (
         <div className="space-y-6">
-          <div className="text-xs font-mono text-muted-foreground">
-            已选择: {originalFile.name} ({(originalFile.size / 1024).toFixed(1)}{' '}
-            KB)
-          </div>
+          <FileList
+            items={items}
+            onRemove={handleRemove}
+            disabled={processing}
+          />
 
           <ImageCompressOptions
             value={options}
@@ -169,23 +286,42 @@ export default function CompressPage() {
             disabled={processing}
             className="w-full h-10 text-sm font-mono bg-foreground text-background rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {processing ? '处理中...' : '开始压缩'}
+            {processing
+              ? '处理中...'
+              : items.length > 1
+                ? `开始压缩 (${items.length} 张)`
+                : '开始压缩'}
           </button>
         </div>
       )}
 
-      {processing && <ProcessingProgress progress={currentProgress} />}
+      {processing && <ProcessingProgress progress={progress} />}
 
-      {error && (
+      {globalError && (
         <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
+          {globalError}
         </div>
       )}
 
-      {resultFile && originalFile && (
+      {hasAnyResult && (
         <div className="space-y-6">
-          <ImageCompare original={originalFile} result={resultFile} />
-          <DownloadButton file={resultFile} />
+          {isSingle && singleItem?.result && (
+            <ImageCompare
+              original={singleItem.file}
+              result={singleItem.result}
+            />
+          )}
+
+          <div className="flex justify-end">
+            {successResults.length === 1 ? (
+              <DownloadButton file={successResults[0]!} />
+            ) : (
+              <ZipDownloadButton
+                files={successResults}
+                zipName={`compressed-${successResults.length}-files.zip`}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -2,7 +2,8 @@ import imageCompression from 'browser-image-compression';
 
 export interface CompressOptions {
   maxSizeMB?: number;
-  maxWidthOrHeight?: number;
+  maxWidth?: number;
+  maxHeight?: number;
   quality?: number;
   outputType?: 'image/jpeg' | 'image/webp' | 'image/png';
   onProgress?: (progress: number) => void;
@@ -12,9 +13,14 @@ export async function compressImage(
   file: File,
   options: CompressOptions = {}
 ): Promise<File> {
+  const longestEdge =
+    options.maxWidth || options.maxHeight
+      ? Math.max(options.maxWidth ?? 0, options.maxHeight ?? 0)
+      : undefined;
+
   return imageCompression(file, {
     maxSizeMB: options.maxSizeMB ?? 1,
-    maxWidthOrHeight: options.maxWidthOrHeight ?? 1920,
+    ...(longestEdge !== undefined && { maxWidthOrHeight: longestEdge }),
     initialQuality: options.quality ?? 0.8,
     fileType: options.outputType,
     useWebWorker: true,

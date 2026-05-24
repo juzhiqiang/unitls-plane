@@ -24,7 +24,7 @@ export function PdfPageCard({
   selected = false,
   onSelect,
 }: PdfPageCardProps) {
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded] = useState(false);
 
   const {
@@ -45,11 +45,9 @@ export function PdfPageCard({
     let cancelled = false;
 
     async function render() {
-      const canvas = await renderPdfPage(pdf, pageNumber, scale);
-      if (cancelled || !canvasRef.current) return;
-      canvasRef.current.innerHTML = '';
-      canvas.className = 'w-full h-auto';
-      canvasRef.current.appendChild(canvas);
+      if (!canvasRef.current) return;
+      await renderPdfPage(pdf, pageNumber, scale, canvasRef.current);
+      if (cancelled) return;
       setLoaded(true);
     }
 
@@ -81,9 +79,10 @@ export function PdfPageCard({
           onClick={(e) => e.stopPropagation()}
         />
       </label>
-      <div ref={canvasRef} className="min-h-[80px] flex items-center justify-center">
+      <div className="relative min-h-[80px] flex items-center justify-center">
+        <canvas ref={canvasRef} className={cn('w-full h-auto', !loaded && 'invisible')} />
         {!loaded && (
-          <div className="text-xs text-muted-foreground">加载中...</div>
+          <div className="absolute text-xs text-muted-foreground">加载中...</div>
         )}
       </div>
       <p className="text-xs text-center text-muted-foreground mt-1">

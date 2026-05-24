@@ -5,6 +5,7 @@ export const taskTypeEnum = z.enum([
   'convert',
   'pdf_merge',
   'pdf_split',
+  'pdf_to_image',
   'font_convert',
 ]);
 

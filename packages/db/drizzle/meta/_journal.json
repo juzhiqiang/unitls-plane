@@ -22,6 +22,13 @@
       "when": 1779154066370,
       "tag": "0002_foamy_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779200000000,
+      "tag": "0003_wide_genesis",
+      "breakpoints": true
     }
   ]
 }

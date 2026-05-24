@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadPdf, renderPdfPage } from '@/lib/processing/pdf-client';
 
 interface PdfPreviewProps {
@@ -14,21 +14,24 @@ export function PdfPreview({
   scale = 0.5,
   maxConcurrent = 3,
 }: PdfPreviewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [pageCount, setPageCount] = useState(0);
   const [rendered, setRendered] = useState(0);
+  const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
+    canvasRefs.current = new Map();
+    setPageCount(0);
+    setRendered(0);
 
     async function render() {
       const pdf = await loadPdf(file);
       if (cancelled) return;
       setPageCount(pdf.numPages);
 
-      if (!containerRef.current) return;
-      containerRef.current.innerHTML = '';
+      // wait one frame so React commits the canvas elements before we paint into them
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (cancelled) return;
 
       const queue: number[] = [];
       for (let i = 1; i <= pdf.numPages; i++) queue.push(i);
@@ -37,26 +40,10 @@ export function PdfPreview({
 
       async function processPage(pageNum: number) {
         if (cancelled) return;
-        const canvas = await renderPdfPage(pdf, pageNum, scale);
+        const canvas = canvasRefs.current.get(pageNum);
+        if (!canvas) return;
+        await renderPdfPage(pdf, pageNum, scale, canvas);
         if (cancelled) return;
-        canvas.className = 'border rounded shadow-sm w-full';
-        canvas.dataset.page = String(pageNum);
-
-        const container = containerRef.current;
-        if (!container) return;
-
-        const existing = Array.from(container.children);
-        let inserted = false;
-        for (const child of existing) {
-          const childPage = Number((child as HTMLElement).dataset.page);
-          if (childPage > pageNum) {
-            container.insertBefore(canvas, child);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) container.appendChild(canvas);
-
         completed++;
         setRendered(completed);
       }
@@ -79,7 +66,6 @@ export function PdfPreview({
     render();
     return () => {
       cancelled = true;
-      controller.abort();
     };
   }, [file, scale, maxConcurrent]);
 
@@ -88,7 +74,18 @@ export function PdfPreview({
       <p className="text-sm text-muted-foreground">
         共 {pageCount} 页{pageCount > 0 && rendered < pageCount && ` (已渲染 ${rendered}/${pageCount})`}
       </p>
-      <div ref={containerRef} className="grid grid-cols-3 gap-4 mt-4" />
+      <div className="grid grid-cols-3 gap-4 mt-4">
+        {Array.from({ length: pageCount }, (_, i) => i + 1).map((pageNum) => (
+          <canvas
+            key={pageNum}
+            ref={(el) => {
+              if (el) canvasRefs.current.set(pageNum, el);
+              else canvasRefs.current.delete(pageNum);
+            }}
+            className="border rounded shadow-sm w-full"
+          />
+        ))}
+      </div>
     </div>
   );
 }

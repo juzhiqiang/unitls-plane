@@ -35,7 +35,7 @@ interface SortableFileListProps {
 }
 
 function PdfThumbnail({ file }: { file: File }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -44,12 +44,9 @@ function PdfThumbnail({ file }: { file: File }) {
     async function render() {
       try {
         const pdf = await loadPdf(file);
-        if (cancelled || !ref.current) return;
-        const canvas = await renderPdfPage(pdf, 1, 0.2);
-        if (cancelled || !ref.current) return;
-        ref.current.innerHTML = '';
-        canvas.className = 'w-full h-full object-contain';
-        ref.current.appendChild(canvas);
+        if (cancelled || !canvasRef.current) return;
+        await renderPdfPage(pdf, 1, 0.2, canvasRef.current);
+        if (cancelled) return;
         setLoaded(true);
       } catch {
         // non-PDF or corrupt file
@@ -61,12 +58,16 @@ function PdfThumbnail({ file }: { file: File }) {
   }, [file]);
 
   return (
-    <div
-      ref={ref}
-      className="w-10 h-14 border border-border bg-muted/30 flex items-center justify-center overflow-hidden"
-    >
+    <div className="relative w-10 h-14 border border-border bg-muted/30 flex items-center justify-center overflow-hidden">
+      <canvas
+        ref={canvasRef}
+        className={cn(
+          'w-full h-full object-contain',
+          !loaded && 'invisible',
+        )}
+      />
       {!loaded && (
-        <span className="text-[9px] font-mono text-muted-foreground">PDF</span>
+        <span className="absolute text-[9px] font-mono text-muted-foreground">PDF</span>
       )}
     </div>
   );

@@ -21,10 +21,10 @@ export type TaskQueryInput = z.infer<typeof taskQuerySchema>;
 
 export class CreateTaskDto {
   @ApiProperty({
-    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'font_convert'],
+    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'],
   })
-  @IsEnum(['compress', 'convert', 'pdf_merge', 'pdf_split', 'font_convert'])
-  type!: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'font_convert';
+  @IsEnum(['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'])
+  type!: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
 
   @ApiProperty({ type: [String], format: 'uuid' })
   @IsArray()
@@ -66,7 +66,7 @@ export class TaskResponseDto {
   userId?: string;
 
   @ApiProperty({
-    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'font_convert'],
+    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'],
   })
   type!: string;
 

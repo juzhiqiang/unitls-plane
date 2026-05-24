@@ -162,6 +162,7 @@ export class TasksService {
         return this.imageQueue;
       case 'pdf_merge':
       case 'pdf_split':
+      case 'pdf_to_image':
         return this.pdfQueue;
       case 'font_convert':
         return this.fontQueue;

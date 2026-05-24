@@ -48,7 +48,7 @@ export function middleware(request: NextRequest) {
   // Redirect unauthenticated users away from protected pages
   if (!sessionToken && !isPublicPath(path)) {
     const redirectUrl = new URL(`/${locale}/login`, request.url);
-    redirectUrl.searchParams.set('redirect', pathname);
+    redirectUrl.searchParams.set('next', path);
     return NextResponse.redirect(redirectUrl);
   }
 

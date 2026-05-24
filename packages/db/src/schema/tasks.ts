@@ -15,6 +15,7 @@ export const taskTypeEnum = pgEnum('task_type', [
   'convert',
   'pdf_merge',
   'pdf_split',
+  'pdf_to_image',
   'font_convert',
 ]);
 

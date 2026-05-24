@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { useRouter, Link } from '@/i18n/navigation';
+import { useLocale, useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { signIn } from '@/lib/auth-client';
 
 export default function LoginPage() {
   const t = useTranslations('Auth');
-  const router = useRouter();
+  const locale = useLocale();
   const searchParams = useSearchParams();
   const next = searchParams.get('next');
   const [email, setEmail] = useState('');
@@ -34,8 +34,7 @@ export default function LoginPage() {
     }
 
     const target = next && next.startsWith('/') ? next : '/dashboard';
-    router.push(target);
-    router.refresh();
+    window.location.href = `/${locale}${target}`;
   };
 
   return (

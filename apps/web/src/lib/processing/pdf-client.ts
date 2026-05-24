@@ -14,12 +14,13 @@ export async function loadPdf(
 export async function renderPdfPage(
   pdf: pdfjsLib.PDFDocumentProxy,
   pageNumber: number,
-  scale: number = 1
+  scale: number = 1,
+  targetCanvas?: HTMLCanvasElement
 ): Promise<HTMLCanvasElement> {
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale });
 
-  const canvas = document.createElement('canvas');
+  const canvas = targetCanvas ?? document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
 

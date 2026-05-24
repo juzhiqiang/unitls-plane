@@ -171,6 +171,10 @@
       "split": {
         "title": "Split PDF",
         "description": "Split a PDF by page range or selection"
+      },
+      "toImage": {
+        "title": "PDF to images",
+        "description": "Convert PDF pages to PNG or JPEG images"
       }
     },
     "merge": {
@@ -197,6 +201,20 @@
         "pages": "By page",
         "every": "Every N"
       }
+    },
+    "toImage": {
+      "title": "PDF to images",
+      "description": "Convert PDF pages to PNG or JPEG; multiple pages are bundled into a ZIP",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "format": "Format",
+      "dpi": "DPI",
+      "quality": "JPEG quality",
+      "allPages": "All pages",
+      "selectedPages": "Select pages",
+      "selectPages": "Click pages to select for export",
+      "start": "Convert",
+      "processing": "Converting..."
     }
   },
   "FontTool": {

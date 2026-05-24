@@ -2,11 +2,12 @@
 
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { Merge, Scissors } from 'lucide-react';
+import { Merge, Scissors, Image as ImageIcon } from 'lucide-react';
 
 const tools = [
   { key: 'merge', icon: Merge, href: '/pdf/merge' },
   { key: 'split', icon: Scissors, href: '/pdf/split' },
+  { key: 'toImage', icon: ImageIcon, href: '/pdf/to-image' },
 ] as const;
 
 export default function PdfPage() {

@@ -171,6 +171,10 @@
       "split": {
         "title": "拆分 PDF",
         "description": "按页面范围或指定页码拆分 PDF"
+      },
+      "toImage": {
+        "title": "PDF 转图片",
+        "description": "将 PDF 页面转换为 PNG 或 JPEG 图片"
       }
     },
     "merge": {
@@ -197,6 +201,20 @@
         "pages": "按页码",
         "every": "每 N 页"
       }
+    },
+    "toImage": {
+      "title": "PDF 转图片",
+      "description": "将 PDF 页面转换为 PNG 或 JPEG 图片，多页将打包为 ZIP",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "format": "格式",
+      "dpi": "DPI",
+      "quality": "JPEG 质量",
+      "allPages": "全部页面",
+      "selectedPages": "选择页面",
+      "selectPages": "点击选择要导出的页面",
+      "start": "开始转换",
+      "processing": "转换中..."
     }
   },
   "FontTool": {

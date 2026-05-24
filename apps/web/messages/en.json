@@ -161,7 +161,43 @@
   },
   "PdfTool": {
     "title": "PDF Tools",
-    "comingSoon": "PDF processing tools coming soon."
+    "description": "Pick a tool to start working with your PDFs",
+    "retry": "Retry",
+    "tools": {
+      "merge": {
+        "title": "Merge PDF",
+        "description": "Combine multiple PDF files into one"
+      },
+      "split": {
+        "title": "Split PDF",
+        "description": "Split a PDF by page range or selection"
+      }
+    },
+    "merge": {
+      "title": "Merge PDF",
+      "description": "Upload multiple PDFs, drag to reorder, then merge into one file",
+      "outputFilename": "Output filename",
+      "start": "Merge",
+      "processing": "Merging..."
+    },
+    "split": {
+      "title": "Split PDF",
+      "description": "Upload a PDF and choose how to split it",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "selectPages": "Click pages to select them for extraction",
+      "from": "From",
+      "to": "To",
+      "everyNPages": "Split every N pages",
+      "outputFiles": "files",
+      "start": "Split",
+      "processing": "Splitting...",
+      "modes": {
+        "ranges": "By range",
+        "pages": "By page",
+        "every": "Every N"
+      }
+    }
   },
   "FontTool": {
     "title": "Font Tools",

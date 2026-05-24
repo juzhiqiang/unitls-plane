@@ -161,7 +161,43 @@
   },
   "PdfTool": {
     "title": "PDF 工具",
-    "comingSoon": "PDF 处理工具即将上线。"
+    "description": "选择一个工具开始处理 PDF 文件",
+    "retry": "重试",
+    "tools": {
+      "merge": {
+        "title": "合并 PDF",
+        "description": "将多个 PDF 文件合并为一个"
+      },
+      "split": {
+        "title": "拆分 PDF",
+        "description": "按页面范围或指定页码拆分 PDF"
+      }
+    },
+    "merge": {
+      "title": "合并 PDF",
+      "description": "上传多个 PDF 文件，拖拽排序后合并为一个文件",
+      "outputFilename": "输出文件名",
+      "start": "开始合并",
+      "processing": "合并中..."
+    },
+    "split": {
+      "title": "拆分 PDF",
+      "description": "上传 PDF 文件，选择拆分方式",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "selectPages": "点击选择要提取的页面",
+      "from": "起始页",
+      "to": "结束页",
+      "everyNPages": "每 N 页拆分",
+      "outputFiles": "个文件",
+      "start": "开始拆分",
+      "processing": "拆分中...",
+      "modes": {
+        "ranges": "按范围",
+        "pages": "按页码",
+        "every": "每 N 页"
+      }
+    }
   },
   "FontTool": {
     "title": "字体工具",

@@ -162,6 +162,36 @@
         ]
       }
     },
+    "/fonts/{fileId}/info": {
+      "get": {
+        "operationId": "FontsController_getFontInfo",
+        "parameters": [
+          {
+            "name": "fileId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Font info"
+          },
+          "400": {
+            "description": "Invalid font file"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Get font file metadata",
+        "tags": [
+          "fonts"
+        ]
+      }
+    },
     "/files/upload": {
       "post": {
         "operationId": "FilesController_upload",

@@ -16,6 +16,7 @@ const ALLOWED_MIME_TYPES = [
   'image/gif',
   'image/webp',
   'application/pdf',
+  'application/zip',
   'font/ttf',
   'font/otf',
   'font/woff',

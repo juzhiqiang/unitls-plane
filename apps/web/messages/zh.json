@@ -218,8 +218,17 @@
     }
   },
   "FontTool": {
-    "title": "字体工具",
-    "comingSoon": "字体处理工具即将上线。"
+    "title": "字体转换",
+    "description": "上传字体文件，预览效果，选择目标格式后转换下载",
+    "dropzoneHint": "TTF、OTF、WOFF 或 WOFF2",
+    "targetFormat": "目标格式",
+    "subset": "子集化",
+    "subsetEnable": "启用子集化（仅保留指定字符）",
+    "subsetPlaceholder": "输入要保留的字符，例如：你好世界 ABC 123",
+    "start": "开始转换",
+    "processing": "转换中...",
+    "changeFile": "更换文件",
+    "retry": "重试"
   },
   "FilesTool": {
     "title": "我的文件",

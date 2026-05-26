@@ -218,8 +218,17 @@
     }
   },
   "FontTool": {
-    "title": "Font Tools",
-    "comingSoon": "Font processing tools coming soon."
+    "title": "Font Convert",
+    "description": "Upload a font file, preview it, then convert to your target format",
+    "dropzoneHint": "TTF, OTF, WOFF, or WOFF2",
+    "targetFormat": "Target format",
+    "subset": "Subset",
+    "subsetEnable": "Enable subsetting (keep only specified characters)",
+    "subsetPlaceholder": "Enter characters to keep, e.g.: Hello World ABC 123 你好",
+    "start": "Convert",
+    "processing": "Converting...",
+    "changeFile": "Change file",
+    "retry": "Retry"
   },
   "FilesTool": {
     "title": "My Files",

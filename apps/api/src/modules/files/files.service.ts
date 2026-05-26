@@ -5,7 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { eq, desc, and, isNull, gte, sql } from 'drizzle-orm';
+import { eq, desc, and, isNull, isNotNull, gte, like, inArray, sql } from 'drizzle-orm';
 import { db, files, type File } from '@utils-plane/db';
 import { MinioService } from './minio.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -134,13 +134,21 @@ export class FilesService {
 
   async listByUser(
     userId: string,
-    options: { page?: number; limit?: number } = {}
+    options: { page?: number; limit?: number; mimeType?: string; search?: string } = {}
   ): Promise<{ files: File[]; total: number }> {
     const page = options.page ?? 1;
     const limit = options.limit ?? 20;
     const offset = (page - 1) * limit;
 
-    const where = and(eq(files.userId, userId), isNull(files.deletedAt));
+    const conditions = [eq(files.userId, userId), isNull(files.deletedAt)];
+    if (options.mimeType) {
+      conditions.push(like(files.mimeType, `${options.mimeType}%`));
+    }
+    if (options.search) {
+      conditions.push(like(files.filename, `%${options.search}%`));
+    }
+
+    const where = and(...conditions);
 
     const [fileList, countResult] = await Promise.all([
       db
@@ -171,6 +179,80 @@ export class FilesService {
       .where(eq(files.id, id));
 
     this.logger.log(`Soft deleted file ${id}`);
+  }
+
+  async batchSoftDelete(ids: string[], userId: string): Promise<void> {
+    const userFiles = await db
+      .select()
+      .from(files)
+      .where(and(inArray(files.id, ids), eq(files.userId, userId)));
+
+    if (userFiles.length === 0) return;
+
+    const validIds = userFiles.map((f) => f.id);
+    await db
+      .update(files)
+      .set({ deletedAt: new Date() })
+      .where(inArray(files.id, validIds));
+
+    this.logger.log(`Batch soft deleted ${validIds.length} files`);
+  }
+
+  async restore(id: string, userId: string): Promise<void> {
+    const file = await db.query.files.findFirst({
+      where: eq(files.id, id),
+    });
+
+    if (!file) {
+      throw new NotFoundException({
+        code: ErrorCodes.TASK_NOT_FOUND,
+        message: 'File not found',
+      });
+    }
+
+    if (file.userId !== userId) {
+      throw new ForbiddenException({
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Access denied',
+      });
+    }
+
+    await db
+      .update(files)
+      .set({ deletedAt: null })
+      .where(eq(files.id, id));
+
+    this.logger.log(`Restored file ${id}`);
+  }
+
+  async listTrashed(
+    userId: string,
+    options: { page?: number; limit?: number } = {}
+  ): Promise<{ files: File[]; total: number }> {
+    const page = options.page ?? 1;
+    const limit = options.limit ?? 20;
+    const offset = (page - 1) * limit;
+
+    const where = and(eq(files.userId, userId), isNotNull(files.deletedAt));
+
+    const [fileList, countResult] = await Promise.all([
+      db
+        .select()
+        .from(files)
+        .where(where)
+        .orderBy(desc(files.deletedAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(files)
+        .where(where),
+    ]);
+
+    return {
+      files: fileList,
+      total: countResult[0]?.count ?? 0,
+    };
   }
 
   async permanentDelete(id: string, userId: string): Promise<void> {

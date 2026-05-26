@@ -2,15 +2,32 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import type { CreateTaskDto, TaskResponseDto, TaskStatusDto } from './types';
 
-export function useTasks(query?: { page?: number; limit?: number; status?: TaskResponseDto['status'] }) {
+export type TaskType = 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
+export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface TaskQuery {
+  page?: number;
+  limit?: number;
+  status?: TaskStatus;
+  type?: TaskType;
+}
+
+export function useTasks(query?: TaskQuery) {
   return useQuery({
     queryKey: ['tasks', query],
     queryFn: async () => {
       const { data, error } = await api.GET('/tasks', {
-        params: { query: { page: query?.page, limit: query?.limit, status: query?.status } },
+        params: { query: { page: query?.page, limit: query?.limit, status: query?.status, type: query?.type } as any },
       });
       if (error) throw error;
-      return data;
+      return data as unknown as { tasks: TaskResponseDto[]; total: number };
+    },
+    refetchInterval: (q) => {
+      const tasks = (q.state.data as any)?.tasks as TaskResponseDto[] | undefined;
+      if (tasks?.some((t) => t.status === 'pending' || t.status === 'processing')) {
+        return 5000;
+      }
+      return false;
     },
   });
 }
@@ -52,6 +69,22 @@ export function useCreateTask() {
   return useMutation({
     mutationFn: async (task: CreateTaskDto) => {
       const { data, error } = await api.POST('/tasks', { body: task as any });
+      if (error) throw error;
+      return data as TaskResponseDto;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+export function useRetryTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { data, error } = await api.POST('/tasks/{id}/retry' as any, {
+        params: { path: { id: taskId } } as any,
+      });
       if (error) throw error;
       return data as TaskResponseDto;
     },

@@ -99,6 +99,24 @@ export class TasksController {
       page: query.page ?? 1,
       limit: query.limit ?? 20,
       status: query.status,
+      type: query.type,
     });
+  }
+
+  @Post(':id/retry')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Retry a failed task' })
+  @ApiResponse({ status: 201, description: 'New task created', type: TaskResponseDto })
+  async retry(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    const userId = req.user?.id;
+    const original = await this.tasksService.getById(id, userId);
+    return this.tasksService.create(
+      {
+        type: original.type,
+        inputFileIds: original.inputFileIds as string[],
+        inputConfig: (original.inputConfig as Record<string, unknown>) ?? {},
+      },
+      userId,
+    );
   }
 }

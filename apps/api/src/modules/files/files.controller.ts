@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Query,
+  Body,
   Res,
   UploadedFile,
   UseInterceptors,
@@ -105,12 +106,33 @@ export class FilesController {
   async list(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('mimeType') mimeType?: string,
+    @Query('search') search?: string,
     @CurrentUser() user?: User
   ) {
     if (!user) {
       throw new BadRequestException('User required for listing files');
     }
     return this.filesService.listByUser(user.id, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      mimeType,
+      search,
+    });
+  }
+
+  @Get('trash')
+  @ApiOperation({ summary: 'List trashed files for current user' })
+  @ApiBearerAuth()
+  async listTrash(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @CurrentUser() user?: User
+  ) {
+    if (!user) {
+      throw new BadRequestException('User required for listing trash');
+    }
+    return this.filesService.listTrashed(user.id, {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
@@ -124,6 +146,45 @@ export class FilesController {
       throw new BadRequestException('User required for deleting files');
     }
     await this.filesService.softDelete(id, user.id);
+    return { success: true };
+  }
+
+  @Post(':id/restore')
+  @ApiOperation({ summary: 'Restore a soft-deleted file' })
+  @ApiBearerAuth()
+  async restore(@Param('id') id: string, @CurrentUser() user?: User) {
+    if (!user) {
+      throw new BadRequestException('User required for restoring files');
+    }
+    await this.filesService.restore(id, user.id);
+    return { success: true };
+  }
+
+  @Delete(':id/permanent')
+  @ApiOperation({ summary: 'Permanently delete a file' })
+  @ApiBearerAuth()
+  async permanentRemove(@Param('id') id: string, @CurrentUser() user?: User) {
+    if (!user) {
+      throw new BadRequestException('User required for permanent deletion');
+    }
+    await this.filesService.permanentDelete(id, user.id);
+    return { success: true };
+  }
+
+  @Post('batch-delete')
+  @ApiOperation({ summary: 'Batch soft-delete files' })
+  @ApiBearerAuth()
+  async batchDelete(
+    @Body() body: { ids: string[] },
+    @CurrentUser() user?: User
+  ) {
+    if (!user) {
+      throw new BadRequestException('User required for batch deletion');
+    }
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new BadRequestException('ids array is required');
+    }
+    await this.filesService.batchSoftDelete(body.ids, user.id);
     return { success: true };
   }
 }

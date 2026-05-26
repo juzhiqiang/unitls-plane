@@ -56,6 +56,13 @@ export class TaskQueryDto {
   @IsOptional()
   @IsEnum(['pending', 'processing', 'completed', 'failed'])
   status?: 'pending' | 'processing' | 'completed' | 'failed';
+
+  @ApiPropertyOptional({
+    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'],
+  })
+  @IsOptional()
+  @IsEnum(['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'])
+  type?: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
 }
 
 export class TaskResponseDto {

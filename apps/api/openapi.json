@@ -71,6 +71,22 @@
                 "failed"
               ]
             }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "compress",
+                "convert",
+                "pdf_merge",
+                "pdf_split",
+                "pdf_to_image",
+                "font_convert"
+              ]
+            }
           }
         ],
         "responses": {
@@ -157,6 +173,42 @@
           }
         },
         "summary": "Get task status (lightweight)",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/{id}/retry": {
+      "post": {
+        "operationId": "TasksController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "New task created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retry a failed task",
         "tags": [
           "tasks"
         ]
@@ -306,6 +358,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "mimeType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -319,6 +387,121 @@
           }
         ],
         "summary": "List files for current user",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/trash": {
+      "get": {
+        "operationId": "FilesController_listTrash",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List trashed files for current user",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/{id}/restore": {
+      "post": {
+        "operationId": "FilesController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a soft-deleted file",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/{id}/permanent": {
+      "delete": {
+        "operationId": "FilesController_permanentRemove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently delete a file",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/batch-delete": {
+      "post": {
+        "operationId": "FilesController_batchDelete",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Batch soft-delete files",
         "tags": [
           "files"
         ]

@@ -1,15 +1,62 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 
-export function useFiles(query?: { page?: number; limit?: number }) {
+export interface FileRecord {
+  id: string;
+  userId: string | null;
+  filename: string;
+  originalSize: number;
+  storageKey: string;
+  bucket: string;
+  mimeType: string;
+  metadata: unknown;
+  expiresAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FileListResponse {
+  files: FileRecord[];
+  total: number;
+}
+
+export interface FileQuery {
+  page?: number;
+  limit?: number;
+  mimeType?: string;
+  search?: string;
+}
+
+export function useFiles(query?: FileQuery) {
   return useQuery({
     queryKey: ['files', query],
     queryFn: async () => {
+      const params: Record<string, string> = {
+        page: String(query?.page ?? 1),
+        limit: String(query?.limit ?? 10),
+      };
+      if (query?.mimeType) params.mimeType = query.mimeType;
+      if (query?.search) params.search = query.search;
+
       const { data, error } = await api.GET('/files', {
+        params: { query: params as any },
+      });
+      if (error) throw error;
+      return data as unknown as FileListResponse;
+    },
+  });
+}
+
+export function useTrashedFiles(query?: { page?: number; limit?: number }) {
+  return useQuery({
+    queryKey: ['files', 'trash', query],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/files/trash' as any, {
         params: { query: { page: String(query?.page ?? 1), limit: String(query?.limit ?? 10) } },
       });
       if (error) throw error;
-      return data;
+      return data as unknown as FileListResponse;
     },
   });
 }
@@ -52,6 +99,54 @@ export function useDeleteFile() {
     mutationFn: async (fileId: string) => {
       const { data, error } = await api.DELETE('/files/{id}', {
         params: { path: { id: fileId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['files'] });
+    },
+  });
+}
+
+export function useBatchDeleteFiles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data, error } = await api.POST('/files/batch-delete' as any, {
+        body: { ids } as any,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['files'] });
+    },
+  });
+}
+
+export function useRestoreFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (fileId: string) => {
+      const { data, error } = await api.POST('/files/{id}/restore' as any, {
+        params: { path: { id: fileId } } as any,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['files'] });
+    },
+  });
+}
+
+export function usePermanentDeleteFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (fileId: string) => {
+      const { data, error } = await api.DELETE('/files/{id}/permanent' as any, {
+        params: { path: { id: fileId } } as any,
       });
       if (error) throw error;
       return data;

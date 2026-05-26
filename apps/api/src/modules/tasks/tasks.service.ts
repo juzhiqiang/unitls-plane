@@ -73,13 +73,16 @@ export class TasksService {
 
   async listByUser(
     userId: string,
-    query: { page: number; limit: number; status?: TaskStatus }
+    query: { page: number; limit: number; status?: TaskStatus; type?: TaskType }
   ): Promise<{ tasks: Task[]; total: number }> {
     const offset = (query.page - 1) * query.limit;
 
     const conditions = [eq(tasks.userId, userId)];
     if (query.status) {
       conditions.push(eq(tasks.status, query.status));
+    }
+    if (query.type) {
+      conditions.push(eq(tasks.type, query.type));
     }
 
     const [tasksList, countResult] = await Promise.all([

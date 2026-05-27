@@ -130,7 +130,7 @@ export default function FilesPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-lg font-medium">{t('title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -139,7 +139,7 @@ export default function FilesPage() {
         </div>
         <Link
           href="/files/trash"
-          className="inline-flex items-center gap-2 px-3 h-8 text-xs font-mono text-muted-foreground border border-border rounded-md hover:text-foreground hover:border-foreground/20 transition-colors"
+          className="inline-flex items-center gap-2 px-3 h-8 text-xs font-mono text-muted-foreground border border-border rounded-md hover:text-foreground hover:border-foreground/20 transition-colors self-start sm:self-auto"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
           {t('trash')}
@@ -268,7 +268,7 @@ export default function FilesPage() {
 
       {/* Grid view */}
       {view === 'grid' && files.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {files.map((file) => (
             <div
               key={file.id}
@@ -328,75 +328,77 @@ export default function FilesPage() {
 
       {/* List view */}
       {view === 'list' && files.length > 0 && (
-        <div>
-          {/* Table header */}
-          <div className="grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-2 border-b border-border">
-            <input
-              type="checkbox"
-              checked={selected.size === files.length && files.length > 0}
-              onChange={selectAll}
-              className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
-            />
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('filename')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('type')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('size')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('uploaded')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right">
-              {t('actions')}
-            </span>
-          </div>
-          {/* Table rows */}
-          {files.map((file) => (
-            <div
-              key={file.id}
-              className={`grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-3 border-b border-border transition-colors ${
-                selected.has(file.id) ? 'bg-accent/5' : 'hover:bg-muted/40'
-              }`}
-            >
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[640px] sm:min-w-0">
+            {/* Table header */}
+            <div className="grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-2 border-b border-border">
               <input
                 type="checkbox"
-                checked={selected.has(file.id)}
-                onChange={() => toggleSelect(file.id)}
+                checked={selected.size === files.length && files.length > 0}
+                onChange={selectAll}
                 className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
               />
-              <span className="text-sm truncate" title={file.filename}>
-                {file.filename}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('filename')}
               </span>
-              <span className="text-[11px] font-mono text-muted-foreground uppercase">
-                {file.mimeType.split('/')[1]}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('type')}
               </span>
-              <span className="text-[11px] font-mono text-muted-foreground">
-                {formatFileSize(file.originalSize)}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('size')}
               </span>
-              <span className="text-[11px] text-muted-foreground">
-                {formatDate(file.createdAt)}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('uploaded')}
               </span>
-              <div className="flex justify-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleDownload(file)}
-                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteFile.mutate(file.id)}
-                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </button>
-              </div>
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right">
+                {t('actions')}
+              </span>
             </div>
-          ))}
+            {/* Table rows */}
+            {files.map((file) => (
+              <div
+                key={file.id}
+                className={`grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-3 border-b border-border transition-colors ${
+                  selected.has(file.id) ? 'bg-accent/5' : 'hover:bg-muted/40'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(file.id)}
+                  onChange={() => toggleSelect(file.id)}
+                  className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
+                />
+                <span className="text-sm truncate" title={file.filename}>
+                  {file.filename}
+                </span>
+                <span className="text-[11px] font-mono text-muted-foreground uppercase">
+                  {file.mimeType.split('/')[1]}
+                </span>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  {formatFileSize(file.originalSize)}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {formatDate(file.createdAt)}
+                </span>
+                <div className="flex justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(file)}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteFile.mutate(file.id)}
+                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

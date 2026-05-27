@@ -24,7 +24,11 @@
     "nav": {
       "tools": "Tools",
       "login": "Sign in",
-      "getStarted": "Get started"
+      "getStarted": "Get started",
+      "dashboard": "Dashboard",
+      "settings": "Settings",
+      "logOut": "Log out",
+      "defaultUser": "User"
     },
     "footer": {
       "docs": "Docs",

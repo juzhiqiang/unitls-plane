@@ -22,14 +22,16 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Sun, Moon, Monitor, LogOut, Settings } from "lucide-react";
+import { Sun, Moon, Monitor, LogOut, Settings, Menu } from "lucide-react";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export function AppHeader() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const { data: session, isPending } = useSession();
+  const { setMobileOpen } = useSidebar();
   const [mounted, setMounted] = React.useState(false);
   const tNav = useTranslations("Nav");
   const tLayout = useTranslations("AppLayout");
@@ -92,9 +94,19 @@ export function AppHeader() {
   });
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-card px-4 lg:px-6">
-      {/* Breadcrumb */}
-      <div className="flex-1">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 sm:gap-4 border-b border-border bg-card px-4 lg:px-6">
+      {/* Mobile menu trigger */}
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        className="flex lg:hidden items-center justify-center h-9 w-9 -ml-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        aria-label={tLayout("toggleNavigation")}
+      >
+        <Menu className="h-5 w-5" strokeWidth={1.5} />
+      </button>
+
+      {/* Breadcrumb - hidden on mobile */}
+      <div className="flex-1 hidden md:block">
         {pathname !== "/" && (
           <Breadcrumb>
             <BreadcrumbItem>
@@ -117,7 +129,7 @@ export function AppHeader() {
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 ml-auto">
         {/* Locale Switcher */}
         <LocaleSwitcher />
 

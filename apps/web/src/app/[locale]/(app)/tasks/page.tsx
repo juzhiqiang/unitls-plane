@@ -317,8 +317,8 @@ export default function TasksPage() {
       {/* Table */}
       {filteredTasks.length > 0 && (
         <div>
-          {/* Table header */}
-          <div className="grid grid-cols-[140px_90px_140px_80px_1fr_80px] gap-3 px-3 py-2 border-b border-border">
+          {/* Table header (md+) */}
+          <div className="hidden md:grid grid-cols-[140px_90px_140px_80px_1fr_80px] gap-3 px-3 py-2 border-b border-border">
             <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
               {t('type')}
             </span>
@@ -339,11 +339,82 @@ export default function TasksPage() {
             </span>
           </div>
 
-          {/* Table rows */}
+          {/* Rows */}
           {filteredTasks.map((task) => (
             <div key={task.id}>
+              {/* Mobile / tablet card layout */}
               <div
-                className={`grid grid-cols-[140px_90px_140px_80px_1fr_80px] gap-3 px-3 py-3 border-b border-border transition-colors cursor-pointer ${
+                className={`md:hidden border-b border-border px-3 py-3 cursor-pointer transition-colors ${
+                  expandedId === task.id ? 'bg-muted/40' : 'hover:bg-muted/40'
+                }`}
+                onClick={() =>
+                  setExpandedId(expandedId === task.id ? null : task.id)
+                }
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <TypeLabel type={task.type as TaskType} />
+                      <StatusBadge status={task.status} />
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
+                      <span>{formatTimestamp(task.createdAt as unknown as string)}</span>
+                      <span className="tabular-nums">{formatDuration(task)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {task.status === 'completed' && task.outputFileId && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(task);
+                        }}
+                        className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                        title={t('download')}
+                      >
+                        <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      </button>
+                    )}
+                    {task.status === 'failed' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          retryTask.mutate(task.id);
+                        }}
+                        disabled={retryTask.isPending}
+                        className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                        title={t('retry')}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedId(expandedId === task.id ? null : task.id);
+                      }}
+                      className={`p-2 text-muted-foreground hover:text-foreground transition-all ${
+                        expandedId === task.id ? 'rotate-180' : ''
+                      }`}
+                      title={t('details')}
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                </div>
+                {(task.status === 'processing' || task.status === 'pending') && (
+                  <div className="mt-2.5">
+                    <ProgressBar progress={task.progress} status={task.status} />
+                  </div>
+                )}
+              </div>
+
+              {/* Desktop table row (md+) */}
+              <div
+                className={`hidden md:grid grid-cols-[140px_90px_140px_80px_1fr_80px] gap-3 px-3 py-3 border-b border-border transition-colors cursor-pointer ${
                   expandedId === task.id ? 'bg-muted/40' : 'hover:bg-muted/40'
                 }`}
                 onClick={() =>

@@ -24,7 +24,11 @@
     "nav": {
       "tools": "工具",
       "login": "登录",
-      "getStarted": "开始使用"
+      "getStarted": "开始使用",
+      "dashboard": "仪表盘",
+      "settings": "设置",
+      "logOut": "退出登录",
+      "defaultUser": "用户"
     },
     "footer": {
       "docs": "文档",

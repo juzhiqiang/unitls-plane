@@ -86,28 +86,28 @@ export default async function MarketingPage({
       />
 
       {/* Hero Section */}
-      <section className="relative min-h-[80vh] flex items-center">
+      <section className="relative min-h-[70vh] sm:min-h-[80vh] flex items-center py-16 sm:py-20">
         <div className="container-main">
           <div className="max-w-2xl">
             <div className="text-sm text-muted-foreground mb-4 font-mono">
               <span className="text-accent">01</span> / 04
             </div>
-            <h1 className="text-5xl md:text-7xl font-medium tracking-tight text-foreground leading-tight">
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-medium tracking-tight text-foreground leading-tight">
               {t("hero.titleLine1")}
               <br />
               {t("hero.titleLine2")}
             </h1>
-            <p className="mt-6 text-lg text-muted-foreground max-w-lg">
+            <p className="mt-6 text-base sm:text-lg text-muted-foreground max-w-lg">
               {t("hero.subtitle")}
             </p>
-            <div className="mt-8 flex gap-4">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
               <Link href="/image">
-                <Button size="lg" className="h-11 px-6">
+                <Button size="lg" className="h-11 px-6 w-full sm:w-auto">
                   {t("hero.ctaPrimary")}
                 </Button>
               </Link>
               <Link href="/docs">
-                <Button variant="outline" size="lg" className="h-11 px-6">
+                <Button variant="outline" size="lg" className="h-11 px-6 w-full sm:w-auto">
                   {t("hero.ctaSecondary")}
                 </Button>
               </Link>
@@ -117,7 +117,7 @@ export default async function MarketingPage({
       </section>
 
       {/* Features Section */}
-      <section className="py-24 border-t border-border">
+      <section className="py-16 sm:py-24 border-t border-border">
         <div className="container-main">
           <div className="text-sm text-muted-foreground mb-4 font-mono">
             <span className="text-accent">02</span> / 04 — {t("features.label")}
@@ -126,7 +126,7 @@ export default async function MarketingPage({
             {t("features.heading")}
           </h2>
 
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
               <Link key={feature.title} href={feature.href}>
                 <Card className="h-full transition-colors hover:border-accent/50">
@@ -148,7 +148,7 @@ export default async function MarketingPage({
       </section>
 
       {/* Highlights Section */}
-      <section className="py-24 border-t border-border">
+      <section className="py-16 sm:py-24 border-t border-border">
         <div className="container-main">
           <div className="text-sm text-muted-foreground mb-4 font-mono">
             <span className="text-accent">03</span> / 04 — {t("highlights.label")}
@@ -157,7 +157,7 @@ export default async function MarketingPage({
             {t("highlights.heading")}
           </h2>
 
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {highlights.map((item) => (
               <div
                 key={item.title}
@@ -178,7 +178,7 @@ export default async function MarketingPage({
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 border-t border-border">
+      <section className="py-16 sm:py-24 border-t border-border">
         <div className="container-main text-center">
           <div className="text-sm text-muted-foreground mb-4 font-mono">
             <span className="text-accent">04</span> / 04

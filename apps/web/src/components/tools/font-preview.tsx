@@ -61,7 +61,7 @@ export function FontPreview({ file }: FontPreviewProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
               <div>
                 <span className="block font-mono text-[11px] tracking-wider uppercase text-muted-foreground">
                   Font Family
@@ -114,7 +114,7 @@ export function FontPreview({ file }: FontPreviewProps) {
           placeholder="Type preview text..."
         />
         <div
-          className="px-8 py-12 whitespace-pre-wrap break-words min-h-[160px]"
+          className="px-4 sm:px-8 py-8 sm:py-12 whitespace-pre-wrap break-words min-h-[160px]"
           style={{
             fontFamily: fontFamily ?? 'inherit',
             fontSize: `${fontSize}px`,
@@ -137,7 +137,7 @@ export function FontPreview({ file }: FontPreviewProps) {
                 : `${glyphs.length} glyphs`}
             </span>
           </div>
-          <div className="grid grid-cols-8 gap-0">
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-0">
             {glyphs.slice(0, 128).map((g) => (
               <div
                 key={g.index}

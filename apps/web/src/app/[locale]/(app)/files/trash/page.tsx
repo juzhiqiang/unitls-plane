@@ -79,69 +79,71 @@ export default function TrashPage() {
 
       {/* File list */}
       {files.length > 0 && (
-        <div>
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_100px_100px_100px_140px] gap-3 px-3 py-2 border-b border-border">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('filename')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('type')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              {t('size')}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-              Deleted
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right">
-              {t('actions')}
-            </span>
-          </div>
-          {/* Table rows */}
-          {files.map((file) => (
-            <div
-              key={file.id}
-              className="grid grid-cols-[1fr_100px_100px_100px_140px] gap-3 px-3 py-3 border-b border-border hover:bg-muted/40 transition-colors"
-            >
-              <span className="text-sm truncate" title={file.filename}>
-                {file.filename}
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[640px] sm:min-w-0">
+            {/* Table header */}
+            <div className="grid grid-cols-[1fr_100px_100px_100px_140px] gap-3 px-3 py-2 border-b border-border">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('filename')}
               </span>
-              <span className="text-[11px] font-mono text-muted-foreground uppercase">
-                {file.mimeType.split('/')[1]}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('type')}
               </span>
-              <span className="text-[11px] font-mono text-muted-foreground">
-                {formatFileSize(file.originalSize)}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {t('size')}
               </span>
-              <span className="text-[11px] text-muted-foreground">
-                {file.deletedAt ? formatDate(file.deletedAt) : '—'}
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                Deleted
               </span>
-              <div className="flex justify-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => restoreFile.mutate(file.id)}
-                  disabled={restoreFile.isPending}
-                  className="inline-flex items-center gap-1 px-2 h-6 text-[10px] font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-foreground/20 transition-colors disabled:opacity-50"
-                >
-                  <RotateCcw className="h-3 w-3" strokeWidth={1.5} />
-                  {t('restore')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePermanentDelete(file.id)}
-                  disabled={permanentDelete.isPending}
-                  className={`inline-flex items-center gap-1 px-2 h-6 text-[10px] font-mono rounded transition-colors disabled:opacity-50 ${
-                    confirmId === file.id
-                      ? 'text-destructive border border-destructive/50 bg-destructive/10'
-                      : 'text-muted-foreground border border-border hover:text-destructive hover:border-destructive/30'
-                  }`}
-                >
-                  <Trash2 className="h-3 w-3" strokeWidth={1.5} />
-                  {confirmId === file.id ? t('confirmPermanentDelete') : t('permanentDelete')}
-                </button>
-              </div>
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right">
+                {t('actions')}
+              </span>
             </div>
-          ))}
+            {/* Table rows */}
+            {files.map((file) => (
+              <div
+                key={file.id}
+                className="grid grid-cols-[1fr_100px_100px_100px_140px] gap-3 px-3 py-3 border-b border-border hover:bg-muted/40 transition-colors"
+              >
+                <span className="text-sm truncate" title={file.filename}>
+                  {file.filename}
+                </span>
+                <span className="text-[11px] font-mono text-muted-foreground uppercase">
+                  {file.mimeType.split('/')[1]}
+                </span>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  {formatFileSize(file.originalSize)}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {file.deletedAt ? formatDate(file.deletedAt) : '—'}
+                </span>
+                <div className="flex justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => restoreFile.mutate(file.id)}
+                    disabled={restoreFile.isPending}
+                    className="inline-flex items-center gap-1 px-2 h-6 text-[10px] font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-foreground/20 transition-colors disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-3 w-3" strokeWidth={1.5} />
+                    {t('restore')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePermanentDelete(file.id)}
+                    disabled={permanentDelete.isPending}
+                    className={`inline-flex items-center gap-1 px-2 h-6 text-[10px] font-mono rounded transition-colors disabled:opacity-50 ${
+                      confirmId === file.id
+                        ? 'text-destructive border border-destructive/50 bg-destructive/10'
+                        : 'text-muted-foreground border border-border hover:text-destructive hover:border-destructive/30'
+                    }`}
+                  >
+                    <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+                    {confirmId === file.id ? t('confirmPermanentDelete') : t('permanentDelete')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

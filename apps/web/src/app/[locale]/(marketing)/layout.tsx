@@ -1,6 +1,6 @@
 import { Link } from "@/i18n/navigation";
 import { getTranslations } from "next-intl/server";
-import { Button } from "@/components/ui/button";
+import { MarketingNav } from "@/components/layout/marketing-nav";
 
 export default async function MarketingLayout({
   children,
@@ -19,25 +19,17 @@ export default async function MarketingLayout({
             <span className="font-medium text-foreground">Utils Plane</span>
           </Link>
 
-          <nav className="flex items-center gap-4">
-            <Link
-              href="/image"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("nav.tools")}
-            </Link>
-            <Link
-              href="/login"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("nav.login")}
-            </Link>
-            <Link href="/register">
-              <Button size="sm" className="h-8">
-                {t("nav.getStarted")}
-              </Button>
-            </Link>
-          </nav>
+          <MarketingNav
+            labels={{
+              tools: t("nav.tools"),
+              login: t("nav.login"),
+              getStarted: t("nav.getStarted"),
+              dashboard: t("nav.dashboard"),
+              settings: t("nav.settings"),
+              logOut: t("nav.logOut"),
+              defaultUser: t("nav.defaultUser"),
+            }}
+          />
         </div>
       </header>
 

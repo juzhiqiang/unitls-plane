@@ -38,7 +38,8 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
-      <div className="grid grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 px-3 py-2 border-b border-border text-[10px] font-mono text-muted-foreground uppercase tracking-wider bg-muted/30">
+      {/* Desktop / tablet header */}
+      <div className="hidden sm:grid grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 px-3 py-2 border-b border-border text-[10px] font-mono text-muted-foreground uppercase tracking-wider bg-muted/30">
         <span></span>
         <span>{t('fileList.filename')}</span>
         <span className="text-right">{t('fileList.original')}</span>
@@ -57,34 +58,77 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
           return (
             <div
               key={`${item.file.name}-${i}`}
-              className="grid grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 px-3 py-2 items-center text-xs font-mono"
+              className="px-3 py-2 text-xs font-mono"
             >
-              <StatusIcon status={item.status} />
-              <div className="truncate" title={item.file.name}>
-                <span className="text-foreground">{item.file.name}</span>
-                {item.error && (
-                  <span className="ml-2 text-destructive">{item.error}</span>
+              {/* Mobile card layout */}
+              <div className="sm:hidden flex items-start gap-2">
+                <div className="pt-0.5 shrink-0">
+                  <StatusIcon status={item.status} />
+                </div>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="truncate text-foreground" title={item.file.name}>
+                    {item.file.name}
+                  </div>
+                  {item.error && (
+                    <div className="text-destructive break-words">{item.error}</div>
+                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+                    <span className="tabular-nums">
+                      {formatBytes(original, tUnits, locale)}
+                    </span>
+                    {result !== undefined && (
+                      <>
+                        <span className="tabular-nums text-foreground">
+                          → {formatBytes(result, tUnits, locale)}
+                        </span>
+                        <span className="tabular-nums text-emerald-500">
+                          {savedPct}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {onRemove && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(i)}
+                    disabled={disabled || item.status === 'processing'}
+                    className="shrink-0 p-1 -mr-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
                 )}
               </div>
-              <span className="text-right tabular-nums text-muted-foreground">
-                {formatBytes(original, tUnits, locale)}
-              </span>
-              <span className="text-right tabular-nums text-foreground">
-                {result !== undefined ? formatBytes(result, tUnits, locale) : '—'}
-              </span>
-              <span className="text-right tabular-nums text-emerald-500">
-                {savedPct}
-              </span>
-              {onRemove && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(i)}
-                  disabled={disabled || item.status === 'processing'}
-                  className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </button>
-              )}
+
+              {/* Desktop / tablet grid layout */}
+              <div className="hidden sm:grid grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 items-center">
+                <StatusIcon status={item.status} />
+                <div className="truncate" title={item.file.name}>
+                  <span className="text-foreground">{item.file.name}</span>
+                  {item.error && (
+                    <span className="ml-2 text-destructive">{item.error}</span>
+                  )}
+                </div>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {formatBytes(original, tUnits, locale)}
+                </span>
+                <span className="text-right tabular-nums text-foreground">
+                  {result !== undefined ? formatBytes(result, tUnits, locale) : '—'}
+                </span>
+                <span className="text-right tabular-nums text-emerald-500">
+                  {savedPct}
+                </span>
+                {onRemove && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(i)}
+                    disabled={disabled || item.status === 'processing'}
+                    className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { BullBoardModule } from '@bull-board/nestjs';
@@ -12,6 +12,7 @@ import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
+import { BasicAuthMiddleware } from './common/middleware/basic-auth.middleware';
 
 @Module({
   imports: [
@@ -38,4 +39,10 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(BasicAuthMiddleware)
+      .forRoutes('/admin/queues');
+  }
+}

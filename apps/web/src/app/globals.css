@@ -1,21 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  /* Dark Mode (Default) */
-  --color-background: oklch(0.12 0.005 240);
-  --color-foreground: oklch(0.92 0.005 240);
-  --color-muted: oklch(0.18 0.005 240);
-  --color-muted-foreground: oklch(0.55 0.005 240);
-  --color-border: oklch(0.22 0.005 240);
-  --color-accent: oklch(0.78 0.18 145);
-  --color-destructive: oklch(0.65 0.22 25);
-  --color-card: oklch(0.14 0.005 240);
-  --color-ring: oklch(0.78 0.18 145 / 0.4);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-destructive: var(--destructive);
+  --color-card: var(--card);
+  --color-ring: var(--ring);
 
   /* Typography */
-  --font-sans: 'Geist', 'Inter', system-ui, sans-serif;
-  --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
-  --font-display: 'Geist', sans-serif;
+  --font-sans: var(--font-geist-sans), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'JetBrains Mono', monospace;
+  --font-display: var(--font-geist-sans), sans-serif;
 
   /* Spacing */
   --spacing-section: 96px;
@@ -31,19 +30,6 @@
 
 @layer base {
   :root {
-    --background: oklch(0.12 0.005 240);
-    --foreground: oklch(0.92 0.005 240);
-    --muted: oklch(0.18 0.005 240);
-    --muted-foreground: oklch(0.55 0.005 240);
-    --border: oklch(0.22 0.005 240);
-    --accent: oklch(0.78 0.18 145);
-    --destructive: oklch(0.65 0.22 25);
-    --card: oklch(0.14 0.005 240);
-    --ring: oklch(0.78 0.18 145 / 0.4);
-    --radius: 6px;
-  }
-
-  .light {
     --background: oklch(0.98 0.002 240);
     --foreground: oklch(0.15 0.005 240);
     --muted: oklch(0.94 0.002 240);
@@ -53,6 +39,19 @@
     --destructive: oklch(0.55 0.22 25);
     --card: oklch(1 0 0);
     --ring: oklch(0.55 0.18 145 / 0.4);
+    --radius: 6px;
+  }
+
+  .dark {
+    --background: oklch(0.12 0.005 240);
+    --foreground: oklch(0.92 0.005 240);
+    --muted: oklch(0.18 0.005 240);
+    --muted-foreground: oklch(0.55 0.005 240);
+    --border: oklch(0.22 0.005 240);
+    --accent: oklch(0.78 0.18 145);
+    --destructive: oklch(0.65 0.22 25);
+    --card: oklch(0.14 0.005 240);
+    --ring: oklch(0.78 0.18 145 / 0.4);
   }
 
   * {

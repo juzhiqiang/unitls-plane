@@ -5,7 +5,7 @@ import { Menu, LogOut, Settings, LayoutDashboard } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useSession, signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,7 +74,11 @@ export function MarketingNav({ labels }: MarketingNavProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs">{userInitial}</AvatarFallback>
+                    {session.user.image ? (
+                      <AvatarImage src={session.user.image} alt={session.user.name || ""} />
+                    ) : (
+                      <AvatarFallback className="text-xs">{userInitial}</AvatarFallback>
+                    )}
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
@@ -143,7 +147,11 @@ export function MarketingNav({ labels }: MarketingNavProps) {
             {session && !isPending && (
               <div className="flex items-center gap-3 px-3 py-3 mb-2 border-b border-border">
                 <Avatar className="h-9 w-9">
-                  <AvatarFallback className="text-xs">{userInitial}</AvatarFallback>
+                  {session.user.image ? (
+                    <AvatarImage src={session.user.image} alt={session.user.name || ""} />
+                  ) : (
+                    <AvatarFallback className="text-xs">{userInitial}</AvatarFallback>
+                  )}
                 </Avatar>
                 <div className="flex flex-col min-w-0">
                   <p className="text-sm font-medium leading-tight truncate">

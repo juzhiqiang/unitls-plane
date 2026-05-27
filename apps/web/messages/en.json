@@ -110,6 +110,44 @@
     "toggleNavigation": "Toggle navigation",
     "defaultUser": "User"
   },
+  "Settings": {
+    "title": "Settings",
+    "subtitle": "Manage your profile and account",
+    "profile": {
+      "title": "Profile",
+      "avatarUpload": "Upload avatar",
+      "avatarUploading": "Uploading...",
+      "name": "Name",
+      "email": "Email",
+      "save": "Save",
+      "saving": "Saving...",
+      "updated": "Profile updated"
+    },
+    "password": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "submit": "Change password",
+      "submitting": "Submitting...",
+      "mismatch": "The new passwords do not match",
+      "tooShort": "New password must be at least 8 characters",
+      "updated": "Password updated"
+    },
+    "account": {
+      "title": "Account",
+      "createdAt": "Member since",
+      "plan": "Current plan",
+      "emailVerified": "Email status",
+      "verified": "Verified",
+      "unverified": "Unverified"
+    },
+    "errors": {
+      "uploadTooLarge": "Avatar must be smaller than 2MB",
+      "uploadInvalidType": "Please choose an image file",
+      "uploadFailed": "Avatar upload failed"
+    }
+  },
   "Dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome to Utils Plane",

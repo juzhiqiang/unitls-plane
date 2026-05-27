@@ -110,6 +110,44 @@
     "toggleNavigation": "切换导航",
     "defaultUser": "用户"
   },
+  "Settings": {
+    "title": "设置",
+    "subtitle": "管理你的个人资料和账号",
+    "profile": {
+      "title": "个人资料",
+      "avatarUpload": "上传头像",
+      "avatarUploading": "上传中...",
+      "name": "姓名",
+      "email": "邮箱",
+      "save": "保存",
+      "saving": "保存中...",
+      "updated": "资料已更新"
+    },
+    "password": {
+      "title": "修改密码",
+      "current": "当前密码",
+      "new": "新密码",
+      "confirm": "确认新密码",
+      "submit": "修改密码",
+      "submitting": "提交中...",
+      "mismatch": "两次输入的新密码不一致",
+      "tooShort": "新密码至少需要 8 个字符",
+      "updated": "密码已更新"
+    },
+    "account": {
+      "title": "账号信息",
+      "createdAt": "注册时间",
+      "plan": "当前套餐",
+      "emailVerified": "邮箱状态",
+      "verified": "已验证",
+      "unverified": "未验证"
+    },
+    "errors": {
+      "uploadTooLarge": "头像文件不能超过 2MB",
+      "uploadInvalidType": "请选择图片文件",
+      "uploadFailed": "头像上传失败"
+    }
+  },
   "Dashboard": {
     "title": "仪表盘",
     "welcome": "欢迎使用 Utils Plane",

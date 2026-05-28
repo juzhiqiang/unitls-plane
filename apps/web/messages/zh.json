@@ -306,7 +306,12 @@
       "start": "开始提取",
       "processing": "提取中...",
       "preview": "预览",
-      "source": "源码"
+      "source": "源码",
+      "copy": "复制",
+      "copied": "已复制",
+      "lines": "行",
+      "chars": "字符",
+      "words": "字"
     },
     "fromImage": {
       "title": "图片转 PDF",

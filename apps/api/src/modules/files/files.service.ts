@@ -22,6 +22,7 @@ const ALLOWED_MIME_TYPES = [
   'font/woff',
   'font/woff2',
   'application/octet-stream',
+  'text/plain',
 ];
 
 const ANONYMOUS_MAX_SIZE = 10 * 1024 * 1024; // 10MB

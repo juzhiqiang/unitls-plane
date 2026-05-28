@@ -306,7 +306,12 @@
       "start": "Extract",
       "processing": "Extracting...",
       "preview": "Preview",
-      "source": "Source"
+      "source": "Source",
+      "copy": "Copy",
+      "copied": "Copied",
+      "lines": "lines",
+      "chars": "chars",
+      "words": "words"
     },
     "fromImage": {
       "title": "Images to PDF",

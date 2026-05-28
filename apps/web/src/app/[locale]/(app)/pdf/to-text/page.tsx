@@ -351,6 +351,11 @@ export default function ToTextPage() {
             format={format}
             labelPreview={t('toText.preview')}
             labelSource={t('toText.source')}
+            labelCopy={t('toText.copy')}
+            labelCopied={t('toText.copied')}
+            labelLines={t('toText.lines')}
+            labelChars={t('toText.chars')}
+            labelWords={t('toText.words')}
           />
           <div className="flex justify-end">
             <DownloadButton file={resultFile} />

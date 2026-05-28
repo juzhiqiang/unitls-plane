@@ -40,6 +40,20 @@
     --card: oklch(1 0 0);
     --ring: oklch(0.55 0.18 145 / 0.4);
     --radius: 6px;
+
+    /* Syntax highlighting tokens (light) */
+    --hl-keyword: oklch(0.42 0.18 320);
+    --hl-string: oklch(0.42 0.14 60);
+    --hl-number: oklch(0.45 0.14 50);
+    --hl-comment: oklch(0.55 0.005 240);
+    --hl-function: oklch(0.42 0.13 220);
+    --hl-class: oklch(0.48 0.14 90);
+    --hl-tag: oklch(0.45 0.15 10);
+    --hl-attr: oklch(0.42 0.13 200);
+    --hl-meta: oklch(0.55 0.005 240);
+    --hl-builtin: oklch(0.5 0.18 30);
+    --hl-deletion-bg: oklch(0.93 0.05 25);
+    --hl-addition-bg: oklch(0.93 0.05 145);
   }
 
   .dark {
@@ -52,6 +66,20 @@
     --destructive: oklch(0.65 0.22 25);
     --card: oklch(0.14 0.005 240);
     --ring: oklch(0.78 0.18 145 / 0.4);
+
+    /* Syntax highlighting tokens (dark) */
+    --hl-keyword: oklch(0.74 0.13 320);
+    --hl-string: oklch(0.78 0.12 60);
+    --hl-number: oklch(0.76 0.13 50);
+    --hl-comment: oklch(0.48 0.005 240);
+    --hl-function: oklch(0.74 0.1 220);
+    --hl-class: oklch(0.82 0.1 90);
+    --hl-tag: oklch(0.72 0.13 10);
+    --hl-attr: oklch(0.74 0.1 200);
+    --hl-meta: oklch(0.55 0.005 240);
+    --hl-builtin: oklch(0.74 0.13 30);
+    --hl-deletion-bg: oklch(0.28 0.05 25);
+    --hl-addition-bg: oklch(0.28 0.05 145);
   }
 
   * {
@@ -122,4 +150,168 @@
       padding-right: var(--spacing-container-lg);
     }
   }
+}
+
+/* highlight.js theme — design-system aligned, dual mode via CSS vars */
+.hljs {
+  color: inherit;
+  background: transparent;
+}
+.hljs-keyword,
+.hljs-built_in,
+.hljs-type,
+.hljs-keyword.module_,
+.hljs-keyword.import_,
+.hljs-keyword.export_ {
+  color: var(--hl-keyword);
+}
+.hljs-string,
+.hljs-attr-value,
+.hljs-regexp,
+.hljs-link,
+.hljs-template-tag,
+.hljs-template-variable {
+  color: var(--hl-string);
+}
+.hljs-number,
+.hljs-literal {
+  color: var(--hl-number);
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-function .hljs-title,
+.hljs-title.function_,
+.hljs-title.invoke__,
+.hljs-subst {
+  color: var(--hl-function);
+}
+.hljs-class .hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__ {
+  color: var(--hl-class);
+}
+.hljs-tag,
+.hljs-name,
+.hljs-selector-tag {
+  color: var(--hl-tag);
+}
+.hljs-attribute,
+.hljs-attr,
+.hljs-property,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--hl-attr);
+}
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-doctag {
+  color: var(--hl-meta);
+}
+.hljs-section,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--hl-builtin);
+}
+.hljs-variable,
+.hljs-params {
+  color: inherit;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+.hljs-deletion {
+  background-color: var(--hl-deletion-bg);
+}
+.hljs-addition {
+  background-color: var(--hl-addition-bg);
+}
+
+/* Markdown body: GFM task list + minor refinements */
+.markdown-body ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+.markdown-body li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.markdown-body li.task-list-item > input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  margin-top: 0.4em;
+  width: 0.9em;
+  height: 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  flex-shrink: 0;
+  cursor: default;
+  position: relative;
+}
+.markdown-body li.task-list-item > input[type='checkbox']:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+.markdown-body li.task-list-item > input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 0.3em;
+  height: 0.55em;
+  border: solid var(--background);
+  border-width: 0 1.5px 1.5px 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.markdown-body del,
+.markdown-body s {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--muted-foreground);
+}
+.markdown-body kbd {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1;
+  color: var(--foreground);
+  background-color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+.markdown-body sup {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+}
+.markdown-body sup a {
+  text-decoration: none;
+}
+
+/* Slim scrollbar inside preview/source containers */
+.preview-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.preview-scroll::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+  border-radius: 4px;
+}
+.preview-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+}
+.preview-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }

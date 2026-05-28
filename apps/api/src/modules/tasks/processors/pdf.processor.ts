@@ -311,36 +311,351 @@ export class PdfProcessor extends WorkerHost {
     return { outputFileId: outputFile.id };
   }
 
-  private async handleToText(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_to_text');
+  private async handleToText(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 10);
+
+    const config = task.inputConfig as {
+      format?: 'markdown' | 'text';
+      pages?: number[];
+      pageBreak?: 'hr' | 'newline' | 'none';
+    };
+
+    const pageBreakMap = {
+      hr: '\n\n---\n\n',
+      newline: '\n\n',
+      none: '',
+    };
+    const pageBreak = pageBreakMap[config.pageBreak ?? 'hr'] ?? '\n\n---\n\n';
+
+    const result = await this.pdfService.toText(inputBuffer, {
+      format: config.format ?? 'markdown',
+      pages: config.pages,
+      pageBreak,
+    });
+    await this.reportProgress(task.id, job, 80);
+
+    const ext = config.format === 'text' ? 'txt' : 'md';
+    const baseName = inputFile.filename.replace(/\.pdf$/i, '');
+    const outputBuffer = Buffer.from(result, 'utf-8');
+
+    const outputFile = await this.filesService.upload(
+      outputBuffer,
+      {
+        filename: `${baseName}.${ext}`,
+        mimeType: 'text/plain',
+        size: outputBuffer.length,
+      },
+      task.userId ?? undefined,
+    );
+    await this.reportProgress(task.id, job, 95);
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+
+    return { outputFileId: outputFile.id };
   }
 
-  private async handleImageToPdf(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: image_to_pdf');
+  private async handleImageToPdf(task: any, job: Job): Promise<unknown> {
+    const fileIds: string[] = task.inputFileIds ?? [];
+    if (fileIds.length === 0) throw new Error('No input files specified');
+
+    const config = task.inputConfig as {
+      pageSize?: 'original' | 'a4' | 'letter';
+      fit?: 'fit' | 'fill' | 'stretch';
+      order?: string[];
+      outputFilename?: string;
+    };
+
+    const orderedIds: string[] = config.order ?? fileIds;
+
+    const images: { buffer: Buffer; mimeType: string }[] = [];
+    for (let i = 0; i < orderedIds.length; i++) {
+      const file = await this.filesService.getById(orderedIds[i]!);
+      if (!file.mimeType.startsWith('image/')) {
+        throw new Error(`INVALID_FILE_TYPE: File ${file.filename} is not an image`);
+      }
+      const buffer = await this.filesService.download(file.storageKey);
+      images.push({ buffer, mimeType: file.mimeType });
+      await this.reportProgress(task.id, job, Math.floor(((i + 1) / orderedIds.length) * 50));
+    }
+
+    const pdfBuffer = await this.pdfService.imagesToPdf(images, {
+      pageSize: config.pageSize ?? 'original',
+      fit: config.fit ?? 'fit',
+    });
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      pdfBuffer,
+      {
+        filename: config.outputFilename ?? 'images.pdf',
+        mimeType: 'application/pdf',
+        size: pdfBuffer.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
   }
 
-  private async handleRotate(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_rotate');
+  private async handleRotate(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const config = task.inputConfig as { pages: number[]; angle: 0 | 90 | 180 | 270 };
+    if (!Array.isArray(config.pages) || config.pages.length === 0) {
+      throw new Error('At least one page must be selected');
+    }
+
+    const result = await this.pdfService.rotate(inputBuffer, {
+      pages: config.pages,
+      angle: config.angle,
+    });
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: `rotated-${inputFile.filename}`,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
   }
 
-  private async handleWatermark(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_watermark');
+  private async handleWatermark(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const config = task.inputConfig as {
+      text: string;
+      fontSize?: number;
+      opacity?: number;
+      color?: { r: number; g: number; b: number };
+      rotation?: number;
+      position?: 'center' | 'diagonal';
+    };
+    if (!config.text || config.text.trim().length === 0) {
+      throw new Error('Watermark text is required');
+    }
+
+    const result = await this.pdfService.watermark(inputBuffer, {
+      text: config.text,
+      fontSize: config.fontSize,
+      opacity: config.opacity,
+      color: config.color,
+      rotation: config.rotation,
+      position: config.position,
+    });
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: `watermarked-${inputFile.filename}`,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
   }
 
-  private async handleEncrypt(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_encrypt');
+  private async handleEncrypt(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const config = task.inputConfig as {
+      userPassword?: string;
+      ownerPassword: string;
+      permissions?: {
+        print?: boolean;
+        copy?: boolean;
+        modify?: boolean;
+        annotate?: boolean;
+      };
+    };
+    if (!config.ownerPassword) {
+      throw new Error('Owner password is required');
+    }
+
+    const result = await this.pdfService.encrypt(inputBuffer, {
+      userPassword: config.userPassword,
+      ownerPassword: config.ownerPassword,
+      permissions: config.permissions,
+    });
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: `encrypted-${inputFile.filename}`,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
   }
 
-  private async handleCompressPdf(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_compress');
+  private async handleCompressPdf(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    const originalSize = inputBuffer.length;
+    await this.reportProgress(task.id, job, 10);
+
+    const config = task.inputConfig as { level?: 'light' | 'medium' | 'heavy' };
+    const result = await this.pdfService.compressPdf(inputBuffer, {
+      level: config.level ?? 'medium',
+    });
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: `compressed-${inputFile.filename}`,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return {
+      outputFileId: outputFile.id,
+      originalSize,
+      compressedSize: result.length,
+    };
   }
 
-  private async handleMetadata(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_metadata');
+  private async handleMetadata(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const config = task.inputConfig as {
+      title?: string;
+      author?: string;
+      subject?: string;
+      keywords?: string[];
+      creator?: string;
+      producer?: string;
+    };
+
+    const result = await this.pdfService.editMetadata(inputBuffer, config);
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: inputFile.filename,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
   }
 
-  private async handleRearrange(_task: any, _job: Job): Promise<unknown> {
-    throw new Error('Not implemented: pdf_rearrange');
+  private async handleRearrange(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const config = task.inputConfig as { pageOrder: number[] };
+    if (!Array.isArray(config.pageOrder) || config.pageOrder.length === 0) {
+      throw new Error('Page order must not be empty');
+    }
+
+    const result = await this.pdfService.rearrange(inputBuffer, {
+      pageOrder: config.pageOrder,
+    });
+    await this.reportProgress(task.id, job, 85);
+
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: `rearranged-${inputFile.filename}`,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined,
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
   }
 
   @OnWorkerEvent('failed')

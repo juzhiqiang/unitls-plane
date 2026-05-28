@@ -217,6 +217,38 @@
       "toImage": {
         "title": "PDF to images",
         "description": "Convert PDF pages to PNG or JPEG images"
+      },
+      "toText": {
+        "title": "PDF to text",
+        "description": "Extract PDF content as Markdown or plain text"
+      },
+      "fromImage": {
+        "title": "Images to PDF",
+        "description": "Combine multiple images into a single PDF"
+      },
+      "rotate": {
+        "title": "Rotate pages",
+        "description": "Rotate selected PDF pages 90°/180°/270° clockwise"
+      },
+      "watermark": {
+        "title": "Add watermark",
+        "description": "Stamp a translucent text watermark on every PDF page"
+      },
+      "encrypt": {
+        "title": "Encrypt PDF",
+        "description": "Set open password and permission controls"
+      },
+      "compress": {
+        "title": "Compress PDF",
+        "description": "Shrink PDF file size with three compression levels"
+      },
+      "metadata": {
+        "title": "Edit metadata",
+        "description": "View and edit PDF title, author, keywords, and more"
+      },
+      "rearrange": {
+        "title": "Rearrange pages",
+        "description": "Drag to reorder or delete PDF pages"
       }
     },
     "merge": {
@@ -257,6 +289,136 @@
       "selectPages": "Click pages to select for export",
       "start": "Convert",
       "processing": "Converting..."
+    },
+    "toText": {
+      "title": "PDF to text",
+      "description": "Extract PDF text content as Markdown or plain text, with optional page selection",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "format": "Output format",
+      "pageBreak": "Page separator",
+      "pageBreakHr": "Divider (---)",
+      "pageBreakNewline": "Blank line",
+      "pageBreakNone": "None",
+      "allPages": "All pages",
+      "selectedPages": "Select pages",
+      "selectPages": "Click pages to select for export",
+      "start": "Extract",
+      "processing": "Extracting...",
+      "preview": "Preview",
+      "source": "Source"
+    },
+    "fromImage": {
+      "title": "Images to PDF",
+      "description": "Combine multiple images into a single PDF with drag-and-drop ordering",
+      "outputFilename": "Output filename",
+      "pageSize": "Page size",
+      "pageSizeOriginal": "Original",
+      "pageSizeA4": "A4",
+      "pageSizeLetter": "Letter",
+      "fit": "Fit",
+      "fitFit": "Fit",
+      "fitFill": "Fill",
+      "fitStretch": "Stretch",
+      "start": "Convert",
+      "processing": "Converting..."
+    },
+    "rotate": {
+      "title": "Rotate pages",
+      "description": "Select pages and rotate them 90° / 180° / 270° clockwise",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "angle": "Rotation",
+      "angle90": "90° CW",
+      "angle180": "180°",
+      "angle270": "270° CW",
+      "allPages": "All pages",
+      "selectedPages": "Select pages",
+      "selectPages": "Click pages to select for rotation",
+      "start": "Rotate",
+      "processing": "Rotating..."
+    },
+    "watermark": {
+      "title": "Add watermark",
+      "description": "Stamp a translucent text watermark on every PDF page",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "text": "Watermark text",
+      "textPlaceholder": "Enter watermark text",
+      "fontSize": "Font size",
+      "opacity": "Opacity",
+      "color": "Color",
+      "colorGray": "Gray",
+      "colorRed": "Red",
+      "colorBlue": "Blue",
+      "position": "Position",
+      "positionCenter": "Center",
+      "positionDiagonal": "Diagonal",
+      "rotation": "Tilt",
+      "start": "Apply",
+      "processing": "Applying..."
+    },
+    "encrypt": {
+      "title": "Encrypt PDF",
+      "description": "Set open password and permission controls",
+      "userPassword": "Open password (optional)",
+      "userPasswordHint": "Required when opening the PDF",
+      "ownerPassword": "Owner password (required)",
+      "ownerPasswordHint": "Used to enforce the permissions below",
+      "permissions": "Permissions",
+      "permPrint": "Allow printing",
+      "permCopy": "Allow copying text",
+      "permModify": "Allow modifications",
+      "permAnnotate": "Allow annotations",
+      "securityNote": "Passwords are not stored — discarded immediately after processing",
+      "start": "Encrypt",
+      "processing": "Encrypting..."
+    },
+    "compress": {
+      "title": "Compress PDF",
+      "description": "Reduce PDF file size with three compression levels",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "level": "Level",
+      "levelLight": "Light",
+      "levelLightDesc": "Garbage collection only — preserves original quality",
+      "levelMedium": "Medium",
+      "levelMediumDesc": "JPEG quality 75%, 150 DPI",
+      "levelHeavy": "Heavy",
+      "levelHeavyDesc": "JPEG quality 50%, 100 DPI",
+      "warning": "Medium / heavy modes convert text to images and lose searchability",
+      "originalSize": "Original",
+      "compressedSize": "Compressed",
+      "saved": "Saved",
+      "start": "Compress",
+      "processing": "Compressing..."
+    },
+    "metadata": {
+      "title": "Edit metadata",
+      "description": "View and edit PDF title, author, keywords, and more",
+      "fieldTitle": "Title",
+      "fieldAuthor": "Author",
+      "fieldSubject": "Subject",
+      "fieldKeywords": "Keywords",
+      "fieldKeywordsHint": "Separate multiple keywords with commas",
+      "fieldCreator": "Creator",
+      "fieldProducer": "Producer",
+      "fieldProducerHint": "Read-only",
+      "changeFile": "Change file",
+      "start": "Save metadata",
+      "processing": "Saving..."
+    },
+    "rearrange": {
+      "title": "Rearrange pages",
+      "description": "Drag to reorder PDF pages — click × to delete",
+      "pages": "pages",
+      "remaining": "kept",
+      "changeFile": "Change file",
+      "dragHint": "Drag thumbnails to reorder; click × to delete a page",
+      "reverse": "Reverse",
+      "reset": "Reset",
+      "start": "Save",
+      "processing": "Processing..."
     }
   },
   "FontTool": {
@@ -335,6 +497,14 @@
     "typePdfMerge": "PDF Merge",
     "typePdfSplit": "PDF Split",
     "typePdfToImage": "PDF → Image",
+    "typePdfToText": "PDF → Text",
+    "typeImageToPdf": "Image → PDF",
+    "typePdfRotate": "PDF Rotate",
+    "typePdfWatermark": "PDF Watermark",
+    "typePdfEncrypt": "PDF Encrypt",
+    "typePdfCompress": "PDF Compress",
+    "typePdfMetadata": "PDF Metadata",
+    "typePdfRearrange": "PDF Rearrange",
     "typeFontConvert": "Font Convert"
   },
   "ToolsShared": {

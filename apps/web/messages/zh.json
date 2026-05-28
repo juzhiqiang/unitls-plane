@@ -217,6 +217,38 @@
       "toImage": {
         "title": "PDF 转图片",
         "description": "将 PDF 页面转换为 PNG 或 JPEG 图片"
+      },
+      "toText": {
+        "title": "PDF 转文本",
+        "description": "提取 PDF 文字内容为 Markdown 或纯文本"
+      },
+      "fromImage": {
+        "title": "图片转 PDF",
+        "description": "将多张图片合并为一个 PDF 文件"
+      },
+      "rotate": {
+        "title": "旋转页面",
+        "description": "顺时针旋转 PDF 选中页面 90°/180°/270°"
+      },
+      "watermark": {
+        "title": "添加水印",
+        "description": "为 PDF 所有页面添加半透明文字水印"
+      },
+      "encrypt": {
+        "title": "加密 PDF",
+        "description": "设置 PDF 打开密码与权限控制"
+      },
+      "compress": {
+        "title": "压缩 PDF",
+        "description": "降低 PDF 文件大小，可选三档压缩级别"
+      },
+      "metadata": {
+        "title": "元数据编辑",
+        "description": "查看并修改 PDF 标题、作者、关键词等元信息"
+      },
+      "rearrange": {
+        "title": "页面重排",
+        "description": "拖拽调整 PDF 页面顺序或删除页面"
       }
     },
     "merge": {
@@ -257,6 +289,136 @@
       "selectPages": "点击选择要导出的页面",
       "start": "开始转换",
       "processing": "转换中..."
+    },
+    "toText": {
+      "title": "PDF 转文本",
+      "description": "提取 PDF 文字内容，支持 Markdown 格式和纯文本，可选页面范围",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "format": "输出格式",
+      "pageBreak": "页面分隔符",
+      "pageBreakHr": "分割线 (---)",
+      "pageBreakNewline": "空行",
+      "pageBreakNone": "无",
+      "allPages": "全部页面",
+      "selectedPages": "选择页面",
+      "selectPages": "点击选择要导出的页面",
+      "start": "开始提取",
+      "processing": "提取中...",
+      "preview": "预览",
+      "source": "源码"
+    },
+    "fromImage": {
+      "title": "图片转 PDF",
+      "description": "将多张图片合并为一个 PDF 文件，支持拖拽排序",
+      "outputFilename": "输出文件名",
+      "pageSize": "页面尺寸",
+      "pageSizeOriginal": "原图尺寸",
+      "pageSizeA4": "A4",
+      "pageSizeLetter": "Letter",
+      "fit": "适应方式",
+      "fitFit": "适应",
+      "fitFill": "填充",
+      "fitStretch": "拉伸",
+      "start": "开始转换",
+      "processing": "转换中..."
+    },
+    "rotate": {
+      "title": "旋转页面",
+      "description": "选择 PDF 页面并按 90° / 180° / 270° 顺时针旋转",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "angle": "旋转角度",
+      "angle90": "90° 顺时针",
+      "angle180": "180°",
+      "angle270": "270° 顺时针",
+      "allPages": "全部页面",
+      "selectedPages": "选择页面",
+      "selectPages": "点击选择要旋转的页面",
+      "start": "开始旋转",
+      "processing": "旋转中..."
+    },
+    "watermark": {
+      "title": "添加水印",
+      "description": "为 PDF 所有页面添加半透明文字水印",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "text": "水印文字",
+      "textPlaceholder": "请输入水印文字",
+      "fontSize": "字号",
+      "opacity": "透明度",
+      "color": "颜色",
+      "colorGray": "灰",
+      "colorRed": "红",
+      "colorBlue": "蓝",
+      "position": "位置",
+      "positionCenter": "居中",
+      "positionDiagonal": "对角线",
+      "rotation": "倾斜角度",
+      "start": "开始添加",
+      "processing": "添加中..."
+    },
+    "encrypt": {
+      "title": "加密 PDF",
+      "description": "为 PDF 设置打开密码与权限控制",
+      "userPassword": "打开密码（可选）",
+      "userPasswordHint": "用户打开 PDF 时需要输入此密码",
+      "ownerPassword": "权限密码（必填）",
+      "ownerPasswordHint": "用于控制下方权限的密码",
+      "permissions": "权限设置",
+      "permPrint": "允许打印",
+      "permCopy": "允许复制文本",
+      "permModify": "允许修改",
+      "permAnnotate": "允许注释",
+      "securityNote": "密码不会存储在服务器，处理完成后立即丢弃",
+      "start": "开始加密",
+      "processing": "加密中..."
+    },
+    "compress": {
+      "title": "压缩 PDF",
+      "description": "降低 PDF 文件大小，可选三档压缩级别",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "level": "压缩级别",
+      "levelLight": "轻度",
+      "levelLightDesc": "仅清理冗余数据，保留原始质量",
+      "levelMedium": "中度",
+      "levelMediumDesc": "图片质量 75%，DPI 150",
+      "levelHeavy": "重度",
+      "levelHeavyDesc": "图片质量 50%，DPI 100",
+      "warning": "中度 / 重度模式会将文字转为图片，丢失可搜索性",
+      "originalSize": "原始大小",
+      "compressedSize": "压缩后",
+      "saved": "节省",
+      "start": "开始压缩",
+      "processing": "压缩中..."
+    },
+    "metadata": {
+      "title": "元数据编辑",
+      "description": "查看并修改 PDF 的标题、作者、关键词等元信息",
+      "fieldTitle": "标题",
+      "fieldAuthor": "作者",
+      "fieldSubject": "主题",
+      "fieldKeywords": "关键词",
+      "fieldKeywordsHint": "用逗号分隔多个关键词",
+      "fieldCreator": "创建者",
+      "fieldProducer": "生产者",
+      "fieldProducerHint": "只读",
+      "changeFile": "更换文件",
+      "start": "保存元数据",
+      "processing": "处理中..."
+    },
+    "rearrange": {
+      "title": "页面重排",
+      "description": "拖拽调整 PDF 页面顺序，可删除指定页面",
+      "pages": "页",
+      "remaining": "保留",
+      "changeFile": "更换文件",
+      "dragHint": "拖拽缩略图调整顺序，点击 × 删除页面",
+      "reverse": "反转顺序",
+      "reset": "重置",
+      "start": "保存重排",
+      "processing": "处理中..."
     }
   },
   "FontTool": {
@@ -335,6 +497,14 @@
     "typePdfMerge": "PDF 合并",
     "typePdfSplit": "PDF 拆分",
     "typePdfToImage": "PDF 转图片",
+    "typePdfToText": "PDF 转文本",
+    "typeImageToPdf": "图片转 PDF",
+    "typePdfRotate": "PDF 旋转",
+    "typePdfWatermark": "PDF 水印",
+    "typePdfEncrypt": "PDF 加密",
+    "typePdfCompress": "PDF 压缩",
+    "typePdfMetadata": "PDF 元数据",
+    "typePdfRearrange": "PDF 重排",
     "typeFontConvert": "字体转换"
   },
   "ToolsShared": {

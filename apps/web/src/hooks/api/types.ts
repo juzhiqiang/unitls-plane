@@ -1,5 +1,21 @@
+export type TaskTypeValue =
+  | 'compress'
+  | 'convert'
+  | 'pdf_merge'
+  | 'pdf_split'
+  | 'pdf_to_image'
+  | 'font_convert'
+  | 'pdf_to_text'
+  | 'image_to_pdf'
+  | 'pdf_rotate'
+  | 'pdf_watermark'
+  | 'pdf_encrypt'
+  | 'pdf_compress'
+  | 'pdf_metadata'
+  | 'pdf_rearrange';
+
 export interface CreateTaskDto {
-  type: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
+  type: TaskTypeValue;
   inputFileIds: string[];
   inputConfig?: Record<string, unknown>;
 }
@@ -7,7 +23,7 @@ export interface CreateTaskDto {
 export interface TaskResponseDto {
   id: string;
   userId?: string;
-  type: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
+  type: TaskTypeValue;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   inputFileIds: string[];
   inputConfig?: Record<string, unknown>;

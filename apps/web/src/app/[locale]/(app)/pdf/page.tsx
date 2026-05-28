@@ -2,12 +2,32 @@
 
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { Merge, Scissors, Image as ImageIcon } from 'lucide-react';
+import {
+  Merge,
+  Scissors,
+  Image as ImageIcon,
+  FileText,
+  Images,
+  RotateCw,
+  Stamp,
+  Lock,
+  Minimize2,
+  Info,
+  ArrowUpDown,
+} from 'lucide-react';
 
 const tools = [
   { key: 'merge', icon: Merge, href: '/pdf/merge' },
   { key: 'split', icon: Scissors, href: '/pdf/split' },
   { key: 'toImage', icon: ImageIcon, href: '/pdf/to-image' },
+  { key: 'toText', icon: FileText, href: '/pdf/to-text' },
+  { key: 'fromImage', icon: Images, href: '/pdf/from-image' },
+  { key: 'rotate', icon: RotateCw, href: '/pdf/rotate' },
+  { key: 'watermark', icon: Stamp, href: '/pdf/watermark' },
+  { key: 'encrypt', icon: Lock, href: '/pdf/encrypt' },
+  { key: 'compress', icon: Minimize2, href: '/pdf/compress' },
+  { key: 'metadata', icon: Info, href: '/pdf/metadata' },
+  { key: 'rearrange', icon: ArrowUpDown, href: '/pdf/rearrange' },
 ] as const;
 
 export default function PdfPage() {

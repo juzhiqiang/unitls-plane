@@ -30,6 +30,14 @@ function getTaskTypeCategory(type: TaskType): 'image' | 'pdf' | 'font' {
     case 'pdf_merge':
     case 'pdf_split':
     case 'pdf_to_image':
+    case 'pdf_to_text':
+    case 'image_to_pdf':
+    case 'pdf_rotate':
+    case 'pdf_watermark':
+    case 'pdf_encrypt':
+    case 'pdf_compress':
+    case 'pdf_metadata':
+    case 'pdf_rearrange':
       return 'pdf';
     case 'font_convert':
       return 'font';
@@ -102,6 +110,14 @@ function TypeLabel({ type }: { type: TaskType }) {
     pdf_merge: t('typePdfMerge'),
     pdf_split: t('typePdfSplit'),
     pdf_to_image: t('typePdfToImage'),
+    pdf_to_text: t('typePdfToText'),
+    image_to_pdf: t('typeImageToPdf'),
+    pdf_rotate: t('typePdfRotate'),
+    pdf_watermark: t('typePdfWatermark'),
+    pdf_encrypt: t('typePdfEncrypt'),
+    pdf_compress: t('typePdfCompress'),
+    pdf_metadata: t('typePdfMetadata'),
+    pdf_rearrange: t('typePdfRearrange'),
     font_convert: t('typeFontConvert'),
   };
 

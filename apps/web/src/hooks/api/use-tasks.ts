@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import type { CreateTaskDto, TaskResponseDto, TaskStatusDto } from './types';
+import type { CreateTaskDto, TaskResponseDto, TaskStatusDto, TaskTypeValue } from './types';
 
-export type TaskType = 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
+export type TaskType = TaskTypeValue;
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface TaskQuery {

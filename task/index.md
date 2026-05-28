@@ -389,7 +389,22 @@ docker compose down -v         # 停止并清除数据
 - [ ] 性能优化（懒加载、代码分割）
 - [ ] 生产 Docker Compose（含反向代理）
 
-**总计：18-22天**
+### Phase 8: PDF 模块全面扩展 (3-4天)
+
+> 详细任务文件见 `task/phase8/`
+
+- [ ] 00 — Schema / Validators / DTO 扩展（前置，必须先完成）
+- [ ] 01 — PDF → Markdown / Text（mupdf + turndown）
+- [ ] 02 — 图片 → PDF（pdf-lib embed）
+- [ ] 03 — PDF 页面旋转（pdf-lib setRotation）
+- [ ] 04 — PDF 加水印（pdf-lib drawText）
+- [ ] 05 — PDF 加密（mupdf saveToBuffer）
+- [ ] 06 — PDF 压缩（mupdf + pdf-lib 重建）
+- [ ] 07 — PDF 元数据编辑（pdf-lib get/set）
+- [ ] 08 — PDF 页面重排 / 删除（pdf-lib copyPages）
+- [ ] 09 — PDF 首页 UI + 国际化 + 预览组件（收尾）
+
+**总计：21-26天**
 
 ---
 

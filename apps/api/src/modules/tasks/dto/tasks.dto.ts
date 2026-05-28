@@ -19,12 +19,20 @@ export const taskQuerySchema = z.object({
 
 export type TaskQueryInput = z.infer<typeof taskQuerySchema>;
 
+const TASK_TYPES = [
+  'compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert',
+  'pdf_to_text', 'image_to_pdf', 'pdf_rotate', 'pdf_watermark', 'pdf_encrypt',
+  'pdf_compress', 'pdf_metadata', 'pdf_rearrange',
+] as const;
+
+type TaskTypeValue = (typeof TASK_TYPES)[number];
+
 export class CreateTaskDto {
   @ApiProperty({
-    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'],
+    enum: TASK_TYPES,
   })
-  @IsEnum(['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'])
-  type!: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
+  @IsEnum(TASK_TYPES)
+  type!: TaskTypeValue;
 
   @ApiProperty({ type: [String], format: 'uuid' })
   @IsArray()
@@ -58,11 +66,11 @@ export class TaskQueryDto {
   status?: 'pending' | 'processing' | 'completed' | 'failed';
 
   @ApiPropertyOptional({
-    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'],
+    enum: TASK_TYPES,
   })
   @IsOptional()
-  @IsEnum(['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'])
-  type?: 'compress' | 'convert' | 'pdf_merge' | 'pdf_split' | 'pdf_to_image' | 'font_convert';
+  @IsEnum(TASK_TYPES)
+  type?: TaskTypeValue;
 }
 
 export class TaskResponseDto {
@@ -73,7 +81,7 @@ export class TaskResponseDto {
   userId?: string;
 
   @ApiProperty({
-    enum: ['compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert'],
+    enum: TASK_TYPES,
   })
   type!: string;
 

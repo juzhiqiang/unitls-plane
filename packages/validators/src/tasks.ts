@@ -7,6 +7,14 @@ export const taskTypeEnum = z.enum([
   'pdf_split',
   'pdf_to_image',
   'font_convert',
+  'pdf_to_text',
+  'image_to_pdf',
+  'pdf_rotate',
+  'pdf_watermark',
+  'pdf_encrypt',
+  'pdf_compress',
+  'pdf_metadata',
+  'pdf_rearrange',
 ]);
 
 export const createTaskSchema = z.object({

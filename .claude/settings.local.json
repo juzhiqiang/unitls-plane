@@ -54,7 +54,9 @@
       "Bash(xargs grep -l \"compress\\\\|convert\")",
       "Bash(docker exec *)",
       "Bash(grep -E \"dist|\\\\.js$\" D:/myProject/unitls-plane/.gitignore)",
-      "Bash(grep -E \"\\\\.\\(js|d\\\\.ts|d\\\\.ts\\\\.map|js\\\\.map\\)$\")"
+      "Bash(grep -E \"\\\\.\\(js|d\\\\.ts|d\\\\.ts\\\\.map|js\\\\.map\\)$\")",
+      "Read(//c/Users/10208/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.5.0/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python scripts/search.py \"error monitoring dashboard developer tool dark mode\" --design-system -p \"Error Tracker\")"
     ]
   }
 }

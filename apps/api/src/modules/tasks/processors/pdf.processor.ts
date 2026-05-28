@@ -3,7 +3,18 @@ import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import * as archiver from 'archiver';
 import * as mupdf from 'mupdf';
-import { PdfService, type SplitOptions } from '../services/pdf.service';
+import {
+  PdfService,
+  type SplitOptions,
+  type ToTextOptions,
+  type ImageToPdfOptions,
+  type RotateOptions,
+  type WatermarkOptions,
+  type EncryptOptions,
+  type CompressPdfOptions,
+  type PdfMetadata,
+  type RearrangeOptions,
+} from '../services/pdf.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 
@@ -50,6 +61,22 @@ export class PdfProcessor extends WorkerHost {
           return await this.handleSplit(task, job);
         case 'pdf_to_image':
           return await this.handleToImage(task, job);
+        case 'pdf_to_text':
+          return await this.handleToText(task, job);
+        case 'image_to_pdf':
+          return await this.handleImageToPdf(task, job);
+        case 'pdf_rotate':
+          return await this.handleRotate(task, job);
+        case 'pdf_watermark':
+          return await this.handleWatermark(task, job);
+        case 'pdf_encrypt':
+          return await this.handleEncrypt(task, job);
+        case 'pdf_compress':
+          return await this.handleCompressPdf(task, job);
+        case 'pdf_metadata':
+          return await this.handleMetadata(task, job);
+        case 'pdf_rearrange':
+          return await this.handleRearrange(task, job);
         default:
           throw new Error(`Unknown pdf task type: ${task.type}`);
       }
@@ -282,6 +309,38 @@ export class PdfProcessor extends WorkerHost {
     await this.reportProgress(task.id, job, 100);
 
     return { outputFileId: outputFile.id };
+  }
+
+  private async handleToText(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_to_text');
+  }
+
+  private async handleImageToPdf(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: image_to_pdf');
+  }
+
+  private async handleRotate(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_rotate');
+  }
+
+  private async handleWatermark(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_watermark');
+  }
+
+  private async handleEncrypt(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_encrypt');
+  }
+
+  private async handleCompressPdf(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_compress');
+  }
+
+  private async handleMetadata(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_metadata');
+  }
+
+  private async handleRearrange(_task: any, _job: Job): Promise<unknown> {
+    throw new Error('Not implemented: pdf_rearrange');
   }
 
   @OnWorkerEvent('failed')

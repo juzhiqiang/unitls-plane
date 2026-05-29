@@ -23,6 +23,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
 } from '@nestjs/swagger';
+import { normalizeUploadedFilename } from './filename.util';
 
 interface FileMetadata {
   fieldname: string;
@@ -58,7 +59,7 @@ export class FilesController {
     const result = await this.filesService.upload(
       file.buffer,
       {
-        filename: file.originalname,
+        filename: normalizeUploadedFilename(file.originalname),
         mimeType: file.mimetype,
         size: file.size,
       },
@@ -81,7 +82,7 @@ export class FilesController {
   async download(
     @Param('id') id: string,
     @CurrentUser() user?: User,
-    @Res() res?: Response,
+    @Res() res?: Response
   ) {
     const file = await this.filesService.getById(id, user?.id);
     const buffer = await this.filesService.download(file.storageKey);
@@ -94,7 +95,7 @@ export class FilesController {
     res.setHeader('Content-Length', buffer.length.toString());
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${encodeURIComponent(file.filename)}"`,
+      `inline; filename="${encodeURIComponent(file.filename)}"`
     );
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.end(buffer);

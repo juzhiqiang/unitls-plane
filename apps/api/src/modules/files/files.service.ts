@@ -5,10 +5,21 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { eq, desc, and, isNull, isNotNull, gte, like, inArray, sql } from 'drizzle-orm';
+import {
+  eq,
+  desc,
+  and,
+  isNull,
+  isNotNull,
+  gte,
+  like,
+  inArray,
+  sql,
+} from 'drizzle-orm';
 import { db, files, type File } from '@utils-plane/db';
 import { MinioService } from './minio.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { normalizeUploadedFilename } from './filename.util';
 
 const ALLOWED_MIME_TYPES = [
   'image/png',
@@ -27,6 +38,13 @@ const ALLOWED_MIME_TYPES = [
 
 const ANONYMOUS_MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const USER_MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
+function normalizeFileRecord(file: File): File {
+  return {
+    ...file,
+    filename: normalizeUploadedFilename(file.filename),
+  };
+}
 
 export interface UploadMeta {
   filename: string;
@@ -90,7 +108,7 @@ export class FilesService {
     this.logger.log(
       `Uploaded file ${newFile.id} by user ${userId ?? 'anonymous'}`
     );
-    return newFile;
+    return normalizeFileRecord(newFile);
   }
 
   async getById(id: string, userId?: string): Promise<File> {
@@ -121,7 +139,7 @@ export class FilesService {
       });
     }
 
-    return file;
+    return normalizeFileRecord(file);
   }
 
   async download(storageKey: string): Promise<Buffer> {
@@ -135,7 +153,12 @@ export class FilesService {
 
   async listByUser(
     userId: string,
-    options: { page?: number; limit?: number; mimeType?: string; search?: string } = {}
+    options: {
+      page?: number;
+      limit?: number;
+      mimeType?: string;
+      search?: string;
+    } = {}
   ): Promise<{ files: File[]; total: number }> {
     const page = options.page ?? 1;
     const limit = options.limit ?? 20;
@@ -166,7 +189,7 @@ export class FilesService {
     ]);
 
     return {
-      files: fileList,
+      files: fileList.map(normalizeFileRecord),
       total: countResult[0]?.count ?? 0,
     };
   }
@@ -190,7 +213,7 @@ export class FilesService {
 
     if (userFiles.length === 0) return;
 
-    const validIds = userFiles.map((f) => f.id);
+    const validIds = userFiles.map(f => f.id);
     await db
       .update(files)
       .set({ deletedAt: new Date() })
@@ -218,10 +241,7 @@ export class FilesService {
       });
     }
 
-    await db
-      .update(files)
-      .set({ deletedAt: null })
-      .where(eq(files.id, id));
+    await db.update(files).set({ deletedAt: null }).where(eq(files.id, id));
 
     this.logger.log(`Restored file ${id}`);
   }
@@ -251,7 +271,7 @@ export class FilesService {
     ]);
 
     return {
-      files: fileList,
+      files: fileList.map(normalizeFileRecord),
       total: countResult[0]?.count ?? 0,
     };
   }

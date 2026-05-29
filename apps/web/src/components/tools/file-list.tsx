@@ -21,11 +21,17 @@ export interface FileListProps {
 
 function StatusIcon({ status }: { status: FileStatus }) {
   if (status === 'done')
-    return <CheckCircle2 className="h-4 w-4 text-emerald-500" strokeWidth={1.5} />;
+    return (
+      <CheckCircle2 className="h-4 w-4 text-emerald-500" strokeWidth={1.5} />
+    );
   if (status === 'failed')
-    return <AlertCircle className="h-4 w-4 text-destructive" strokeWidth={1.5} />;
+    return (
+      <AlertCircle className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+    );
   if (status === 'processing')
-    return <Loader2 className="h-4 w-4 text-accent animate-spin" strokeWidth={1.5} />;
+    return (
+      <Loader2 className="h-4 w-4 text-accent animate-spin" strokeWidth={1.5} />
+    );
   return <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />;
 }
 
@@ -66,11 +72,16 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                   <StatusIcon status={item.status} />
                 </div>
                 <div className="flex-1 min-w-0 space-y-1">
-                  <div className="truncate text-foreground" title={item.file.name}>
+                  <div
+                    className="truncate text-foreground"
+                    title={item.file.name}
+                  >
                     {item.file.name}
                   </div>
                   {item.error && (
-                    <div className="text-destructive break-words">{item.error}</div>
+                    <div className="text-destructive break-words">
+                      {item.error}
+                    </div>
                   )}
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
                     <span className="tabular-nums">
@@ -113,7 +124,9 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                   {formatBytes(original, tUnits, locale)}
                 </span>
                 <span className="text-right tabular-nums text-foreground">
-                  {result !== undefined ? formatBytes(result, tUnits, locale) : '—'}
+                  {result !== undefined
+                    ? formatBytes(result, tUnits, locale)
+                    : '—'}
                 </span>
                 <span className="text-right tabular-nums text-emerald-500">
                   {savedPct}

@@ -30,7 +30,7 @@ function parseOrigins(value: string | undefined): string[] {
 }
 
 function unique(values: string[]): string[] {
-  return [...new Set(values)];
+  return Array.from(new Set(values));
 }
 
 function portFor(url: URL): string {

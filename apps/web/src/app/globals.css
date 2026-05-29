@@ -315,3 +315,211 @@
 .preview-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Auth: faint grid texture for brand panel (< 5% effective opacity, vignette-masked) */
+.grid-texture {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.45;
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 25% 15%, black, transparent 78%);
+  mask-image: radial-gradient(ellipse 90% 70% at 25% 15%, black, transparent 78%);
+}
+
+/* Auth: form column entrance — reduced-motion safe */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes auth-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .auth-enter {
+    animation: auth-enter 220ms cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
+/* ───────────────────────── Cyber FX layer ─────────────────────────
+   Terminal-grade motion: aurora drift, pointer spotlight, scanlines,
+   soft glitch, tool-card glow, grid drift. All reduced-motion safe and
+   tuned per theme. Decorative layers are aria-hidden in markup. */
+
+/* Aurora — low-saturation accent bloom behind hero / brand panel */
+.aurora {
+  position: absolute;
+  inset: -25%;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      38% 48% at 22% 28%,
+      color-mix(in oklch, var(--accent) 30%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      34% 42% at 80% 18%,
+      color-mix(in oklch, var(--accent) 18%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      44% 40% at 62% 82%,
+      color-mix(in oklch, var(--accent) 14%, transparent),
+      transparent 70%
+    );
+  filter: blur(64px);
+  opacity: 0.32;
+}
+.dark .aurora {
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes aurora-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(4%, -4%, 0) scale(1.08);
+    }
+    66% {
+      transform: translate3d(-4%, 4%, 0) scale(1.04);
+    }
+  }
+  .aurora {
+    animation: aurora-drift 20s ease-in-out infinite;
+  }
+}
+
+/* Pointer spotlight — follows cursor inside a .spotlight-host */
+.spotlight-host {
+  isolation: isolate;
+}
+.spotlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    var(--spot-radius, 520px) circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    color-mix(in oklch, var(--accent) var(--spot-intensity, 12%), transparent),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.spotlight-host[data-active='true'] .spotlight-layer {
+  opacity: 1;
+}
+
+/* Animated grid — faint, drifts then fades out downward */
+.grid-fade {
+  position: absolute;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, currentColor 1px, transparent 1px),
+    linear-gradient(to bottom, currentColor 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: 0.045;
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent 75%);
+  mask-image: linear-gradient(to bottom, black, transparent 75%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes grid-pan {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 64px 64px;
+    }
+  }
+  .grid-fade {
+    animation: grid-pan 9s linear infinite;
+  }
+}
+
+/* Scanlines — ultra-faint CRT overlay */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 2px,
+    color-mix(in oklch, var(--foreground) 4%, transparent) 2px 3px
+  );
+  opacity: 0.5;
+}
+
+/* Soft glitch — periodic RGB-split micro flicker (multiline safe) */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes glitch-soft {
+    0%,
+    92%,
+    100% {
+      text-shadow: none;
+      transform: translate3d(0, 0, 0);
+    }
+    93% {
+      text-shadow:
+        -2px 0 color-mix(in oklch, var(--accent) 80%, transparent),
+        2px 0 oklch(0.72 0.15 220);
+      transform: translate3d(1px, 0, 0);
+    }
+    95% {
+      text-shadow:
+        2px 0 color-mix(in oklch, var(--accent) 80%, transparent),
+        -2px 0 oklch(0.72 0.15 220);
+      transform: translate3d(-1px, 0, 0);
+    }
+    97% {
+      text-shadow: none;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  .glitch-soft {
+    animation: glitch-soft 6s infinite;
+  }
+  .glitch-soft:hover {
+    animation-duration: 1.2s;
+  }
+}
+
+/* Tool card — accent glow + inner grid reveal on hover */
+.tool-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.3s ease,
+    transform 0.2s ease;
+}
+.tool-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, currentColor 1px, transparent 1px),
+    linear-gradient(to bottom, currentColor 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.tool-card:hover {
+  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--accent) 25%, transparent),
+    0 12px 48px -16px color-mix(in oklch, var(--accent) 45%, transparent);
+}
+.tool-card:hover::before {
+  opacity: 0.06;
+}

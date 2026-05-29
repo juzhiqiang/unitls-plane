@@ -3,10 +3,6 @@ import type { Request, Response } from 'express';
 import { auth } from '@utils-plane/auth';
 import { Public } from '../../common/decorators/public.decorator';
 
-const ALLOWED_ORIGINS = new Set(
-  (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(','),
-);
-
 @Controller('api/auth')
 @Public()
 export class AuthController {
@@ -14,25 +10,6 @@ export class AuthController {
 
   @All('*path')
   async handle(@Req() req: Request, @Res() res: Response) {
-    const origin = req.headers.origin;
-    if (origin && ALLOWED_ORIGINS.has(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader(
-        'Access-Control-Allow-Methods',
-        'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-      );
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Content-Type,Authorization',
-      );
-    }
-
-    if (req.method === 'OPTIONS') {
-      res.status(204).end();
-      return;
-    }
-
     const url = new URL(req.originalUrl, `http://${req.headers.host}`);
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) {

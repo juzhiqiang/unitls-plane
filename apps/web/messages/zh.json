@@ -99,7 +99,22 @@
     "verifyEmailBody": "我们已向您的邮箱发送了一封验证邮件。请查收并点击链接完成验证。",
     "verifyEmailSpam": "如果没有收到邮件，请检查垃圾邮件文件夹。",
     "backToLogin": "返回登录",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "brandTagline": "本地优先的文件、PDF 与字体工具集。",
+    "feature1": "免费 · 无需信用卡",
+    "feature2": "静态加密存储",
+    "feature3": "支持自托管",
+    "statusLabel": "状态",
+    "systemStatus": "在线",
+    "buildLabel": "版本",
+    "sectionRegister": "01 / 注册",
+    "sectionLogin": "01 / 登录",
+    "sectionVerify": "02 / 验证",
+    "passwordStrength": "强度",
+    "pwWeak": "弱",
+    "pwFair": "中",
+    "pwGood": "良",
+    "pwStrong": "强"
   },
   "AppLayout": {
     "home": "首页",

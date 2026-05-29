@@ -99,7 +99,22 @@
     "verifyEmailBody": "We've sent a verification email to your inbox. Please check it and click the link to complete verification.",
     "verifyEmailSpam": "If you don't see it, please check your spam folder.",
     "backToLogin": "Back to sign in",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "brandTagline": "Local-first utilities for files, PDFs and fonts.",
+    "feature1": "Free · no credit card",
+    "feature2": "Encrypted at rest",
+    "feature3": "Self-host ready",
+    "statusLabel": "STATUS",
+    "systemStatus": "ONLINE",
+    "buildLabel": "BUILD",
+    "sectionRegister": "01 / REGISTER",
+    "sectionLogin": "01 / LOGIN",
+    "sectionVerify": "02 / VERIFY",
+    "passwordStrength": "strength",
+    "pwWeak": "weak",
+    "pwFair": "fair",
+    "pwGood": "good",
+    "pwStrong": "strong"
   },
   "AppLayout": {
     "home": "Home",

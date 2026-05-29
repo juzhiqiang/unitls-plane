@@ -1,0 +1,97 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Utils Plane" [ref=e5] [cursor=pointer]:
+          - /url: /en
+          - generic [ref=e7]: Utils Plane
+        - navigation [ref=e8]:
+          - link "Tools" [ref=e9] [cursor=pointer]:
+            - /url: /en/image
+    - main [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e20]: "01"
+            - text: / 04 — Your desktop
+          - heading "Your desktop toolbox" [level=1] [ref=e21]:
+            - text: Your desktop
+            - text: toolbox
+          - paragraph [ref=e22]: Image compression, PDF processing, font conversion. Everything runs locally in your browser to keep your data private.
+          - generic [ref=e23]:
+            - link "Get started" [ref=e24] [cursor=pointer]:
+              - /url: /en/image
+              - button "Get started" [ref=e25]
+            - link "Read the docs" [ref=e26] [cursor=pointer]:
+              - /url: /en/docs
+              - button "Read the docs" [ref=e27]
+        - generic [ref=e29]:
+          - generic [ref=e30]: 02 / 04 — Features
+          - heading "Everything you need" [level=2] [ref=e31]
+          - generic [ref=e34]:
+            - link "Image tools PNG, JPG, WebP, and GIF support with lossless compression and smart conversion open" [ref=e35] [cursor=pointer]:
+              - /url: /en/image
+              - img [ref=e36]
+              - heading "Image tools" [level=3] [ref=e40]
+              - paragraph [ref=e41]: PNG, JPG, WebP, and GIF support with lossless compression and smart conversion
+              - generic [ref=e42]:
+                - text: open
+                - generic [ref=e43]: →
+            - link "PDF tools Merge, split, and extract pages online with no install required open" [ref=e44] [cursor=pointer]:
+              - /url: /en/pdf
+              - img [ref=e45]
+              - heading "PDF tools" [level=3] [ref=e49]
+              - paragraph [ref=e50]: Merge, split, and extract pages online with no install required
+              - generic [ref=e51]:
+                - text: open
+                - generic [ref=e52]: →
+            - link "Font conversion Convert between TTF, OTF, and WOFF with efficient batch processing open" [ref=e53] [cursor=pointer]:
+              - /url: /en/font
+              - img [ref=e54]
+              - heading "Font conversion" [level=3] [ref=e56]
+              - paragraph [ref=e57]: Convert between TTF, OTF, and WOFF with efficient batch processing
+              - generic [ref=e58]:
+                - text: open
+                - generic [ref=e59]: →
+        - generic [ref=e61]:
+          - generic [ref=e62]: 03 / 04 — Highlights
+          - heading "Why choose us" [level=2] [ref=e63]
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - generic [ref=e68]:
+                - img [ref=e69]
+                - generic [ref=e71]: "01"
+              - heading "High performance" [level=3] [ref=e72]
+              - paragraph [ref=e73]: Client-side processing means no waiting on uploads
+            - generic [ref=e74]:
+              - generic [ref=e75]:
+                - img [ref=e76]
+                - generic [ref=e78]: "02"
+              - heading "Privacy first" [level=3] [ref=e79]
+              - paragraph [ref=e80]: Files are processed in your browser and never uploaded to a server
+            - generic [ref=e81]:
+              - generic [ref=e82]:
+                - img [ref=e83]
+                - generic [ref=e86]: "03"
+              - heading "Free to use" [level=3] [ref=e87]
+              - paragraph [ref=e88]: No signup required and every feature is free
+        - generic [ref=e90]:
+          - generic [ref=e91]: 04 / 04
+          - heading "Start using it now" [level=2] [ref=e92]
+          - paragraph [ref=e93]: No signup, just open it and go. Every feature is free, and your privacy is protected.
+          - link "Try it now" [ref=e95] [cursor=pointer]:
+            - /url: /en/image
+            - button "Try it now" [ref=e96]
+    - contentinfo [ref=e97]:
+      - generic [ref=e99]:
+        - generic [ref=e102]: Utils Plane © 2026
+        - generic [ref=e103]:
+          - link "Docs" [ref=e104] [cursor=pointer]:
+            - /url: /docs
+          - link "GitHub" [ref=e105] [cursor=pointer]:
+            - /url: /github
+          - link "Terms" [ref=e106] [cursor=pointer]:
+            - /url: /terms
+          - link "Privacy" [ref=e107] [cursor=pointer]:
+            - /url: /privacy
+  - region "Notifications alt+T"

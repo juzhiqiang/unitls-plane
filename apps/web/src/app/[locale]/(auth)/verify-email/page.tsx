@@ -12,40 +12,43 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     if (!isPending && session) {
-      // If already logged in, redirect to dashboard
       router.push('/dashboard');
     }
   }, [session, isPending, router]);
 
   if (isPending) {
     return (
-      <div className="w-full max-w-md p-6">
-        <div className="border border-border rounded-lg p-6 text-center">
-          <p>{t('loading')}</p>
-        </div>
-      </div>
+      <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+        [ {t('loading')} ]
+      </p>
     );
   }
 
   return (
-    <div className="w-full max-w-md p-6">
-      <div className="border border-border rounded-lg p-6 text-center">
-        <h1 className="text-2xl font-bold mb-4">{t('verifyEmailTitle')}</h1>
-        <p className="text-muted-foreground mb-4">
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {t('sectionVerify')}
+        </span>
+        <h1 className="text-2xl font-medium tracking-tight text-foreground">
+          {t('verifyEmailTitle')}
+        </h1>
+      </div>
+
+      <div className="space-y-3 border-l-2 border-accent pl-4">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           {t('verifyEmailBody')}
         </p>
-        <p className="text-sm text-muted-foreground">
-          {t('verifyEmailSpam')}
-        </p>
-        <div className="mt-6">
-          <Link
-            href="/login"
-            className="text-sm text-primary hover:underline"
-          >
-            {t('backToLogin')}
-          </Link>
-        </div>
+        <p className="text-xs text-muted-foreground/80">{t('verifyEmailSpam')}</p>
       </div>
+
+      <Link
+        href="/login"
+        className="group inline-flex items-center gap-2 text-sm text-accent underline decoration-accent/40 underline-offset-[3px] transition-colors hover:decoration-accent"
+      >
+        <span className="transition-transform group-hover:-translate-x-0.5">←</span>
+        {t('backToLogin')}
+      </Link>
     </div>
   );
 }

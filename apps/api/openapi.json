@@ -267,6 +267,206 @@
         ]
       }
     },
+    "/files/trash": {
+      "get": {
+        "operationId": "FilesController_listTrash",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List trashed files for current user",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/trash/empty": {
+      "delete": {
+        "operationId": "FilesController_emptyTrash",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Empty trash for current user",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/batch-delete": {
+      "post": {
+        "operationId": "FilesController_batchDelete",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Batch soft-delete files",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/batch-restore": {
+      "post": {
+        "operationId": "FilesController_batchRestore",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Batch restore soft-deleted files",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/batch-permanent-delete": {
+      "post": {
+        "operationId": "FilesController_batchPermanentDelete",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Batch permanently delete files from trash",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files": {
+      "get": {
+        "operationId": "FilesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mimeType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List files for current user",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/files/{id}": {
       "get": {
         "operationId": "FilesController_getOne",
@@ -347,96 +547,6 @@
         ]
       }
     },
-    "/files": {
-      "get": {
-        "operationId": "FilesController_list",
-        "parameters": [
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "mimeType",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "List files for current user",
-        "tags": [
-          "files"
-        ]
-      }
-    },
-    "/files/trash": {
-      "get": {
-        "operationId": "FilesController_listTrash",
-        "parameters": [
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "List trashed files for current user",
-        "tags": [
-          "files"
-        ]
-      }
-    },
     "/files/{id}/restore": {
       "post": {
         "operationId": "FilesController_restore",
@@ -490,26 +600,6 @@
           }
         ],
         "summary": "Permanently delete a file",
-        "tags": [
-          "files"
-        ]
-      }
-    },
-    "/files/batch-delete": {
-      "post": {
-        "operationId": "FilesController_batchDelete",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Batch soft-delete files",
         "tags": [
           "files"
         ]
@@ -796,6 +886,21 @@
         "required": [
           "status",
           "progress"
+        ]
+      },
+      "FileIdsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "ids"
         ]
       }
     }

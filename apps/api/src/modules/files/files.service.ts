@@ -222,6 +222,29 @@ export class FilesService {
     this.logger.log(`Batch soft deleted ${validIds.length} files`);
   }
 
+  async batchRestore(ids: string[], userId: string): Promise<void> {
+    const userFiles = await db
+      .select()
+      .from(files)
+      .where(
+        and(
+          inArray(files.id, ids),
+          eq(files.userId, userId),
+          isNotNull(files.deletedAt)
+        )
+      );
+
+    if (userFiles.length === 0) return;
+
+    const validIds = userFiles.map(f => f.id);
+    await db
+      .update(files)
+      .set({ deletedAt: null })
+      .where(inArray(files.id, validIds));
+
+    this.logger.log(`Batch restored ${validIds.length} files`);
+  }
+
   async restore(id: string, userId: string): Promise<void> {
     const file = await db.query.files.findFirst({
       where: eq(files.id, id),
@@ -277,7 +300,7 @@ export class FilesService {
   }
 
   async permanentDelete(id: string, userId: string): Promise<void> {
-    const file = await this.getById(id, userId);
+    const file = await this.getDeletedFileById(id, userId);
 
     // 删除 MinIO 对象
     await this.minioService.delete(file.storageKey);
@@ -286,6 +309,53 @@ export class FilesService {
     await db.delete(files).where(eq(files.id, id));
 
     this.logger.log(`Permanently deleted file ${id}`);
+  }
+
+  async batchPermanentDelete(ids: string[], userId: string): Promise<void> {
+    const userFiles = await db
+      .select()
+      .from(files)
+      .where(
+        and(
+          inArray(files.id, ids),
+          eq(files.userId, userId),
+          isNotNull(files.deletedAt)
+        )
+      );
+
+    for (const file of userFiles) {
+      await this.minioService.delete(file.storageKey);
+    }
+
+    if (userFiles.length === 0) return;
+
+    await db.delete(files).where(
+      inArray(
+        files.id,
+        userFiles.map(f => f.id)
+      )
+    );
+
+    this.logger.log(`Batch permanently deleted ${userFiles.length} files`);
+  }
+
+  async emptyTrash(userId: string): Promise<void> {
+    const userFiles = await db
+      .select()
+      .from(files)
+      .where(and(eq(files.userId, userId), isNotNull(files.deletedAt)));
+
+    for (const file of userFiles) {
+      await this.minioService.delete(file.storageKey);
+    }
+
+    if (userFiles.length === 0) return;
+
+    await db
+      .delete(files)
+      .where(and(eq(files.userId, userId), isNotNull(files.deletedAt)));
+
+    this.logger.log(`Emptied trash for user ${userId}`);
   }
 
   async cleanupExpired(): Promise<number> {
@@ -319,5 +389,27 @@ export class FilesService {
     const prefix = mimeType.split('/')[0];
     const wildcardTypes = ALLOWED_MIME_TYPES.filter(t => t.endsWith('/*'));
     return wildcardTypes.some(t => t.startsWith(`${prefix}/`));
+  }
+
+  private async getDeletedFileById(id: string, userId: string): Promise<File> {
+    const file = await db.query.files.findFirst({
+      where: and(eq(files.id, id), isNotNull(files.deletedAt)),
+    });
+
+    if (!file) {
+      throw new NotFoundException({
+        code: ErrorCodes.TASK_NOT_FOUND,
+        message: 'File not found in trash',
+      });
+    }
+
+    if (file.userId !== userId) {
+      throw new ForbiddenException({
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Access denied',
+      });
+    }
+
+    return normalizeFileRecord(file);
   }
 }

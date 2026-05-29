@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 
 export interface FileRecord {
@@ -28,6 +28,10 @@ export interface FileQuery {
   search?: string;
 }
 
+function refreshFileQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['files'] });
+}
+
 export function useFiles(query?: FileQuery) {
   return useQuery({
     queryKey: ['files', query],
@@ -53,7 +57,12 @@ export function useTrashedFiles(query?: { page?: number; limit?: number }) {
     queryKey: ['files', 'trash', query],
     queryFn: async () => {
       const { data, error } = await api.GET('/files/trash' as any, {
-        params: { query: { page: String(query?.page ?? 1), limit: String(query?.limit ?? 10) } },
+        params: {
+          query: {
+            page: String(query?.page ?? 1),
+            limit: String(query?.limit ?? 10),
+          },
+        },
       });
       if (error) throw error;
       return data as unknown as FileListResponse;
@@ -74,7 +83,7 @@ export function useUploadFile() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['files'] });
+      refreshFileQueries(queryClient);
     },
   });
 }
@@ -104,7 +113,7 @@ export function useDeleteFile() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['files'] });
+      refreshFileQueries(queryClient);
     },
   });
 }
@@ -120,7 +129,7 @@ export function useBatchDeleteFiles() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['files'] });
+      refreshFileQueries(queryClient);
     },
   });
 }
@@ -136,7 +145,7 @@ export function useRestoreFile() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['files'] });
+      refreshFileQueries(queryClient);
     },
   });
 }
@@ -152,7 +161,56 @@ export function usePermanentDeleteFile() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['files'] });
+      refreshFileQueries(queryClient);
+    },
+  });
+}
+
+export function useBatchRestoreFiles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data, error } = await api.POST('/files/batch-restore' as any, {
+        body: { ids } as any,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      refreshFileQueries(queryClient);
+    },
+  });
+}
+
+export function useBatchPermanentDeleteFiles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data, error } = await api.POST(
+        '/files/batch-permanent-delete' as any,
+        {
+          body: { ids } as any,
+        }
+      );
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      refreshFileQueries(queryClient);
+    },
+  });
+}
+
+export function useEmptyTrash() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await api.DELETE('/files/trash/empty' as any, {});
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      refreshFileQueries(queryClient);
     },
   });
 }

@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+describe('FilesController route order', () => {
+  it('declares static trash routes before dynamic id routes', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'files.controller.ts'),
+      'utf8'
+    );
+
+    const idRouteIndex = source.indexOf("@Get(':id')");
+    expect(idRouteIndex).toBeGreaterThanOrEqual(0);
+
+    for (const route of [
+      "@Get('trash')",
+      "@Delete('trash/empty')",
+      "@Post('batch-restore')",
+      "@Post('batch-permanent-delete')",
+      "@Post('batch-delete')",
+    ]) {
+      const routeIndex = source.indexOf(route);
+      expect(routeIndex, route).toBeGreaterThanOrEqual(0);
+      expect(routeIndex, route).toBeLessThan(idRouteIndex);
+    }
+  });
+
+  it('uses a class-validator DTO for batch file id requests', () => {
+    const controllerSource = readFileSync(
+      join(import.meta.dir, 'files.controller.ts'),
+      'utf8'
+    );
+    const dtoSource = readFileSync(
+      join(import.meta.dir, 'dto', 'file-ids.dto.ts'),
+      'utf8'
+    );
+
+    expect(controllerSource).toContain(
+      "import { FileIdsDto } from './dto/file-ids.dto'"
+    );
+    expect(controllerSource).toContain('@Body() body: FileIdsDto');
+    expect(controllerSource).not.toContain('private validateIds');
+    expect(dtoSource).toContain('export class FileIdsDto');
+    expect(dtoSource).toContain('@IsArray()');
+    expect(dtoSource).toContain('@ArrayNotEmpty()');
+    expect(dtoSource).toContain("@IsUUID('4', { each: true })");
+  });
+});

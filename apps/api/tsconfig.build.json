@@ -3,7 +3,7 @@
   "compilerOptions": {
     "noEmit": false,
     "module": "commonjs",
-    "moduleResolution": "node10",
+    "moduleResolution": "bundler",
     "target": "es2022",
     "outDir": "./dist",
     "rootDir": "./src",

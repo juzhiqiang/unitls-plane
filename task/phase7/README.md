@@ -20,7 +20,7 @@
 | 文件              | 任务                                | 依赖       | 预估 |
 | ----------------- | ----------------------------------- | ---------- | ---- |
 | 01-sentry.md      | Sentry 错误追踪（NestJS + Next.js） | Phase 2, 3 | 1.5h |
-| 02-analytics.md   | Vercel Analytics + Web Vitals       | Phase 3    | 0.5h |
+| 02-analytics.md   | 自研 Telemetry + Web Vitals         | Phase 3, 7/01 | 1h |
 | 03-performance.md | 性能优化（懒加载、代码分割）        | Phase 6    | 2h   |
 
 ## 前置依赖

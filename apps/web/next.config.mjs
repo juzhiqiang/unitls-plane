@@ -1,5 +1,7 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 import withPWA from '@ducanh2912/next-pwa';
+import bundleAnalyzer from '@next/bundle-analyzer';
+import { staticAssetHeaders } from './src/config/cache-headers.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -12,6 +14,9 @@ const nextConfig = {
 };
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
 const withPwa = withPWA({
   dest: 'public',
   cacheOnFrontEndNav: true,
@@ -28,7 +33,8 @@ const withPwa = withPWA({
   },
 });
 
-const pwaConfig = withPwa(withNextIntl(nextConfig));
+const analyzedConfig = withBundleAnalyzer(nextConfig);
+const pwaConfig = withPwa(withNextIntl(analyzedConfig));
 
 function isPwaBrowserEntry(entry) {
   return (
@@ -66,6 +72,10 @@ function stripPwaBrowserEntryFromServer(config) {
 
 export default {
   ...pwaConfig,
+  async headers() {
+    const inheritedHeaders = await pwaConfig.headers?.();
+    return [...(inheritedHeaders ?? []), ...staticAssetHeaders];
+  },
   webpack(config, options) {
     const resolvedConfig = pwaConfig.webpack?.(config, options) ?? config;
 

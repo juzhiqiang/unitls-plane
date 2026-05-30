@@ -7,6 +7,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
+import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
 import { ZipDownloadButton } from '@/components/tools/zip-download-button';
 import { loadPdf, renderPdfPage } from '@/lib/processing/pdf-client';
 import { useUploadFile } from '@/hooks/api/use-files';
@@ -49,8 +50,8 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
     >
       <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
         {canvas ? (
-          <img
-            src={canvas.toDataURL()}
+          <PdfPagePreviewImage
+            canvas={canvas}
             alt={`Page ${pageNumber}`}
             className="w-full h-full object-contain"
           />

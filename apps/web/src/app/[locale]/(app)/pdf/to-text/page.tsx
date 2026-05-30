@@ -7,6 +7,7 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
 import { MarkdownPreview } from '@/components/tools/markdown-preview';
+import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
@@ -46,8 +47,8 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
     >
       <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
         {canvas ? (
-          <img
-            src={canvas.toDataURL()}
+          <PdfPagePreviewImage
+            canvas={canvas}
             alt={`Page ${pageNumber}`}
             className="w-full h-full object-contain"
           />

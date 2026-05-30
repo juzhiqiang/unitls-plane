@@ -6,6 +6,7 @@ import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
+import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
@@ -62,8 +63,8 @@ function WatermarkPreview({
   return (
     <div className="relative inline-block border border-border bg-muted/20">
       {canvas ? (
-        <img
-          src={canvas.toDataURL()}
+        <PdfPagePreviewImage
+          canvas={canvas}
           alt="Preview"
           className="block max-w-full h-auto"
         />

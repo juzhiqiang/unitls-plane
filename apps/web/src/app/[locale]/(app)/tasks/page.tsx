@@ -15,7 +15,7 @@ import {
   Download,
   RotateCcw,
   FileText,
-  Image,
+  Image as ImageIcon,
   Type,
 } from 'lucide-react';
 
@@ -122,7 +122,7 @@ function TypeLabel({ type }: { type: TaskType }) {
   };
 
   const icons: Record<string, React.ReactNode> = {
-    image: <Image className="h-3 w-3" strokeWidth={1.5} />,
+    image: <ImageIcon className="h-3 w-3" strokeWidth={1.5} />,
     pdf: <FileText className="h-3 w-3" strokeWidth={1.5} />,
     font: <Type className="h-3 w-3" strokeWidth={1.5} />,
   };

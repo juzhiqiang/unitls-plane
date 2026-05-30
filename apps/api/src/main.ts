@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import * as dotenv from 'dotenv';
+import compression from 'compression';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 dotenv.config({ path: path.join(repoRoot, '.env.local') });
@@ -16,6 +17,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableShutdownHooks();
+  app.use(compression());
 
   app.enableCors({
     origin: (

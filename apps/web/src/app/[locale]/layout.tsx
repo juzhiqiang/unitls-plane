@@ -3,13 +3,18 @@ import { GeistMono } from 'geist/font/mono';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/providers/query-provider';
+import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { Toaster } from 'sonner';
 import { routing } from '@/i18n/routing';
 import type { Locale } from '@/i18n/routing';
 import '../globals.css';
+
+export const viewport: Viewport = {
+  themeColor: '#0a0a0c',
+};
 
 export async function generateMetadata({
   params,
@@ -27,6 +32,16 @@ export async function generateMetadata({
   return {
     title: t('title'),
     description: t('description'),
+    manifest: '/manifest.json',
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'default',
+      title: 'Utils-Plane',
+    },
+    icons: {
+      icon: '/icons/icon-32.png',
+      apple: '/icons/icon-180.png',
+    },
     alternates: {
       canonical: `${baseUrl}/${locale}`,
       languages: {
@@ -70,6 +85,7 @@ export default async function LocaleLayout({
           >
             <QueryProvider>
               {children}
+              <InstallPrompt />
               <Toaster position="bottom-right" richColors />
             </QueryProvider>
           </ThemeProvider>

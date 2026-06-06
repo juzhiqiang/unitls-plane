@@ -6,6 +6,9 @@
     "apps/*",
     "packages/*"
   ],
+  "dependencies": {
+    "@error-tracker/sdk": "file:../error-tracker/packages/sdk"
+  },
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",

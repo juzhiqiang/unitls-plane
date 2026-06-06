@@ -7,6 +7,7 @@ import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
+import { ErrorTrackerInit } from '@/components/error-tracker-init';
 import { Toaster } from 'sonner';
 import { routing } from '@/i18n/routing';
 import type { Locale } from '@/i18n/routing';
@@ -77,6 +78,7 @@ export default async function LocaleLayout({
     <html lang={locale} suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="font-sans antialiased">
         <NextIntlClientProvider messages={messages} locale={locale}>
+          <ErrorTrackerInit />
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"

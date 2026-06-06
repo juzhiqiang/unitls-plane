@@ -24,6 +24,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
+    "@error-tracker/sdk": "file:../../../error-tracker/packages/sdk",
     "@aws-sdk/client-s3": "^3.1049.0",
     "@aws-sdk/s3-request-presigner": "^3.1049.0",
     "@bull-board/api": "^7.1.5",

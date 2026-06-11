@@ -667,6 +667,12 @@
     "zipBuilding": "Zipping...",
     "downloadZipCount": "Download ZIP ({count})",
     "processing": "Processing",
+    "stages": {
+      "uploading": "Uploading",
+      "queued": "Queued",
+      "processing": "Processing",
+      "generating": "Generating result"
+    },
     "dropzoneRelease": "Release to upload",
     "dropzonePrompt": "Click or drag files here",
     "fileList": {

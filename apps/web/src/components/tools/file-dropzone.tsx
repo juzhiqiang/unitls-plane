@@ -13,6 +13,14 @@ export interface FileDropzoneProps {
   onDrop: (files: File[]) => void;
   className?: string;
   hint?: string;
+  processingLabel?: string;
+}
+
+function formatMaxSize(bytes?: number): string | null {
+  if (!bytes) return null;
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${Math.round(mb)} MB max`;
+  return `${Math.round(bytes / 1024)} KB max`;
 }
 
 export function FileDropzone({
@@ -23,8 +31,10 @@ export function FileDropzone({
   onDrop,
   className,
   hint,
+  processingLabel,
 }: FileDropzoneProps) {
   const t = useTranslations('ToolsShared');
+  const maxSizeLabel = formatMaxSize(maxSize);
   const { getRootProps, getInputProps, isDragActive, fileRejections } =
     useDropzone({
       accept,
@@ -52,8 +62,12 @@ export function FileDropzone({
         <div className="text-sm text-foreground">
           {isDragActive ? t('dropzoneRelease') : t('dropzonePrompt')}
         </div>
-        {hint && (
-          <div className="text-xs font-mono text-muted-foreground">{hint}</div>
+        {(hint || maxSizeLabel || processingLabel) && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-mono text-muted-foreground">
+            {hint && <span>{hint}</span>}
+            {maxSizeLabel && <span>{maxSizeLabel}</span>}
+            {processingLabel && <span>{processingLabel}</span>}
+          </div>
         )}
       </div>
       {fileRejections.length > 0 && (

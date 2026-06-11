@@ -667,6 +667,12 @@
     "zipBuilding": "打包中...",
     "downloadZipCount": "下载 ZIP ({count})",
     "processing": "处理中",
+    "stages": {
+      "uploading": "上传中",
+      "queued": "排队中",
+      "processing": "处理中",
+      "generating": "生成结果"
+    },
     "dropzoneRelease": "松开以上传",
     "dropzonePrompt": "点击或拖拽文件到此处",
     "fileList": {

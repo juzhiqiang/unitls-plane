@@ -10,6 +10,7 @@ node_modules/
 # 2. Monorepo / 工具链自身的缓存
 # ==========================================
 .turbo/
+.worktrees/
 dist/
 build/
 

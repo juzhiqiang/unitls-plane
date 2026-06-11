@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUpDown,
   FileText,
@@ -15,15 +15,13 @@ import {
   Type,
 } from 'lucide-react';
 
-type ToolIcon = ComponentType<{ className?: string; strokeWidth?: number }>;
-
 export type ToolProcessing = 'local' | 'local-first' | 'server';
 export type ToolRetention = 'browser-session' | 'server-24h' | 'account-files';
 
 export interface ToolMeta {
   key: string;
   href: string;
-  icon: ToolIcon;
+  icon: LucideIcon;
   titleKey: string;
   descriptionKey: string;
   categoryKey: string;

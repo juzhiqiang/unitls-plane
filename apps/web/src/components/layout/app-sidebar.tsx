@@ -10,6 +10,7 @@ import {
   Type,
   FolderOpen,
   History,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   Sheet,
@@ -18,6 +19,7 @@ import {
 import { useSidebar } from "@/components/ui/sidebar";
 
 const navigation = [
+  { key: "dashboard", href: "/dashboard", icon: LayoutDashboard },
   { key: "imageTools", href: "/image", icon: Image },
   { key: "pdfTools", href: "/pdf", icon: FileType },
   { key: "fontTools", href: "/font", icon: Type },

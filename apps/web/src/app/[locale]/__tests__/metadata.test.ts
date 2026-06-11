@@ -46,6 +46,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { generateMetadata, viewport } from '../layout';
+import { primaryToolHrefs } from '@/lib/tools/tool-metadata';
 
 describe('locale layout PWA metadata', () => {
   it('exposes manifest and apple web app metadata', async () => {
@@ -71,5 +72,12 @@ describe('locale layout PWA metadata', () => {
 
   it('exposes the PWA theme color through viewport metadata', () => {
     expect(viewport.themeColor).toBe('#0a0a0c');
+  });
+
+  it('does not point primary tool journeys at missing documentation routes', () => {
+    expect(primaryToolHrefs).not.toContain('/docs');
+    expect(primaryToolHrefs).toContain('/image/compress');
+    expect(primaryToolHrefs).toContain('/pdf/merge');
+    expect(primaryToolHrefs).toContain('/font');
   });
 });

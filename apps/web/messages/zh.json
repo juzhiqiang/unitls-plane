@@ -39,9 +39,14 @@
     "hero": {
       "titleLine1": "你的桌面",
       "titleLine2": "工具箱",
-      "subtitle": "图片压缩、PDF处理、字体转换。所有操作在浏览器本地完成，保护你的隐私。",
+      "subtitle": "图片压缩、PDF 处理、字体转换。清楚区分本地优先和服务端处理路径。",
       "ctaPrimary": "开始使用",
-      "ctaSecondary": "查看文档"
+      "ctaSecondary": "合并 PDF"
+    },
+    "tools": {
+      "heading": "直接进入真实工具",
+      "description": "高频工作流在首屏就能开始，不需要先读宣传页。",
+      "recovery": "处理失败后可重试、更换文件或查看任务记录。"
     },
     "features": {
       "label": "功能",
@@ -67,8 +72,8 @@
         "description": "客户端处理，原地上传无需等待"
       },
       "privacy": {
-        "title": "隐私保护",
-        "description": "文件仅在浏览器中处理，不上传服务器"
+        "title": "处理透明",
+        "description": "每个工具都会说明文件留在本地、上传服务端，或是否需要登录"
       },
       "free": {
         "title": "免费使用",
@@ -76,9 +81,9 @@
       }
     },
     "cta": {
-      "heading": "立即开始使用",
-      "description": "无需注册，直接使用。所有功能免费，隐私保护无忧。",
-      "button": "立即体验"
+      "heading": "进入工作台",
+      "description": "从工具继续到文件、任务记录和失败恢复路径，不丢上下文。",
+      "button": "打开仪表盘"
     }
   },
   "ToolShell": {
@@ -242,7 +247,7 @@
     "pwStrong": "强"
   },
   "AppLayout": {
-    "home": "首页",
+    "home": "仪表盘",
     "signIn": "登录",
     "logOut": "退出登录",
     "settings": "设置",
@@ -290,10 +295,55 @@
   },
   "Dashboard": {
     "title": "仪表盘",
-    "welcome": "欢迎使用 Utils Plane",
+    "welcome": "把当前文件、任务、恢复路径和高频工具放在一个工作台里。",
     "totalFiles": "文件总数",
     "activeTasks": "进行中的任务",
-    "completed": "已完成"
+    "completed": "已完成",
+    "sections": {
+      "quickTools": "快捷工具",
+      "quickToolsDescription": "不用经过宣传页，直接开始最高频的处理流程。",
+      "activeTasks": "进行中",
+      "failedTasks": "需要处理",
+      "storage": "保留规则",
+      "recentTasks": "最近任务",
+      "recentTasksDescription": "最近处理工作的当前状态。",
+      "recentFiles": "最近文件",
+      "recentFilesDescription": "最近上传或生成的文件。"
+    },
+    "empty": {
+      "activeTasks": "排队中和处理中任务会出现在这里。",
+      "failedTasks": "失败任务会在这里给出恢复入口。",
+      "storageTitle": "暂无存储汇总",
+      "storage": "后续可通过 dashboard 汇总接口展示精确配额和成功率。",
+      "recentTasks": "暂无任务。处理文件后会显示在这里。",
+      "recentFiles": "暂无文件。上传或处理文件后会显示在这里。"
+    },
+    "actions": {
+      "viewTasks": "查看任务",
+      "viewFiles": "查看文件"
+    },
+    "statuses": {
+      "pending": "等待中",
+      "processing": "处理中",
+      "completed": "完成",
+      "failed": "失败"
+    },
+    "taskTypes": {
+      "compress": "图片压缩",
+      "convert": "图片转换",
+      "pdf_merge": "PDF 合并",
+      "pdf_split": "PDF 拆分",
+      "pdf_to_image": "PDF 转图片",
+      "pdf_to_text": "PDF 转文本",
+      "image_to_pdf": "图片转 PDF",
+      "pdf_rotate": "PDF 旋转",
+      "pdf_watermark": "PDF 水印",
+      "pdf_encrypt": "PDF 加密",
+      "pdf_compress": "PDF 压缩",
+      "pdf_metadata": "PDF 元数据",
+      "pdf_rearrange": "PDF 重排",
+      "font_convert": "字体转换"
+    }
   },
   "ImageTool": {
     "title": "图片工具",

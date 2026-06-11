@@ -81,6 +81,131 @@
       "button": "立即体验"
     }
   },
+  "ToolShell": {
+    "catalogRecovery": "处理失败后可重试、更换文件或查看任务记录。",
+    "steps": {
+      "upload": "上传",
+      "configure": "配置",
+      "processing": "处理中",
+      "result": "结果"
+    },
+    "trust": {
+      "labels": {
+        "processing": "处理位置",
+        "retention": "保留规则",
+        "login": "登录要求",
+        "recovery": "恢复方式"
+      },
+      "processing": {
+        "local": "本地处理",
+        "local-first": "本地优先，可切到服务端",
+        "server": "服务端处理"
+      },
+      "retention": {
+        "browser-session": "仅保留在当前浏览器会话",
+        "server-24h": "24 小时后删除",
+        "account-files": "保存到账号文件"
+      },
+      "login": {
+        "required": "需要登录",
+        "notRequired": "无需登录"
+      }
+    },
+    "failure": {
+      "title": "处理失败",
+      "retry": "重试",
+      "replaceFile": "更换文件"
+    }
+  },
+  "ToolCatalog": {
+    "recommended": "推荐",
+    "categories": {
+      "imageOptimize": "优化",
+      "imageOptimizeDescription": "在保持视觉质量的同时降低文件大小。",
+      "imageConvert": "转换",
+      "imageConvertDescription": "在浏览器中完成图片格式互转。",
+      "imageBatch": "批量",
+      "imageBatchDescription": "一次处理多张图片，并打包下载结果。",
+      "imagePreview": "预览",
+      "imagePreviewDescription": "保存前对比原图和处理结果。",
+      "pdfOrganize": "整理",
+      "pdfOrganizeDescription": "合并、拆分、重排和旋转页面。",
+      "pdfConvert": "转换",
+      "pdfConvertDescription": "在 PDF、图片、文本和元数据流程间转换。",
+      "pdfSecurity": "安全",
+      "pdfSecurityDescription": "添加密码、权限和可见归属标记。",
+      "pdfOptimize": "优化",
+      "pdfOptimizeDescription": "用明确质量档位降低 PDF 文件大小。",
+      "fontConvert": "字体转换",
+      "fontConvertDescription": "预览、子集化并转换字体文件。"
+    },
+    "tools": {
+      "imageCompress": {
+        "title": "图片压缩",
+        "description": "本地优先压缩 JPG、PNG、WebP 和 AVIF。"
+      },
+      "imageConvert": {
+        "title": "图片转换",
+        "description": "在浏览器中转换 JPEG、PNG、WebP 和 AVIF。"
+      },
+      "imageBatch": {
+        "title": "批量图片输出",
+        "description": "处理多张图片并下载一个 ZIP。"
+      },
+      "imageCompare": {
+        "title": "前后对比预览",
+        "description": "保留结果前检查视觉质量。"
+      },
+      "pdfMerge": {
+        "title": "合并 PDF",
+        "description": "按可控顺序合并多个 PDF 文件。"
+      },
+      "pdfSplit": {
+        "title": "拆分 PDF",
+        "description": "按范围、页码或固定间隔提取页面。"
+      },
+      "pdfRearrange": {
+        "title": "页面重排",
+        "description": "拖拽调整页面顺序或移除多余页面。"
+      },
+      "pdfRotate": {
+        "title": "旋转页面",
+        "description": "旋转全部或选中的 PDF 页面。"
+      },
+      "pdfFromImage": {
+        "title": "图片转 PDF",
+        "description": "将多张图片转成一个 PDF 文档。"
+      },
+      "pdfToImage": {
+        "title": "PDF 转图片",
+        "description": "将 PDF 页面导出为 PNG 或 JPEG。"
+      },
+      "pdfToText": {
+        "title": "PDF 转文本",
+        "description": "提取 Markdown 或纯文本内容。"
+      },
+      "pdfMetadata": {
+        "title": "编辑元数据",
+        "description": "查看并修改标题、作者和关键词。"
+      },
+      "pdfEncrypt": {
+        "title": "加密 PDF",
+        "description": "设置打开密码与权限控制。"
+      },
+      "pdfWatermark": {
+        "title": "添加水印",
+        "description": "为文档添加可见归属文字。"
+      },
+      "pdfCompress": {
+        "title": "压缩 PDF",
+        "description": "用明确质量档位降低 PDF 大小。"
+      },
+      "fontConvert": {
+        "title": "字体转换",
+        "description": "登录后转换 TTF、OTF、WOFF 和 WOFF2。"
+      }
+    }
+  },
   "Auth": {
     "loginTitle": "登录",
     "loginButton": "登录",

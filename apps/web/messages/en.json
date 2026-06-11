@@ -81,6 +81,131 @@
       "button": "Try it now"
     }
   },
+  "ToolShell": {
+    "catalogRecovery": "Retry, replace files, or review task history when processing fails.",
+    "steps": {
+      "upload": "Upload",
+      "configure": "Configure",
+      "processing": "Processing",
+      "result": "Result"
+    },
+    "trust": {
+      "labels": {
+        "processing": "Processing location",
+        "retention": "Retention",
+        "login": "Login requirement",
+        "recovery": "Recovery path"
+      },
+      "processing": {
+        "local": "Local processing",
+        "local-first": "Local first, server optional",
+        "server": "Server processing"
+      },
+      "retention": {
+        "browser-session": "Browser session only",
+        "server-24h": "Removed after 24 hours",
+        "account-files": "Saved to account files"
+      },
+      "login": {
+        "required": "Sign-in required",
+        "notRequired": "No sign-in required"
+      }
+    },
+    "failure": {
+      "title": "Processing failed",
+      "retry": "Retry",
+      "replaceFile": "Replace file"
+    }
+  },
+  "ToolCatalog": {
+    "recommended": "Recommended",
+    "categories": {
+      "imageOptimize": "Optimize",
+      "imageOptimizeDescription": "Reduce file size while keeping visual quality visible.",
+      "imageConvert": "Convert",
+      "imageConvertDescription": "Move between image formats without leaving the browser.",
+      "imageBatch": "Batch",
+      "imageBatchDescription": "Process multiple images and package the result as one download.",
+      "imagePreview": "Preview",
+      "imagePreviewDescription": "Compare original and result before saving.",
+      "pdfOrganize": "Organize",
+      "pdfOrganizeDescription": "Merge, split, reorder, and rotate pages.",
+      "pdfConvert": "Convert",
+      "pdfConvertDescription": "Move between PDF, image, text, and metadata workflows.",
+      "pdfSecurity": "Security",
+      "pdfSecurityDescription": "Apply passwords, permissions, and visible ownership marks.",
+      "pdfOptimize": "Optimize",
+      "pdfOptimizeDescription": "Reduce PDF file size with clear quality tradeoffs.",
+      "fontConvert": "Font conversion",
+      "fontConvertDescription": "Preview, subset, and convert font files."
+    },
+    "tools": {
+      "imageCompress": {
+        "title": "Image compression",
+        "description": "Compress JPG, PNG, WebP, and AVIF with local-first processing."
+      },
+      "imageConvert": {
+        "title": "Image conversion",
+        "description": "Convert JPEG, PNG, WebP, and AVIF in the browser."
+      },
+      "imageBatch": {
+        "title": "Batch image output",
+        "description": "Process many images and download a single ZIP."
+      },
+      "imageCompare": {
+        "title": "Before / after preview",
+        "description": "Check visual quality before keeping the result."
+      },
+      "pdfMerge": {
+        "title": "Merge PDF",
+        "description": "Combine multiple PDF files in a controlled order."
+      },
+      "pdfSplit": {
+        "title": "Split PDF",
+        "description": "Extract ranges, pages, or recurring chunks."
+      },
+      "pdfRearrange": {
+        "title": "Rearrange pages",
+        "description": "Drag pages into a new order or remove extras."
+      },
+      "pdfRotate": {
+        "title": "Rotate pages",
+        "description": "Rotate all or selected PDF pages."
+      },
+      "pdfFromImage": {
+        "title": "Image to PDF",
+        "description": "Turn multiple images into a PDF document."
+      },
+      "pdfToImage": {
+        "title": "PDF to image",
+        "description": "Export PDF pages as PNG or JPEG files."
+      },
+      "pdfToText": {
+        "title": "PDF to text",
+        "description": "Extract text as Markdown or plain text."
+      },
+      "pdfMetadata": {
+        "title": "Edit metadata",
+        "description": "Review and update title, author, and keyword fields."
+      },
+      "pdfEncrypt": {
+        "title": "Encrypt PDF",
+        "description": "Set an open password and permissions."
+      },
+      "pdfWatermark": {
+        "title": "Add watermark",
+        "description": "Apply visible ownership text across the document."
+      },
+      "pdfCompress": {
+        "title": "Compress PDF",
+        "description": "Reduce PDF size with explicit quality levels."
+      },
+      "fontConvert": {
+        "title": "Font conversion",
+        "description": "Convert TTF, OTF, WOFF, and WOFF2 after sign-in."
+      }
+    }
+  },
   "Auth": {
     "loginTitle": "Sign in",
     "loginButton": "Sign in",

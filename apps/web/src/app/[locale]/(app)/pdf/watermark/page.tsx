@@ -7,10 +7,14 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
 import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { authClient } from '@/lib/auth-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
 type WatermarkColor = { r: number; g: number; b: number };
@@ -96,6 +100,8 @@ function WatermarkPreview({
 
 export default function WatermarkPage() {
   const t = useTranslations('PdfTool');
+  const tShell = useTranslations('ToolShell');
+  const tool = getToolByHref('/pdf/watermark')!;
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pdf, setPdf] = useState<any>(null);
@@ -202,21 +208,41 @@ export default function WatermarkPage() {
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('watermark.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('watermark.description')}
-        </p>
-      </div>
+  const handleReset = () => {
+    setFile(null);
+    setPdf(null);
+    setPageCount(0);
+    setResult(null);
+    setError(null);
+    setTaskId(null);
+    setProcessing(false);
+  };
 
+  const stage = result
+    ? 'result'
+    : processing
+      ? 'processing'
+      : file
+        ? 'configure'
+        : 'upload';
+
+  return (
+    <ToolPageShell
+      title={t('watermark.title')}
+      description={t('watermark.description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       {!file && (
         <FileDropzone
           accept={{ 'application/pdf': ['.pdf'] }}
           maxSize={50 * 1024 * 1024}
           onDrop={handleDrop}
           hint="PDF"
+          processingLabel={tShell('trust.processing.server')}
         />
       )}
 
@@ -231,11 +257,7 @@ export default function WatermarkPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                setFile(null);
-                setPdf(null);
-                setResult(null);
-              }}
+              onClick={handleReset}
               className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
             >
               {t('watermark.changeFile')}
@@ -389,30 +411,24 @@ export default function WatermarkPage() {
       )}
 
       {processing && progress && (
-        <ProcessingProgress progress={progress.progress} />
+        <ProcessingProgress progress={progress.progress} stage="processing" />
       )}
 
       {error && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setTaskId(null);
-            }}
-            className="ml-3 underline hover:no-underline"
-          >
-            {t('retry')}
-          </button>
-        </div>
+        <FailureRecoveryPanel
+          message={error}
+          onRetry={handleStart}
+          onReset={handleReset}
+        />
       )}
 
       {result && (
-        <div className="flex justify-end">
-          <DownloadButton file={result} />
-        </div>
+        <ResultPanel
+          title={result.name}
+          description={tShell('result.ready')}
+          action={<DownloadButton file={result} />}
+        />
       )}
-    </div>
+    </ToolPageShell>
   );
 }

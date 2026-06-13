@@ -120,6 +120,10 @@
       "title": "处理失败",
       "retry": "重试",
       "replaceFile": "更换文件"
+    },
+    "result": {
+      "ready": "已生成，可下载。",
+      "filesReady": "{count} 个文件已生成，可下载。"
     }
   },
   "ToolCatalog": {

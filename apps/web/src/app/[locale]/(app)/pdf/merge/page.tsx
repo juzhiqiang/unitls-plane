@@ -7,13 +7,19 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { SortableFileList, type SortableFile } from '@/components/tools/sortable-file-list';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { authClient } from '@/lib/auth-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 
 export default function MergePage() {
   const t = useTranslations('PdfTool');
+  const tShell = useTranslations('ToolShell');
+  const tool = getToolByHref('/pdf/merge')!;
   const router = useRouter();
   const [files, setFiles] = useState<SortableFile[]>([]);
   const [outputFilename, setOutputFilename] = useState('merged.pdf');
@@ -96,15 +102,32 @@ export default function MergePage() {
     }
   };
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('merge.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('merge.description')}
-        </p>
-      </div>
+  const handleReset = () => {
+    setFiles([]);
+    setResult(null);
+    setError(null);
+    setTaskId(null);
+    setProcessing(false);
+  };
 
+  const stage = result
+    ? 'result'
+    : processing
+      ? 'processing'
+      : files.length > 0
+        ? 'configure'
+        : 'upload';
+
+  return (
+    <ToolPageShell
+      title={t('merge.title')}
+      description={t('merge.description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       <FileDropzone
         accept={{ 'application/pdf': ['.pdf'] }}
         maxSize={50 * 1024 * 1024}
@@ -112,6 +135,7 @@ export default function MergePage() {
         onDrop={handleDrop}
         disabled={processing}
         hint="PDF"
+        processingLabel={tShell('trust.processing.server')}
       />
 
       {files.length > 0 && (
@@ -148,27 +172,24 @@ export default function MergePage() {
       )}
 
       {processing && progress && (
-        <ProcessingProgress progress={progress.progress} />
+        <ProcessingProgress progress={progress.progress} stage="processing" />
       )}
 
       {error && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
-          <button
-            type="button"
-            onClick={() => { setError(null); setTaskId(null); }}
-            className="ml-3 underline hover:no-underline"
-          >
-            {t('retry')}
-          </button>
-        </div>
+        <FailureRecoveryPanel
+          message={error}
+          onRetry={handleMerge}
+          onReset={handleReset}
+        />
       )}
 
       {result && (
-        <div className="flex justify-end">
-          <DownloadButton file={result} />
-        </div>
+        <ResultPanel
+          title={result.name}
+          description={tShell('result.ready')}
+          action={<DownloadButton file={result} />}
+        />
       )}
-    </div>
+    </ToolPageShell>
   );
 }

@@ -9,11 +9,15 @@ import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
 import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
 import { ZipDownloadButton } from '@/components/tools/zip-download-button';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import { loadPdf, renderPdfPage } from '@/lib/processing/pdf-client';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { authClient } from '@/lib/auth-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
@@ -68,6 +72,8 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
 
 export default function SplitPage() {
   const t = useTranslations('PdfTool');
+  const tShell = useTranslations('ToolShell');
+  const tool = getToolByHref('/pdf/split')!;
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -193,21 +199,42 @@ export default function SplitPage() {
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('split.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('split.description')}
-        </p>
-      </div>
+  const handleReset = () => {
+    setFile(null);
+    setPdf(null);
+    setPageCount(0);
+    setSelectedPages(new Set());
+    setResults([]);
+    setError(null);
+    setTaskId(null);
+    setProcessing(false);
+  };
 
+  const stage = results.length > 0
+    ? 'result'
+    : processing
+      ? 'processing'
+      : file
+        ? 'configure'
+        : 'upload';
+
+  return (
+    <ToolPageShell
+      title={t('split.title')}
+      description={t('split.description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       {!file && (
         <FileDropzone
           accept={{ 'application/pdf': ['.pdf'] }}
           maxSize={50 * 1024 * 1024}
           onDrop={handleDrop}
           hint="PDF"
+          processingLabel={tShell('trust.processing.server')}
         />
       )}
 
@@ -222,7 +249,7 @@ export default function SplitPage() {
             </div>
             <button
               type="button"
-              onClick={() => { setFile(null); setPdf(null); }}
+              onClick={handleReset}
               className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
             >
               {t('split.changeFile')}
@@ -329,31 +356,34 @@ export default function SplitPage() {
       )}
 
       {processing && progress && (
-        <ProcessingProgress progress={progress.progress} />
+        <ProcessingProgress progress={progress.progress} stage="processing" />
       )}
 
       {error && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
-          <button
-            type="button"
-            onClick={() => { setError(null); setTaskId(null); }}
-            className="ml-3 underline hover:no-underline"
-          >
-            {t('retry')}
-          </button>
-        </div>
+        <FailureRecoveryPanel
+          message={error}
+          onRetry={handleSplit}
+          onReset={handleReset}
+        />
       )}
 
       {results.length > 0 && (
-        <div className="flex justify-end">
-          {results.length === 1 ? (
-            <DownloadButton file={results[0]!} />
-          ) : (
-            <ZipDownloadButton files={results} zipName="split-pages.zip" />
-          )}
-        </div>
+        <ResultPanel
+          title={results.length === 1 ? results[0]!.name : 'split-pages.zip'}
+          description={
+            results.length === 1
+              ? tShell('result.ready')
+              : tShell('result.filesReady', { count: results.length })
+          }
+          action={
+            results.length === 1 ? (
+              <DownloadButton file={results[0]!} />
+            ) : (
+              <ZipDownloadButton files={results} zipName="split-pages.zip" />
+            )
+          }
+        />
       )}
-    </div>
+    </ToolPageShell>
   );
 }

@@ -6,10 +6,14 @@ import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { authClient } from '@/lib/auth-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
 type CompressLevel = 'light' | 'medium' | 'heavy';
@@ -23,6 +27,8 @@ function formatBytes(n: number): string {
 
 export default function CompressPage() {
   const t = useTranslations('PdfTool');
+  const tShell = useTranslations('ToolShell');
+  const tool = getToolByHref('/pdf/compress')!;
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pdf, setPdf] = useState<any>(null);
@@ -147,21 +153,42 @@ export default function CompressPage() {
       ? ((1 - compressedSize / originalSize) * 100).toFixed(1)
       : null;
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('compress.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('compress.description')}
-        </p>
-      </div>
+  const handleReset = () => {
+    setFile(null);
+    setPdf(null);
+    setPageCount(0);
+    setResultFile(null);
+    setCompressedSize(null);
+    setError(null);
+    setTaskId(null);
+    setProcessing(false);
+  };
 
+  const stage = resultFile
+    ? 'result'
+    : processing
+      ? 'processing'
+      : file
+        ? 'configure'
+        : 'upload';
+
+  return (
+    <ToolPageShell
+      title={t('compress.title')}
+      description={t('compress.description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       {!file && (
         <FileDropzone
           accept={{ 'application/pdf': ['.pdf'] }}
           maxSize={50 * 1024 * 1024}
           onDrop={handleDrop}
           hint="PDF"
+          processingLabel={tShell('trust.processing.server')}
         />
       )}
 
@@ -176,12 +203,7 @@ export default function CompressPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                setFile(null);
-                setPdf(null);
-                setResultFile(null);
-                setCompressedSize(null);
-              }}
+              onClick={handleReset}
               className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
             >
               {t('compress.changeFile')}
@@ -246,60 +268,29 @@ export default function CompressPage() {
       )}
 
       {processing && progress && (
-        <ProcessingProgress progress={progress.progress} />
+        <ProcessingProgress progress={progress.progress} stage="processing" />
       )}
 
       {error && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setTaskId(null);
-            }}
-            className="ml-3 underline hover:no-underline"
-          >
-            {t('retry')}
-          </button>
-        </div>
+        <FailureRecoveryPanel
+          message={error}
+          onRetry={handleCompress}
+          onReset={handleReset}
+        />
       )}
 
       {resultFile && compressedSize !== null && (
-        <div className="space-y-4">
-          <div className="border border-border rounded-md p-4 space-y-3">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-                  {t('compress.originalSize')}
-                </p>
-                <p className="text-sm font-mono text-foreground mt-1 tabular-nums">
-                  {formatBytes(originalSize)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-                  {t('compress.compressedSize')}
-                </p>
-                <p className="text-sm font-mono text-foreground mt-1 tabular-nums">
-                  {formatBytes(compressedSize)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-                  {t('compress.saved')}
-                </p>
-                <p className="text-sm font-mono text-accent mt-1 tabular-nums">
-                  {savedPercent}%
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <DownloadButton file={resultFile} />
-          </div>
-        </div>
+        <ResultPanel
+          title={resultFile.name}
+          description={tShell('result.ready')}
+          meta={[
+            { label: t('compress.originalSize'), value: formatBytes(originalSize) },
+            { label: t('compress.compressedSize'), value: formatBytes(compressedSize) },
+            { label: t('compress.saved'), value: `${savedPercent}%` },
+          ]}
+          action={<DownloadButton file={resultFile} />}
+        />
       )}
-    </div>
+    </ToolPageShell>
   );
 }

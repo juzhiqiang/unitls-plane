@@ -7,10 +7,14 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { FontPreview } from '@/components/tools/font-preview';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { authClient } from '@/lib/auth-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { X } from 'lucide-react';
 
 type FontFormat = 'ttf' | 'otf' | 'woff' | 'woff2';
@@ -57,6 +61,8 @@ function FormatSegment({
 
 export default function FontPage() {
   const t = useTranslations('FontTool');
+  const tShell = useTranslations('ToolShell');
+  const tool = getToolByHref('/font')!;
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [toFormat, setToFormat] = useState<FontFormat>('woff2');
@@ -135,15 +141,24 @@ export default function FontPage() {
     setProcessing(false);
   };
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('description')}
-        </p>
-      </div>
+  const stage = result
+    ? 'result'
+    : processing
+      ? 'processing'
+      : file
+        ? 'configure'
+        : 'upload';
 
+  return (
+    <ToolPageShell
+      title={t('title')}
+      description={t('description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       {!file && (
         <FileDropzone
           accept={{
@@ -156,6 +171,7 @@ export default function FontPage() {
           maxSize={50 * 1024 * 1024}
           onDrop={(files) => setFile(files[0] ?? null)}
           hint={t('dropzoneHint')}
+          processingLabel={tShell('trust.processing.server')}
         />
       )}
 
@@ -213,6 +229,12 @@ export default function FontPage() {
               )}
             </div>
 
+            {!session && (
+              <p className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                {tShell('trust.login.required')}
+              </p>
+            )}
+
             <button
               type="button"
               onClick={handleConvert}
@@ -223,29 +245,26 @@ export default function FontPage() {
             </button>
 
             {processing && progress && (
-              <ProcessingProgress progress={progress.progress} />
+              <ProcessingProgress
+                progress={progress.progress}
+                stage="processing"
+              />
             )}
 
             {error && (
-              <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-                {error}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setTaskId(null);
-                  }}
-                  className="ml-3 underline hover:no-underline"
-                >
-                  {t('retry')}
-                </button>
-              </div>
+              <FailureRecoveryPanel
+                message={error}
+                onRetry={handleConvert}
+                onReset={handleReset}
+              />
             )}
 
             {result && (
-              <div className="flex justify-start">
-                <DownloadButton file={result} />
-              </div>
+              <ResultPanel
+                title={result.name}
+                description={tShell('result.ready')}
+                action={<DownloadButton file={result} />}
+              />
             )}
           </div>
 
@@ -255,6 +274,6 @@ export default function FontPage() {
           </div>
         </div>
       )}
-    </div>
+    </ToolPageShell>
   );
 }

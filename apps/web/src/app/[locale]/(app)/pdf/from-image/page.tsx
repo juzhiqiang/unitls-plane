@@ -7,10 +7,14 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { SortableFileList, type SortableFile } from '@/components/tools/sortable-file-list';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { authClient } from '@/lib/auth-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
 type PageSize = 'original' | 'a4' | 'letter';
@@ -25,6 +29,8 @@ const ACCEPTED_IMAGE_TYPES = [
 
 export default function FromImagePage() {
   const t = useTranslations('PdfTool');
+  const tShell = useTranslations('ToolShell');
+  const tool = getToolByHref('/pdf/from-image')!;
   const router = useRouter();
   const [files, setFiles] = useState<SortableFile[]>([]);
   const [pageSize, setPageSize] = useState<PageSize>('a4');
@@ -126,15 +132,32 @@ export default function FromImagePage() {
     { value: 'stretch', label: t('fromImage.fitStretch') },
   ];
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('fromImage.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('fromImage.description')}
-        </p>
-      </div>
+  const handleReset = () => {
+    setFiles([]);
+    setResult(null);
+    setError(null);
+    setTaskId(null);
+    setProcessing(false);
+  };
 
+  const stage = result
+    ? 'result'
+    : processing
+      ? 'processing'
+      : files.length > 0
+        ? 'configure'
+        : 'upload';
+
+  return (
+    <ToolPageShell
+      title={t('fromImage.title')}
+      description={t('fromImage.description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       <FileDropzone
         accept={{
           'image/png': ['.png'],
@@ -146,6 +169,7 @@ export default function FromImagePage() {
         onDrop={handleDrop}
         disabled={processing}
         hint="PNG / JPEG / WebP"
+        processingLabel={tShell('trust.processing.server')}
       />
 
       {files.length > 0 && (
@@ -232,27 +256,24 @@ export default function FromImagePage() {
       )}
 
       {processing && progress && (
-        <ProcessingProgress progress={progress.progress} />
+        <ProcessingProgress progress={progress.progress} stage="processing" />
       )}
 
       {error && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
-          <button
-            type="button"
-            onClick={() => { setError(null); setTaskId(null); }}
-            className="ml-3 underline hover:no-underline"
-          >
-            {t('retry')}
-          </button>
-        </div>
+        <FailureRecoveryPanel
+          message={error}
+          onRetry={handleConvert}
+          onReset={handleReset}
+        />
       )}
 
       {result && (
-        <div className="flex justify-end">
-          <DownloadButton file={result} />
-        </div>
+        <ResultPanel
+          title={result.name}
+          description={tShell('result.ready')}
+          action={<DownloadButton file={result} />}
+        />
       )}
-    </div>
+    </ToolPageShell>
   );
 }

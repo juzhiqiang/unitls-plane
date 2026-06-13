@@ -14,19 +14,26 @@ import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ImageCompare } from '@/components/tools/image-compare';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import {
   convertImageFormat,
   type ImageOutputType,
 } from '@/lib/processing/image-convert-client';
 import { shouldProcessLocally } from '@/lib/processing/image-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 
 export default function ConvertPage() {
   const t = useTranslations('ImageConvert');
+  const tShell = useTranslations('ToolShell');
+  const tShared = useTranslations('ToolsShared');
   const tUnits = useTranslations('Common.units');
   const locale = useLocale();
+  const tool = getToolByHref('/image/convert')!;
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [resultFile, setResultFile] = useState<File | null>(null);
   const [options, setOptions] = useState<ImageConvertOptionsState>({
@@ -130,22 +137,33 @@ export default function ConvertPage() {
 
   const serverProgress = taskQuery.data?.progress ?? 0;
   const currentProgress = mode === 'local' ? progress : serverProgress;
+  const stage = resultFile
+    ? 'result'
+    : processing
+      ? 'processing'
+      : originalFile
+        ? 'configure'
+        : 'upload';
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('description')}
-        </p>
-      </div>
-
+    <ToolPageShell
+      title={t('title')}
+      description={t('description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       <FileDropzone
         accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
         maxSize={50 * 1024 * 1024}
         onDrop={handleDrop}
         disabled={processing}
         hint={t('dropzoneHint')}
+        processingLabel={
+          mode === 'local' ? tShared('mode.local') : tShared('mode.server')
+        }
       />
 
       {originalFile && (
@@ -181,20 +199,44 @@ export default function ConvertPage() {
         </div>
       )}
 
-      {processing && <ProcessingProgress progress={currentProgress} />}
+      {processing && (
+        <ProcessingProgress progress={currentProgress} stage="processing" />
+      )}
 
       {error && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {error}
-        </div>
+        <FailureRecoveryPanel
+          message={error}
+          onRetry={handleProcess}
+          onReset={() => {
+            setOriginalFile(null);
+            setResultFile(null);
+            setError(null);
+            setTaskId(null);
+            setProgress(0);
+          }}
+        />
       )}
 
       {resultFile && originalFile && (
         <div className="space-y-6">
           <ImageCompare original={originalFile} result={resultFile} />
-          <DownloadButton file={resultFile} />
+          <ResultPanel
+            title={resultFile.name}
+            description={tShell('result.ready')}
+            meta={[
+              {
+                label: tShared('compare.original'),
+                value: formatBytes(originalFile.size, tUnits, locale),
+              },
+              {
+                label: tShared('compare.result'),
+                value: formatBytes(resultFile.size, tUnits, locale),
+              },
+            ]}
+            action={<DownloadButton file={resultFile} />}
+          />
         </div>
       )}
-    </div>
+    </ToolPageShell>
   );
 }

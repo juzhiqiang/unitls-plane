@@ -120,6 +120,10 @@
       "title": "Processing failed",
       "retry": "Retry",
       "replaceFile": "Replace file"
+    },
+    "result": {
+      "ready": "Ready to download.",
+      "filesReady": "{count} files ready to download."
     }
   },
   "ToolCatalog": {

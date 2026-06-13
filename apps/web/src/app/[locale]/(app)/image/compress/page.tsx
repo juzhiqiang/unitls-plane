@@ -19,10 +19,14 @@ import { ImageCompare } from '@/components/tools/image-compare';
 import { DownloadButton } from '@/components/tools/download-button';
 import { ZipDownloadButton } from '@/components/tools/zip-download-button';
 import { FileList, type FileItem } from '@/components/tools/file-list';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
 import {
   compressImage,
   shouldProcessLocally,
 } from '@/lib/processing/image-client';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 
@@ -93,6 +97,9 @@ async function processOnServer(
 
 export default function CompressPage() {
   const t = useTranslations('ImageCompress');
+  const tShell = useTranslations('ToolShell');
+  const tShared = useTranslations('ToolsShared');
+  const tool = getToolByHref('/image/compress')!;
   const [items, setItems] = useState<FileItem[]>([]);
   const [options, setOptions] = useState<ImageCompressOptionsState>({
     quality: 80,
@@ -242,16 +249,24 @@ export default function CompressPage() {
     .filter((it) => it.status === 'done' && it.result)
     .map((it) => it.result as File);
   const hasAnyResult = successResults.length > 0;
+  const stage = hasAnyResult
+    ? 'result'
+    : processing
+      ? 'processing'
+      : items.length > 0
+        ? 'configure'
+        : 'upload';
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-lg font-medium">{t('title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('description')}
-        </p>
-      </div>
-
+    <ToolPageShell
+      title={t('title')}
+      description={t('description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
       <FileDropzone
         accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
         maxSize={50 * 1024 * 1024}
@@ -259,6 +274,9 @@ export default function CompressPage() {
         onDrop={handleDrop}
         disabled={processing}
         hint={t('dropzoneHint')}
+        processingLabel={
+          mode === 'local' ? tShared('mode.local') : tShared('mode.server')
+        }
       />
 
       {items.length > 0 && (
@@ -297,12 +315,20 @@ export default function CompressPage() {
         </div>
       )}
 
-      {processing && <ProcessingProgress progress={progress} />}
+      {processing && (
+        <ProcessingProgress progress={progress} stage="processing" />
+      )}
 
       {globalError && (
-        <div className="text-xs font-mono text-destructive p-3 border border-destructive/30 rounded-md">
-          {globalError}
-        </div>
+        <FailureRecoveryPanel
+          message={globalError}
+          onRetry={handleProcess}
+          onReset={() => {
+            setItems([]);
+            setGlobalError(null);
+            setProgress(0);
+          }}
+        />
       )}
 
       {hasAnyResult && (
@@ -314,18 +340,30 @@ export default function CompressPage() {
             />
           )}
 
-          <div className="flex justify-end">
-            {successResults.length === 1 ? (
-              <DownloadButton file={successResults[0]!} />
-            ) : (
-              <ZipDownloadButton
-                files={successResults}
-                zipName={`compressed-${successResults.length}-files.zip`}
-              />
-            )}
-          </div>
+          <ResultPanel
+            title={
+              successResults.length === 1
+                ? successResults[0]!.name
+                : `compressed-${successResults.length}-files.zip`
+            }
+            description={
+              successResults.length === 1
+                ? tShell('result.ready')
+                : tShell('result.filesReady', { count: successResults.length })
+            }
+            action={
+              successResults.length === 1 ? (
+                <DownloadButton file={successResults[0]!} />
+              ) : (
+                <ZipDownloadButton
+                  files={successResults}
+                  zipName={`compressed-${successResults.length}-files.zip`}
+                />
+              )
+            }
+          />
         </div>
       )}
-    </div>
+    </ToolPageShell>
   );
 }

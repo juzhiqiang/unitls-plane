@@ -27,9 +27,9 @@ export default function DashboardPage() {
 
   const tasks = tasksQuery.data?.tasks ?? [];
   const files = filesQuery.data?.files ?? [];
-  const failedTasks = tasks.filter((task) => task.status === 'failed');
+  const failedTasks = tasks.filter(task => task.status === 'failed');
   const activeTasks = tasks.filter(
-    (task) => task.status === 'pending' || task.status === 'processing',
+    task => task.status === 'pending' || task.status === 'processing'
   );
 
   const recommendedGroup = [
@@ -48,13 +48,20 @@ export default function DashboardPage() {
       <section className="grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-3">
         <div className="bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
-            <History className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            <History
+              className="h-4 w-4 text-muted-foreground"
+              strokeWidth={1.5}
+            />
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               {t('sections.activeTasks')}
             </span>
           </div>
-          <p className="text-2xl font-medium tabular-nums">{activeTasks.length}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{t('empty.activeTasks')}</p>
+          <p className="text-2xl font-medium tabular-nums">
+            {activeTasks.length}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('empty.activeTasks')}
+          </p>
         </div>
         <div className="bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
@@ -66,8 +73,12 @@ export default function DashboardPage() {
               {t('sections.failedTasks')}
             </span>
           </div>
-          <p className="text-2xl font-medium tabular-nums">{failedTasks.length}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{t('empty.failedTasks')}</p>
+          <p className="text-2xl font-medium tabular-nums">
+            {failedTasks.length}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('empty.failedTasks')}
+          </p>
         </div>
         <div className="bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
@@ -80,7 +91,9 @@ export default function DashboardPage() {
             </span>
           </div>
           <p className="text-sm font-medium">{t('empty.storageTitle')}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{t('empty.storage')}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('empty.storage')}
+          </p>
         </div>
       </section>
 
@@ -108,7 +121,7 @@ export default function DashboardPage() {
               </p>
             ) : (
               <div className="divide-y divide-border">
-                {tasks.map((task) => (
+                {tasks.map(task => (
                   <div
                     key={task.id}
                     className="grid grid-cols-[1fr_auto] gap-3 p-3 text-sm"
@@ -152,12 +165,15 @@ export default function DashboardPage() {
               </p>
             ) : (
               <div className="divide-y divide-border">
-                {files.map((file) => (
+                {files.map(file => (
                   <div
                     key={file.id}
                     className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-3 text-sm"
                   >
-                    <FileText className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                    <FileText
+                      className="h-4 w-4 text-muted-foreground"
+                      strokeWidth={1.5}
+                    />
                     <div className="min-w-0">
                       <p className="truncate font-medium">{file.filename}</p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">

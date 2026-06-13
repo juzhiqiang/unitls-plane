@@ -21,7 +21,7 @@ export function ResultPanel({
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
           {meta.length > 0 && (
             <dl className="mt-3 grid gap-2 sm:grid-cols-3">
-              {meta.map((item) => (
+              {meta.map(item => (
                 <div key={item.label}>
                   <dt className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {item.label}

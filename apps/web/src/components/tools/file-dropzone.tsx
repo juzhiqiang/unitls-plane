@@ -54,7 +54,7 @@ export function FileDropzone({
           'cursor-pointer transition-colors',
           'hover:bg-muted/40',
           isDragActive && 'bg-muted/60 border-accent',
-          disabled && 'opacity-50 cursor-not-allowed',
+          disabled && 'opacity-50 cursor-not-allowed'
         )}
       >
         <input {...getInputProps()} />
@@ -74,7 +74,7 @@ export function FileDropzone({
         <div className="mt-3 text-xs text-destructive font-mono">
           {fileRejections.map(({ file, errors }) => (
             <div key={file.name}>
-              {file.name}: {errors.map((e) => e.message).join(', ')}
+              {file.name}: {errors.map(e => e.message).join(', ')}
             </div>
           ))}
         </div>

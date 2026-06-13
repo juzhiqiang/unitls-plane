@@ -1,6 +1,12 @@
 'use client';
 
-import { Clock3, LockKeyhole, RotateCcw, Server, ShieldCheck } from 'lucide-react';
+import {
+  Clock3,
+  LockKeyhole,
+  RotateCcw,
+  Server,
+  ShieldCheck,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { ToolProcessing, ToolRetention } from '@/lib/tools/tool-metadata';
 
@@ -47,7 +53,7 @@ export function ToolTrustStrip({
     <dl
       className={`grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 xl:grid-cols-4 ${className ?? ''}`}
     >
-      {items.map((item) => (
+      {items.map(item => (
         <div key={item.label} className="bg-card px-3 py-3">
           <dt className="sr-only">{item.term}</dt>
           <dd className="flex items-start gap-2 text-xs text-muted-foreground">

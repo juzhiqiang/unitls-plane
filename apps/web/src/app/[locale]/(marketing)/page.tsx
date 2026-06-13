@@ -1,14 +1,11 @@
-import { Link } from "@/i18n/navigation";
-import { Metadata } from "next";
-import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Button } from "@/components/ui/button";
-import { PointerSpotlight } from "@/components/effects/pointer-spotlight";
-import { ToolCatalogGrid } from "@/components/tools/tool-catalog-grid";
-import { ToolTrustStrip } from "@/components/tools/tool-trust-strip";
-import {
-  recommendedTools,
-  type ToolGroup,
-} from "@/lib/tools/tool-metadata";
+import { Link } from '@/i18n/navigation';
+import { Metadata } from 'next';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { Button } from '@/components/ui/button';
+import { PointerSpotlight } from '@/components/effects/pointer-spotlight';
+import { ToolCatalogGrid } from '@/components/tools/tool-catalog-grid';
+import { ToolTrustStrip } from '@/components/tools/tool-trust-strip';
+import { recommendedTools, type ToolGroup } from '@/lib/tools/tool-metadata';
 
 export async function generateMetadata({
   params,
@@ -16,15 +13,15 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "Common.meta" });
+  const t = await getTranslations({ locale, namespace: 'Common.meta' });
 
   return {
-    title: t("title"),
-    description: t("description"),
+    title: t('title'),
+    description: t('description'),
     openGraph: {
-      title: t("title"),
-      description: t("ogDescription"),
-      type: "website",
+      title: t('title'),
+      description: t('ogDescription'),
+      type: 'website',
     },
   };
 }
@@ -37,13 +34,13 @@ export default async function MarketingPage({
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const t = await getTranslations("Marketing");
+  const t = await getTranslations('Marketing');
 
   const recommendedGroup = [
     {
-      key: "recommended",
-      titleKey: "Marketing.tools.heading",
-      descriptionKey: "Marketing.tools.description",
+      key: 'recommended',
+      titleKey: 'Marketing.tools.heading',
+      descriptionKey: 'Marketing.tools.description',
       tools: recommendedTools,
     },
   ] satisfies ToolGroup[];
@@ -65,20 +62,21 @@ export default async function MarketingPage({
               <div className="max-w-2xl">
                 <div className="mb-5 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />
-                  <span className="text-accent">01</span> / 03 - {t("hero.titleLine1")}
+                  <span className="text-accent">01</span> / 03 -{' '}
+                  {t('hero.titleLine1')}
                 </div>
                 <h1 className="text-4xl font-medium leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
-                  {t("hero.titleLine1")}
+                  {t('hero.titleLine1')}
                   <br />
-                  <span className="text-accent">{t("hero.titleLine2")}</span>
+                  <span className="text-accent">{t('hero.titleLine2')}</span>
                 </h1>
                 <p className="mt-6 max-w-xl text-base text-muted-foreground sm:text-lg">
-                  {t("hero.subtitle")}
+                  {t('hero.subtitle')}
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
                   <Link href="/image/compress">
                     <Button size="lg" className="h-11 w-full px-6 sm:w-auto">
-                      {t("hero.ctaPrimary")}
+                      {t('hero.ctaPrimary')}
                     </Button>
                   </Link>
                   <Link href="/pdf/merge">
@@ -87,7 +85,7 @@ export default async function MarketingPage({
                       size="lg"
                       className="h-11 w-full px-6 sm:w-auto"
                     >
-                      {t("hero.ctaSecondary")}
+                      {t('hero.ctaSecondary')}
                     </Button>
                   </Link>
                 </div>
@@ -98,7 +96,7 @@ export default async function MarketingPage({
                   processing="local-first"
                   retention="browser-session"
                   requiresLogin={false}
-                  recovery={t("tools.recovery")}
+                  recovery={t('tools.recovery')}
                 />
                 <ToolCatalogGrid groups={recommendedGroup} />
               </div>
@@ -110,13 +108,14 @@ export default async function MarketingPage({
       <section className="border-t border-border py-14 sm:py-20">
         <div className="container-main">
           <div className="mb-4 font-mono text-sm text-muted-foreground">
-            <span className="text-accent">02</span> / 03 - {t("highlights.label")}
+            <span className="text-accent">02</span> / 03 -{' '}
+            {t('highlights.label')}
           </div>
           <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-3">
-            {["performance", "privacy", "free"].map((key, index) => (
+            {['performance', 'privacy', 'free'].map((key, index) => (
               <div key={key} className="bg-card p-5">
                 <div className="mb-4 font-mono text-[11px] tabular-nums text-muted-foreground">
-                  {String(index + 1).padStart(2, "0")}
+                  {String(index + 1).padStart(2, '0')}
                 </div>
                 <h2 className="text-base font-medium">
                   {t(`highlights.${key}.title`)}
@@ -138,15 +137,15 @@ export default async function MarketingPage({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-medium tracking-tight md:text-3xl">
-                {t("cta.heading")}
+                {t('cta.heading')}
               </h2>
               <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-                {t("cta.description")}
+                {t('cta.description')}
               </p>
             </div>
             <Link href="/dashboard">
               <Button size="lg" className="h-11 px-8">
-                {t("cta.button")}
+                {t('cta.button')}
               </Button>
             </Link>
           </div>

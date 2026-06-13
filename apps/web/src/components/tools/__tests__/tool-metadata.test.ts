@@ -8,12 +8,16 @@ import {
 
 describe('tool metadata', () => {
   it('keeps dashboard and marketing primary tool links pointed at real app routes', () => {
-    expect(primaryToolHrefs).toEqual(['/image/compress', '/pdf/merge', '/font']);
+    expect(primaryToolHrefs).toEqual([
+      '/image/compress',
+      '/pdf/merge',
+      '/font',
+    ]);
   });
 
   it('groups every PDF tool into a user intent category', () => {
-    const hrefs = groupedPdfTools.flatMap((group) =>
-      group.tools.map((tool) => tool.href)
+    const hrefs = groupedPdfTools.flatMap(group =>
+      group.tools.map(tool => tool.href)
     );
 
     expect(hrefs).toEqual([
@@ -37,6 +41,6 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap((group) => group.tools)).toHaveLength(4);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(4);
   });
 });

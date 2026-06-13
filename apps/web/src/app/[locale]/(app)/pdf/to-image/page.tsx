@@ -29,11 +29,13 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
   useEffect(() => {
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ renderPdfPage }) => {
-      renderPdfPage(pdf, pageNumber, 0.25).then((c) => {
+      renderPdfPage(pdf, pageNumber, 0.25).then(c => {
         if (!cancelled) setCanvas(c);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, pageNumber]);
 
   return (
@@ -44,7 +46,7 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
         'relative border bg-muted/20 p-1 transition-colors text-left',
         selected
           ? 'border-l-2 border-l-accent border-t-border border-r-border border-b-border'
-          : 'border-border hover:bg-muted/40',
+          : 'border-border hover:bg-muted/40'
       )}
     >
       <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
@@ -55,7 +57,9 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
             className="w-full h-full object-contain"
           />
         ) : (
-          <span className="text-[9px] font-mono text-muted-foreground">...</span>
+          <span className="text-[9px] font-mono text-muted-foreground">
+            ...
+          </span>
         )}
       </div>
       <p className="text-[10px] font-mono text-center text-muted-foreground mt-1 tabular-nums">
@@ -88,22 +92,20 @@ export default function ToImagePage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
         const ext = format === 'jpeg' ? 'jpg' : 'png';
         const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
-        const outputName = pageCount === 1
-          ? `${baseName}.${ext}`
-          : `${baseName}-images.zip`;
-        const mimeType = pageCount === 1
-          ? `image/${format}`
-          : 'application/zip';
+        const outputName =
+          pageCount === 1 ? `${baseName}.${ext}` : `${baseName}-images.zip`;
+        const mimeType =
+          pageCount === 1 ? `image/${format}` : 'application/zip';
         setResult(new File([blob], outputName, { type: mimeType }));
       } catch (err) {
         setError((err as Error).message);
@@ -111,7 +113,7 @@ export default function ToImagePage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -122,18 +124,20 @@ export default function ToImagePage() {
     let cancelled = false;
 
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
       });
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -145,7 +149,7 @@ export default function ToImagePage() {
   }, []);
 
   const togglePage = (page: number) => {
-    setSelectedPages((prev) => {
+    setSelectedPages(prev => {
       const next = new Set(prev);
       if (next.has(page)) next.delete(page);
       else next.add(page);
@@ -176,7 +180,7 @@ export default function ToImagePage() {
       if (!selectAll && selectedPages.size > 0) {
         inputConfig.pages = Array.from(selectedPages)
           .sort((a, b) => a - b)
-          .map((p) => p - 1);
+          .map(p => p - 1);
       }
 
       const task = await createTask.mutateAsync({
@@ -255,7 +259,7 @@ export default function ToImagePage() {
                 {t('toImage.format')}
               </label>
               <div className="flex gap-2">
-                {(['png', 'jpeg'] as const).map((f) => (
+                {(['png', 'jpeg'] as const).map(f => (
                   <button
                     key={f}
                     type="button"
@@ -265,7 +269,7 @@ export default function ToImagePage() {
                       'px-4 h-9 text-sm font-mono border rounded-md transition-colors',
                       format === f
                         ? 'border-accent text-foreground bg-accent/10'
-                        : 'border-border text-muted-foreground hover:text-foreground',
+                        : 'border-border text-muted-foreground hover:text-foreground'
                     )}
                   >
                     {f.toUpperCase()}
@@ -284,7 +288,7 @@ export default function ToImagePage() {
                 max={600}
                 step={1}
                 value={dpi}
-                onChange={(e) => setDpi(Number(e.target.value))}
+                onChange={e => setDpi(Number(e.target.value))}
                 disabled={processing}
                 className="w-24 h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none tabular-nums disabled:opacity-50"
               />
@@ -300,7 +304,7 @@ export default function ToImagePage() {
                   min={1}
                   max={100}
                   value={quality}
-                  onChange={(e) => setQuality(Number(e.target.value))}
+                  onChange={e => setQuality(Number(e.target.value))}
                   disabled={processing}
                   className="w-24 h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none tabular-nums disabled:opacity-50"
                 />
@@ -316,7 +320,9 @@ export default function ToImagePage() {
                 disabled={processing}
                 className={cn(
                   'text-xs font-mono transition-colors',
-                  selectAll ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  selectAll
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {t('toImage.allPages')}
@@ -327,7 +333,9 @@ export default function ToImagePage() {
                 disabled={processing}
                 className={cn(
                   'text-xs font-mono transition-colors',
-                  !selectAll ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  !selectAll
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {t('toImage.selectedPages')}
@@ -340,15 +348,17 @@ export default function ToImagePage() {
                   {t('toImage.selectPages')}
                 </p>
                 <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-                  {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
-                    <PageThumb
-                      key={page}
-                      pdf={pdf}
-                      pageNumber={page}
-                      selected={selectedPages.has(page)}
-                      onToggle={togglePage}
-                    />
-                  ))}
+                  {Array.from({ length: pageCount }, (_, i) => i + 1).map(
+                    page => (
+                      <PageThumb
+                        key={page}
+                        pdf={pdf}
+                        pageNumber={page}
+                        selected={selectedPages.has(page)}
+                        onToggle={togglePage}
+                      />
+                    )
+                  )}
                 </div>
               </div>
             )}

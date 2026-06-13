@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { useTranslations } from "next-intl";
-import { Link, usePathname } from "@/i18n/navigation";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import { useTranslations } from 'next-intl';
+import { Link, usePathname } from '@/i18n/navigation';
+import { cn } from '@/lib/utils';
 import {
   Image,
   FileType,
@@ -11,20 +11,17 @@ import {
   FolderOpen,
   History,
   LayoutDashboard,
-} from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet";
-import { useSidebar } from "@/components/ui/sidebar";
+} from 'lucide-react';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { useSidebar } from '@/components/ui/sidebar';
 
 const navigation = [
-  { key: "dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { key: "imageTools", href: "/image", icon: Image },
-  { key: "pdfTools", href: "/pdf", icon: FileType },
-  { key: "fontTools", href: "/font", icon: Type },
-  { key: "myFiles", href: "/files", icon: FolderOpen },
-  { key: "taskHistory", href: "/tasks", icon: History },
+  { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { key: 'imageTools', href: '/image', icon: Image },
+  { key: 'pdfTools', href: '/pdf', icon: FileType },
+  { key: 'fontTools', href: '/font', icon: Type },
+  { key: 'myFiles', href: '/files', icon: FolderOpen },
+  { key: 'taskHistory', href: '/tasks', icon: History },
 ] as const;
 
 interface AppSidebarProps {
@@ -33,7 +30,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname();
-  const tNav = useTranslations("Nav");
+  const tNav = useTranslations('Nav');
   const { mobileOpen, setMobileOpen } = useSidebar();
 
   const NavContent = () => (
@@ -49,8 +46,9 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-2">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {navigation.map(item => {
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           const name = tNav(item.key);
           return (
             <Link
@@ -58,10 +56,10 @@ export function AppSidebar({ className }: AppSidebarProps) {
               href={item.href}
               onClick={() => setMobileOpen(false)}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 text-sm transition-colors relative min-h-11",
+                'flex items-center gap-3 px-3 py-2 text-sm transition-colors relative min-h-11',
                 isActive
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               )}
             >
               {isActive && (
@@ -88,7 +86,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
       {/* Desktop Sidebar */}
       <aside
         className={cn(
-          "hidden lg:flex fixed left-0 top-0 z-40 h-screen w-60 flex-col border-r border-border bg-card",
+          'hidden lg:flex fixed left-0 top-0 z-40 h-screen w-60 flex-col border-r border-border bg-card',
           className
         )}
       >

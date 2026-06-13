@@ -4,7 +4,10 @@ import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
-import { SortableFileList, type SortableFile } from '@/components/tools/sortable-file-list';
+import {
+  SortableFileList,
+  type SortableFile,
+} from '@/components/tools/sortable-file-list';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
@@ -46,42 +49,44 @@ export default function FromImagePage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
-        setResult(new File([blob], outputFilename, { type: 'application/pdf' }));
+        setResult(
+          new File([blob], outputFilename, { type: 'application/pdf' })
+        );
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
   });
 
   const handleDrop = useCallback((dropped: File[]) => {
-    const images = dropped.filter((f) => ACCEPTED_IMAGE_TYPES.includes(f.type));
+    const images = dropped.filter(f => ACCEPTED_IMAGE_TYPES.includes(f.type));
     if (images.length === 0) return;
 
-    const newFiles: SortableFile[] = images.map((file) => ({
+    const newFiles: SortableFile[] = images.map(file => ({
       id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       file,
     }));
-    setFiles((prev) => [...prev, ...newFiles]);
+    setFiles(prev => [...prev, ...newFiles]);
     setResult(null);
     setError(null);
   }, []);
 
   const handleRemove = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleConvert = async () => {
@@ -99,7 +104,7 @@ export default function FromImagePage() {
 
     try {
       const uploaded = await Promise.all(
-        files.map((f) => uploadFile.mutateAsync(f.file)),
+        files.map(f => uploadFile.mutateAsync(f.file))
       );
       const fileIds = uploaded.map((u: any) => u.id);
 
@@ -197,7 +202,7 @@ export default function FromImagePage() {
                       'px-3 h-9 text-sm font-mono border rounded-md transition-colors',
                       pageSize === value
                         ? 'border-accent text-foreground bg-accent/10'
-                        : 'border-border text-muted-foreground hover:text-foreground',
+                        : 'border-border text-muted-foreground hover:text-foreground'
                     )}
                   >
                     {label}
@@ -221,7 +226,7 @@ export default function FromImagePage() {
                       'px-3 h-9 text-sm font-mono border rounded-md transition-colors',
                       fit === value
                         ? 'border-accent text-foreground bg-accent/10'
-                        : 'border-border text-muted-foreground hover:text-foreground',
+                        : 'border-border text-muted-foreground hover:text-foreground'
                     )}
                   >
                     {label}
@@ -238,7 +243,7 @@ export default function FromImagePage() {
             <input
               type="text"
               value={outputFilename}
-              onChange={(e) => setOutputFilename(e.target.value)}
+              onChange={e => setOutputFilename(e.target.value)}
               disabled={processing}
               className="w-full h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none transition-colors disabled:opacity-50"
             />

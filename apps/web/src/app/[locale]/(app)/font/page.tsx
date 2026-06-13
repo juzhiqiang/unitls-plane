@@ -37,7 +37,7 @@ function FormatSegment({
 }) {
   return (
     <div className="flex border border-border rounded-md overflow-hidden">
-      {FORMATS.map((fmt) => (
+      {FORMATS.map(fmt => (
         <button
           key={fmt.value}
           type="button"
@@ -78,26 +78,24 @@ export default function FontPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
         const ext = toFormat === 'woff2' ? 'woff2' : toFormat;
         const baseName = file?.name.replace(/\.[^.]+$/, '') ?? 'converted';
-        setResult(
-          new File([blob], `${baseName}.${ext}`, { type: blob.type }),
-        );
+        setResult(new File([blob], `${baseName}.${ext}`, { type: blob.type }));
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -117,7 +115,9 @@ export default function FontPage() {
     setResult(null);
 
     try {
-      const uploaded = await uploadFile.mutateAsync(file) as unknown as { id: string };
+      const uploaded = (await uploadFile.mutateAsync(file)) as unknown as {
+        id: string;
+      };
       const task = await createTask.mutateAsync({
         type: 'font_convert',
         inputFileIds: [uploaded.id],
@@ -169,7 +169,7 @@ export default function FontPage() {
             'application/octet-stream': ['.ttf', '.otf', '.woff', '.woff2'],
           }}
           maxSize={50 * 1024 * 1024}
-          onDrop={(files) => setFile(files[0] ?? null)}
+          onDrop={files => setFile(files[0] ?? null)}
           hint={t('dropzoneHint')}
           processingLabel={tShell('trust.processing.server')}
         />
@@ -209,7 +209,7 @@ export default function FontPage() {
                 <input
                   type="checkbox"
                   checked={enableSubset}
-                  onChange={(e) => setEnableSubset(e.target.checked)}
+                  onChange={e => setEnableSubset(e.target.checked)}
                   disabled={processing}
                   className="h-3.5 w-3.5 rounded-sm border border-border bg-transparent checked:bg-accent checked:border-accent transition-colors"
                 />
@@ -220,7 +220,7 @@ export default function FontPage() {
               {enableSubset && (
                 <textarea
                   value={subsetText}
-                  onChange={(e) => setSubsetText(e.target.value)}
+                  onChange={e => setSubsetText(e.target.value)}
                   disabled={processing}
                   placeholder={t('subsetPlaceholder')}
                   rows={4}

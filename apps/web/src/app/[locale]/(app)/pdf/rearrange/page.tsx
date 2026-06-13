@@ -70,7 +70,7 @@ function SortablePageCard({
   useEffect(() => {
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ renderPdfPage }) => {
-      renderPdfPage(pdf, pageIndex + 1, 0.3).then((c) => {
+      renderPdfPage(pdf, pageIndex + 1, 0.3).then(c => {
         if (!cancelled) setCanvas(c);
       });
     });
@@ -86,15 +86,15 @@ function SortablePageCard({
       className={cn(
         'group relative border border-border bg-muted/20 p-1 select-none',
         'cursor-grab active:cursor-grabbing',
-        isDragging && 'opacity-50 shadow-lg z-10',
+        isDragging && 'opacity-50 shadow-lg z-10'
       )}
       {...attributes}
       {...listeners}
     >
       <button
         type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
+        onPointerDown={e => e.stopPropagation()}
+        onClick={e => {
           e.stopPropagation();
           onDelete(pageIndex);
         }}
@@ -104,7 +104,7 @@ function SortablePageCard({
           'bg-background/90 border border-border rounded-sm',
           'text-muted-foreground hover:text-destructive hover:border-destructive',
           'opacity-0 group-hover:opacity-100 transition-opacity',
-          'disabled:opacity-30 disabled:cursor-not-allowed',
+          'disabled:opacity-30 disabled:cursor-not-allowed'
         )}
         aria-label="Delete page"
       >
@@ -120,7 +120,9 @@ function SortablePageCard({
             draggable={false}
           />
         ) : (
-          <span className="text-[9px] font-mono text-muted-foreground">...</span>
+          <span className="text-[9px] font-mono text-muted-foreground">
+            ...
+          </span>
         )}
       </div>
       <p className="text-[10px] font-mono text-center text-muted-foreground mt-1 tabular-nums">
@@ -150,15 +152,15 @@ export default function RearrangePage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
@@ -171,7 +173,7 @@ export default function RearrangePage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -181,7 +183,7 @@ export default function RearrangePage() {
     if (!file) return;
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
@@ -199,7 +201,7 @@ export default function RearrangePage() {
   }, [pageCount]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -212,7 +214,7 @@ export default function RearrangePage() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setPageOrder((prev) => {
+    setPageOrder(prev => {
       const oldIdx = prev.indexOf(Number(active.id));
       const newIdx = prev.indexOf(Number(over.id));
       if (oldIdx === -1 || newIdx === -1) return prev;
@@ -221,11 +223,11 @@ export default function RearrangePage() {
   };
 
   const deletePage = (p: number) => {
-    setPageOrder((prev) => prev.filter((x) => x !== p));
+    setPageOrder(prev => prev.filter(x => x !== p));
   };
 
   const handleReverse = () => {
-    setPageOrder((prev) => [...prev].reverse());
+    setPageOrder(prev => [...prev].reverse());
   };
 
   const handleReset = () => {
@@ -330,7 +332,11 @@ export default function RearrangePage() {
             <button
               type="button"
               onClick={handleReset}
-              disabled={processing || (pageOrder.length === pageCount && pageOrder.every((v, i) => v === i))}
+              disabled={
+                processing ||
+                (pageOrder.length === pageCount &&
+                  pageOrder.every((v, i) => v === i))
+              }
               className="px-3 h-8 text-xs font-mono border border-border rounded-md text-muted-foreground hover:text-foreground hover:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('rearrange.reset')}
@@ -348,7 +354,7 @@ export default function RearrangePage() {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={pageOrder.map((p) => String(p))}
+                items={pageOrder.map(p => String(p))}
                 strategy={rectSortingStrategy}
               >
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">

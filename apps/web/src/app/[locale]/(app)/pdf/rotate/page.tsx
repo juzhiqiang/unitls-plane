@@ -27,17 +27,25 @@ interface PageThumbProps {
   onToggle: (page: number) => void;
 }
 
-function PageThumb({ pdf, pageNumber, selected, angle, onToggle }: PageThumbProps) {
+function PageThumb({
+  pdf,
+  pageNumber,
+  selected,
+  angle,
+  onToggle,
+}: PageThumbProps) {
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ renderPdfPage }) => {
-      renderPdfPage(pdf, pageNumber, 0.25).then((c) => {
+      renderPdfPage(pdf, pageNumber, 0.25).then(c => {
         if (!cancelled) setCanvas(c);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, pageNumber]);
 
   return (
@@ -48,7 +56,7 @@ function PageThumb({ pdf, pageNumber, selected, angle, onToggle }: PageThumbProp
         'relative border bg-muted/20 p-1 transition-colors text-left',
         selected
           ? 'border-l-2 border-l-accent border-t-border border-r-border border-b-border'
-          : 'border-border hover:bg-muted/40',
+          : 'border-border hover:bg-muted/40'
       )}
     >
       <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
@@ -59,7 +67,9 @@ function PageThumb({ pdf, pageNumber, selected, angle, onToggle }: PageThumbProp
             className="w-full h-full object-contain"
           />
         ) : (
-          <span className="text-[9px] font-mono text-muted-foreground">...</span>
+          <span className="text-[9px] font-mono text-muted-foreground">
+            ...
+          </span>
         )}
       </div>
       <p
@@ -93,11 +103,11 @@ export default function RotatePage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
@@ -110,7 +120,7 @@ export default function RotatePage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -121,25 +131,29 @@ export default function RotatePage() {
     let cancelled = false;
 
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
       });
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file]);
 
   // When switching to "All pages" tab, auto-select every page so submission stays valid.
   useEffect(() => {
     if (selectAll && pageCount > 0) {
-      setSelectedPages(new Set(Array.from({ length: pageCount }, (_, i) => i + 1)));
+      setSelectedPages(
+        new Set(Array.from({ length: pageCount }, (_, i) => i + 1))
+      );
     }
   }, [selectAll, pageCount]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -153,7 +167,7 @@ export default function RotatePage() {
   const togglePage = (page: number) => {
     // Clicking a page implicitly switches to manual selection mode.
     if (selectAll) setSelectAll(false);
-    setSelectedPages((prev) => {
+    setSelectedPages(prev => {
       const next = new Set(prev);
       if (next.has(page)) next.delete(page);
       else next.add(page);
@@ -183,7 +197,7 @@ export default function RotatePage() {
         angle,
         pages: Array.from(selectedPages)
           .sort((a, b) => a - b)
-          .map((p) => p - 1),
+          .map(p => p - 1),
       };
 
       const task = await createTask.mutateAsync({
@@ -263,7 +277,7 @@ export default function RotatePage() {
               {t('rotate.angle')}
             </label>
             <div className="flex gap-2">
-              {angleOptions.map((a) => (
+              {angleOptions.map(a => (
                 <button
                   key={a}
                   type="button"
@@ -273,7 +287,7 @@ export default function RotatePage() {
                     'px-4 h-9 text-sm font-mono border rounded-md transition-colors',
                     angle === a
                       ? 'border-accent text-foreground bg-accent/10'
-                      : 'border-border text-muted-foreground hover:text-foreground',
+                      : 'border-border text-muted-foreground hover:text-foreground'
                   )}
                 >
                   {a === 90
@@ -288,7 +302,7 @@ export default function RotatePage() {
 
           <div className="space-y-3">
             <div className="flex gap-4 border-b border-border">
-              {[true, false].map((all) => (
+              {[true, false].map(all => (
                 <button
                   key={String(all)}
                   type="button"
@@ -298,7 +312,7 @@ export default function RotatePage() {
                     'text-xs font-mono pb-2 transition-colors border-b-[1.5px] -mb-px',
                     selectAll === all
                       ? 'border-foreground text-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground',
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
                   )}
                 >
                   {all ? t('rotate.allPages') : t('rotate.selectedPages')}
@@ -311,16 +325,18 @@ export default function RotatePage() {
                 {t('rotate.selectPages')}
               </p>
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
-                  <PageThumb
-                    key={page}
-                    pdf={pdf}
-                    pageNumber={page}
-                    selected={selectedPages.has(page)}
-                    angle={angle}
-                    onToggle={togglePage}
-                  />
-                ))}
+                {Array.from({ length: pageCount }, (_, i) => i + 1).map(
+                  page => (
+                    <PageThumb
+                      key={page}
+                      pdf={pdf}
+                      pageNumber={page}
+                      selected={selectedPages.has(page)}
+                      angle={angle}
+                      onToggle={togglePage}
+                    />
+                  )
+                )}
               </div>
             </div>
           </div>

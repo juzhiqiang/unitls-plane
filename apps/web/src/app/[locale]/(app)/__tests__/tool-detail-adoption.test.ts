@@ -29,6 +29,6 @@ describe('tool detail shell adoption', () => {
       expect(source).toContain('FailureRecoveryPanel');
       expect(source).toContain('ResultPanel');
       expect(source).toContain(`getToolByHref('${href}')`);
-    },
+    }
   );
 });

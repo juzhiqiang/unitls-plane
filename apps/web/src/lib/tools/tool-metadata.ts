@@ -249,13 +249,13 @@ export const fontTools: ToolMeta[] = [
 ];
 
 function groupByCategory(tools: ToolMeta[]): ToolGroup[] {
-  const orderedKeys = Array.from(new Set(tools.map((tool) => tool.categoryKey)));
+  const orderedKeys = Array.from(new Set(tools.map(tool => tool.categoryKey)));
 
-  return orderedKeys.map((categoryKey) => ({
+  return orderedKeys.map(categoryKey => ({
     key: categoryKey.split('.').at(-1) ?? categoryKey,
     titleKey: categoryKey,
     descriptionKey: `${categoryKey}Description`,
-    tools: tools.filter((tool) => tool.categoryKey === categoryKey),
+    tools: tools.filter(tool => tool.categoryKey === categoryKey),
   }));
 }
 
@@ -263,8 +263,8 @@ export const imageToolGroups = groupByCategory(imageTools);
 export const groupedPdfTools = groupByCategory(pdfTools);
 export const fontToolGroups = groupByCategory(fontTools);
 export const allTools = [...imageTools, ...pdfTools, ...fontTools];
-export const recommendedTools = allTools.filter((tool) => tool.recommended);
+export const recommendedTools = allTools.filter(tool => tool.recommended);
 
 export function getToolByHref(href: string): ToolMeta | undefined {
-  return allTools.find((tool) => tool.href === href);
+  return allTools.find(tool => tool.href === href);
 }

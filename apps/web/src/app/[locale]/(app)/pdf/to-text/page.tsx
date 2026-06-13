@@ -31,11 +31,13 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
   useEffect(() => {
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ renderPdfPage }) => {
-      renderPdfPage(pdf, pageNumber, 0.25).then((c) => {
+      renderPdfPage(pdf, pageNumber, 0.25).then(c => {
         if (!cancelled) setCanvas(c);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, pageNumber]);
 
   return (
@@ -46,7 +48,7 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
         'relative border bg-muted/20 p-1 transition-colors text-left',
         selected
           ? 'border-l-2 border-l-accent border-t-border border-r-border border-b-border'
-          : 'border-border hover:bg-muted/40',
+          : 'border-border hover:bg-muted/40'
       )}
     >
       <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
@@ -57,7 +59,9 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
             className="w-full h-full object-contain"
           />
         ) : (
-          <span className="text-[9px] font-mono text-muted-foreground">...</span>
+          <span className="text-[9px] font-mono text-muted-foreground">
+            ...
+          </span>
         )}
       </div>
       <p className="text-[10px] font-mono text-center text-muted-foreground mt-1 tabular-nums">
@@ -93,11 +97,11 @@ export default function ToTextPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const text = await response.text();
@@ -105,14 +109,16 @@ export default function ToTextPage() {
         const ext = format === 'text' ? 'txt' : 'md';
         const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
         setResultText(text);
-        setResultFile(new File([blob], `${baseName}.${ext}`, { type: 'text/plain' }));
+        setResultFile(
+          new File([blob], `${baseName}.${ext}`, { type: 'text/plain' })
+        );
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -122,17 +128,19 @@ export default function ToTextPage() {
     if (!file) return;
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -145,7 +153,7 @@ export default function ToTextPage() {
   }, []);
 
   const togglePage = (page: number) => {
-    setSelectedPages((prev) => {
+    setSelectedPages(prev => {
       const next = new Set(prev);
       if (next.has(page)) next.delete(page);
       else next.add(page);
@@ -174,7 +182,7 @@ export default function ToTextPage() {
       if (!selectAll && selectedPages.size > 0) {
         inputConfig.pages = Array.from(selectedPages)
           .sort((a, b) => a - b)
-          .map((p) => p - 1);
+          .map(p => p - 1);
       }
 
       const task = await createTask.mutateAsync({
@@ -260,7 +268,7 @@ export default function ToTextPage() {
                 {t('toText.format')}
               </label>
               <div className="flex gap-2">
-                {(['markdown', 'text'] as const).map((f) => (
+                {(['markdown', 'text'] as const).map(f => (
                   <button
                     key={f}
                     type="button"
@@ -270,7 +278,7 @@ export default function ToTextPage() {
                       'px-4 h-9 text-sm font-mono border rounded-md transition-colors',
                       format === f
                         ? 'border-accent text-foreground bg-accent/10'
-                        : 'border-border text-muted-foreground hover:text-foreground',
+                        : 'border-border text-muted-foreground hover:text-foreground'
                     )}
                   >
                     {f === 'markdown' ? 'Markdown' : '.txt'}
@@ -295,7 +303,7 @@ export default function ToTextPage() {
                         'px-3 h-9 text-sm font-mono border rounded-md transition-colors',
                         pageBreak === value
                           ? 'border-accent text-foreground bg-accent/10'
-                          : 'border-border text-muted-foreground hover:text-foreground',
+                          : 'border-border text-muted-foreground hover:text-foreground'
                       )}
                     >
                       {label}
@@ -308,7 +316,7 @@ export default function ToTextPage() {
 
           <div className="space-y-3">
             <div className="flex gap-4 border-b border-border">
-              {[true, false].map((all) => (
+              {[true, false].map(all => (
                 <button
                   key={String(all)}
                   type="button"
@@ -318,7 +326,7 @@ export default function ToTextPage() {
                     'text-xs font-mono pb-2 transition-colors border-b-[1.5px] -mb-px',
                     selectAll === all
                       ? 'border-foreground text-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground',
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
                   )}
                 >
                   {all ? t('toText.allPages') : t('toText.selectedPages')}
@@ -332,15 +340,17 @@ export default function ToTextPage() {
                   {t('toText.selectPages')}
                 </p>
                 <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-                  {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
-                    <PageThumb
-                      key={page}
-                      pdf={pdf}
-                      pageNumber={page}
-                      selected={selectedPages.has(page)}
-                      onToggle={togglePage}
-                    />
-                  ))}
+                  {Array.from({ length: pageCount }, (_, i) => i + 1).map(
+                    page => (
+                      <PageThumb
+                        key={page}
+                        pdf={pdf}
+                        pageNumber={page}
+                        selected={selectedPages.has(page)}
+                        onToggle={togglePage}
+                      />
+                    )
+                  )}
                 </div>
               </div>
             )}

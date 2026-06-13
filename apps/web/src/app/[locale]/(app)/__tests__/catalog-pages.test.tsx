@@ -24,7 +24,7 @@ function renderWithIntl(ui: React.ReactElement) {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
       {ui}
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
 }
 
@@ -32,16 +32,21 @@ describe('tool catalog pages', () => {
   it('shows the image catalog as local-first grouped tool intents', () => {
     renderWithIntl(<ImagePage />);
 
-    expect(screen.getByText('Local first, server optional')).toBeInTheDocument();
+    expect(
+      screen.getByText('Local first, server optional')
+    ).toBeInTheDocument();
     expect(screen.getByText('Browser session only')).toBeInTheDocument();
     expect(screen.getByText('No sign-in required')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Optimize' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Convert' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Optimize' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Convert' })
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Batch' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Image compression/ })).toHaveAttribute(
-      'href',
-      expect.stringContaining('/image/compress'),
-    );
+    expect(
+      screen.getByRole('link', { name: /Image compression/ })
+    ).toHaveAttribute('href', expect.stringContaining('/image/compress'));
   });
 
   it('shows the PDF catalog as server-processed grouped tool intents', () => {
@@ -50,12 +55,18 @@ describe('tool catalog pages', () => {
     expect(screen.getByText('Server processing')).toBeInTheDocument();
     expect(screen.getByText('Saved to account files')).toBeInTheDocument();
     expect(screen.getByText('Sign-in required')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Organize' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Security' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Optimize' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Organize' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Security' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Optimize' })
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Merge PDF/ })).toHaveAttribute(
       'href',
-      expect.stringContaining('/pdf/merge'),
+      expect.stringContaining('/pdf/merge')
     );
   });
 });

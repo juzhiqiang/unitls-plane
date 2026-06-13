@@ -52,20 +52,21 @@ export default function ConvertPage() {
   const createTask = useCreateTask();
 
   const taskQuery = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' },
+        { credentials: 'include' }
       );
       const blob = await response.blob();
       const ext = options.toFormat.split('/')[1];
-      const newName = originalFile?.name.replace(/\.[^.]+$/, `.${ext}`) ?? `converted.${ext}`;
+      const newName =
+        originalFile?.name.replace(/\.[^.]+$/, `.${ext}`) ?? `converted.${ext}`;
       const file = new File([blob], newName, { type: blob.type });
       setResultFile(file);
       setProcessing(false);
       setTaskId(null);
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
       setTaskId(null);
@@ -107,7 +108,7 @@ export default function ConvertPage() {
         const result = await convertImageFormat(
           originalFile,
           options.toFormat as ImageOutputType,
-          options.quality / 100,
+          options.quality / 100
         );
         setProgress(100);
         setResultFile(result);

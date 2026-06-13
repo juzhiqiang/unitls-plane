@@ -37,7 +37,11 @@ export function ToolStepRail({ current, className }: ToolStepRailProps) {
                   active || done ? 'border-accent text-accent' : 'border-border'
                 }`}
               >
-                {done ? <Check className="h-3 w-3" strokeWidth={1.5} /> : index + 1}
+                {done ? (
+                  <Check className="h-3 w-3" strokeWidth={1.5} />
+                ) : (
+                  index + 1
+                )}
               </span>
               {t(stage)}
             </span>

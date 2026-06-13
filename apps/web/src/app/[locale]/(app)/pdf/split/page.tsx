@@ -35,10 +35,12 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
 
   useEffect(() => {
     let cancelled = false;
-    renderPdfPage(pdf, pageNumber, 0.25).then((c) => {
+    renderPdfPage(pdf, pageNumber, 0.25).then(c => {
       if (!cancelled) setCanvas(c);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, pageNumber]);
 
   return (
@@ -49,7 +51,7 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
         'relative border bg-muted/20 p-1 transition-colors text-left',
         selected
           ? 'border-l-2 border-l-accent border-t-border border-r-border border-b-border'
-          : 'border-border hover:bg-muted/40',
+          : 'border-border hover:bg-muted/40'
       )}
     >
       <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
@@ -60,7 +62,9 @@ function PageThumb({ pdf, pageNumber, selected, onToggle }: PageThumbProps) {
             className="w-full h-full object-contain"
           />
         ) : (
-          <span className="text-[9px] font-mono text-muted-foreground">...</span>
+          <span className="text-[9px] font-mono text-muted-foreground">
+            ...
+          </span>
         )}
       </div>
       <p className="text-[10px] font-mono text-center text-muted-foreground mt-1 tabular-nums">
@@ -93,11 +97,11 @@ export default function SplitPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
@@ -109,7 +113,7 @@ export default function SplitPage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -119,18 +123,20 @@ export default function SplitPage() {
     if (!file) return;
     let cancelled = false;
 
-    loadPdf(file).then((doc) => {
+    loadPdf(file).then(doc => {
       if (cancelled) return;
       setPdf(doc);
       setPageCount(doc.numPages);
       setRangeEnd(doc.numPages);
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -141,7 +147,7 @@ export default function SplitPage() {
   }, []);
 
   const togglePage = (page: number) => {
-    setSelectedPages((prev) => {
+    setSelectedPages(prev => {
       const next = new Set(prev);
       if (next.has(page)) next.delete(page);
       else next.add(page);
@@ -152,9 +158,15 @@ export default function SplitPage() {
   const getInputConfig = () => {
     switch (mode) {
       case 'ranges':
-        return { mode: 'ranges', ranges: [{ start: rangeStart, end: rangeEnd }] };
+        return {
+          mode: 'ranges',
+          ranges: [{ start: rangeStart, end: rangeEnd }],
+        };
       case 'pages':
-        return { mode: 'pages', pages: Array.from(selectedPages).sort((a, b) => a - b) };
+        return {
+          mode: 'pages',
+          pages: Array.from(selectedPages).sort((a, b) => a - b),
+        };
       case 'every':
         return { mode: 'every', everyN };
     }
@@ -164,7 +176,9 @@ export default function SplitPage() {
     if (!file || processing) return false;
     switch (mode) {
       case 'ranges':
-        return rangeStart >= 1 && rangeEnd <= pageCount && rangeStart <= rangeEnd;
+        return (
+          rangeStart >= 1 && rangeEnd <= pageCount && rangeStart <= rangeEnd
+        );
       case 'pages':
         return selectedPages.size > 0;
       case 'every':
@@ -210,13 +224,14 @@ export default function SplitPage() {
     setProcessing(false);
   };
 
-  const stage = results.length > 0
-    ? 'result'
-    : processing
-      ? 'processing'
-      : file
-        ? 'configure'
-        : 'upload';
+  const stage =
+    results.length > 0
+      ? 'result'
+      : processing
+        ? 'processing'
+        : file
+          ? 'configure'
+          : 'upload';
 
   return (
     <ToolPageShell
@@ -256,9 +271,9 @@ export default function SplitPage() {
             </button>
           </div>
 
-          <Tabs.Root value={mode} onValueChange={(v) => setMode(v as SplitMode)}>
+          <Tabs.Root value={mode} onValueChange={v => setMode(v as SplitMode)}>
             <Tabs.List className="flex gap-6 border-b border-border">
-              {(['ranges', 'pages', 'every'] as const).map((tab) => (
+              {(['ranges', 'pages', 'every'] as const).map(tab => (
                 <Tabs.Trigger
                   key={tab}
                   value={tab}
@@ -267,7 +282,7 @@ export default function SplitPage() {
                     'text-muted-foreground hover:text-foreground',
                     'data-[state=active]:text-foreground',
                     'after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px',
-                    'after:bg-transparent data-[state=active]:after:bg-accent',
+                    'after:bg-transparent data-[state=active]:after:bg-accent'
                   )}
                 >
                   {t(`split.modes.${tab}`)}
@@ -286,7 +301,7 @@ export default function SplitPage() {
                     min={1}
                     max={pageCount}
                     value={rangeStart}
-                    onChange={(e) => setRangeStart(Number(e.target.value))}
+                    onChange={e => setRangeStart(Number(e.target.value))}
                     className="w-20 h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none tabular-nums"
                   />
                 </div>
@@ -300,7 +315,7 @@ export default function SplitPage() {
                     min={1}
                     max={pageCount}
                     value={rangeEnd}
-                    onChange={(e) => setRangeEnd(Number(e.target.value))}
+                    onChange={e => setRangeEnd(Number(e.target.value))}
                     className="w-20 h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none tabular-nums"
                   />
                 </div>
@@ -312,15 +327,17 @@ export default function SplitPage() {
                 {t('split.selectPages')}
               </p>
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
-                  <PageThumb
-                    key={page}
-                    pdf={pdf}
-                    pageNumber={page}
-                    selected={selectedPages.has(page)}
-                    onToggle={togglePage}
-                  />
-                ))}
+                {Array.from({ length: pageCount }, (_, i) => i + 1).map(
+                  page => (
+                    <PageThumb
+                      key={page}
+                      pdf={pdf}
+                      pageNumber={page}
+                      selected={selectedPages.has(page)}
+                      onToggle={togglePage}
+                    />
+                  )
+                )}
               </div>
             </Tabs.Content>
 
@@ -334,7 +351,7 @@ export default function SplitPage() {
                   min={1}
                   max={pageCount}
                   value={everyN}
-                  onChange={(e) => setEveryN(Number(e.target.value))}
+                  onChange={e => setEveryN(Number(e.target.value))}
                   className="w-20 h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none tabular-nums"
                 />
               </div>

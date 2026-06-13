@@ -13,7 +13,7 @@ function renderWithIntl(ui: React.ReactElement) {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
       {ui}
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
 }
 
@@ -25,7 +25,7 @@ describe('tool experience components', () => {
         retention="account-files"
         requiresLogin
         recovery="Retry, replace file, or inspect task details."
-      />,
+      />
     );
 
     expect(screen.getByText('Server processing')).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe('tool experience components', () => {
     expect(screen.getByText('Configure')).toBeInTheDocument();
     expect(screen.getByText('Processing')).toHaveAttribute(
       'aria-current',
-      'step',
+      'step'
     );
     expect(screen.getByText('Result')).toBeInTheDocument();
   });
@@ -57,11 +57,11 @@ describe('tool experience components', () => {
             tools: imageTools.slice(0, 1),
           },
         ]}
-      />,
+      />
     );
 
     expect(
-      screen.getByRole('link', { name: /Image compression/ }),
+      screen.getByRole('link', { name: /Image compression/ })
     ).toHaveAttribute('href', expect.stringContaining('/image/compress'));
     expect(screen.getByText('Recommended')).toBeInTheDocument();
   });
@@ -76,13 +76,13 @@ describe('tool experience components', () => {
         errorCode="PDF_PARSE_FAILED"
         onRetry={retry}
         onReset={reset}
-      />,
+      />
     );
 
     expect(screen.getByText('PDF_PARSE_FAILED')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Replace file' }),
+      screen.getByRole('button', { name: 'Replace file' })
     ).toBeInTheDocument();
   });
 
@@ -96,11 +96,13 @@ describe('tool experience components', () => {
           { label: 'Result', value: '900 KB' },
         ]}
         action={<button type="button">Download</button>}
-      />,
+      />
     );
 
     expect(screen.getByText('compressed.png')).toBeInTheDocument();
     expect(screen.getByText('Original')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Download' })
+    ).toBeInTheDocument();
   });
 });

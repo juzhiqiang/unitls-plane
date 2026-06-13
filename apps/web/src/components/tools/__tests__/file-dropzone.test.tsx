@@ -15,7 +15,7 @@ function renderDropzone() {
         hint="JPG / PNG"
         processingLabel="Local first"
       />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
 }
 

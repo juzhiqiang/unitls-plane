@@ -20,11 +20,12 @@ import { cn } from '@/lib/utils';
 type WatermarkColor = { r: number; g: number; b: number };
 type WatermarkPosition = 'center' | 'diagonal';
 
-const COLOR_PRESETS: { key: 'gray' | 'red' | 'blue'; value: WatermarkColor }[] = [
-  { key: 'gray', value: { r: 0.5, g: 0.5, b: 0.5 } },
-  { key: 'red', value: { r: 0.8, g: 0.2, b: 0.2 } },
-  { key: 'blue', value: { r: 0.2, g: 0.4, b: 0.8 } },
-];
+const COLOR_PRESETS: { key: 'gray' | 'red' | 'blue'; value: WatermarkColor }[] =
+  [
+    { key: 'gray', value: { r: 0.5, g: 0.5, b: 0.5 } },
+    { key: 'red', value: { r: 0.8, g: 0.2, b: 0.2 } },
+    { key: 'blue', value: { r: 0.2, g: 0.4, b: 0.8 } },
+  ];
 
 function colorToCss(c: WatermarkColor): string {
   const r = Math.round(c.r * 255);
@@ -57,11 +58,13 @@ function WatermarkPreview({
   useEffect(() => {
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ renderPdfPage }) => {
-      renderPdfPage(pdf, 1, 0.5).then((c) => {
+      renderPdfPage(pdf, 1, 0.5).then(c => {
         if (!cancelled) setCanvas(c);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf]);
 
   return (
@@ -74,13 +77,13 @@ function WatermarkPreview({
         />
       ) : (
         <div className="w-[300px] aspect-[3/4] flex items-center justify-center">
-          <span className="text-[10px] font-mono text-muted-foreground">...</span>
+          <span className="text-[10px] font-mono text-muted-foreground">
+            ...
+          </span>
         </div>
       )}
       {canvas && text && (
-        <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden"
-        >
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
           <span
             className="font-bold whitespace-nowrap select-none"
             style={{
@@ -120,21 +123,23 @@ export default function WatermarkPage() {
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
-  const color = COLOR_PRESETS.find((p) => p.key === colorKey)!.value;
+  const color = COLOR_PRESETS.find(p => p.key === colorKey)!.value;
   const rotation = position === 'diagonal' ? -45 : 0;
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
         const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
         setResult(
-          new File([blob], `${baseName}-watermark.pdf`, { type: 'application/pdf' }),
+          new File([blob], `${baseName}-watermark.pdf`, {
+            type: 'application/pdf',
+          })
         );
       } catch (err) {
         setError((err as Error).message);
@@ -142,7 +147,7 @@ export default function WatermarkPage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -152,17 +157,19 @@ export default function WatermarkPage() {
     if (!file) return;
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -273,7 +280,7 @@ export default function WatermarkPage() {
                 <input
                   type="text"
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={e => setText(e.target.value)}
                   placeholder={t('watermark.textPlaceholder')}
                   disabled={processing}
                   className="w-full h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:border-accent focus:outline-none disabled:opacity-50"
@@ -290,7 +297,7 @@ export default function WatermarkPage() {
                   max={120}
                   step={1}
                   value={fontSize}
-                  onChange={(e) => {
+                  onChange={e => {
                     const n = Number(e.target.value);
                     if (Number.isFinite(n)) {
                       setFontSize(Math.max(24, Math.min(120, n)));
@@ -312,7 +319,7 @@ export default function WatermarkPage() {
                   max={0.5}
                   step={0.05}
                   value={opacity}
-                  onChange={(e) => setOpacity(Number(e.target.value))}
+                  onChange={e => setOpacity(Number(e.target.value))}
                   disabled={processing}
                   className="w-full accent-foreground disabled:opacity-50"
                 />
@@ -340,7 +347,7 @@ export default function WatermarkPage() {
                           'flex items-center gap-2 px-3 h-9 text-sm font-mono border rounded-md transition-colors',
                           colorKey === key
                             ? 'border-accent text-foreground bg-accent/10'
-                            : 'border-border text-muted-foreground hover:text-foreground',
+                            : 'border-border text-muted-foreground hover:text-foreground'
                         )}
                       >
                         <span
@@ -359,7 +366,7 @@ export default function WatermarkPage() {
                   {t('watermark.position')}
                 </label>
                 <div className="flex gap-2">
-                  {(['center', 'diagonal'] as const).map((p) => (
+                  {(['center', 'diagonal'] as const).map(p => (
                     <button
                       key={p}
                       type="button"
@@ -369,7 +376,7 @@ export default function WatermarkPage() {
                         'px-4 h-9 text-sm font-mono border rounded-md transition-colors',
                         position === p
                           ? 'border-accent text-foreground bg-accent/10'
-                          : 'border-border text-muted-foreground hover:text-foreground',
+                          : 'border-border text-muted-foreground hover:text-foreground'
                       )}
                     >
                       {p === 'center'

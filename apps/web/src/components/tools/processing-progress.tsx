@@ -3,7 +3,11 @@
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
-export type ProcessingStage = 'uploading' | 'queued' | 'processing' | 'generating';
+export type ProcessingStage =
+  | 'uploading'
+  | 'queued'
+  | 'processing'
+  | 'generating';
 
 export interface ProcessingProgressProps {
   progress: number;

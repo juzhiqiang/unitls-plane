@@ -69,7 +69,7 @@ function formatDuration(task: TaskResponseDto): string {
 }
 
 function formatConfigSummary(
-  config: Record<string, unknown> | null | undefined,
+  config: Record<string, unknown> | null | undefined
 ): ConfigSummaryItem[] {
   if (!config) return [];
 
@@ -151,7 +151,13 @@ function TypeLabel({ type }: { type: TaskType }) {
   );
 }
 
-function ProgressBar({ progress, status }: { progress: number; status: string }) {
+function ProgressBar({
+  progress,
+  status,
+}: {
+  progress: number;
+  status: string;
+}) {
   if (status === 'completed') return null;
   if (status === 'failed') return null;
   if (status === 'pending' && progress === 0) return null;
@@ -184,8 +190,11 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
             {task.inputFileIds.length} {t('inputFiles')}
           </p>
           <div className="flex flex-wrap gap-2">
-            {task.inputFileIds.map((id) => (
-              <span key={id} className="text-[11px] font-mono text-foreground/80">
+            {task.inputFileIds.map(id => (
+              <span
+                key={id}
+                className="text-[11px] font-mono text-foreground/80"
+              >
                 {id.slice(0, 8)}...
               </span>
             ))}
@@ -233,7 +242,7 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
             {t('parameterSummary')}
           </span>
           <dl className="grid gap-1">
-            {configSummary.map((item) => (
+            {configSummary.map(item => (
               <div
                 key={item.label}
                 className="grid gap-1 sm:grid-cols-[160px_1fr]"
@@ -277,7 +286,9 @@ export default function TasksPage() {
   const filteredTasks =
     typeFilter === 'all'
       ? tasks
-      : tasks.filter((t) => getTaskTypeCategory(t.type as TaskType) === typeFilter);
+      : tasks.filter(
+          t => getTaskTypeCategory(t.type as TaskType) === typeFilter
+        );
 
   const handleDownload = (task: TaskResponseDto) => {
     if (!task.outputFileId) return;
@@ -315,7 +326,7 @@ export default function TasksPage() {
       <div className="flex items-center gap-3 flex-wrap">
         {/* Status filter */}
         <div className="flex border border-border rounded-md overflow-hidden">
-          {STATUS_FILTERS.map((f) => (
+          {STATUS_FILTERS.map(f => (
             <button
               key={f.value}
               type="button"
@@ -339,7 +350,7 @@ export default function TasksPage() {
 
         {/* Type filter */}
         <div className="flex border border-border rounded-md overflow-hidden">
-          {TYPE_FILTERS.map((f) => (
+          {TYPE_FILTERS.map(f => (
             <button
               key={f.value}
               type="button"
@@ -395,7 +406,7 @@ export default function TasksPage() {
           </div>
 
           {/* Rows */}
-          {filteredTasks.map((task) => (
+          {filteredTasks.map(task => (
             <div key={task.id}>
               {/* Mobile / tablet card layout */}
               <div
@@ -413,15 +424,19 @@ export default function TasksPage() {
                       <StatusBadge status={task.status} />
                     </div>
                     <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
-                      <span>{formatTimestamp(task.createdAt as unknown as string)}</span>
-                      <span className="tabular-nums">{formatDuration(task)}</span>
+                      <span>
+                        {formatTimestamp(task.createdAt as unknown as string)}
+                      </span>
+                      <span className="tabular-nums">
+                        {formatDuration(task)}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {task.status === 'completed' && task.outputFileId && (
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation();
                           handleDownload(task);
                         }}
@@ -435,7 +450,7 @@ export default function TasksPage() {
                     {task.status === 'failed' && (
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation();
                           retryTask.mutate(task.id);
                         }}
@@ -449,7 +464,7 @@ export default function TasksPage() {
                     )}
                     <button
                       type="button"
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation();
                         setExpandedId(expandedId === task.id ? null : task.id);
                       }}
@@ -463,9 +478,13 @@ export default function TasksPage() {
                     </button>
                   </div>
                 </div>
-                {(task.status === 'processing' || task.status === 'pending') && (
+                {(task.status === 'processing' ||
+                  task.status === 'pending') && (
                   <div className="mt-2.5">
-                    <ProgressBar progress={task.progress} status={task.status} />
+                    <ProgressBar
+                      progress={task.progress}
+                      status={task.status}
+                    />
                   </div>
                 )}
               </div>
@@ -488,19 +507,18 @@ export default function TasksPage() {
                   {formatDuration(task)}
                 </span>
                 <div className="flex items-center">
-                  <ProgressBar
-                    progress={task.progress}
-                    status={task.status}
-                  />
+                  <ProgressBar progress={task.progress} status={task.status} />
                   {task.status === 'completed' && (
-                    <span className="text-[10px] font-mono text-accent">100%</span>
+                    <span className="text-[10px] font-mono text-accent">
+                      100%
+                    </span>
                   )}
                 </div>
                 <div className="flex justify-end items-center gap-1">
                   {task.status === 'completed' && task.outputFileId && (
                     <button
                       type="button"
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation();
                         handleDownload(task);
                       }}
@@ -514,7 +532,7 @@ export default function TasksPage() {
                   {task.status === 'failed' && (
                     <button
                       type="button"
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation();
                         retryTask.mutate(task.id);
                       }}
@@ -528,7 +546,7 @@ export default function TasksPage() {
                   )}
                   <button
                     type="button"
-                    onClick={(e) => {
+                    onClick={e => {
                       e.stopPropagation();
                       setExpandedId(expandedId === task.id ? null : task.id);
                     }}
@@ -553,7 +571,7 @@ export default function TasksPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
             <button
               key={p}
               type="button"

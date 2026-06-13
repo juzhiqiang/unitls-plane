@@ -13,14 +13,7 @@ import {
 } from '@/hooks/api/use-files';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { authClient } from '@/lib/auth-client';
-import {
-  Search,
-  Grid3X3,
-  List,
-  Trash2,
-  Download,
-  X,
-} from 'lucide-react';
+import { Search, Grid3X3, List, Trash2, Download, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 
 type ViewMode = 'grid' | 'list';
@@ -81,7 +74,7 @@ export default function FilesPage() {
   const totalPages = Math.ceil(total / 12);
 
   const toggleSelect = (id: string) => {
-    setSelected((prev) => {
+    setSelected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -93,7 +86,7 @@ export default function FilesPage() {
     if (selected.size === files.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(files.map((f) => f.id)));
+      setSelected(new Set(files.map(f => f.id)));
     }
   };
 
@@ -117,7 +110,7 @@ export default function FilesPage() {
         await uploadFile.mutateAsync(file);
       }
     },
-    [uploadFile],
+    [uploadFile]
   );
 
   const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
@@ -150,11 +143,14 @@ export default function FilesPage() {
       <div className="flex items-center gap-3 flex-wrap">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px] max-w-[320px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
+            strokeWidth={1.5}
+          />
           <input
             type="text"
             value={search}
-            onChange={(e) => {
+            onChange={e => {
               setSearch(e.target.value);
               setPage(1);
             }}
@@ -165,7 +161,7 @@ export default function FilesPage() {
 
         {/* Type filter */}
         <div className="flex border border-border rounded-md overflow-hidden">
-          {TYPE_FILTERS.map((f) => (
+          {TYPE_FILTERS.map(f => (
             <button
               key={f.value}
               type="button"
@@ -194,7 +190,9 @@ export default function FilesPage() {
             onClick={() => setView('grid')}
             aria-label={t('gridView')}
             className={`px-2.5 h-8 transition-colors relative ${
-              view === 'grid' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              view === 'grid'
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Grid3X3 className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -207,7 +205,9 @@ export default function FilesPage() {
             onClick={() => setView('list')}
             aria-label={t('listView')}
             className={`px-2.5 h-8 transition-colors relative ${
-              view === 'list' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              view === 'list'
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <List className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -281,7 +281,7 @@ export default function FilesPage() {
       {/* Grid view */}
       {view === 'grid' && files.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {files.map((file) => (
+          {files.map(file => (
             <div
               key={file.id}
               className={`border rounded-md p-4 space-y-2 transition-colors cursor-pointer ${
@@ -296,7 +296,7 @@ export default function FilesPage() {
                   type="checkbox"
                   checked={selected.has(file.id)}
                   onChange={() => toggleSelect(file.id)}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={e => e.stopPropagation()}
                   aria-label={t('selectFile', { filename: file.filename })}
                   className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
                 />
@@ -304,7 +304,7 @@ export default function FilesPage() {
                   <button
                     type="button"
                     aria-label={t('downloadFile', { filename: file.filename })}
-                    onClick={(e) => {
+                    onClick={e => {
                       e.stopPropagation();
                       handleDownload(file);
                     }}
@@ -315,7 +315,7 @@ export default function FilesPage() {
                   <button
                     type="button"
                     aria-label={t('deleteFile', { filename: file.filename })}
-                    onClick={(e) => {
+                    onClick={e => {
                       e.stopPropagation();
                       deleteFile.mutate(file.id);
                     }}
@@ -371,7 +371,7 @@ export default function FilesPage() {
               </span>
             </div>
             {/* Table rows */}
-            {files.map((file) => (
+            {files.map(file => (
               <div
                 key={file.id}
                 className={`grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-3 border-b border-border transition-colors ${
@@ -424,7 +424,7 @@ export default function FilesPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
             <button
               key={p}
               type="button"

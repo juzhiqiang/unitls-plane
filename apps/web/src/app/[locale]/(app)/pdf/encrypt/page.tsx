@@ -27,7 +27,9 @@ export default function EncryptPage() {
   const [pageCount, setPageCount] = useState(0);
   const [userPassword, setUserPassword] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
-  const [permissions, setPermissions] = useState<Record<PermissionKey, boolean>>({
+  const [permissions, setPermissions] = useState<
+    Record<PermissionKey, boolean>
+  >({
     print: true,
     copy: true,
     modify: true,
@@ -43,18 +45,20 @@ export default function EncryptPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
         const pdfBlob = new Blob([blob], { type: 'application/pdf' });
         const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
         setResultFile(
-          new File([pdfBlob], `${baseName}-encrypted.pdf`, { type: 'application/pdf' }),
+          new File([pdfBlob], `${baseName}-encrypted.pdf`, {
+            type: 'application/pdf',
+          })
         );
       } catch (err) {
         setError((err as Error).message);
@@ -62,7 +66,7 @@ export default function EncryptPage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -72,7 +76,7 @@ export default function EncryptPage() {
     if (!file) return;
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPageCount(doc.numPages);
       });
@@ -92,7 +96,7 @@ export default function EncryptPage() {
   };
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPageCount(0);
@@ -111,7 +115,7 @@ export default function EncryptPage() {
   };
 
   const togglePermission = (key: PermissionKey) => {
-    setPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+    setPermissions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleEncrypt = async () => {
@@ -225,7 +229,7 @@ export default function EncryptPage() {
                 id="encrypt-user-password"
                 type="password"
                 value={userPassword}
-                onChange={(e) => setUserPassword(e.target.value)}
+                onChange={e => setUserPassword(e.target.value)}
                 disabled={processing}
                 autoComplete="new-password"
                 className="w-full h-9 px-3 text-sm font-mono bg-transparent border border-border rounded-md focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
@@ -246,7 +250,7 @@ export default function EncryptPage() {
                 id="encrypt-owner-password"
                 type="password"
                 value={ownerPassword}
-                onChange={(e) => setOwnerPassword(e.target.value)}
+                onChange={e => setOwnerPassword(e.target.value)}
                 disabled={processing}
                 autoComplete="new-password"
                 required
@@ -270,7 +274,7 @@ export default function EncryptPage() {
                     'flex items-center gap-3 px-3 h-9 border border-border rounded-md cursor-pointer transition-colors',
                     processing
                       ? 'opacity-50 cursor-not-allowed'
-                      : 'hover:bg-muted/40',
+                      : 'hover:bg-muted/40'
                   )}
                 >
                   <input
@@ -280,7 +284,9 @@ export default function EncryptPage() {
                     disabled={processing}
                     className="h-3.5 w-3.5 accent-foreground cursor-pointer disabled:cursor-not-allowed"
                   />
-                  <span className="text-sm font-mono text-foreground">{label}</span>
+                  <span className="text-sm font-mono text-foreground">
+                    {label}
+                  </span>
                 </label>
               ))}
             </div>

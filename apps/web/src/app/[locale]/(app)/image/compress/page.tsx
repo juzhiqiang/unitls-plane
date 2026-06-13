@@ -60,7 +60,7 @@ async function processOnServer(
   config: Record<string, unknown>,
   uploadMutate: (file: File) => Promise<unknown>,
   createTaskMutate: (input: any) => Promise<{ id: string }>,
-  outputType: CompressFormat,
+  outputType: CompressFormat
 ): Promise<File> {
   const uploaded = (await uploadMutate(file)) as { id: string };
   const task = await createTaskMutate({
@@ -78,7 +78,7 @@ async function processOnServer(
       const outputFileId = (data as any).outputFileId as string;
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' },
+        { credentials: 'include' }
       );
       if (!response.ok) throw new Error('Failed to download result');
       const blob = await response.blob();
@@ -87,11 +87,9 @@ async function processOnServer(
       });
     }
     if (data?.status === 'failed') {
-      throw new Error(
-        (data as any).errorMessage ?? 'Task failed',
-      );
+      throw new Error((data as any).errorMessage ?? 'Task failed');
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1000));
   }
 }
 
@@ -120,7 +118,7 @@ export default function CompressPage() {
 
   const recommendation: ProcessMode =
     items.length > 0
-      ? items.every((it) => shouldProcessLocally(it.file))
+      ? items.every(it => shouldProcessLocally(it.file))
         ? 'local'
         : 'server'
       : 'local';
@@ -128,17 +126,17 @@ export default function CompressPage() {
   const handleDrop = (files: File[]) => {
     if (files.length === 0) return;
 
-    const newItems: FileItem[] = files.map((file) => ({
+    const newItems: FileItem[] = files.map(file => ({
       file,
       status: 'pending' as const,
     }));
 
-    setItems((prev) => {
+    setItems(prev => {
       // First batch ever: auto-detect output type from the first file
       if (prev.length === 0 && files[0]) {
         const detected = detectOutputType(files[0]);
         if (detected) {
-          setOptions((o) => ({ ...o, outputType: detected }));
+          setOptions(o => ({ ...o, outputType: detected }));
         }
       }
       return [...prev, ...newItems];
@@ -149,12 +147,12 @@ export default function CompressPage() {
   };
 
   const handleRemove = (index: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+    setItems(prev => prev.filter((_, i) => i !== index));
   };
 
   const updateItem = (index: number, patch: Partial<FileItem>) => {
-    setItems((prev) =>
-      prev.map((it, i) => (i === index ? { ...it, ...patch } : it)),
+    setItems(prev =>
+      prev.map((it, i) => (i === index ? { ...it, ...patch } : it))
     );
   };
 
@@ -169,23 +167,23 @@ export default function CompressPage() {
 
     const indicesToProcess = items
       .map((it, i) => (it.status === 'done' && it.result ? -1 : i))
-      .filter((i) => i >= 0);
+      .filter(i => i >= 0);
 
     if (indicesToProcess.length === 0) return;
 
     setProcessing(true);
     setGlobalError(null);
     setProgress(0);
-    setItems((prev) =>
-      prev.map((it) =>
+    setItems(prev =>
+      prev.map(it =>
         it.status === 'done' && it.result
           ? it
-          : { file: it.file, status: 'pending' as const },
-      ),
+          : { file: it.file, status: 'pending' as const }
+      )
     );
 
-    const fileProgress: number[] = items.map((it) =>
-      it.status === 'done' && it.result ? 100 : 0,
+    const fileProgress: number[] = items.map(it =>
+      it.status === 'done' && it.result ? 100 : 0
     );
     const updateOverall = () => {
       const sum = fileProgress.reduce((a, b) => a + b, 0);
@@ -200,7 +198,7 @@ export default function CompressPage() {
     };
     const { width, height } = resolveSize(options);
 
-    const tasks = indicesToProcess.map(async (i) => {
+    const tasks = indicesToProcess.map(async i => {
       const item = items[i]!;
       updateItem(i, { status: 'processing' });
       try {
@@ -208,7 +206,7 @@ export default function CompressPage() {
         if (mode === 'local') {
           result = await compressImage(item.file, {
             ...toCompressOptions(options),
-            onProgress: (p) => {
+            onProgress: p => {
               fileProgress[i] = p;
               updateOverall();
             },
@@ -223,9 +221,9 @@ export default function CompressPage() {
           result = await processOnServer(
             item.file,
             config,
-            (f) => uploadFile.mutateAsync(f),
-            (input) => createTask.mutateAsync(input) as Promise<{ id: string }>,
-            options.outputType,
+            f => uploadFile.mutateAsync(f),
+            input => createTask.mutateAsync(input) as Promise<{ id: string }>,
+            options.outputType
           );
           fileProgress[i] = 100;
           updateOverall();
@@ -246,8 +244,8 @@ export default function CompressPage() {
   const isSingle = items.length === 1;
   const singleItem = isSingle ? items[0] : null;
   const successResults = items
-    .filter((it) => it.status === 'done' && it.result)
-    .map((it) => it.result as File);
+    .filter(it => it.status === 'done' && it.result)
+    .map(it => it.result as File);
   const hasAnyResult = successResults.length > 0;
   const stage = hasAnyResult
     ? 'result'

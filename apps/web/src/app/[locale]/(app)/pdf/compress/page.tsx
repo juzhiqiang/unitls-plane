@@ -45,11 +45,11 @@ export default function CompressPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
@@ -59,7 +59,7 @@ export default function CompressPage() {
         setResultFile(
           new File([pdfBlob], `${baseName}-compressed.pdf`, {
             type: 'application/pdf',
-          }),
+          })
         );
       } catch (err) {
         setError((err as Error).message);
@@ -67,7 +67,7 @@ export default function CompressPage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -77,7 +77,7 @@ export default function CompressPage() {
     if (!file) return;
     let cancelled = false;
     import('@/lib/processing/pdf-client').then(({ loadPdf }) => {
-      loadPdf(file).then((doc) => {
+      loadPdf(file).then(doc => {
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
@@ -89,7 +89,7 @@ export default function CompressPage() {
   }, [file]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setPdf(null);
@@ -225,7 +225,7 @@ export default function CompressPage() {
                     'w-full text-left p-4 border rounded-md transition-colors',
                     level === value
                       ? 'border-accent bg-accent/10'
-                      : 'border-border hover:border-foreground/40',
+                      : 'border-border hover:border-foreground/40'
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -234,7 +234,7 @@ export default function CompressPage() {
                         'text-sm font-mono',
                         level === value
                           ? 'text-foreground'
-                          : 'text-muted-foreground',
+                          : 'text-muted-foreground'
                       )}
                     >
                       {label}
@@ -284,8 +284,14 @@ export default function CompressPage() {
           title={resultFile.name}
           description={tShell('result.ready')}
           meta={[
-            { label: t('compress.originalSize'), value: formatBytes(originalSize) },
-            { label: t('compress.compressedSize'), value: formatBytes(compressedSize) },
+            {
+              label: t('compress.originalSize'),
+              value: formatBytes(originalSize),
+            },
+            {
+              label: t('compress.compressedSize'),
+              value: formatBytes(compressedSize),
+            },
             { label: t('compress.saved'), value: `${savedPercent}%` },
           ]}
           action={<DownloadButton file={resultFile} />}

@@ -7,7 +7,7 @@ export function ToolCatalogGrid({ groups }: { groups: ToolGroup[] }) {
 
   return (
     <div className="space-y-8">
-      {groups.map((group) => (
+      {groups.map(group => (
         <section key={group.key} className="space-y-3">
           <div className="grid gap-1 sm:grid-cols-[220px_1fr]">
             <h2 className="text-sm font-medium">{t(group.titleKey)}</h2>
@@ -16,7 +16,7 @@ export function ToolCatalogGrid({ groups }: { groups: ToolGroup[] }) {
             </p>
           </div>
           <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 xl:grid-cols-3">
-            {group.tools.map((tool) => (
+            {group.tools.map(tool => (
               <Link
                 key={tool.key}
                 href={tool.href}

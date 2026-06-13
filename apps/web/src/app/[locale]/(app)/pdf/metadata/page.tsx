@@ -52,11 +52,11 @@ export default function MetadataPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async (outputFileId) => {
+    onCompleted: async outputFileId => {
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' },
+          { credentials: 'include' }
         );
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
@@ -68,7 +68,7 @@ export default function MetadataPage() {
         setProcessing(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: err => {
       setError(err.message);
       setProcessing(false);
     },
@@ -106,7 +106,7 @@ export default function MetadataPage() {
   }, [file]);
 
   const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find((f) => f.type === 'application/pdf');
+    const pdfFile = files.find(f => f.type === 'application/pdf');
     if (!pdfFile) return;
     setFile(pdfFile);
     setExisting(EMPTY_FORM);
@@ -115,9 +115,9 @@ export default function MetadataPage() {
     setError(null);
   }, []);
 
-  const handleChange = (key: keyof MetadataForm) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const handleChange =
+    (key: keyof MetadataForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm(prev => ({ ...prev, [key]: e.target.value }));
     };
 
   const handleStart = async () => {
@@ -137,12 +137,9 @@ export default function MetadataPage() {
       const uploaded = (await uploadFile.mutateAsync(file)) as any;
 
       const inputConfig: Record<string, unknown> = {};
-      const textFields: Array<keyof Omit<MetadataForm, 'keywords' | 'producer'>> = [
-        'title',
-        'author',
-        'subject',
-        'creator',
-      ];
+      const textFields: Array<
+        keyof Omit<MetadataForm, 'keywords' | 'producer'>
+      > = ['title', 'author', 'subject', 'creator'];
       for (const key of textFields) {
         if (form[key] !== existing[key]) {
           inputConfig[key] = form[key];
@@ -151,7 +148,7 @@ export default function MetadataPage() {
       if (form.keywords !== existing.keywords) {
         inputConfig.keywords = form.keywords
           .split(',')
-          .map((s) => s.trim())
+          .map(s => s.trim())
           .filter(Boolean);
       }
 
@@ -268,7 +265,9 @@ export default function MetadataPage() {
                     'w-full h-9 px-3 text-sm font-mono bg-background border border-border rounded-md ' +
                     'focus:outline-none focus:border-accent transition-colors ' +
                     'disabled:opacity-50 ' +
-                    (readOnly ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground')
+                    (readOnly
+                      ? 'text-muted-foreground cursor-not-allowed'
+                      : 'text-foreground')
                   }
                 />
               </div>

@@ -19,7 +19,7 @@ function renderFileList(result?: File, onRemove?: (index: number) => void) {
         ]}
         onRemove={onRemove}
       />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
 }
 
@@ -42,7 +42,7 @@ describe('FileList', () => {
     renderFileList(undefined, () => undefined);
 
     expect(
-      screen.getAllByRole('button', { name: 'Remove source.png' }),
+      screen.getAllByRole('button', { name: 'Remove source.png' })
     ).toHaveLength(2);
   });
 });

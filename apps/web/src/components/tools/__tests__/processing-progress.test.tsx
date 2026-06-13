@@ -9,7 +9,7 @@ describe('ProcessingProgress', () => {
     render(
       <NextIntlClientProvider locale="en" messages={en}>
         <ProcessingProgress progress={143} stage="generating" />
-      </NextIntlClientProvider>,
+      </NextIntlClientProvider>
     );
 
     expect(screen.getByText('Generating result')).toBeInTheDocument();

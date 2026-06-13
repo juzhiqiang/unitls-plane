@@ -1,6 +1,6 @@
 'use client';
 
-import { X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { formatBytes } from '@/lib/format';
 
@@ -20,18 +20,24 @@ export interface FileListProps {
 }
 
 function StatusIcon({ status }: { status: FileStatus }) {
-  if (status === 'done')
+  if (status === 'done') {
     return (
       <CheckCircle2 className="h-4 w-4 text-emerald-500" strokeWidth={1.5} />
     );
-  if (status === 'failed')
+  }
+
+  if (status === 'failed') {
     return (
       <AlertCircle className="h-4 w-4 text-destructive" strokeWidth={1.5} />
     );
-  if (status === 'processing')
+  }
+
+  if (status === 'processing') {
     return (
-      <Loader2 className="h-4 w-4 text-accent animate-spin" strokeWidth={1.5} />
+      <Loader2 className="h-4 w-4 animate-spin text-accent" strokeWidth={1.5} />
     );
+  }
+
   return <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />;
 }
 
@@ -43,35 +49,38 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
   if (items.length === 0) return null;
 
   return (
-    <div className="border border-border rounded-md overflow-hidden">
-      {/* Desktop / tablet header */}
-      <div className="hidden sm:grid grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 px-3 py-2 border-b border-border text-[10px] font-mono text-muted-foreground uppercase tracking-wider bg-muted/30">
-        <span></span>
+    <div className="overflow-hidden rounded-md border border-border">
+      <div className="hidden grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 border-b border-border bg-muted/30 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+        <span />
         <span>{t('fileList.filename')}</span>
         <span className="text-right">{t('fileList.original')}</span>
         <span className="text-right">{t('fileList.compressed')}</span>
         <span className="text-right">{t('fileList.saved')}</span>
-        <span></span>
+        <span />
       </div>
+
       <div className="divide-y divide-border">
         {items.map((item, i) => {
           const original = item.file.size;
           const result = item.result?.size;
           const savedPct =
             result !== undefined && original > 0
-              ? ((1 - result / original) * 100).toFixed(1) + '%'
-              : '—';
+              ? `${((1 - result / original) * 100).toFixed(1)}%`
+              : '-';
+          const removeLabel = t('fileList.removeFile', {
+            filename: item.file.name,
+          });
+
           return (
             <div
               key={`${item.file.name}-${i}`}
-              className="px-3 py-2 text-xs font-mono"
+              className="px-3 py-2 font-mono text-xs"
             >
-              {/* Mobile card layout */}
-              <div className="sm:hidden flex items-start gap-2">
-                <div className="pt-0.5 shrink-0">
+              <div className="flex items-start gap-2 sm:hidden">
+                <div className="shrink-0 pt-0.5">
                   <StatusIcon status={item.status} />
                 </div>
-                <div className="flex-1 min-w-0 space-y-1">
+                <div className="min-w-0 flex-1 space-y-1">
                   <div
                     className="truncate text-foreground"
                     title={item.file.name}
@@ -79,7 +88,7 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                     {item.file.name}
                   </div>
                   {item.error && (
-                    <div className="text-destructive break-words">
+                    <div className="break-words text-destructive">
                       {item.error}
                     </div>
                   )}
@@ -90,7 +99,7 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                     {result !== undefined && (
                       <>
                         <span className="tabular-nums text-foreground">
-                          → {formatBytes(result, tUnits, locale)}
+                          {'->'} {formatBytes(result, tUnits, locale)}
                         </span>
                         <span className="tabular-nums text-emerald-500">
                           {savedPct}
@@ -104,15 +113,15 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                     type="button"
                     onClick={() => onRemove(i)}
                     disabled={disabled || item.status === 'processing'}
-                    className="shrink-0 p-1 -mr-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    aria-label={removeLabel}
+                    className="-mr-1 shrink-0 p-1 text-muted-foreground transition-colors hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <X className="h-3.5 w-3.5" strokeWidth={1.5} />
                   </button>
                 )}
               </div>
 
-              {/* Desktop / tablet grid layout */}
-              <div className="hidden sm:grid grid-cols-[24px_1fr_88px_88px_64px_28px] gap-3 items-center">
+              <div className="hidden grid-cols-[24px_1fr_88px_88px_64px_28px] items-center gap-3 sm:grid">
                 <StatusIcon status={item.status} />
                 <div className="truncate" title={item.file.name}>
                   <span className="text-foreground">{item.file.name}</span>
@@ -126,7 +135,7 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                 <span className="text-right tabular-nums text-foreground">
                   {result !== undefined
                     ? formatBytes(result, tUnits, locale)
-                    : '—'}
+                    : '-'}
                 </span>
                 <span className="text-right tabular-nums text-emerald-500">
                   {savedPct}
@@ -136,7 +145,8 @@ export function FileList({ items, onRemove, disabled }: FileListProps) {
                     type="button"
                     onClick={() => onRemove(i)}
                     disabled={disabled || item.status === 'processing'}
-                    className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    aria-label={removeLabel}
+                    className="text-muted-foreground transition-colors hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <X className="h-3.5 w-3.5" strokeWidth={1.5} />
                   </button>

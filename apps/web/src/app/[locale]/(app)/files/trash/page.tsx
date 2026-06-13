@@ -131,6 +131,7 @@ export default function TrashPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/files"
+            aria-label={t('title')}
             className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
@@ -173,45 +174,54 @@ export default function TrashPage() {
       )}
 
       {/* Batch actions */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 py-2 flex-wrap">
-          <span className="text-xs font-mono text-muted-foreground">
-            {t('selected', { count: selected.size })}
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleBatchRestore()}
-            disabled={batchRestore.isPending}
-            className="inline-flex items-center gap-1.5 px-3 h-7 text-xs font-mono text-muted-foreground border border-border rounded-md hover:text-foreground hover:border-foreground/20 transition-colors disabled:opacity-50"
-          >
-            <RotateCcw className="h-3 w-3" strokeWidth={1.5} />
-            {t('restoreSelected')}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleBatchPermanentDelete()}
-            disabled={batchPermanentDelete.isPending}
-            className={`inline-flex items-center gap-1.5 px-3 h-7 text-xs font-mono border rounded-md transition-colors disabled:opacity-50 ${
-              confirmBatchDelete
-                ? 'text-destructive border-destructive/50 bg-destructive/10'
-                : 'text-destructive border-destructive/30 hover:bg-destructive/10'
-            }`}
-          >
-            <Trash2 className="h-3 w-3" strokeWidth={1.5} />
-            {confirmBatchDelete
-              ? t('confirmBatchPermanentDelete')
-              : t('deleteSelectedPermanently')}
-          </button>
-          <button
-            type="button"
-            onClick={clearSelection}
-            aria-label={t('clearSelection')}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-          </button>
-        </div>
-      )}
+      <div
+        role="toolbar"
+        aria-label={t('actions')}
+        aria-hidden={selected.size === 0}
+        className={`flex min-h-11 items-center gap-3 py-2 flex-wrap transition-opacity ${
+          selected.size === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+      >
+        {selected.size > 0 && (
+          <>
+            <span className="text-xs font-mono text-muted-foreground">
+              {t('selected', { count: selected.size })}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleBatchRestore()}
+              disabled={batchRestore.isPending}
+              className="inline-flex items-center gap-1.5 px-3 h-7 text-xs font-mono text-muted-foreground border border-border rounded-md hover:text-foreground hover:border-foreground/20 transition-colors disabled:opacity-50"
+            >
+              <RotateCcw className="h-3 w-3" strokeWidth={1.5} />
+              {t('restoreSelected')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBatchPermanentDelete()}
+              disabled={batchPermanentDelete.isPending}
+              className={`inline-flex items-center gap-1.5 px-3 h-7 text-xs font-mono border rounded-md transition-colors disabled:opacity-50 ${
+                confirmBatchDelete
+                  ? 'text-destructive border-destructive/50 bg-destructive/10'
+                  : 'text-destructive border-destructive/30 hover:bg-destructive/10'
+              }`}
+            >
+              <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+              {confirmBatchDelete
+                ? t('confirmBatchPermanentDelete')
+                : t('deleteSelectedPermanently')}
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              aria-label={t('clearSelection')}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </button>
+          </>
+        )}
+      </div>
 
       {/* File list */}
       {files.length > 0 && (

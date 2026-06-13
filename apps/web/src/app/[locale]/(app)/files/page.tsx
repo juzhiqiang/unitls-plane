@@ -192,6 +192,7 @@ export default function FilesPage() {
           <button
             type="button"
             onClick={() => setView('grid')}
+            aria-label={t('gridView')}
             className={`px-2.5 h-8 transition-colors relative ${
               view === 'grid' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -204,6 +205,7 @@ export default function FilesPage() {
           <button
             type="button"
             onClick={() => setView('list')}
+            aria-label={t('listView')}
             className={`px-2.5 h-8 transition-colors relative ${
               view === 'list' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -217,29 +219,39 @@ export default function FilesPage() {
       </div>
 
       {/* Batch actions */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 py-2">
-          <span className="text-xs font-mono text-muted-foreground">
-            {t('selected', { count: selected.size })}
-          </span>
-          <button
-            type="button"
-            onClick={handleBatchDelete}
-            disabled={batchDelete.isPending}
-            className="inline-flex items-center gap-1.5 px-3 h-7 text-xs font-mono text-destructive border border-destructive/30 rounded-md hover:bg-destructive/10 transition-colors disabled:opacity-50"
-          >
-            <Trash2 className="h-3 w-3" strokeWidth={1.5} />
-            {t('batchDelete')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-          </button>
-        </div>
-      )}
+      <div
+        role="toolbar"
+        aria-label={t('actions')}
+        aria-hidden={selected.size === 0}
+        className={`flex min-h-11 items-center gap-3 py-2 transition-opacity ${
+          selected.size === 0 ? 'pointer-events-none opacity-0' : 'opacity-100'
+        }`}
+      >
+        {selected.size > 0 && (
+          <>
+            <span className="text-xs font-mono text-muted-foreground">
+              {t('selected', { count: selected.size })}
+            </span>
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              disabled={batchDelete.isPending}
+              className="inline-flex items-center gap-1.5 px-3 h-7 text-xs font-mono text-destructive border border-destructive/30 rounded-md hover:bg-destructive/10 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+              {t('batchDelete')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              aria-label={t('clearSelection')}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Drop zone for upload */}
       {files.length === 0 && !isLoading && !search && typeFilter === 'all' && (
@@ -285,11 +297,13 @@ export default function FilesPage() {
                   checked={selected.has(file.id)}
                   onChange={() => toggleSelect(file.id)}
                   onClick={(e) => e.stopPropagation()}
+                  aria-label={t('selectFile', { filename: file.filename })}
                   className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
                 />
                 <div className="flex gap-1">
                   <button
                     type="button"
+                    aria-label={t('downloadFile', { filename: file.filename })}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDownload(file);
@@ -300,6 +314,7 @@ export default function FilesPage() {
                   </button>
                   <button
                     type="button"
+                    aria-label={t('deleteFile', { filename: file.filename })}
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteFile.mutate(file.id);
@@ -336,6 +351,7 @@ export default function FilesPage() {
                 type="checkbox"
                 checked={selected.size === files.length && files.length > 0}
                 onChange={selectAll}
+                aria-label={t('selectAll')}
                 className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
               />
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
@@ -366,6 +382,7 @@ export default function FilesPage() {
                   type="checkbox"
                   checked={selected.has(file.id)}
                   onChange={() => toggleSelect(file.id)}
+                  aria-label={t('selectFile', { filename: file.filename })}
                   className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
                 />
                 <span className="text-sm truncate" title={file.filename}>
@@ -384,6 +401,7 @@ export default function FilesPage() {
                   <button
                     type="button"
                     onClick={() => handleDownload(file)}
+                    aria-label={t('downloadFile', { filename: file.filename })}
                     className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -391,6 +409,7 @@ export default function FilesPage() {
                   <button
                     type="button"
                     onClick={() => deleteFile.mutate(file.id)}
+                    aria-label={t('deleteFile', { filename: file.filename })}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors"
                   >
                     <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />

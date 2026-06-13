@@ -652,6 +652,8 @@
     "actions": "操作",
     "delete": "删除",
     "download": "下载",
+    "downloadFile": "下载 {filename}",
+    "deleteFile": "删除 {filename}",
     "batchDelete": "删除所选",
     "selected": "已选 {count} 项",
     "selectAll": "全选",
@@ -697,6 +699,10 @@
     "outputFile": "输出文件",
     "error": "错误",
     "config": "配置",
+    "parameterSummary": "参数摘要",
+    "failureReason": "失败原因",
+    "suggestedAction": "建议操作",
+    "tryAgainOrReplace": "重试任务或更换源文件。",
     "statusDone": "DONE",
     "statusFail": "FAIL",
     "statusWait": "WAIT",
@@ -718,6 +724,7 @@
   },
   "ToolsShared": {
     "download": "下载",
+    "downloadFile": "下载 {filename}",
     "zipBuilding": "打包中...",
     "downloadZipCount": "下载 ZIP ({count})",
     "processing": "处理中",
@@ -733,7 +740,8 @@
       "filename": "文件名",
       "original": "原始",
       "compressed": "压缩后",
-      "saved": "节省"
+      "saved": "节省",
+      "removeFile": "移除 {filename}"
     },
     "compare": {
       "original": "原始",

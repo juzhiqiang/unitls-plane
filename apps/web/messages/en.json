@@ -652,6 +652,8 @@
     "actions": "Actions",
     "delete": "Delete",
     "download": "Download",
+    "downloadFile": "Download {filename}",
+    "deleteFile": "Delete {filename}",
     "batchDelete": "Delete selected",
     "selected": "{count} selected",
     "selectAll": "Select all",
@@ -697,6 +699,10 @@
     "outputFile": "Output file",
     "error": "Error",
     "config": "Config",
+    "parameterSummary": "Parameter summary",
+    "failureReason": "Failure reason",
+    "suggestedAction": "Suggested action",
+    "tryAgainOrReplace": "Retry the task or replace the source file.",
     "statusDone": "DONE",
     "statusFail": "FAIL",
     "statusWait": "WAIT",
@@ -718,6 +724,7 @@
   },
   "ToolsShared": {
     "download": "Download",
+    "downloadFile": "Download {filename}",
     "zipBuilding": "Zipping...",
     "downloadZipCount": "Download ZIP ({count})",
     "processing": "Processing",
@@ -733,7 +740,8 @@
       "filename": "Filename",
       "original": "Original",
       "compressed": "Compressed",
-      "saved": "Saved"
+      "saved": "Saved",
+      "removeFile": "Remove {filename}"
     },
     "compare": {
       "original": "Original",

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FileList } from '../file-list';
 import en from '../../../../messages/en.json';
 
-function renderFileList(result?: File) {
+function renderFileList(result?: File, onRemove?: (index: number) => void) {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
       <FileList
@@ -17,23 +17,32 @@ function renderFileList(result?: File) {
             status: 'done',
           },
         ]}
+        onRemove={onRemove}
       />
-    </NextIntlClientProvider>
+    </NextIntlClientProvider>,
   );
 }
 
 describe('FileList', () => {
-  it('does not render mojibake for the dash placeholder', () => {
+  it('renders an ASCII dash placeholder', () => {
     renderFileList();
 
-    expect(screen.getAllByText('—')).toHaveLength(2);
-    expect(document.body.textContent).not.toContain('鈥');
+    expect(screen.getAllByText('-')).toHaveLength(2);
+    expect(document.body.textContent).not.toContain('\uFFFD');
   });
 
-  it('does not render mojibake for the arrow between file sizes', () => {
+  it('renders an ASCII arrow between file sizes', () => {
     renderFileList(new File(['a'.repeat(1024)], 'result.png'));
 
-    expect(document.body.textContent).toContain('→');
-    expect(document.body.textContent).not.toContain('鈫');
+    expect(document.body.textContent).toContain('->');
+    expect(document.body.textContent).not.toContain('\uFFFD');
+  });
+
+  it('labels remove buttons with the source filename', () => {
+    renderFileList(undefined, () => undefined);
+
+    expect(
+      screen.getAllByRole('button', { name: 'Remove source.png' }),
+    ).toHaveLength(2);
   });
 });

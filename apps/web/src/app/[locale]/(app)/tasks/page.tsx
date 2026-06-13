@@ -21,6 +21,7 @@ import {
 
 type StatusFilter = 'all' | TaskStatus;
 type TypeFilter = 'all' | 'image' | 'pdf' | 'font';
+type ConfigSummaryItem = { label: string; value: string };
 
 function getTaskTypeCategory(type: TaskType): 'image' | 'pdf' | 'font' {
   switch (type) {
@@ -56,8 +57,7 @@ function formatTimestamp(dateStr: string): string {
 
 function formatDuration(task: TaskResponseDto): string {
   if (!task.completedAt) {
-    if (task.status === 'processing' || task.status === 'pending') return '—';
-    return '—';
+    return '-';
   }
   const start = new Date(task.createdAt).getTime();
   const end = new Date(task.completedAt).getTime();
@@ -66,6 +66,20 @@ function formatDuration(task: TaskResponseDto): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}m ${secs}s`;
+}
+
+function formatConfigSummary(
+  config: Record<string, unknown> | null | undefined,
+): ConfigSummaryItem[] {
+  if (!config) return [];
+
+  return Object.entries(config).map(([key, value]) => ({
+    label: key,
+    value:
+      value !== null && typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value),
+  }));
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -156,6 +170,7 @@ function ProgressBar({ progress, status }: { progress: number; status: string })
 
 function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
   const t = useTranslations('TasksTool');
+  const configSummary = formatConfigSummary(task.inputConfig);
 
   return (
     <div className="border-t border-border px-3 py-4 space-y-3 bg-muted/20">
@@ -165,6 +180,9 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
           <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
             {t('inputFiles')}
           </span>
+          <p className="text-[11px] font-mono text-foreground/80">
+            {task.inputFileIds.length} {t('inputFiles')}
+          </p>
           <div className="flex flex-wrap gap-2">
             {task.inputFileIds.map((id) => (
               <span key={id} className="text-[11px] font-mono text-foreground/80">
@@ -182,7 +200,7 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
             {t('outputFile')}
           </span>
           <span className="text-[11px] font-mono text-foreground/80 block">
-            {task.outputFileId.slice(0, 8)}...
+            {task.outputFileId.slice(0, 8)}... - {t('download')}
           </span>
         </div>
       )}
@@ -191,23 +209,44 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
       {task.errorCode && (
         <div className="space-y-1">
           <span className="text-[10px] font-mono uppercase tracking-wider text-destructive">
-            {t('error')}
+            {t('failureReason')}
           </span>
-          <p className="text-[11px] text-destructive/80">
-            [{task.errorCode}] {task.errorMessage}
+          <p className="text-[11px] text-destructive/80 break-words">
+            {task.errorMessage || task.errorCode}
+          </p>
+          <span className="block text-[10px] font-mono text-destructive/70">
+            {task.errorCode}
+          </span>
+          <span className="block pt-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            {t('suggestedAction')}
+          </span>
+          <p className="text-[11px] text-muted-foreground">
+            {t('tryAgainOrReplace')}
           </p>
         </div>
       )}
 
       {/* Config */}
-      {task.inputConfig && Object.keys(task.inputConfig).length > 0 && (
+      {configSummary.length > 0 && (
         <div className="space-y-1">
           <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            {t('config')}
+            {t('parameterSummary')}
           </span>
-          <pre className="text-[10px] font-mono text-foreground/70 whitespace-pre-wrap">
-            {JSON.stringify(task.inputConfig, null, 2)}
-          </pre>
+          <dl className="grid gap-1">
+            {configSummary.map((item) => (
+              <div
+                key={item.label}
+                className="grid gap-1 sm:grid-cols-[160px_1fr]"
+              >
+                <dt className="text-[10px] font-mono text-muted-foreground">
+                  {item.label}
+                </dt>
+                <dd className="text-[11px] font-mono text-foreground/80 break-words">
+                  {item.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
       )}
     </div>
@@ -388,6 +427,7 @@ export default function TasksPage() {
                         }}
                         className="p-2 text-muted-foreground hover:text-foreground transition-colors"
                         title={t('download')}
+                        aria-label={t('download')}
                       >
                         <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
                       </button>
@@ -402,6 +442,7 @@ export default function TasksPage() {
                         disabled={retryTask.isPending}
                         className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                         title={t('retry')}
+                        aria-label={t('retry')}
                       >
                         <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
                       </button>
@@ -416,6 +457,7 @@ export default function TasksPage() {
                         expandedId === task.id ? 'rotate-180' : ''
                       }`}
                       title={t('details')}
+                      aria-label={t('details')}
                     >
                       <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
@@ -464,6 +506,7 @@ export default function TasksPage() {
                       }}
                       className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                       title={t('download')}
+                      aria-label={t('download')}
                     >
                       <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
@@ -478,6 +521,7 @@ export default function TasksPage() {
                       disabled={retryTask.isPending}
                       className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                       title={t('retry')}
+                      aria-label={t('retry')}
                     >
                       <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
@@ -492,6 +536,7 @@ export default function TasksPage() {
                       expandedId === task.id ? 'rotate-180' : ''
                     }`}
                     title={t('details')}
+                    aria-label={t('details')}
                   >
                     <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
                   </button>

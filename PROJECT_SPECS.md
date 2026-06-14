@@ -1,55 +1,76 @@
 # Utils-Plane 项目规范
 
-> 本文档由 CLAUDE.md 和 AGENTS.md 共享引用
+> 本文档是 `CLAUDE.md`、`AGENTS.md` 和 `README.md` 的共享事实源。
 
 ## 项目概述
 
-Utils-Plane 是一个工具平台，支持文件处理（压缩、转换、PDF 操作、字体转换）等功能的全栈应用。
+Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字体、文件管理和异步任务管理。前端提供本地优先与服务端处理并存的工具体验，后端负责认证、文件存储、任务队列、处理器和 API 文档。
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 包管理器 | Bun 1.3.13 |
-| 前端 | Next.js 14 (App Router) |
-| 后端 | NestJS 11 |
-| 认证 | Better-Auth |
-| 数据库 | PostgreSQL 16 + Drizzle ORM |
-| 缓存/队列 | Redis 7 + BullMQ |
-| 对象存储 | MinIO (S3 兼容) |
-| Monorepo | Turborepo + Bun Workspace |
+| 层级      | 技术                                                       |
+| --------- | ---------------------------------------------------------- |
+| 包管理器  | Bun 1.3.13                                                 |
+| Monorepo  | Turborepo + Bun Workspace                                  |
+| 前端      | Next.js 14 App Router、React 18、Tailwind CSS 4、next-intl |
+| 后端      | NestJS 11、Bun runtime                                     |
+| 认证      | Better-Auth                                                |
+| 数据库    | PostgreSQL 16 + Drizzle ORM                                |
+| 缓存/队列 | Redis 7 + BullMQ                                           |
+| 对象存储  | MinIO (S3 兼容)                                            |
+| API 类型  | Swagger/OpenAPI + openapi-fetch                            |
+| 监控      | 可选 Error Tracker SDK                                     |
 
 ## 项目结构
 
-```
+```text
 utils-plane/
 ├── apps/
-│   ├── api/          # NestJS 后端 (端口 3001)
-│   └── web/          # Next.js 前端 (端口 3000)
+│   ├── api/                    # NestJS API, port 3001
+│   │   └── src/
+│   │       ├── common/         # guards, filters, middleware, errors
+│   │       ├── config/         # BullMQ, throttling
+│   │       ├── modules/        # auth, files, tasks, health
+│   │       └── main.ts
+│   └── web/                    # Next.js web, port 3000
+│       └── src/
+│           ├── app/            # locale-aware App Router pages
+│           ├── components/     # UI, layout, tool components
+│           ├── hooks/          # API hooks
+│           ├── i18n/           # locale routing
+│           └── lib/            # API client, auth, processing, tools
 ├── packages/
-│   ├── auth/         # Better-Auth 认证配置
-│   ├── db/           # Drizzle ORM Schema
-│   ├── utils/        # 工具函数
-│   ├── validators/   # Zod 验证器
-│   └── api-client/   # API 客户端类型
-├── task/             # 任务文档 (phase1-7)
+│   ├── api-client/             # generated OpenAPI schema + client
+│   ├── auth/                   # Better-Auth config and origin helpers
+│   ├── db/                     # Drizzle schema, migrations, client
+│   ├── utils/                  # shared utilities
+│   └── validators/             # Zod schemas
+├── docs/                       # audits and generated specs
+├── task/                       # phase1-phase8 task docs
 ├── docker-compose.yml
+├── package.json
 ├── turbo.json
-└── .env.local
+└── tsconfig.json
 ```
 
 ## 环境配置
 
-### 必须设置的环境变量 (.env.local)
+从模板创建本地环境：
+
+```bash
+cp .env.example .env.local
+```
+
+`.env.local` 关键变量：
 
 ```env
 # Database
-DATABASE_URL=postgresql://utils:utils@localhost:5432/utils_plane
+DATABASE_URL=postgresql://utils:utils@localhost:5433/utils_plane
 
 # Redis
 REDIS_URL=redis://localhost:6379
 
-# MinIO (S3 兼容)
+# MinIO
 S3_ENDPOINT=http://localhost:9000
 S3_REGION=us-east-1
 S3_ACCESS_KEY=minioadmin
@@ -59,9 +80,9 @@ S3_FORCE_PATH_STYLE=true
 
 # Better-Auth
 BETTER_AUTH_SECRET=<通过 openssl rand -base64 32 生成>
-BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:3001
 
-# OAuth (开发环境留空)
+# OAuth
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GITHUB_CLIENT_ID=
@@ -70,22 +91,46 @@ GITHUB_CLIENT_SECRET=
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_S3_PUBLIC_URL=http://localhost:9000
+NEXT_PUBLIC_ERROR_TRACKER_DSN=
+NEXT_PUBLIC_RELEASE=dev
 
 # Backend
 PORT=3001
 CORS_ORIGIN=http://localhost:3000
 NODE_ENV=development
+ERROR_TRACKER_DSN=
+RELEASE=dev
+
+# Error Tracker sourcemap upload
+ERROR_TRACKER_API=http://localhost:3002
+ERROR_TRACKER_PROJECT_ID=
+ERROR_TRACKER_TOKEN=
 ```
 
-### 启动服务
+访问队列后台 `/admin/queues` 还需要：
+
+```env
+ADMIN_USER=<admin user>
+ADMIN_PASSWORD=<admin password>
+```
+
+## 本地服务
 
 ```bash
-# 启动 Docker 服务 (PG + Redis + MinIO)
 bun run services:up
-
-# 验证服务状态
 docker compose ps
 ```
+
+| 服务            | 地址                               |
+| --------------- | ---------------------------------- |
+| Web             | http://localhost:3000              |
+| API             | http://localhost:3001              |
+| Swagger UI      | http://localhost:3001/docs         |
+| Queue Dashboard | http://localhost:3001/admin/queues |
+| PostgreSQL      | localhost:5433                     |
+| Redis           | localhost:6379                     |
+| MinIO API       | http://localhost:9000              |
+| MinIO Console   | http://localhost:9001              |
 
 ## 常用命令
 
@@ -94,181 +139,152 @@ docker compose ps
 bun install
 
 # 开发
-bun run dev                        # 并行启动所有 apps
-cd apps/api && bun run dev         # 仅后端
-cd apps/web && bun run dev         # 仅前端
+bun run dev
+cd apps/api && bun run dev
+cd apps/web && bun run dev
 
-# 构建
+# 测试/构建
+bun --cwd apps/web test
+bun --cwd apps/web build
 bun run build
-cd packages/db && bun run build
 
-# Lint & Format
+# Lint/Format
 bun run lint
 bun run lint:fix
 bun run format
+bun run format:check
 
 # Docker
-bun run services:up       # 启动
-bun run services:down     # 停止
-bun run services:reset    # 重置
-bun run services:logs     # 查看日志
+bun run services:up
+bun run services:down
+bun run services:reset
+bun run services:logs
 
 # 数据库
 cd packages/db
-bunx drizzle-kit generate   # 生成 migration
-bunx drizzle-kit migrate    # 执行 migration
-bunx drizzle-kit push       # push schema
+bunx drizzle-kit generate
+bunx drizzle-kit migrate
+bunx drizzle-kit push
 
-# API
-cd apps/api
-bun run openapi:export      # 导出 OpenAPI JSON
+# API / Client
+cd apps/api && bun run openapi:export
+cd packages/api-client && bun run generate
 ```
 
 ## 数据库
 
 ### 连接信息
 
-- **PostgreSQL**: `postgresql://utils:utils@localhost:5432/utils_plane`
-- **Redis**: `redis://localhost:6379`
-- **容器名**: utils-pg, utils-redis, utils-minio
+- PostgreSQL: `postgresql://utils:utils@localhost:5433/utils_plane`
+- Redis: `redis://localhost:6379`
+- 容器名: `utils-pg`, `utils-redis`, `utils-minio`
 
-### Schema
+### 业务表
 
-#### 业务表 (packages/db/src/schema/)
+| 表名    | 说明                                                               |
+| ------- | ------------------------------------------------------------------ |
+| `files` | 文件记录，包含 MinIO key、mime、大小、过期时间、软删除时间         |
+| `tasks` | 异步任务，包含任务类型、状态、输入文件、配置、输出文件、进度、错误 |
 
-| 表名 | 说明 |
-|------|------|
-| `files` | 文件存储，含 userId FK |
-| `tasks` | 任务表，含 userId FK、taskType/taskStatus 枚举 |
+### Auth 表
 
-#### Auth 表 (Better-Auth 生成)
+| 表名           | 说明                                           |
+| -------------- | ---------------------------------------------- |
+| `user`         | 用户，包含 Better-Auth 字段以及 `plan`、`role` |
+| `session`      | 会话                                           |
+| `account`      | OAuth 或密码账户                               |
+| `verification` | 邮箱验证                                       |
 
-| 表名 | 说明 |
-|------|------|
-| `user` | 用户 (含 plan, role 额外字段) |
-| `session` | 会话 |
-| `account` | OAuth 账户 |
-| `verification` | 邮箱验证 |
+### Task 类型
 
-### 调试命令
+`compress`、`convert`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`。
 
-```bash
-# 测试数据库
-docker exec -it utils-pg psql -U utils -d utils_plane -c "SELECT 1"
+## API 服务
 
-# 测试 Redis
-docker exec -it utils-redis redis-cli ping
+当前 API 模块：
 
-# 查看表
-docker exec -it utils-pg psql -U utils -d utils_plane -c "\dt"
+- `auth` - Better-Auth handler 和认证集成。
+- `files` - 上传、下载、签名 URL、文件列表、回收站、恢复、永久删除、批量操作。
+- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler。
+- `health` - 健康检查。
 
-# 查看日志
-docker compose logs -f postgres
-```
+全局能力：
 
-## 依赖关系
+- CORS 使用 `@utils-plane/auth` 的 trusted origin 逻辑。
+- `AuthGuard` 和 `CustomThrottlerGuard` 为全局 guard。
+- 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
+- BullMQ 队列：`image-queue`、`pdf-queue`、`font-queue`、`cleanup-queue`。
+- `/admin/queues` 使用 Basic Auth 保护。
 
-```
+## Web 页面与工具
+
+主要页面：
+
+- `/` - 工具优先的营销首页。
+- `/dashboard` - 最近文件、任务、失败恢复、快捷工具。
+- `/image` - 图片工具入口。
+- `/pdf` - PDF 工具入口。
+- `/font` - 字体转换工具。
+- `/files`、`/files/trash` - 文件管理和回收站。
+- `/tasks` - 任务历史和任务详情。
+- `/settings` - 用户设置。
+- `/login`、`/register`、`/verify-email` - 认证页面。
+
+工具清单：
+
+- 图片：压缩、格式转换、批量压缩/打包、压缩前后对比。
+- PDF：合并、拆分、重排、旋转、图片转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
+- 字体：TTF/OTF/WOFF/WOFF2 转换。
+
+## 文件与任务策略
+
+- 匿名上传单文件上限 10MB，登录用户单文件上限 50MB。
+- 匿名文件默认 24 小时过期，登录用户文件归入账号文件。
+- 图片压缩和图片格式转换支持浏览器本地处理；PDF 和字体工具主要走服务端任务。
+- 任务状态：`pending`、`processing`、`completed`、`failed`。
+- 文件支持软删除、恢复、永久删除和清空回收站。
+
+## 包依赖关系
+
+```text
 @utils-plane/api
-├── @utils-plane/auth (workspace)
-├── @utils-plane/db (workspace)
-├── @utils-plane/validators (workspace)
+├── @utils-plane/auth
+├── @utils-plane/db
+├── @utils-plane/validators
 └── better-auth
 
+@utils-plane/web
+├── @utils-plane/api-client
+├── @utils-plane/auth
+└── next-intl / react-query / tool processing libs
+
 @utils-plane/auth
-└── @utils-plane/db (workspace)
+└── @utils-plane/db
 
 @utils-plane/db
 ├── drizzle-orm
 └── postgres
 ```
 
-## 包导出规范
-
-### packages/db/src/index.ts
-
-```typescript
-export * from './client';
-export * from './schema';
-export type { File, NewFile, Task, NewTask } from './schema';
-```
-
-### packages/auth/src/index.ts
-
-```typescript
-export const auth;
-export type { Auth, Session, User };
-export async function verifySession(headers: Headers);
-```
-
-## API 服务
-
-- **端口**: 3001
-- **Swagger UI**: http://localhost:3001/docs
-- **OpenAPI JSON**: `apps/api/openapi.json`
-
-### 导出 OpenAPI
-
-```bash
-cd apps/api && bun run openapi:export
-```
-
 ## 代码规范
 
-### 文件命名
+| 类型       | 规则           | 示例               |
+| ---------- | -------------- | ------------------ |
+| React 组件 | PascalCase.tsx | `UserProfile.tsx`  |
+| 工具函数   | camelCase.ts   | `formatDate.ts`    |
+| DTO/验证   | \*.dto.ts      | `CreateUserDto.ts` |
+| 类型定义   | \*.type.ts     | `api.response.ts`  |
 
-| 类型 | 规则 | 示例 |
-|------|------|------|
-| React 组件 | PascalCase.tsx | `UserProfile.tsx` |
-| 工具函数 | camelCase.ts | `formatDate.ts` |
-| DTO/验证 | *.dto.ts | `CreateUserDto.ts` |
-| 类型定义 | *.type.ts | `api.response.ts` |
+Git 提交前缀：
 
-### Git 提交规范
-
+```text
+feat, fix, update, refactor, docs, test, chore
 ```
-feat:     新功能
-fix:      修复 bug
-update:   更新现有功能
-refactor: 重构
-docs:     文档
-test:     测试
-chore:    构建/工具
-```
-
-### TypeScript
-
-- 启用 strict 模式
-- 使用 ES2020+ 语法
-- 优先使用类型推断
-
-## 已完成的配置
-
-### 1. Better-Auth (packages/auth)
-
-- Email/Password 认证
-- Google/GitHub OAuth
-- Session 管理 (7天过期)
-- 自定义字段: plan, role
-- 开发环境邮件日志输出
-
-### 2. Database Schema (packages/db)
-
-- auth.ts: user, session, account, verification 表
-- files.ts: 文件存储表 (含 user FK)
-- tasks.ts: 任务表 (含 user FK, taskType/taskStatus 枚举)
-
-### 3. Swagger (apps/api)
-
-- 访问 http://localhost:3001/docs
-- 自动生成 openapi.json
-- Bearer Auth 支持
-- ValidationPipe 配置 (whitelist, forbidNonWhitelisted)
 
 ## 注意事项
 
-1. **不要提交 .env.local** - 已配置 .gitignore
-2. **修改 schema 后执行 migration** - `bunx drizzle-kit migrate`
-3. **API 修改后重新导出 OpenAPI** - `bun run openapi:export`
-4. **Windows 开发** - 使用 Git Bash 或 WSL
-5. **BETTER_AUTH_SECRET** - 必须使用 `openssl rand -base64 32` 生成
+1. 不要提交 `.env.local`。
+2. 修改 schema 后执行 migration。
+3. API 修改后重新导出 OpenAPI，并同步 api-client 类型。
+4. 前端新增文案时同时维护中英文。
+5. Windows 开发中，包含 `[locale]` 或 `(app)` 的路径需要 literal path。

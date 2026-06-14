@@ -1,5 +1,6 @@
 import { Link } from '@/i18n/navigation';
 import { getTranslations } from 'next-intl/server';
+import { BrandMark } from '@/components/brand/brand-mark';
 import { PointerSpotlight } from '@/components/effects/pointer-spotlight';
 
 export default async function AuthLayout({
@@ -28,7 +29,7 @@ export default async function AuthLayout({
           {/* Wordmark */}
           <div>
             <Link href="/" className="group inline-flex items-center gap-2.5">
-              <span className="h-4 w-[3px] bg-accent" />
+              <BrandMark className="h-7 w-7" />
               <span className="font-mono text-sm tracking-wider text-foreground transition-colors group-hover:text-accent">
                 UTILS-PLANE
               </span>
@@ -60,7 +61,7 @@ export default async function AuthLayout({
             </div>
             <div>{t('buildLabel')} / v1.0.0</div>
             <div className="my-2 h-px w-16 bg-border" />
-            <div>© 2026</div>
+            <div>&copy; 2026</div>
           </div>
         </PointerSpotlight>
       </aside>
@@ -70,7 +71,7 @@ export default async function AuthLayout({
         <div className="w-full max-w-sm">
           {/* Mobile wordmark */}
           <Link href="/" className="mb-10 inline-flex items-center gap-2.5 lg:hidden">
-            <span className="h-4 w-[3px] bg-accent" />
+            <BrandMark className="h-7 w-7" />
             <span className="font-mono text-sm tracking-wider text-foreground">UTILS-PLANE</span>
           </Link>
           <div className="auth-enter">{children}</div>

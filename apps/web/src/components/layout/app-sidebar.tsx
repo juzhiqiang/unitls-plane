@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useSidebar } from '@/components/ui/sidebar';
+import { BrandMark } from '@/components/brand/brand-mark';
 
 const navigation = [
   { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -41,7 +42,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
           onClick={() => setMobileOpen(false)}
           className="flex items-center gap-2"
         >
-          <div className="h-6 w-6 rounded-sm bg-accent" />
+          <BrandMark className="h-7 w-7" />
           <span className="font-medium text-foreground">Utils Plane</span>
         </Link>
       </div>

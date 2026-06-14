@@ -1,5 +1,6 @@
 import { Link } from "@/i18n/navigation";
 import { getTranslations } from "next-intl/server";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { MarketingNav } from "@/components/layout/marketing-nav";
 
 export default async function MarketingLayout({
@@ -15,7 +16,7 @@ export default async function MarketingLayout({
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="container-main flex h-14 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-sm bg-accent" />
+            <BrandMark className="h-7 w-7" />
             <span className="font-medium text-foreground">Utils Plane</span>
           </Link>
 
@@ -41,9 +42,9 @@ export default async function MarketingLayout({
         <div className="container-main">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="h-5 w-5 rounded-sm bg-accent" />
+              <BrandMark className="h-5 w-5" title="" />
               <span className="text-sm text-muted-foreground">
-                Utils Plane © 2026
+                Utils Plane &copy; 2026
               </span>
             </div>
 

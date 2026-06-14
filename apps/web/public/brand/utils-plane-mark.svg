@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="utils-plane-route" x1="55" y1="170" x2="180" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5eead4" />
+      <stop offset="0.46" stop-color="#d4d4d8" />
+      <stop offset="1" stop-color="#ffffff" />
+    </linearGradient>
+    <linearGradient id="utils-plane-glass" x1="60" y1="44" x2="182" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2a2b31" />
+      <stop offset="1" stop-color="#090a0d" />
+    </linearGradient>
+    <filter id="utils-plane-shadow" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.38" />
+    </filter>
+  </defs>
+  <rect x="38" y="38" width="164" height="164" rx="40" fill="url(#utils-plane-glass)" stroke="#ffffff" stroke-opacity="0.16" stroke-width="1.6" filter="url(#utils-plane-shadow)" />
+  <path d="M67 141c35-29 69-30 102-4" fill="none" stroke="url(#utils-plane-route)" stroke-width="18" stroke-linecap="round" />
+  <path d="M69 165c34-11 66-8 96 10" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.34" />
+  <path d="M120 62l8.5 26.5L155 97l-26.5 8.5L120 132l-8.5-26.5L85 97l26.5-8.5L120 62z" fill="#f5f5f7" />
+  <path d="M120 82l4 11.5L136 97l-12 4-4 12-4-12-12-4 12-3.5L120 82z" fill="#0a0a0c" opacity="0.88" />
+  <circle cx="166" cy="78" r="2.4" fill="#f5f5f7" opacity="0.7" />
+</svg>

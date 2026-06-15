@@ -1,7 +1,11 @@
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
+import {
+  getMessages,
+  getTranslations,
+  setRequestLocale,
+} from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -27,7 +31,7 @@ export async function generateMetadata({
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
   const languages = Object.fromEntries(
-    routing.locales.map((l) => [l, `${baseUrl}/${l}`]),
+    routing.locales.map(l => [l, `${baseUrl}/${l}`])
   );
 
   return {
@@ -40,8 +44,21 @@ export async function generateMetadata({
       title: 'Utils-Plane',
     },
     icons: {
-      icon: '/icons/icon-32.png',
-      apple: '/icons/icon-180.png',
+      icon: [
+        {
+          url: '/icons/utils-plane-favicon-32.png',
+          sizes: '32x32',
+          type: 'image/png',
+        },
+      ],
+      shortcut: '/favicon.ico',
+      apple: [
+        {
+          url: '/icons/utils-plane-apple-touch-180.png',
+          sizes: '180x180',
+          type: 'image/png',
+        },
+      ],
     },
     alternates: {
       canonical: `${baseUrl}/${locale}`,
@@ -54,7 +71,7 @@ export async function generateMetadata({
 }
 
 export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }));
+  return routing.locales.map(locale => ({ locale }));
 }
 
 export default async function LocaleLayout({
@@ -75,7 +92,11 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html
+      lang={locale}
+      suppressHydrationWarning
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+    >
       <body className="font-sans antialiased">
         <NextIntlClientProvider messages={messages} locale={locale}>
           <ErrorTrackerInit />

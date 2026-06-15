@@ -42,8 +42,11 @@ export default async function AuthLayout({
               {t('brandTagline')}
             </p>
             <ul className="space-y-2.5">
-              {features.map((f) => (
-                <li key={f} className="flex items-center gap-3 text-sm text-muted-foreground">
+              {features.map(f => (
+                <li
+                  key={f}
+                  className="flex items-center gap-3 text-sm text-muted-foreground"
+                >
                   <span className="font-mono text-accent">▸</span>
                   {f}
                 </li>
@@ -70,9 +73,14 @@ export default async function AuthLayout({
       <main className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-sm">
           {/* Mobile wordmark */}
-          <Link href="/" className="mb-10 inline-flex items-center gap-2.5 lg:hidden">
+          <Link
+            href="/"
+            className="mb-10 inline-flex items-center gap-2.5 lg:hidden"
+          >
             <BrandMark className="h-7 w-7" />
-            <span className="font-mono text-sm tracking-wider text-foreground">UTILS-PLANE</span>
+            <span className="font-mono text-sm tracking-wider text-foreground">
+              UTILS-PLANE
+            </span>
           </Link>
           <div className="auth-enter">{children}</div>
         </div>

@@ -1,14 +1,14 @@
-import { Link } from "@/i18n/navigation";
-import { getTranslations } from "next-intl/server";
-import { BrandMark } from "@/components/brand/brand-mark";
-import { MarketingNav } from "@/components/layout/marketing-nav";
+import { Link } from '@/i18n/navigation';
+import { getTranslations } from 'next-intl/server';
+import { BrandMark } from '@/components/brand/brand-mark';
+import { MarketingNav } from '@/components/layout/marketing-nav';
 
 export default async function MarketingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const t = await getTranslations("Marketing");
+  const t = await getTranslations('Marketing');
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -22,13 +22,13 @@ export default async function MarketingLayout({
 
           <MarketingNav
             labels={{
-              tools: t("nav.tools"),
-              login: t("nav.login"),
-              getStarted: t("nav.getStarted"),
-              dashboard: t("nav.dashboard"),
-              settings: t("nav.settings"),
-              logOut: t("nav.logOut"),
-              defaultUser: t("nav.defaultUser"),
+              tools: t('nav.tools'),
+              login: t('nav.login'),
+              getStarted: t('nav.getStarted'),
+              dashboard: t('nav.dashboard'),
+              settings: t('nav.settings'),
+              logOut: t('nav.logOut'),
+              defaultUser: t('nav.defaultUser'),
             }}
           />
         </div>
@@ -49,17 +49,29 @@ export default async function MarketingLayout({
             </div>
 
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="/docs" className="hover:text-foreground transition-colors">
-                {t("footer.docs")}
+              <a
+                href="/docs"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.docs')}
               </a>
-              <a href="/github" className="hover:text-foreground transition-colors">
-                {t("footer.github")}
+              <a
+                href="/github"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.github')}
               </a>
-              <a href="/terms" className="hover:text-foreground transition-colors">
-                {t("footer.terms")}
+              <a
+                href="/terms"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.terms')}
               </a>
-              <a href="/privacy" className="hover:text-foreground transition-colors">
-                {t("footer.privacy")}
+              <a
+                href="/privacy"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.privacy')}
               </a>
             </div>
           </div>

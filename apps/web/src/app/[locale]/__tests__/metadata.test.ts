@@ -64,8 +64,21 @@ describe('locale layout PWA metadata', () => {
     );
     expect(metadata.icons).toEqual(
       expect.objectContaining({
-        icon: '/icons/icon-32.png',
-        apple: '/icons/icon-180.png',
+        icon: [
+          {
+            url: '/icons/utils-plane-favicon-32.png',
+            sizes: '32x32',
+            type: 'image/png',
+          },
+        ],
+        shortcut: '/favicon.ico',
+        apple: [
+          {
+            url: '/icons/utils-plane-apple-touch-180.png',
+            sizes: '180x180',
+            type: 'image/png',
+          },
+        ],
       })
     );
   });

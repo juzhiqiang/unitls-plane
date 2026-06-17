@@ -109,17 +109,16 @@ export function AppHeader() {
       <div className="flex-1 hidden md:block">
         {pathname !== "/" && (
           <Breadcrumb>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard">{tLayout("home")}</BreadcrumbLink>
-            </BreadcrumbItem>
-            {breadcrumbs.map((crumb) => (
+            {breadcrumbs.map((crumb, index) => (
               <React.Fragment key={crumb.href}>
-                <BreadcrumbSeparator />
+                {index > 0 && <BreadcrumbSeparator />}
                 <BreadcrumbItem>
                   {crumb.isLast ? (
                     <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
                   ) : (
-                    <BreadcrumbLink href={crumb.href}>{crumb.name}</BreadcrumbLink>
+                    <BreadcrumbLink asChild>
+                      <Link href={crumb.href}>{crumb.name}</Link>
+                    </BreadcrumbLink>
                   )}
                 </BreadcrumbItem>
               </React.Fragment>

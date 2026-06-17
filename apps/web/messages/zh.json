@@ -754,7 +754,9 @@
       "label": "处理位置",
       "local": "本地",
       "server": "服务端",
-      "recommended": "推荐"
+      "recommended": "推荐",
+      "serverRequiresLogin": "登录后可使用服务器处理、任务历史和账户文件保存。",
+      "loginToUseServer": "登录后使用服务器处理"
     }
   },
   "Format": {},

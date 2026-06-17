@@ -78,6 +78,7 @@ export default function ConvertPage() {
       ? 'local'
       : 'server'
     : 'local';
+  const needsServerLogin = mode === 'server' && !sessionLoading && !session;
 
   const handleDrop = (files: File[]) => {
     if (files[0]) {
@@ -187,6 +188,7 @@ export default function ConvertPage() {
             onChange={setMode}
             recommendation={recommendation}
             disabled={processing}
+            serverLoginRequired={needsServerLogin}
           />
 
           <button
@@ -195,7 +197,11 @@ export default function ConvertPage() {
             disabled={processing}
             className="w-full h-10 text-sm font-mono bg-foreground text-background rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {processing ? t('processing') : t('start')}
+            {processing
+              ? t('processing')
+              : needsServerLogin
+                ? tShared('mode.loginToUseServer')
+                : t('start')}
           </button>
         </div>
       )}

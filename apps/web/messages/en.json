@@ -754,7 +754,9 @@
       "label": "Process where",
       "local": "Local",
       "server": "Server",
-      "recommended": "Recommended"
+      "recommended": "Recommended",
+      "serverRequiresLogin": "Sign in to use server processing, task history, and account file storage.",
+      "loginToUseServer": "Sign in to use server processing"
     }
   },
   "Format": {},

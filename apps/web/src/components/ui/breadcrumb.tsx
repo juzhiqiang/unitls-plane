@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ChevronRight } from "lucide-react";
+import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 
 export interface BreadcrumbProps extends React.HTMLAttributes<HTMLElement> {
@@ -35,8 +36,9 @@ export interface BreadcrumbLinkProps
 
 const BreadcrumbLink = React.forwardRef<HTMLAnchorElement, BreadcrumbLinkProps>(
   ({ className, asChild, ...props }, ref) => {
+    const Comp = asChild ? Slot : "a";
     return (
-      <a
+      <Comp
         ref={ref}
         className={cn(
           "text-sm text-muted-foreground transition-colors hover:text-foreground",

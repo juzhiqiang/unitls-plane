@@ -1,12 +1,25 @@
 'use client';
 
-import {
-  ReactCompareSlider,
-  ReactCompareSliderImage,
-} from 'react-compare-slider';
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { formatBytes } from '@/lib/format';
+
+const ImageCompareSlider = dynamic(
+  () =>
+    import('./image-compare-slider.client').then(
+      mod => mod.ImageCompareSlider
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        aria-hidden
+        className="aspect-video max-h-[480px] bg-muted/20"
+      />
+    ),
+  }
+);
 
 export interface ImageCompareProps {
   original: File;
@@ -63,13 +76,7 @@ export function ImageCompare({ original, result }: ImageCompareProps) {
       </div>
 
       <div className="rounded-md border border-border overflow-hidden">
-        <ReactCompareSlider
-          itemOne={
-            <ReactCompareSliderImage src={originalUrl} alt="Original" />
-          }
-          itemTwo={<ReactCompareSliderImage src={resultUrl} alt="Result" />}
-          className="aspect-video max-h-[480px]"
-        />
+        <ImageCompareSlider originalUrl={originalUrl} resultUrl={resultUrl} />
       </div>
 
       <div className="flex justify-between text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-1">

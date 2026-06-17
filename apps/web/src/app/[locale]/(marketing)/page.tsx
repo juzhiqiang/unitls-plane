@@ -74,20 +74,23 @@ export default async function MarketingPage({
                   {t('hero.subtitle')}
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
-                  <Link href="/image/compress">
-                    <Button size="lg" className="h-11 w-full px-6 sm:w-auto">
+                  <Button
+                    asChild
+                    size="lg"
+                    className="h-11 w-full px-6 sm:w-auto"
+                  >
+                    <Link href="/image/compress">
                       {t('hero.ctaPrimary')}
-                    </Button>
-                  </Link>
-                  <Link href="/pdf/merge">
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="h-11 w-full px-6 sm:w-auto"
-                    >
-                      {t('hero.ctaSecondary')}
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="lg"
+                    className="h-11 w-full px-6 sm:w-auto"
+                  >
+                    <Link href="/pdf/merge">{t('hero.ctaSecondary')}</Link>
+                  </Button>
                 </div>
               </div>
 
@@ -143,11 +146,9 @@ export default async function MarketingPage({
                 {t('cta.description')}
               </p>
             </div>
-            <Link href="/dashboard">
-              <Button size="lg" className="h-11 px-8">
-                {t('cta.button')}
-              </Button>
-            </Link>
+            <Button asChild size="lg" className="h-11 px-8">
+              <Link href="/dashboard">{t('cta.button')}</Link>
+            </Button>
           </div>
         </div>
       </section>

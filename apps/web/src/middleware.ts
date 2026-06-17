@@ -6,7 +6,6 @@ import type { Locale } from './i18n/routing';
 const intlMiddleware = createMiddleware(routing);
 
 const PUBLIC_PATHS = ['/', '/login', '/register', '/image', '/pdf', '/font', '/api/auth'];
-const AUTH_PATHS = ['/login', '/register'];
 
 function stripLocale(pathname: string): { locale: Locale; path: string } {
   const segments = pathname.split('/').filter(Boolean);
@@ -25,10 +24,6 @@ function isPublicPath(path: string): boolean {
   return PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + '/'));
 }
 
-function isAuthPath(path: string): boolean {
-  return AUTH_PATHS.includes(path);
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -39,11 +34,6 @@ export function middleware(request: NextRequest) {
 
   const sessionToken = request.cookies.get('better-auth.session_token');
   const { locale, path } = stripLocale(pathname);
-
-  // Redirect authenticated users away from auth pages
-  if (sessionToken && isAuthPath(path)) {
-    return NextResponse.redirect(new URL(`/${locale}/dashboard`, request.url));
-  }
 
   // Redirect unauthenticated users away from protected pages
   if (!sessionToken && !isPublicPath(path)) {

@@ -122,6 +122,7 @@ export default function CompressPage() {
         ? 'local'
         : 'server'
       : 'local';
+  const needsServerLogin = mode === 'server' && !sessionLoading && !session;
 
   const handleDrop = (files: File[]) => {
     if (files.length === 0) return;
@@ -296,6 +297,7 @@ export default function CompressPage() {
             onChange={setMode}
             recommendation={recommendation}
             disabled={processing}
+            serverLoginRequired={needsServerLogin}
           />
 
           <button
@@ -306,9 +308,11 @@ export default function CompressPage() {
           >
             {processing
               ? t('processing')
-              : items.length > 1
-                ? t('startWithCount', { count: items.length })
-                : t('start')}
+              : needsServerLogin
+                ? tShared('mode.loginToUseServer')
+                : items.length > 1
+                  ? t('startWithCount', { count: items.length })
+                  : t('start')}
           </button>
         </div>
       )}

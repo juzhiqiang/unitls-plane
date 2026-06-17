@@ -10,6 +10,7 @@ export interface ModeToggleProps {
   onChange: (mode: ProcessMode) => void;
   recommendation?: ProcessMode;
   disabled?: boolean;
+  serverLoginRequired?: boolean;
 }
 
 export function ModeToggle({
@@ -17,6 +18,7 @@ export function ModeToggle({
   onChange,
   recommendation,
   disabled,
+  serverLoginRequired,
 }: ModeToggleProps) {
   const t = useTranslations('ToolsShared');
   return (
@@ -48,6 +50,11 @@ export function ModeToggle({
           </button>
         ))}
       </div>
+      {serverLoginRequired && value === 'server' && (
+        <p className="max-w-xl rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+          {t('mode.serverRequiresLogin')}
+        </p>
+      )}
     </div>
   );
 }

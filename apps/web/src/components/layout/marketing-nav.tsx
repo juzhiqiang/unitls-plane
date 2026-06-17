@@ -122,11 +122,11 @@ export function MarketingNav({ labels }: MarketingNavProps) {
             >
               {labels.login}
             </Link>
-            <Link href="/register">
-              <Button size="sm" className="h-8">
+            <Button asChild size="sm" className="h-8">
+              <Link href="/register">
                 {labels.getStarted}
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </>
         )}
       </nav>
@@ -208,13 +208,14 @@ export function MarketingNav({ labels }: MarketingNavProps) {
                 >
                   {labels.login}
                 </Link>
-                <Link
-                  href="/register"
-                  onClick={() => setMobileOpen(false)}
-                  className="mt-2"
-                >
-                  <Button className="w-full h-11">{labels.getStarted}</Button>
-                </Link>
+                <Button asChild className="mt-2 w-full h-11">
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {labels.getStarted}
+                  </Link>
+                </Button>
               </>
             )}
           </nav>

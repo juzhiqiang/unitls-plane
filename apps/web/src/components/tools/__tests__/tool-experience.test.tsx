@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import en from '../../../../messages/en.json';
 import { imageTools } from '@/lib/tools/tool-metadata';
 import { FailureRecoveryPanel } from '../failure-recovery-panel';
+import { ModeToggle } from '../mode-toggle';
 import { ResultPanel } from '../result-panel';
 import { ToolCatalogGrid } from '../tool-catalog-grid';
 import { ToolStepRail } from '../tool-step-rail';
@@ -103,6 +104,22 @@ describe('tool experience components', () => {
     expect(screen.getByText('Original')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Download' })
+    ).toBeInTheDocument();
+  });
+
+  it('explains that server mode needs sign-in before server processing can run', () => {
+    renderWithIntl(
+      <ModeToggle
+        value="server"
+        onChange={vi.fn()}
+        serverLoginRequired
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Sign in to use server processing, task history, and account file storage.'
+      )
     ).toBeInTheDocument();
   });
 });

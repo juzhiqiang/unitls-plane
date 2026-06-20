@@ -1,5 +1,5 @@
 import { All, Controller, Req, Res, Logger } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Request as ExpressRequest, Response } from 'express';
 import { auth } from '@utils-plane/auth';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -9,7 +9,7 @@ export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
   @All('*path')
-  async handle(@Req() req: Request, @Res() res: Response) {
+  async handle(@Req() req: ExpressRequest, @Res() res: Response) {
     const url = new URL(req.originalUrl, `http://${req.headers.host}`);
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) {
@@ -22,7 +22,7 @@ export class AuthController {
       ? undefined
       : JSON.stringify(req.body);
 
-    const request = new Request(url.toString(), {
+    const request = new globalThis.Request(url.toString(), {
       method: req.method,
       headers,
       body,

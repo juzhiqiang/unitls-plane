@@ -5,6 +5,7 @@ import { staticAssetHeaders } from './src/config/cache-headers.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   productionBrowserSourceMaps: true,
   transpilePackages: [
     '@utils-plane/db',

@@ -20,7 +20,9 @@
     "services:up": "docker compose up -d",
     "services:down": "docker compose down",
     "services:reset": "docker compose down -v && docker compose up -d",
-    "services:logs": "docker compose logs -f"
+    "services:logs": "docker compose logs -f",
+    "docker:build:all": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane:all -f Dockerfile .",
+    "docker:build:api": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane-api:latest -f apps/api/Dockerfile ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

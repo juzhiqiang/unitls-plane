@@ -24,19 +24,26 @@ FROM deps AS builder
 WORKDIR /app
 
 COPY . .
-RUN bun run build --filter=@utils-plane/api
+RUN bun run build --filter=@utils-plane/api --filter=@utils-plane/web
 
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV WEB_PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
+COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/docker/start-all.sh ./docker/start-all.sh
 
-EXPOSE 3001
+EXPOSE 3000 3001
 
-CMD ["bun", "apps/api/dist/main.js"]
+CMD ["sh", "docker/start-all.sh"]

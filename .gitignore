@@ -25,6 +25,9 @@ packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
 
+# Hand-written source declarations.
+!apps/api/src/types/**/*.d.ts
+
 # ==========================================
 # 3. Next.js 核心忽略项（关键：匹配所有子包）
 # ==========================================
@@ -61,3 +64,7 @@ apps/web/public/fallback-*.js
 apps/web/public/fallback-*.js.map
 apps/web/public/swe-worker-*.js
 apps/web/public/swe-worker-*.js.map
+
+# Docker image exports for manual server deployment.
+utils-plane-all.tar
+utils-plane-api.tar

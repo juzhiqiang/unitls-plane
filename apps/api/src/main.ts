@@ -13,13 +13,11 @@ import { init as initErrorTracker } from '@error-tracker/sdk/node';
 import { isOriginAllowed } from '@utils-plane/auth';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { buildErrorTrackerOptions } from './config/error-tracker.config';
 
-if (process.env.ERROR_TRACKER_DSN) {
-  initErrorTracker({
-    dsn: process.env.ERROR_TRACKER_DSN,
-    environment: process.env.NODE_ENV,
-    release: process.env.RELEASE ?? process.env.NEXT_PUBLIC_RELEASE ?? 'dev',
-  });
+const errorTrackerOptions = buildErrorTrackerOptions(process.env);
+if (errorTrackerOptions) {
+  initErrorTracker(errorTrackerOptions);
 }
 
 async function bootstrap() {

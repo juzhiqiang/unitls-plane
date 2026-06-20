@@ -137,6 +137,7 @@ API 模块：
 
 ## 开发约定
 
+- 项目文档默认使用中文；除非第三方协议、API 名称、代码标识或用户明确要求，新增或更新文档时不要改用英文。
 - 不要提交 `.env.local`。
 - 修改 API 后运行 `cd apps/api && bun run openapi:export`，必要时再运行 `cd packages/api-client && bun run generate`。
 - 修改数据库 schema 后运行 `bunx drizzle-kit generate` 和 `bunx drizzle-kit migrate`。

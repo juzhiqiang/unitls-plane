@@ -21,8 +21,9 @@
     "services:down": "docker compose down",
     "services:reset": "docker compose down -v && docker compose up -d",
     "services:logs": "docker compose logs -f",
-    "docker:build:all": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane:all -f Dockerfile .",
-    "docker:build:api": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane-api:latest -f apps/api/Dockerfile ."
+    "docker:package:all": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane:all -f Dockerfile . && docker save utils-plane:all -o utils-plane-all.tar",
+    "docker:package:api": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane-api:latest -f apps/api/Dockerfile . && docker save utils-plane-api:latest -o utils-plane-api.tar",
+    "docker:package:offline": "docker build --build-context error_tracker_sdk=../error-tracker/packages/sdk -t utils-plane:all -f Dockerfile . && docker save utils-plane:all postgres:16-alpine redis:7-alpine minio/minio:latest minio/mc:latest -o utils-plane-offline-all.tar"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

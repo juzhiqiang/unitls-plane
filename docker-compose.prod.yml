@@ -7,7 +7,7 @@ services:
     container_name: utils-pg-prod
     restart: unless-stopped
     ports:
-      - '5433:5432'
+      - '5007:5432'
     environment:
       POSTGRES_USER: utils
       POSTGRES_PASSWORD: utils
@@ -25,7 +25,7 @@ services:
     container_name: utils-redis-prod
     restart: unless-stopped
     ports:
-      - '6379:6379'
+      - '5008:6379'
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory-policy noeviction
@@ -40,8 +40,8 @@ services:
     container_name: utils-minio-prod
     restart: unless-stopped
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - '5009:9000'
+      - '5010:9001'
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -68,11 +68,10 @@ services:
       "
 
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: utils-plane:all
+    command: ['bun', 'apps/api/dist/main.js']
     ports:
-      - '3001:3001'
+      - '5006:3001'
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,46 +90,28 @@ services:
       S3_FORCE_PATH_STYLE: 'true'
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
-      CORS_ORIGIN: ${WEB_URL:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://202.104.149.204:5005}
       NODE_ENV: production
       PORT: 3001
     restart: unless-stopped
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
+    image: utils-plane:all
+    command: ['bun', 'server.js']
     ports:
-      - '3000:3000'
+      - '5005:3000'
     depends_on:
       api:
         condition: service_started
     environment:
-      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3001}
-      NEXT_PUBLIC_S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:9000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://202.104.149.204:5006}
+      NEXT_PUBLIC_S3_PUBLIC_URL: ${NEXT_PUBLIC_S3_PUBLIC_URL:-http://202.104.149.204:5009}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       NODE_ENV: production
-    restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: utils-caddy
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - api
-      - web
     restart: unless-stopped
 
 volumes:
   pg_data:
   redis_data:
   minio_data:
-  caddy_data:
-  caddy_config:

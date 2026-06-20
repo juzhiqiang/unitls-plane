@@ -32,6 +32,7 @@ Utils-Plane 是一个全栈文件处理工具平台，支持图片压缩/转换�
 - API DTO 使用 `class-validator` + Swagger 注释。
 - 共享校验优先放在 `packages/validators`，运行时边界使用 Zod。
 - 前端文案需要同时维护 `apps/web/messages/zh.json` 和 `apps/web/messages/en.json`。
+- 项目文档默认使用中文；除非第三方协议、API 名称、代码标识或用户明确要求，新增或更新文档时不要改用英文。
 
 ### 文件命名规范
 

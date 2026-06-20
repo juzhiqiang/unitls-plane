@@ -44,6 +44,7 @@ packages/*/src/**/*.d.ts.map
 # ==========================================
 .env
 .env.local
+.env.prod
 .env.development.local
 .env.test.local
 .env.production.local
@@ -68,3 +69,4 @@ apps/web/public/swe-worker-*.js.map
 # Docker image exports for manual server deployment.
 utils-plane-all.tar
 utils-plane-api.tar
+utils-plane-offline-all.tar

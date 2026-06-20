@@ -136,6 +136,156 @@ cd apps/web && bun run dev
 | MinIO API       | http://localhost:9000              |
 | MinIO Console   | http://localhost:9001              |
 
+## Docker 镜像上传服务器部署
+
+项目支持在本地构建 Docker 镜像，导出为 `.tar` 镜像包后上传到自有服务器，再在服务器上直接加载运行，不需要在服务器上重新构建源码。
+
+当前提供两种镜像：
+
+- `utils-plane:all`：Web + API 在同一个容器中运行，暴露 `3000` 和 `3001`。
+- `utils-plane-api:latest`：只包含 API，暴露 `3001`。
+
+构建镜像时会通过 Docker BuildKit 的额外 build context 引入本地 Error Tracker SDK，因此本地构建时需要保留 `../error-tracker/packages/sdk` 目录。
+
+### 本地打包镜像
+
+自己执行 Docker 打包时，应用镜像只有两种：
+
+| 应用镜像包            | 打包命令                  | 包含内容                 | 适用场景                                      |
+| --------------------- | ------------------------- | ------------------------ | --------------------------------------------- |
+| `utils-plane-all.tar` | `bun run docker:package:all` | `utils-plane:all`        | 服务器已有 PostgreSQL、Redis、MinIO，只部署 Web + API |
+| `utils-plane-api.tar` | `bun run docker:package:api` | `utils-plane-api:latest` | 服务器已有依赖服务，只部署 API                |
+
+执行命令后会自动构建镜像并导出 `.tar`：
+
+```bash
+bun run docker:package:all
+bun run docker:package:api
+```
+
+另外，内网服务器可以导出一个离线部署总包。它不是第三种应用镜像，而是把 `utils-plane:all` 和 `docker-compose.prod.yml` 依赖的 PostgreSQL、Redis、MinIO 镜像一起打进同一个 `.tar`，方便服务器离线 `docker load`：
+
+```bash
+bun run docker:package:offline
+```
+
+生成的镜像包只用于本地发布上传，已加入 `.gitignore`，不需要提交到 GitHub：
+
+- `utils-plane-all.tar`
+- `utils-plane-api.tar`
+- `utils-plane-offline-all.tar`
+
+生产服务器建议使用以下对外端口，避免占用服务器已有的 `5432`、`9000` 等端口：
+
+- Web：`5005 -> 3000`
+- API：`5006 -> 3001`
+- PostgreSQL：`5007 -> 5432`
+- Redis：`5008 -> 6379`
+- MinIO API：`5009 -> 9000`
+- MinIO Console：`5010 -> 9001`
+
+### 上传到服务器
+
+可以使用 `scp`、SFTP 或服务器面板上传 `.tar` 镜像包和生产环境变量文件。
+
+本地已经使用 `.env.prod` 作为生产环境变量文件。上传前请按服务器域名、数据库、Redis、MinIO 和密钥实际情况检查并修改 `.env.prod`。该文件包含敏感信息，已加入 `.gitignore`，不要提交到 GitHub。
+
+Web + API 组合镜像示例：
+
+```bash
+scp utils-plane-all.tar user@server:/opt/utils-plane/
+scp .env.prod user@server:/opt/utils-plane/
+```
+
+API-only 镜像示例：
+
+```bash
+scp utils-plane-api.tar user@server:/opt/utils-plane/
+scp .env.prod user@server:/opt/utils-plane/
+```
+
+内网服务器使用 compose 部署时，上传离线总包和部署配置：
+
+```bash
+scp utils-plane-offline-all.tar user@server:/opt/utils-plane/
+scp docker-compose.prod.yml user@server:/opt/utils-plane/
+scp .env.prod user@server:/opt/utils-plane/
+```
+
+### 服务器加载镜像
+
+```bash
+cd /opt/utils-plane
+docker load -i utils-plane-all.tar
+docker load -i utils-plane-api.tar
+```
+
+内网离线总包只需要加载一次：
+
+```bash
+cd /opt/utils-plane
+docker load -i utils-plane-offline-all.tar
+```
+
+### 使用 docker-compose.prod.yml 部署
+
+如果服务器上需要同时启动 PostgreSQL、Redis、MinIO、Web 和 API，可以上传项目里的 `docker-compose.prod.yml` 和 `.env.prod`，然后在服务器执行：
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+生产 compose 默认使用以下对外端口：
+
+- Web：`http://202.104.149.204:5005`
+- API：`http://202.104.149.204:5006`
+- PostgreSQL：`202.104.149.204:5007`
+- Redis：`202.104.149.204:5008`
+- MinIO API：`http://202.104.149.204:5009`
+- MinIO Console：`http://202.104.149.204:5010`
+
+查看服务状态和日志：
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f
+```
+
+### 运行 Web + API 组合镜像
+
+```bash
+docker run -d \
+  --name utils-plane-all \
+  --restart unless-stopped \
+  -p 5005:3000 \
+  -p 5006:3001 \
+  --env-file .env.prod \
+  utils-plane:all
+```
+
+### 运行 API-only 镜像
+
+```bash
+docker run -d \
+  --name utils-plane-api \
+  --restart unless-stopped \
+  -p 5006:3001 \
+  --env-file .env.prod \
+  utils-plane-api:latest
+```
+
+### 常用服务器命令
+
+```bash
+docker ps
+docker logs -f utils-plane-all
+docker logs -f utils-plane-api
+docker stop utils-plane-all
+docker stop utils-plane-api
+```
+
+API 仍然需要能访问 PostgreSQL、Redis 和 MinIO。请在 `.env.prod` 中配置 `DATABASE_URL`、`REDIS_URL`、`S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL` 和 `CORS_ORIGIN` 等变量。
+
 ## 常用脚本
 
 ```bash

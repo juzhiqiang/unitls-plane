@@ -74,18 +74,22 @@ export class TaskQueryDto {
 }
 
 export class TaskResponseDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiProperty({ type: String, format: 'uuid' })
   id!: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ type: String, format: 'uuid' })
   userId?: string;
 
   @ApiProperty({
+    type: String,
     enum: TASK_TYPES,
   })
   type!: string;
 
-  @ApiProperty({ enum: ['pending', 'processing', 'completed', 'failed'] })
+  @ApiProperty({
+    type: String,
+    enum: ['pending', 'processing', 'completed', 'failed'],
+  })
   status!: string;
 
   @ApiProperty({ type: [String] })
@@ -94,16 +98,16 @@ export class TaskResponseDto {
   @ApiPropertyOptional({ type: Object })
   inputConfig?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ type: String, format: 'uuid' })
   outputFileId?: string;
 
   @ApiProperty({ minimum: 0, maximum: 100 })
   progress!: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String })
   errorCode?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String })
   errorMessage?: string;
 
   @ApiProperty()
@@ -114,18 +118,21 @@ export class TaskResponseDto {
 }
 
 export class TaskStatusDto {
-  @ApiProperty({ enum: ['pending', 'processing', 'completed', 'failed'] })
+  @ApiProperty({
+    type: String,
+    enum: ['pending', 'processing', 'completed', 'failed'],
+  })
   status!: string;
 
   @ApiProperty({ minimum: 0, maximum: 100 })
   progress!: number;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ type: String, format: 'uuid' })
   outputFileId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String })
   errorCode?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String })
   errorMessage?: string;
 }

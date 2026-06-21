@@ -16,10 +16,12 @@ terminate() {
 
 trap terminate INT TERM
 
-bun apps/api/dist/main.js &
+node apps/api/dist/scripts/migrate.js
+
+node apps/api/dist/main.js &
 api_pid="$!"
 
-HOSTNAME="${HOSTNAME:-0.0.0.0}" PORT="${WEB_PORT:-3000}" bun server.js &
+HOSTNAME="${HOSTNAME:-0.0.0.0}" PORT="${WEB_PORT:-3000}" node server.js &
 web_pid="$!"
 
 status="0"

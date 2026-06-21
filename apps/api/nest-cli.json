@@ -6,14 +6,6 @@
     "tsConfigPath": "tsconfig.build.json",
     "deleteOutDir": true,
     "assets": ["**/*.json"],
-    "watchAssets": true,
-    "plugins": [
-      {
-        "name": "@nestjs/swagger",
-        "options": {
-          "introspectComments": true
-        }
-      }
-    ]
+    "watchAssets": true
   }
 }

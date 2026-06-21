@@ -2,7 +2,6 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import * as archiver from 'archiver';
-import * as mupdf from 'mupdf';
 import {
   PdfService,
   type SplitOptions,
@@ -17,6 +16,17 @@ import {
 } from '../services/pdf.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
+
+type MupdfModule = typeof import('mupdf');
+const nativeImport = new Function('specifier', 'return import(specifier)') as (
+  specifier: string,
+) => Promise<MupdfModule>;
+let mupdfPromise: Promise<MupdfModule> | undefined;
+
+function getMupdf(): Promise<MupdfModule> {
+  mupdfPromise ??= nativeImport('mupdf');
+  return mupdfPromise;
+}
 
 function streamToBuffer(archive: archiver.Archiver): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -231,6 +241,7 @@ export class PdfProcessor extends WorkerHost {
     const quality = Math.min(Math.max(config.quality ?? 85, 1), 100);
     const scale = dpi / 72;
 
+    const mupdf = await getMupdf();
     const doc = mupdf.Document.openDocument(inputBuffer, 'application/pdf');
     const totalPages = doc.countPages();
     const pageIndices: number[] = config.pages ?? Array.from({ length: totalPages }, (_, i) => i);

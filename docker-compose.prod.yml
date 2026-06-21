@@ -69,7 +69,12 @@ services:
 
   api:
     image: utils-plane:all
-    command: ['bun', 'apps/api/dist/main.js']
+    command:
+      [
+        'sh',
+        '-c',
+        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/main.js',
+      ]
     ports:
       - '5006:3001'
     depends_on:
@@ -97,7 +102,7 @@ services:
 
   web:
     image: utils-plane:all
-    command: ['bun', 'server.js']
+    command: ['node', 'server.js']
     ports:
       - '5005:3000'
     depends_on:
@@ -109,6 +114,7 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       NODE_ENV: production
+      PORT: 3000
     restart: unless-stopped
 
 volumes:

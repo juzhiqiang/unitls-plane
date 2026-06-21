@@ -1,7 +1,17 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PDFDocument, degrees, rgb, StandardFonts } from 'pdf-lib';
-import * as mupdf from 'mupdf';
 import TurndownService from 'turndown';
+
+type MupdfModule = typeof import('mupdf');
+const nativeImport = new Function('specifier', 'return import(specifier)') as (
+  specifier: string,
+) => Promise<MupdfModule>;
+let mupdfPromise: Promise<MupdfModule> | undefined;
+
+function getMupdf(): Promise<MupdfModule> {
+  mupdfPromise ??= nativeImport('mupdf');
+  return mupdfPromise;
+}
 
 export interface SplitOptions {
   mode: 'ranges' | 'pages' | 'every';
@@ -104,6 +114,7 @@ export class PdfService {
   // ─── PDF → Text/Markdown ───────────────────────────────────────────
 
   async toText(input: Buffer, opts: ToTextOptions): Promise<string> {
+    const mupdf = await getMupdf();
     const doc = mupdf.Document.openDocument(input, 'application/pdf');
     const totalPages = doc.countPages();
     const pageIndices = opts.pages ?? Array.from({ length: totalPages }, (_, i) => i);
@@ -257,7 +268,8 @@ export class PdfService {
   // ─── Encrypt ──────────────────────────────────────────────────────
 
   async encrypt(input: Buffer, opts: EncryptOptions): Promise<Buffer> {
-    const doc = mupdf.Document.openDocument(input, 'application/pdf') as mupdf.PDFDocument;
+    const mupdf = await getMupdf();
+    const doc = mupdf.Document.openDocument(input, 'application/pdf') as import('mupdf').PDFDocument;
 
     const perms = opts.permissions ?? {};
     let permBits = 0;
@@ -280,8 +292,10 @@ export class PdfService {
   // ─── Compress ─────────────────────────────────────────────────────
 
   async compressPdf(input: Buffer, opts: CompressPdfOptions): Promise<Buffer> {
+    const mupdf = await getMupdf();
+
     if (opts.level === 'light') {
-      const doc = mupdf.Document.openDocument(input, 'application/pdf') as mupdf.PDFDocument;
+      const doc = mupdf.Document.openDocument(input, 'application/pdf') as import('mupdf').PDFDocument;
       const result = doc.saveToBuffer('compress,garbage=4,linearize');
       return Buffer.from(result.asUint8Array());
     }

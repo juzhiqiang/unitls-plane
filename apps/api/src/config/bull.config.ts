@@ -15,7 +15,6 @@ export const bullConfig = BullModule.forRootAsync({
     connection: {
       ...parseRedisUrl(process.env.REDIS_URL ?? 'redis://localhost:6379'),
       maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
     },
     defaultJobOptions: {
       attempts: 3,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRouter, Link } from '@/i18n/navigation';
 import { signUp } from '@/lib/auth-client';
 import { AuthField } from '@/components/auth/auth-field';
@@ -9,6 +9,7 @@ import { PasswordStrength } from '@/components/auth/password-strength';
 
 export default function RegisterPage() {
   const t = useTranslations('Auth');
+  const locale = useLocale();
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -25,6 +26,7 @@ export default function RegisterPage() {
       email,
       password,
       name,
+      callbackURL: `${window.location.origin}/${locale}/login`,
     });
 
     setLoading(false);

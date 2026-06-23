@@ -2,6 +2,10 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from '@utils-plane/db';
 import type { Database } from '@utils-plane/db';
+import {
+  getEmailVerificationOptions,
+  isEmailVerificationRequired,
+} from './email-verification';
 import { getTrustedOrigins } from './origins';
 
 export const auth = betterAuth({
@@ -16,21 +20,10 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: process.env.NODE_ENV === 'production',
-    sendVerificationEmail: async ({
-      user,
-      url,
-    }: {
-      user: { email: string };
-      url: string;
-    }) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[Verify Email] ${user.email}: ${url}`);
-        return;
-      }
-      // 生产环境调用邮件服务
-    },
+    requireEmailVerification: isEmailVerificationRequired(process.env),
   },
+
+  emailVerification: getEmailVerificationOptions(process.env),
 
   socialProviders: {
     google: {
@@ -44,8 +37,8 @@ export const auth = betterAuth({
   },
 
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 天
-    updateAge: 60 * 60 * 24, // 1 天刷新一次
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60,

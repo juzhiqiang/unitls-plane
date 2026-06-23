@@ -25,6 +25,7 @@ export default function LoginPage() {
     const { error: authError } = await signIn.email({
       email,
       password,
+      callbackURL: `${window.location.origin}/${locale}/login`,
     });
 
     setLoading(false);

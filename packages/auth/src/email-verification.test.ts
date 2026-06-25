@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  buildVerificationEmailUrl,
+  getEmailAndPasswordOptions,
   getEmailVerificationOptions,
+  getBetterAuthBaseURL,
   getSmtpConfig,
   isEmailVerificationRequired,
 } from './email-verification';
@@ -76,11 +79,54 @@ describe('email verification configuration', () => {
       SMTP_FROM: 'no-reply@example.com',
     });
 
-    expect(options).toMatchObject({
-      sendOnSignUp: true,
-      sendOnSignIn: true,
-    });
     expect(typeof options.sendVerificationEmail).toBe('function');
   });
-});
 
+  it('builds the Better Auth base URL with the auth path', () => {
+    expect(
+      getBetterAuthBaseURL({
+        BETTER_AUTH_URL: 'https://api.example.com',
+      })
+    ).toBe('https://api.example.com/api/auth');
+  });
+
+  it('builds the verification email URL with the auth verify endpoint', () => {
+    expect(
+      buildVerificationEmailUrl(
+        {
+          BETTER_AUTH_URL: 'https://api.example.com',
+        },
+        'token-123'
+      )
+    ).toBe(
+      'https://api.example.com/api/auth/verify-email?token=token-123&callbackURL=%2F'
+    );
+  });
+
+  it('supports a base URL that already includes the auth path', () => {
+    expect(
+      getBetterAuthBaseURL({
+        BETTER_AUTH_URL: 'https://api.example.com/api/auth',
+      })
+    ).toBe('https://api.example.com/api/auth');
+  });
+
+  it('skips resending verification email for an already verified existing user', async () => {
+    const options = getEmailAndPasswordOptions({
+      NODE_ENV: 'production',
+      BETTER_AUTH_SECRET: 'test-secret',
+      BETTER_AUTH_URL: 'https://api.example.com',
+      SMTP_HOST: 'smtp.example.com',
+      SMTP_PORT: '587',
+      SMTP_USER: 'user',
+      SMTP_PASSWORD: 'password',
+      SMTP_FROM: 'no-reply@example.com',
+    });
+
+    await expect(
+      options.onExistingUserSignUp?.({
+        user: { email: 'done@example.com', emailVerified: true },
+      })
+    ).resolves.toBeUndefined();
+  });
+});

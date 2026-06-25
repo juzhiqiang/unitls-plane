@@ -3,8 +3,8 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from '@utils-plane/db';
 import type { Database } from '@utils-plane/db';
 import {
+  getEmailAndPasswordOptions,
   getEmailVerificationOptions,
-  isEmailVerificationRequired,
 } from './email-verification';
 import { getTrustedOrigins } from './origins';
 
@@ -18,10 +18,7 @@ export const auth = betterAuth({
   trustedOrigins: request =>
     getTrustedOrigins(process.env, request?.headers.get('origin')),
 
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: isEmailVerificationRequired(process.env),
-  },
+  emailAndPassword: getEmailAndPasswordOptions(process.env),
 
   emailVerification: getEmailVerificationOptions(process.env),
 

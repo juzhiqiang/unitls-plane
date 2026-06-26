@@ -4,6 +4,7 @@ import {
   getEmailAndPasswordOptions,
   getEmailVerificationOptions,
   getBetterAuthBaseURL,
+  getEmailVerificationCallbackURL,
   getSmtpConfig,
   isEmailVerificationRequired,
 } from './email-verification';
@@ -95,11 +96,12 @@ describe('email verification configuration', () => {
       buildVerificationEmailUrl(
         {
           BETTER_AUTH_URL: 'https://api.example.com',
+          CORS_ORIGIN: 'https://app.example.com',
         },
         'token-123'
       )
     ).toBe(
-      'https://api.example.com/api/auth/verify-email?token=token-123&callbackURL=%2F'
+      'https://api.example.com/api/auth/verify-email?token=token-123&callbackURL=https%3A%2F%2Fapp.example.com%2Fzh%2Flogin'
     );
   });
 
@@ -109,6 +111,23 @@ describe('email verification configuration', () => {
         BETTER_AUTH_URL: 'https://api.example.com/api/auth',
       })
     ).toBe('https://api.example.com/api/auth');
+  });
+
+  it('builds the default email verification callback URL from CORS origin', () => {
+    expect(
+      getEmailVerificationCallbackURL({
+        CORS_ORIGIN: 'https://app.example.com',
+      })
+    ).toBe('https://app.example.com/zh/login');
+  });
+
+  it('allows overriding the email verification callback URL', () => {
+    expect(
+      getEmailVerificationCallbackURL({
+        CORS_ORIGIN: 'https://app.example.com',
+        EMAIL_VERIFICATION_CALLBACK_URL: 'https://app.example.com/en/login',
+      })
+    ).toBe('https://app.example.com/en/login');
   });
 
   it('skips resending verification email for an already verified existing user', async () => {

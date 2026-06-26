@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { createEmailVerificationToken } from 'better-auth/api';
+import { getAllowedCorsOrigins, normalizeOrigin } from './origins';
 
 type Env = Record<string, string | undefined>;
 
@@ -26,10 +27,24 @@ export function getBetterAuthBaseURL(env: Env = process.env): string {
   return new URL('/api/auth', baseURL).toString().replace(/\/$/, '');
 }
 
+export function getEmailVerificationCallbackURL(
+  env: Env = process.env
+): string {
+  const configured = env.EMAIL_VERIFICATION_CALLBACK_URL?.trim();
+  if (configured) return configured;
+
+  const webOrigin =
+    normalizeOrigin(env.NEXT_PUBLIC_APP_URL) ??
+    getAllowedCorsOrigins(env)[0] ??
+    'http://localhost:3000';
+
+  return new URL('/zh/login', webOrigin).toString();
+}
+
 export function buildVerificationEmailUrl(
   env: Env = process.env,
   token: string,
-  callbackURL = '/'
+  callbackURL = getEmailVerificationCallbackURL(env)
 ): string {
   return `${getBetterAuthBaseURL(env)}/verify-email?token=${token}&callbackURL=${encodeURIComponent(
     callbackURL

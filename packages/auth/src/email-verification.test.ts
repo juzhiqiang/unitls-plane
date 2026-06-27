@@ -7,6 +7,7 @@ import {
   getEmailVerificationCallbackURL,
   getSmtpConfig,
   isEmailVerificationRequired,
+  sendExistingUserVerificationEmail,
 } from './email-verification';
 
 describe('email verification configuration', () => {
@@ -147,5 +148,28 @@ describe('email verification configuration', () => {
         user: { email: 'done@example.com', emailVerified: true },
       })
     ).resolves.toBeUndefined();
+  });
+
+  it('resends verification email for an unverified existing user', async () => {
+    const sent: Array<{ email: string; url: string }> = [];
+
+    await sendExistingUserVerificationEmail({
+      env: {
+        NODE_ENV: 'development',
+        BETTER_AUTH_SECRET: 'test-secret',
+        BETTER_AUTH_URL: 'https://api.example.com',
+        CORS_ORIGIN: 'https://app.example.com',
+      },
+      user: { email: 'pending@example.com', emailVerified: false },
+      sendVerificationEmail: async ({ user, url }) => {
+        sent.push({ email: user.email, url });
+      },
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.email).toBe('pending@example.com');
+    expect(sent[0]?.url).toStartWith(
+      'https://api.example.com/api/auth/verify-email?token='
+    );
   });
 });

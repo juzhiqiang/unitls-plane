@@ -12,6 +12,7 @@ const CODE_TO_KEY: Record<string, string> = {
   PASSWORD_TOO_LONG: 'errors.passwordTooLong',
   USER_ALREADY_EXISTS: 'errors.userAlreadyExists',
   USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'errors.userAlreadyExists',
+  EMAIL_VERIFICATION_RESENT: 'errors.emailVerificationResent',
   TOKEN_EXPIRED: 'errors.tokenExpired',
   INVALID_TOKEN: 'errors.invalidToken',
 };
@@ -24,6 +25,7 @@ const MESSAGE_TO_KEY: Array<[RegExp, string]> = [
   [/password too short/i, 'errors.passwordTooShort'],
   [/password too long/i, 'errors.passwordTooLong'],
   [/user already exists/i, 'errors.userAlreadyExists'],
+  [/verification email resent/i, 'errors.emailVerificationResent'],
   [/token expired/i, 'errors.tokenExpired'],
   [/invalid token/i, 'errors.invalidToken'],
 ];

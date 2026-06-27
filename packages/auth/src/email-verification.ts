@@ -22,6 +22,14 @@ export type VerificationEmailContext = {
   url: string;
 };
 
+export type ExistingUserVerificationInput = {
+  env?: Env;
+  user: { email: string; emailVerified?: boolean };
+  sendVerificationEmail?: (
+    context: VerificationEmailContext
+  ) => Promise<void>;
+};
+
 export function getBetterAuthBaseURL(env: Env = process.env): string {
   const baseURL = env.BETTER_AUTH_URL || 'http://localhost:3001';
   return new URL('/api/auth', baseURL).toString().replace(/\/$/, '');
@@ -121,9 +129,27 @@ export function getEmailVerificationOptions(env: Env = process.env) {
   };
 }
 
-export function getEmailAndPasswordOptions(env: Env = process.env) {
-  const sendVerificationEmail = buildVerificationEmailSender(env);
+export async function sendExistingUserVerificationEmail({
+  env = process.env,
+  user,
+  sendVerificationEmail = buildVerificationEmailSender(env),
+}: ExistingUserVerificationInput) {
+  if (user.emailVerified) return;
 
+  const token = await createEmailVerificationToken(
+    env.BETTER_AUTH_SECRET ?? '',
+    user.email,
+    void 0
+  );
+  const url = buildVerificationEmailUrl(env, token);
+
+  await sendVerificationEmail({
+    user: { email: user.email },
+    url,
+  });
+}
+
+export function getEmailAndPasswordOptions(env: Env = process.env) {
   return {
     enabled: true,
     requireEmailVerification: isEmailVerificationRequired(env),
@@ -131,20 +157,6 @@ export function getEmailAndPasswordOptions(env: Env = process.env) {
       user,
     }: {
       user: { email: string; emailVerified?: boolean };
-    }) => {
-      if (user.emailVerified) return;
-
-      const token = await createEmailVerificationToken(
-        env.BETTER_AUTH_SECRET ?? '',
-        user.email,
-        void 0
-      );
-      const url = buildVerificationEmailUrl(env, token);
-
-      await sendVerificationEmail({
-        user: { email: user.email },
-        url,
-      });
-    },
+    }) => sendExistingUserVerificationEmail({ env, user }),
   };
 }

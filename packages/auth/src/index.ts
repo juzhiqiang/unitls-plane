@@ -5,6 +5,7 @@ import type { Database } from '@utils-plane/db';
 import {
   getEmailAndPasswordOptions,
   getEmailVerificationOptions,
+  sendExistingUserVerificationEmail,
 } from './email-verification';
 import { getTrustedOrigins } from './origins';
 
@@ -71,6 +72,7 @@ export {
   isOriginAllowed,
   normalizeOrigin,
 } from './origins';
+export { sendExistingUserVerificationEmail };
 
 export async function verifySession(headers: Headers) {
   const session = await auth.api.getSession({ headers });

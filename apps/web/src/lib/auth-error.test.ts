@@ -19,6 +19,15 @@ describe('getAuthErrorKey', () => {
     ).toBe('errors.invalidCredentials');
   });
 
+  it('maps duplicate unverified sign-up to a resend notice', () => {
+    expect(
+      getAuthErrorKey({
+        code: 'EMAIL_VERIFICATION_RESENT',
+        message: 'Verification email resent.',
+      })
+    ).toBe('errors.emailVerificationResent');
+  });
+
   it('falls back to a generic auth error key', () => {
     expect(getAuthErrorKey({ message: 'Unexpected error' })).toBe(
       'errors.generic'

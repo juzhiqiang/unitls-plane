@@ -260,7 +260,8 @@
       "userAlreadyExists": "This email is already registered. Sign in or check your verification email.",
       "tokenExpired": "The verification link has expired. Please request a new verification email.",
       "invalidToken": "The verification link is invalid. Please request a new verification email.",
-      "generic": "The request failed. Please try again later."
+      "generic": "The request failed. Please try again later.",
+      "emailVerificationResent": "This email is already registered but not verified. We sent a new verification email."
     }
   },
   "AppLayout": {

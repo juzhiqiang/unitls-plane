@@ -1,33 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { signIn } from '@/lib/auth-client';
+import { requestPasswordReset } from '@/lib/auth-client';
 import { getAuthErrorKey } from '@/lib/auth-error';
 import { AuthField } from '@/components/auth/auth-field';
 
-export default function LoginPage() {
+export default function ForgotPasswordPage() {
   const t = useTranslations('Auth');
   const locale = useLocale();
-  const searchParams = useSearchParams();
-  const next = searchParams.get('next');
-  const verificationError = searchParams.get('error');
-  const verified = searchParams.get('verified') === '1' && !verificationError;
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const { error: authError } = await signIn.email({
+    const { error: authError } = await requestPasswordReset({
       email,
-      password,
+      redirectTo: `${window.location.origin}/${locale}/reset-password`,
     });
 
     setLoading(false);
@@ -37,37 +32,27 @@ export default function LoginPage() {
       return;
     }
 
-    const target = next && next.startsWith('/') ? next : '/dashboard';
-    window.location.href = `/${locale}${target}`;
+    setSent(true);
   };
 
   return (
     <div className="space-y-8">
       <div className="space-y-2">
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {t('sectionLogin')}
+          {t('sectionForgotPassword')}
         </span>
         <h1 className="glitch-soft text-2xl font-medium tracking-tight text-foreground">
-          {t('loginTitle')}
+          {t('forgotPasswordTitle')}
         </h1>
       </div>
 
-      <form onSubmit={handleEmailLogin} className="space-y-5">
-        {verified && (
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {sent && (
           <p
             role="status"
             className="rounded-md border border-accent/40 bg-accent/5 p-3 font-mono text-xs text-accent"
           >
-            {t('emailVerifiedNotice')}
-          </p>
-        )}
-
-        {verificationError && (
-          <p
-            role="alert"
-            className="rounded-md border border-destructive/30 p-3 font-mono text-xs text-destructive"
-          >
-            {t(getAuthErrorKey({ code: verificationError }))}
+            {t('passwordResetSent')}
           </p>
         )}
 
@@ -80,25 +65,6 @@ export default function LoginPage() {
           autoComplete="email"
           required
         />
-
-        <AuthField
-          id="password"
-          label={t('password')}
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-
-        <div className="flex justify-end">
-          <Link
-            href="/forgot-password"
-            className="text-xs text-accent underline decoration-accent/40 underline-offset-[3px] transition-colors hover:decoration-accent"
-          >
-            {t('forgotPasswordLink')}
-          </Link>
-        </div>
 
         {error && (
           <p
@@ -114,7 +80,7 @@ export default function LoginPage() {
           disabled={loading}
           className="group inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground text-sm font-mono text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {loading ? t('signingIn') : t('loginButton')}
+          {loading ? t('sendingResetEmail') : t('sendResetEmail')}
           {!loading && (
             <span className="transition-transform group-hover:translate-x-0.5">
               →
@@ -124,12 +90,11 @@ export default function LoginPage() {
       </form>
 
       <p className="text-sm text-muted-foreground">
-        {t('noAccount')}{' '}
         <Link
-          href="/register"
+          href="/login"
           className="text-accent underline decoration-accent/40 underline-offset-[3px] transition-colors hover:decoration-accent"
         >
-          {t('registerLink')}
+          {t('backToLogin')}
         </Link>
       </p>
     </div>

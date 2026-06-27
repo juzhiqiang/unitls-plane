@@ -136,6 +136,38 @@ cd apps/web && bun run dev
 | MinIO API       | http://localhost:9000              |
 | MinIO Console   | http://localhost:9001              |
 
+## 认证与邮箱验证
+
+项目使用 Better-Auth，并在 API 层对邮箱注册做了额外拦截：
+
+- 开发环境默认 `REQUIRE_EMAIL_VERIFICATION=false`，注册后可直接登录；需要在本地模拟正式流程时，把它改成 `true` 并配置 SMTP。
+- 生产环境默认 `REQUIRE_EMAIL_VERIFICATION=true`，必须通过邮箱验证后才能登录。
+- 新邮箱注册时，系统会发送验证邮件；用户点击邮件中的 `/api/auth/verify-email` 链接后，默认跳回 `/zh/login?verified=1`。
+- 登录页提供“忘记密码”入口，用户提交邮箱后会通过同一套 SMTP 发送密码重置邮件；邮件链接先经过 `/api/auth/reset-password/:token` 校验，再跳回 `/zh/reset-password?token=...` 设置新密码。
+- 已验证的邮箱再次注册会返回 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`，前端会显示对应的国际化提示。
+- 已存在但未验证的邮箱再次注册不会创建新用户，而是重新发送验证邮件，并返回 `EMAIL_VERIFICATION_RESENT`。
+
+本地或生产启用邮箱验证、找回密码邮件时，需要配置：
+
+```env
+REQUIRE_EMAIL_VERIFICATION=true
+SMTP_HOST=smtp.example.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM=Utils Plane <no-reply@example.com>
+EMAIL_VERIFICATION_CALLBACK_URL=http://localhost:3000/zh/login?verified=1
+```
+
+生产环境还要保持以下地址一致：
+
+- `BETTER_AUTH_URL` 指向 API 外部访问地址，例如 `http://202.104.149.204:5006`。
+- `CORS_ORIGIN` 指向 Web 外部访问地址，例如 `http://202.104.149.204:5005`。
+- `NEXT_PUBLIC_API_URL` 指向 API 外部访问地址。
+- `NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true`，让前端展示邮箱验证相关提示。
+- 密码重置复用 SMTP 配置，不需要额外的环境变量。
+
 ## Docker 镜像上传服务器部署
 
 项目支持在本地构建 Docker 镜像，导出为 `.tar` 镜像包后上传到自有服务器，再在服务器上直接加载运行，不需要在服务器上重新构建源码。
@@ -151,10 +183,10 @@ cd apps/web && bun run dev
 
 自己执行 Docker 打包时，应用镜像只有两种：
 
-| 应用镜像包            | 打包命令                  | 包含内容                 | 适用场景                                      |
-| --------------------- | ------------------------- | ------------------------ | --------------------------------------------- |
+| 应用镜像包            | 打包命令                     | 包含内容                 | 适用场景                                              |
+| --------------------- | ---------------------------- | ------------------------ | ----------------------------------------------------- |
 | `utils-plane-all.tar` | `bun run docker:package:all` | `utils-plane:all`        | 服务器已有 PostgreSQL、Redis、MinIO，只部署 Web + API |
-| `utils-plane-api.tar` | `bun run docker:package:api` | `utils-plane-api:latest` | 服务器已有依赖服务，只部署 API                |
+| `utils-plane-api.tar` | `bun run docker:package:api` | `utils-plane-api:latest` | 服务器已有依赖服务，只部署 API                        |
 
 执行命令后会自动构建镜像并导出 `.tar`：
 
@@ -189,6 +221,25 @@ bun run docker:package:offline
 可以使用 `scp`、SFTP 或服务器面板上传 `.tar` 镜像包和生产环境变量文件。
 
 本地已经使用 `.env.prod` 作为生产环境变量文件。上传前请按服务器域名、数据库、Redis、MinIO 和密钥实际情况检查并修改 `.env.prod`。该文件包含敏感信息，已加入 `.gitignore`，不要提交到 GitHub。
+
+生产 `.env.prod` 至少需要检查：
+
+```env
+BETTER_AUTH_SECRET=<openssl rand -base64 32>
+BETTER_AUTH_URL=http://202.104.149.204:5006
+CORS_ORIGIN=http://202.104.149.204:5005
+NEXT_PUBLIC_API_URL=http://202.104.149.204:5006
+NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009
+REQUIRE_EMAIL_VERIFICATION=true
+NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true
+EMAIL_VERIFICATION_CALLBACK_URL=http://202.104.149.204:5005/zh/login?verified=1
+SMTP_HOST=smtp.example.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM=Utils Plane <no-reply@example.com>
+```
 
 Web + API 组合镜像示例：
 

@@ -1,6 +1,7 @@
 import { createTaskSchema, taskStatusEnum } from '@utils-plane/validators';
 import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsEnum,
   IsArray,
@@ -20,9 +21,20 @@ export const taskQuerySchema = z.object({
 export type TaskQueryInput = z.infer<typeof taskQuerySchema>;
 
 const TASK_TYPES = [
-  'compress', 'convert', 'pdf_merge', 'pdf_split', 'pdf_to_image', 'font_convert',
-  'pdf_to_text', 'image_to_pdf', 'pdf_rotate', 'pdf_watermark', 'pdf_encrypt',
-  'pdf_compress', 'pdf_metadata', 'pdf_rearrange',
+  'compress',
+  'convert',
+  'pdf_merge',
+  'pdf_split',
+  'pdf_to_image',
+  'font_convert',
+  'pdf_to_text',
+  'image_to_pdf',
+  'pdf_rotate',
+  'pdf_watermark',
+  'pdf_encrypt',
+  'pdf_compress',
+  'pdf_metadata',
+  'pdf_rearrange',
 ] as const;
 
 type TaskTypeValue = (typeof TASK_TYPES)[number];
@@ -47,12 +59,14 @@ export class CreateTaskDto {
 export class TaskQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   @Max(100)

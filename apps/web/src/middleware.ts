@@ -10,6 +10,8 @@ const PUBLIC_PATHS = [
   '/login',
   '/register',
   '/verify-email',
+  '/forgot-password',
+  '/reset-password',
   '/image',
   '/pdf',
   '/font',
@@ -30,7 +32,7 @@ function stripLocale(pathname: string): { locale: Locale; path: string } {
 }
 
 function isPublicPath(path: string): boolean {
-  return PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + '/'));
+  return PUBLIC_PATHS.some(p => path === p || path.startsWith(p + '/'));
 }
 
 export function middleware(request: NextRequest) {

@@ -22,12 +22,16 @@ export type VerificationEmailContext = {
   url: string;
 };
 
+export type PasswordResetEmailContext = {
+  user: VerificationUser;
+  url: string;
+  token: string;
+};
+
 export type ExistingUserVerificationInput = {
   env?: Env;
   user: { email: string; emailVerified?: boolean };
-  sendVerificationEmail?: (
-    context: VerificationEmailContext
-  ) => Promise<void>;
+  sendVerificationEmail?: (context: VerificationEmailContext) => Promise<void>;
 };
 
 export function getBetterAuthBaseURL(env: Env = process.env): string {
@@ -76,6 +80,15 @@ function required(value: string | undefined, name: string): string {
   return trimmed;
 }
 
+function hasCompleteSmtpConfig(env: Env = process.env): boolean {
+  return Boolean(
+    env.SMTP_HOST?.trim() &&
+    env.SMTP_USER?.trim() &&
+    env.SMTP_PASSWORD?.trim() &&
+    env.SMTP_FROM?.trim()
+  );
+}
+
 export function getSmtpConfig(env: Env = process.env): SmtpConfig {
   return {
     host: required(env.SMTP_HOST, 'SMTP_HOST'),
@@ -85,6 +98,18 @@ export function getSmtpConfig(env: Env = process.env): SmtpConfig {
     password: required(env.SMTP_PASSWORD, 'SMTP_PASSWORD'),
     from: required(env.SMTP_FROM, 'SMTP_FROM'),
   };
+}
+
+function createSmtpTransporter(smtp: SmtpConfig) {
+  return nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: {
+      user: smtp.user,
+      pass: smtp.password,
+    },
+  });
 }
 
 export function buildVerificationEmailSender(env: Env = process.env) {
@@ -99,15 +124,7 @@ export function buildVerificationEmailSender(env: Env = process.env) {
   const smtp = getSmtpConfig(env);
 
   return async ({ user, url }: VerificationEmailContext) => {
-    const transporter = nodemailer.createTransport({
-      host: smtp.host,
-      port: smtp.port,
-      secure: smtp.secure,
-      auth: {
-        user: smtp.user,
-        pass: smtp.password,
-      },
-    });
+    const transporter = createSmtpTransporter(smtp);
 
     const result = await transporter.sendMail({
       from: smtp.from,
@@ -119,6 +136,38 @@ export function buildVerificationEmailSender(env: Env = process.env) {
 
     console.log(
       `[Verify Email] accepted=${JSON.stringify(result.accepted)} rejected=${JSON.stringify(result.rejected)} messageId=${result.messageId}`
+    );
+  };
+}
+
+export function buildPasswordResetEmailSender(env: Env = process.env) {
+  if (!hasCompleteSmtpConfig(env)) {
+    if (env.NODE_ENV === 'production') {
+      getSmtpConfig(env);
+    }
+
+    return async ({ user, url }: PasswordResetEmailContext) => {
+      if (env.NODE_ENV === 'development') {
+        console.log(`[Reset Password] ${user.email}: ${url}`);
+      }
+    };
+  }
+
+  const smtp = getSmtpConfig(env);
+
+  return async ({ user, url }: PasswordResetEmailContext) => {
+    const transporter = createSmtpTransporter(smtp);
+
+    const result = await transporter.sendMail({
+      from: smtp.from,
+      to: user.email,
+      subject: 'Reset your Utils Plane password',
+      text: `Click the link below to reset your password:\n\n${url}`,
+      html: `<p>Click the link below to reset your password:</p><p><a href="${url}">${url}</a></p>`,
+    });
+
+    console.log(
+      `[Reset Password] accepted=${JSON.stringify(result.accepted)} rejected=${JSON.stringify(result.rejected)} messageId=${result.messageId}`
     );
   };
 }
@@ -153,6 +202,9 @@ export function getEmailAndPasswordOptions(env: Env = process.env) {
   return {
     enabled: true,
     requireEmailVerification: isEmailVerificationRequired(env),
+    sendResetPassword: buildPasswordResetEmailSender(env),
+    resetPasswordTokenExpiresIn: 60 * 60,
+    revokeSessionsOnPasswordReset: true,
     onExistingUserSignUp: async ({
       user,
     }: {

@@ -2,9 +2,11 @@
 
 import { createAuthClient } from 'better-auth/react';
 
-export const authClient: ReturnType<typeof createAuthClient> = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
-});
+export const authClient: ReturnType<typeof createAuthClient> = createAuthClient(
+  {
+    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  }
+);
 
 export const {
   signIn,
@@ -13,4 +15,6 @@ export const {
   useSession,
   getSession,
   changePassword,
+  requestPasswordReset,
+  resetPassword,
 } = authClient;

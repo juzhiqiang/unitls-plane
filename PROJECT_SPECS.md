@@ -81,6 +81,14 @@ S3_FORCE_PATH_STYLE=true
 # Better-Auth
 BETTER_AUTH_SECRET=<通过 openssl rand -base64 32 生成>
 BETTER_AUTH_URL=http://localhost:3001
+REQUIRE_EMAIL_VERIFICATION=false
+EMAIL_VERIFICATION_CALLBACK_URL=http://localhost:3000/zh/login?verified=1
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
 
 # OAuth
 GOOGLE_CLIENT_ID=
@@ -91,6 +99,7 @@ GITHUB_CLIENT_SECRET=
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_S3_PUBLIC_URL=http://localhost:9000
+NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=false
 NEXT_PUBLIC_ERROR_TRACKER_DSN=
 NEXT_PUBLIC_ERROR_TRACKER_TOKEN=
 NEXT_PUBLIC_RELEASE=dev
@@ -196,6 +205,16 @@ cd packages/api-client && bun run generate
 | `account`      | OAuth 或密码账户                               |
 | `verification` | 邮箱验证                                       |
 
+### 认证流程
+
+- Better-Auth 挂载在 API 的 `/api/auth/*`，前端通过 `NEXT_PUBLIC_API_URL` 访问。
+- `REQUIRE_EMAIL_VERIFICATION` 控制邮箱验证；未设置时生产环境默认启用，开发环境默认关闭。
+- 启用邮箱验证后，SMTP 变量 `SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASSWORD`、`SMTP_FROM` 必须可用。
+- 验证邮件链接使用 API 地址 `/api/auth/verify-email`，验证成功后跳转到 `EMAIL_VERIFICATION_CALLBACK_URL`；未配置时默认使用允许的 Web origin 并跳到 `/zh/login?verified=1`。
+- 找回密码使用 Better-Auth `/api/auth/request-password-reset` 和 `/api/auth/reset-password`，复用同一套 SMTP；重置链接先经过 API token 校验，再跳到前端 `/reset-password?token=...` 页面。
+- 已验证邮箱重复注册会返回 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`；未验证邮箱重复注册会重新发送验证邮件并返回 `EMAIL_VERIFICATION_RESENT`。
+- 前端通过 `apps/web/src/lib/auth-error.ts` 将 Better-Auth 和后端认证错误码映射到中英文文案。
+
 ### Task 类型
 
 `compress`、`convert`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`。
@@ -216,6 +235,7 @@ cd packages/api-client && bun run generate
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - BullMQ 队列：`image-queue`、`pdf-queue`、`font-queue`、`cleanup-queue`。
 - `/admin/queues` 使用 Basic Auth 保护。
+- 生产 Docker compose 默认暴露 Web `5005`、API `5006`、PostgreSQL `5007`、Redis `5008`、MinIO API `5009`、MinIO Console `5010`。
 
 ## Web 页面与工具
 
@@ -229,7 +249,7 @@ cd packages/api-client && bun run generate
 - `/files`、`/files/trash` - 文件管理和回收站。
 - `/tasks` - 任务历史和任务详情。
 - `/settings` - 用户设置。
-- `/login`、`/register`、`/verify-email` - 认证页面。
+- `/login`、`/register`、`/verify-email`、`/forgot-password`、`/reset-password` - 认证页面。
 
 工具清单：
 

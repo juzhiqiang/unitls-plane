@@ -84,6 +84,20 @@ describe('email verification configuration', () => {
     expect(typeof options.sendVerificationEmail).toBe('function');
   });
 
+  it('enables password reset emails when SMTP config is complete', () => {
+    const options = getEmailAndPasswordOptions({
+      NODE_ENV: 'production',
+      SMTP_HOST: 'smtp.example.com',
+      SMTP_PORT: '587',
+      SMTP_USER: 'user',
+      SMTP_PASSWORD: 'password',
+      SMTP_FROM: 'no-reply@example.com',
+    });
+
+    expect(typeof options.sendResetPassword).toBe('function');
+    expect(options.revokeSessionsOnPasswordReset).toBe(true);
+  });
+
   it('builds the Better Auth base URL with the auth path', () => {
     expect(
       getBetterAuthBaseURL({

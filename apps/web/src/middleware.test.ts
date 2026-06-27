@@ -33,4 +33,13 @@ describe('middleware auth routes', () => {
     expect(response.status).not.toBe(307);
     expect(response.headers.get('location')).toBeNull();
   });
+
+  it('allows unauthenticated users to reset their password', () => {
+    for (const path of ['/zh/forgot-password', '/zh/reset-password']) {
+      const response = middleware(request(path));
+
+      expect(response.status).not.toBe(307);
+      expect(response.headers.get('location')).toBeNull();
+    }
+  });
 });

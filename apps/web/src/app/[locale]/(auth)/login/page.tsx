@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { signIn } from '@/lib/auth-client';
+import { getAuthErrorKey } from '@/lib/auth-error';
 import { AuthField } from '@/components/auth/auth-field';
 
 export default function LoginPage() {
@@ -12,6 +13,8 @@ export default function LoginPage() {
   const locale = useLocale();
   const searchParams = useSearchParams();
   const next = searchParams.get('next');
+  const verificationError = searchParams.get('error');
+  const verified = searchParams.get('verified') === '1' && !verificationError;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,13 +28,12 @@ export default function LoginPage() {
     const { error: authError } = await signIn.email({
       email,
       password,
-      callbackURL: `${window.location.origin}/${locale}/login`,
     });
 
     setLoading(false);
 
     if (authError) {
-      setError(authError.message || 'Login failed');
+      setError(t(getAuthErrorKey(authError)));
       return;
     }
 
@@ -51,6 +53,24 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={handleEmailLogin} className="space-y-5">
+        {verified && (
+          <p
+            role="status"
+            className="rounded-md border border-accent/40 bg-accent/5 p-3 font-mono text-xs text-accent"
+          >
+            {t('emailVerifiedNotice')}
+          </p>
+        )}
+
+        {verificationError && (
+          <p
+            role="alert"
+            className="rounded-md border border-destructive/30 p-3 font-mono text-xs text-destructive"
+          >
+            {t(getAuthErrorKey({ code: verificationError }))}
+          </p>
+        )}
+
         <AuthField
           id="email"
           label={t('email')}

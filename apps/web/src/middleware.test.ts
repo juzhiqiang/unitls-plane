@@ -26,4 +26,11 @@ describe('middleware auth routes', () => {
       'http://localhost:3000/zh/login?next=%2Fdashboard'
     );
   });
+
+  it('allows unauthenticated users to see the verify email page', () => {
+    const response = middleware(request('/zh/verify-email'));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+  });
 });

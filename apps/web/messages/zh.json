@@ -248,7 +248,20 @@
     "pwWeak": "弱",
     "pwFair": "中",
     "pwGood": "良",
-    "pwStrong": "强"
+    "pwStrong": "强",
+    "emailVerifiedNotice": "邮箱验证成功，请登录。",
+    "errors": {
+      "emailNotVerified": "邮箱还未验证，请先点击邮箱中的验证链接。",
+      "invalidCredentials": "邮箱或密码错误。",
+      "invalidEmail": "请输入有效的邮箱地址。",
+      "invalidPassword": "密码无效，请检查后重试。",
+      "passwordTooShort": "密码长度太短。",
+      "passwordTooLong": "密码长度太长。",
+      "userAlreadyExists": "该邮箱已注册，请直接登录或检查验证邮件。",
+      "tokenExpired": "验证链接已过期，请重新注册或登录后重新获取验证邮件。",
+      "invalidToken": "验证链接无效，请重新获取验证邮件。",
+      "generic": "操作失败，请稍后重试。"
+    }
   },
   "AppLayout": {
     "home": "仪表盘",

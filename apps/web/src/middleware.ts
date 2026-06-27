@@ -5,7 +5,16 @@ import type { Locale } from './i18n/routing';
 
 const intlMiddleware = createMiddleware(routing);
 
-const PUBLIC_PATHS = ['/', '/login', '/register', '/image', '/pdf', '/font', '/api/auth'];
+const PUBLIC_PATHS = [
+  '/',
+  '/login',
+  '/register',
+  '/verify-email',
+  '/image',
+  '/pdf',
+  '/font',
+  '/api/auth',
+];
 
 function stripLocale(pathname: string): { locale: Locale; path: string } {
   const segments = pathname.split('/').filter(Boolean);

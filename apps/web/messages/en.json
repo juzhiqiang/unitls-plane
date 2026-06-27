@@ -248,7 +248,20 @@
     "pwWeak": "weak",
     "pwFair": "fair",
     "pwGood": "good",
-    "pwStrong": "strong"
+    "pwStrong": "strong",
+    "emailVerifiedNotice": "Email verified. Please sign in.",
+    "errors": {
+      "emailNotVerified": "Please verify your email before signing in.",
+      "invalidCredentials": "Invalid email or password.",
+      "invalidEmail": "Please enter a valid email address.",
+      "invalidPassword": "The password is invalid. Please check it and try again.",
+      "passwordTooShort": "Password is too short.",
+      "passwordTooLong": "Password is too long.",
+      "userAlreadyExists": "This email is already registered. Sign in or check your verification email.",
+      "tokenExpired": "The verification link has expired. Please request a new verification email.",
+      "invalidToken": "The verification link is invalid. Please request a new verification email.",
+      "generic": "The request failed. Please try again later."
+    }
   },
   "AppLayout": {
     "home": "Dashboard",

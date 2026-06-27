@@ -101,7 +101,7 @@ describe('email verification configuration', () => {
         'token-123'
       )
     ).toBe(
-      'https://api.example.com/api/auth/verify-email?token=token-123&callbackURL=https%3A%2F%2Fapp.example.com%2Fzh%2Flogin'
+      'https://api.example.com/api/auth/verify-email?token=token-123&callbackURL=https%3A%2F%2Fapp.example.com%2Fzh%2Flogin%3Fverified%3D1'
     );
   });
 
@@ -118,7 +118,7 @@ describe('email verification configuration', () => {
       getEmailVerificationCallbackURL({
         CORS_ORIGIN: 'https://app.example.com',
       })
-    ).toBe('https://app.example.com/zh/login');
+    ).toBe('https://app.example.com/zh/login?verified=1');
   });
 
   it('allows overriding the email verification callback URL', () => {

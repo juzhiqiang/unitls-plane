@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter, Link } from '@/i18n/navigation';
 import { signUp } from '@/lib/auth-client';
+import { getAuthErrorKey } from '@/lib/auth-error';
 import { AuthField } from '@/components/auth/auth-field';
 import { PasswordStrength } from '@/components/auth/password-strength';
 
@@ -26,13 +27,13 @@ export default function RegisterPage() {
       email,
       password,
       name,
-      callbackURL: `${window.location.origin}/${locale}/login`,
+      callbackURL: `${window.location.origin}/${locale}/login?verified=1`,
     });
 
     setLoading(false);
 
     if (authError) {
-      setError(authError.message || 'Registration failed');
+      setError(t(getAuthErrorKey(authError)));
       return;
     }
 

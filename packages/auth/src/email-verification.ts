@@ -38,7 +38,9 @@ export function getEmailVerificationCallbackURL(
     getAllowedCorsOrigins(env)[0] ??
     'http://localhost:3000';
 
-  return new URL('/zh/login', webOrigin).toString();
+  const callbackURL = new URL('/zh/login', webOrigin);
+  callbackURL.searchParams.set('verified', '1');
+  return callbackURL.toString();
 }
 
 export function buildVerificationEmailUrl(

@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const taskTypeEnum = z.enum([
   'compress',
   'convert',
+  'image_watermark',
   'pdf_merge',
   'pdf_split',
   'pdf_to_image',

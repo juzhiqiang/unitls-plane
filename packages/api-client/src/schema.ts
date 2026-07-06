@@ -56,6 +56,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry a failed task */
+        post: operations["TasksController_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fonts/{fileId}/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get font file metadata */
+        get: operations["FontsController_getFontInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/upload": {
         parameters: {
             query?: never;
@@ -67,6 +101,108 @@ export interface paths {
         put?: never;
         /** Upload a file */
         post: operations["FilesController_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List trashed files for current user */
+        get: operations["FilesController_listTrash"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/trash/empty": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Empty trash for current user */
+        delete: operations["FilesController_emptyTrash"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/batch-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch soft-delete files */
+        post: operations["FilesController_batchDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/batch-restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch restore soft-deleted files */
+        post: operations["FilesController_batchRestore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/batch-permanent-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch permanently delete files from trash */
+        post: operations["FilesController_batchPermanentDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List files for current user */
+        get: operations["FilesController_list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -108,18 +244,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/files": {
+    "/files/{id}/restore": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List files for current user */
-        get: operations["FilesController_list"];
+        get?: never;
+        put?: never;
+        /** Restore a soft-deleted file */
+        post: operations["FilesController_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** Permanently delete a file */
+        delete: operations["FilesController_permanentRemove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -164,7 +317,7 @@ export interface components {
     schemas: {
         CreateTaskDto: {
             /** @enum {string} */
-            type: "compress" | "convert" | "pdf_merge" | "pdf_split" | "font_convert";
+            type: "compress" | "convert" | "image_watermark" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
             inputFileIds: string[];
             inputConfig?: Record<string, never>;
         };
@@ -174,7 +327,7 @@ export interface components {
             /** Format: uuid */
             userId?: string;
             /** @enum {string} */
-            type: "compress" | "convert" | "pdf_merge" | "pdf_split" | "font_convert";
+            type: "compress" | "convert" | "image_watermark" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
             inputFileIds: string[];
@@ -198,6 +351,9 @@ export interface components {
             errorCode?: string;
             errorMessage?: string;
         };
+        FileIdsDto: {
+            ids: string[];
+        };
     };
     responses: never;
     parameters: never;
@@ -213,6 +369,7 @@ export interface operations {
                 page?: number;
                 limit?: number;
                 status?: "pending" | "processing" | "completed" | "failed";
+                type?: "compress" | "convert" | "image_watermark" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
             };
             header?: never;
             path?: never;
@@ -311,6 +468,62 @@ export interface operations {
             };
         };
     };
+    TasksController_retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New task created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponseDto"];
+                };
+            };
+        };
+    };
+    FontsController_getFontInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Font info */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid font file */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description File not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     FilesController_upload: {
         parameters: {
             query?: never;
@@ -321,6 +534,128 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_listTrash: {
+        parameters: {
+            query: {
+                page: string;
+                limit: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_emptyTrash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_batchDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileIdsDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_batchRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileIdsDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_batchPermanentDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileIdsDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_list: {
+        parameters: {
+            query: {
+                page: string;
+                limit: string;
+                mimeType: string;
+                search: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -385,14 +720,32 @@ export interface operations {
             };
         };
     };
-    FilesController_list: {
+    FilesController_restore: {
         parameters: {
-            query: {
-                page: string;
-                limit: string;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_permanentRemove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

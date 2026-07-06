@@ -133,6 +133,8 @@
       "imageOptimizeDescription": "在保持视觉质量的同时降低文件大小。",
       "imageConvert": "转换",
       "imageConvertDescription": "在浏览器中完成图片格式互转。",
+      "imageProtect": "保护",
+      "imageProtectDescription": "添加可见归属标记，用于品牌保护和防盗图发布。",
       "imageBatch": "批量",
       "imageBatchDescription": "一次处理多张图片，并打包下载结果。",
       "imagePreview": "预览",
@@ -156,6 +158,10 @@
       "imageConvert": {
         "title": "图片转换",
         "description": "在浏览器中转换 JPEG、PNG、WebP 和 AVIF。"
+      },
+      "imageWatermark": {
+        "title": "图片水印",
+        "description": "为图片添加可见文字水印，用于防盗图和品牌保护。"
       },
       "imageBatch": {
         "title": "批量图片输出",
@@ -363,6 +369,7 @@
     "taskTypes": {
       "compress": "图片压缩",
       "convert": "图片转换",
+      "image_watermark": "图片水印",
       "pdf_merge": "PDF 合并",
       "pdf_split": "PDF 拆分",
       "pdf_to_image": "PDF 转图片",
@@ -422,6 +429,46 @@
     "quality": "质量",
     "start": "开始转换",
     "processing": "处理中..."
+  },
+  "ImageTransform": {
+    "title": "图片变换",
+    "autoOrient": "自动校正方向",
+    "rotate": "旋转",
+    "rotateLeft": "向左旋转",
+    "rotateRight": "向右旋转",
+    "resetRotation": "重置",
+    "flip": "翻转",
+    "flipHorizontal": "水平",
+    "flipVertical": "垂直",
+    "currentRotation": "{degrees}°"
+  },
+  "ImageWatermark": {
+    "title": "图片加水印",
+    "description": "为图片添加可见文字水印，小图本地处理，大批量可切换服务端。",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，单文件最大 50MB",
+    "text": "水印文字",
+    "textPlaceholder": "品牌 / 账号 / 版权信息",
+    "position": "位置",
+    "positions": {
+      "tile": "平铺",
+      "center": "居中",
+      "bottom-right": "右下角"
+    },
+    "fontSize": "字号",
+    "opacity": "透明度",
+    "rotation": "倾斜角度",
+    "color": "颜色",
+    "colors": {
+      "gray": "灰",
+      "red": "红",
+      "blue": "蓝",
+      "white": "白"
+    },
+    "outputFormat": "输出格式",
+    "quality": "质量",
+    "start": "添加水印",
+    "startWithCount": "为 {count} 张图片添加水印",
+    "processing": "添加中..."
   },
   "PdfTool": {
     "title": "PDF 工具",
@@ -737,6 +784,7 @@
     "statusRun": "...",
     "typeCompress": "压缩",
     "typeConvert": "转换",
+    "typeImageWatermark": "水印",
     "typePdfMerge": "PDF 合并",
     "typePdfSplit": "PDF 拆分",
     "typePdfToImage": "PDF 转图片",

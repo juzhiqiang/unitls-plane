@@ -1,0 +1,1 @@
+ALTER TYPE "public"."task_type" ADD VALUE 'image_watermark' BEFORE 'pdf_merge';

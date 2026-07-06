@@ -18,10 +18,15 @@ import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
 import {
+  DEFAULT_IMAGE_TRANSFORM,
+  ImageTransformOptions,
+} from '@/components/tools/image-transform-options';
+import {
   convertImageFormat,
   type ImageOutputType,
 } from '@/lib/processing/image-convert-client';
 import { shouldProcessLocally } from '@/lib/processing/image-client';
+import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
@@ -40,6 +45,7 @@ export default function ConvertPage() {
     toFormat: 'image/webp',
     quality: 90,
   });
+  const [transform, setTransform] = useState(DEFAULT_IMAGE_TRANSFORM);
   const [mode, setMode] = useState<ProcessMode>('local');
   const [progress, setProgress] = useState(0);
   const [processing, setProcessing] = useState(false);
@@ -109,7 +115,8 @@ export default function ConvertPage() {
         const result = await convertImageFormat(
           originalFile,
           options.toFormat as ImageOutputType,
-          options.quality / 100
+          options.quality / 100,
+          transform
         );
         setProgress(100);
         setResultFile(result);
@@ -127,6 +134,7 @@ export default function ConvertPage() {
           inputConfig: {
             toFormat: formatMap[options.toFormat] ?? 'webp',
             quality: options.quality,
+            transform: toServerTransformConfig(transform),
           },
         });
         setTaskId(task.id);
@@ -180,6 +188,12 @@ export default function ConvertPage() {
           <ImageConvertOptions
             value={options}
             onChange={setOptions}
+            disabled={processing}
+          />
+
+          <ImageTransformOptions
+            value={transform}
+            onChange={setTransform}
             disabled={processing}
           />
 

@@ -1,4 +1,4 @@
-import { createTaskSchema, taskStatusEnum } from '@utils-plane/validators';
+import { taskStatusEnum } from '@utils-plane/validators';
 import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -23,6 +23,7 @@ export type TaskQueryInput = z.infer<typeof taskQuerySchema>;
 const TASK_TYPES = [
   'compress',
   'convert',
+  'image_watermark',
   'pdf_merge',
   'pdf_split',
   'pdf_to_image',

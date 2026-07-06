@@ -21,6 +21,8 @@ Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片�
 
 - 图片压缩
 - 图片格式转换
+- 图片加水印
+- 图片旋转、水平/垂直翻转、自动方向校正
 - 批量处理与 zip 下载
 - 压缩前后对比
 
@@ -88,12 +90,14 @@ utils-plane/
 bun install
 ```
 
-### 启动基础服务
+### 启动后端 Docker 服务
 
 ```bash
 bun run services:up
 docker compose ps
 ```
+
+本地后端栈统一由 Docker Compose 启动，包含 API、PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。不要再单独执行 `cd apps/api && bun run dev`。
 
 ### 配置环境变量
 
@@ -110,18 +114,13 @@ ADMIN_USER=<admin user>
 ADMIN_PASSWORD=<admin password>
 ```
 
-### 启动开发服务
+### 启动前端开发服务
 
 ```bash
-bun run dev
-```
-
-或分别启动：
-
-```bash
-cd apps/api && bun run dev
 cd apps/web && bun run dev
 ```
+
+前端仍然访问 Docker 中的 API：`http://localhost:3001`。
 
 ## 本地服务地址
 

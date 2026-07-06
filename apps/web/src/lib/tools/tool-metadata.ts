@@ -69,6 +69,18 @@ export const imageTools: ToolMeta[] = [
     tags: ['local', 'format'],
   },
   {
+    key: 'imageWatermark',
+    href: '/image/watermark',
+    icon: Stamp,
+    titleKey: 'ToolCatalog.tools.imageWatermark.title',
+    descriptionKey: 'ToolCatalog.tools.imageWatermark.description',
+    categoryKey: 'ToolCatalog.categories.imageProtect',
+    processing: 'local-first',
+    retention: 'browser-session',
+    requiresLogin: false,
+    tags: ['watermark', 'ownership'],
+  },
+  {
     key: 'imageBatch',
     href: '/image/compress',
     icon: Images,

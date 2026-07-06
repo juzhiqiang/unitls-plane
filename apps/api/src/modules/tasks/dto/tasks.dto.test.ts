@@ -17,4 +17,13 @@ describe('TaskQueryDto', () => {
       '@Type(() => Number)\n  @IsNumber()\n  @Min(1)\n  @Max(100)\n  limit?'
     );
   });
+
+  it('includes the image watermark task type in the API boundary', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'tasks.dto.ts'),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
+
+    expect(source).toContain("'image_watermark'");
+  });
 });

@@ -1,7 +1,12 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { ImageService, type CompressOptions, type ConvertOptions } from '../services/image.service';
+import {
+  ImageService,
+  type CompressOptions,
+  type ConvertOptions,
+  type WatermarkOptions,
+} from '../services/image.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 
@@ -13,10 +18,27 @@ function getMimeType(format?: string): string {
       return 'image/webp';
     case 'avif':
       return 'image/avif';
+    case 'jpeg':
+    case 'jpg':
+      return 'image/jpeg';
     default:
       return 'image/jpeg';
   }
 }
+
+function withWatermarkSuffix(filename: string, format?: string): string {
+  const ext =
+    format === 'jpeg' ? 'jpg' : (format ?? filename.split('.').pop() ?? 'jpg');
+  const base = filename.replace(/\.[^.]+$/, '');
+  return `watermarked-${base}.${ext}`;
+}
+
+type ImageTask = {
+  id: string;
+  userId?: string | null;
+  inputFileIds?: string[] | null;
+  inputConfig?: unknown;
+};
 
 @Processor('image-queue', {
   concurrency: 2,
@@ -28,14 +50,16 @@ export class ImageProcessor extends WorkerHost {
   constructor(
     private readonly imageService: ImageService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService,
+    private readonly tasksService: TasksService
   ) {
     super();
   }
 
   async process(job: Job<{ taskId: string }>): Promise<unknown> {
     const { taskId } = job.data;
-    this.logger.log(`[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`);
+    this.logger.log(
+      `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
+    );
     const task = await this.tasksService.getById(taskId);
 
     try {
@@ -46,6 +70,8 @@ export class ImageProcessor extends WorkerHost {
           return await this.handleCompress(task, job);
         case 'convert':
           return await this.handleConvert(task, job);
+        case 'image_watermark':
+          return await this.handleWatermark(task, job);
         default:
           throw new Error(`Unknown image task type: ${task.type}`);
       }
@@ -54,10 +80,12 @@ export class ImageProcessor extends WorkerHost {
         await this.tasksService.markFailed(
           taskId,
           'IMAGE_PROCESSING_FAILED',
-          (err as Error).message,
+          (err as Error).message
         );
       } catch (dbErr) {
-        this.logger.error(`Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`);
+        this.logger.error(
+          `Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`
+        );
       }
       throw err;
     }
@@ -70,19 +98,27 @@ export class ImageProcessor extends WorkerHost {
     ]);
   }
 
-  private async handleCompress(task: any, job: Job): Promise<unknown> {
+  private async handleCompress(task: ImageTask, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
-    this.logger.log(`[compress] taskId=${task.id} downloading fileId=${fileId}`);
+    this.logger.log(
+      `[compress] taskId=${task.id} downloading fileId=${fileId}`
+    );
     const inputFile = await this.filesService.getById(fileId);
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
-    this.logger.log(`[compress] taskId=${task.id} downloaded ${inputBuffer.length} bytes`);
+    this.logger.log(
+      `[compress] taskId=${task.id} downloaded ${inputBuffer.length} bytes`
+    );
     await this.reportProgress(task.id, job, 20);
 
     const opts = task.inputConfig as CompressOptions;
-    this.logger.log(`[compress] taskId=${task.id} starting sharp, format=${opts.format}`);
+    this.logger.log(
+      `[compress] taskId=${task.id} starting sharp, format=${opts.format}`
+    );
     const outputBuffer = await this.imageService.compress(inputBuffer, opts);
-    this.logger.log(`[compress] taskId=${task.id} sharp done, output=${outputBuffer.length} bytes`);
+    this.logger.log(
+      `[compress] taskId=${task.id} sharp done, output=${outputBuffer.length} bytes`
+    );
     await this.reportProgress(task.id, job, 70);
 
     const outputFile = await this.filesService.upload(
@@ -92,7 +128,7 @@ export class ImageProcessor extends WorkerHost {
         mimeType: getMimeType(opts.format),
         size: outputBuffer.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -101,7 +137,7 @@ export class ImageProcessor extends WorkerHost {
     return { outputFileId: outputFile.id };
   }
 
-  private async handleConvert(task: any, job: Job): Promise<unknown> {
+  private async handleConvert(task: ImageTask, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
     const inputFile = await this.filesService.getById(fileId);
@@ -125,7 +161,46 @@ export class ImageProcessor extends WorkerHost {
         mimeType: getMimeType(ext),
         size: outputBuffer.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
+    );
+    await this.reportProgress(task.id, job, 95);
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await job.updateProgress(100);
+    return { outputFileId: outputFile.id };
+  }
+
+  private async handleWatermark(task: ImageTask, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+    const inputFile = await this.filesService.getById(fileId);
+    if (!inputFile.mimeType.startsWith('image/')) {
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not an image`
+      );
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const opts = task.inputConfig as WatermarkOptions;
+    if (!opts.text || opts.text.trim().length === 0) {
+      throw new Error('Watermark text is required');
+    }
+
+    const outputBuffer = await this.imageService.watermark(inputBuffer, opts);
+    await this.reportProgress(task.id, job, 75);
+
+    const format =
+      opts.outputFormat ?? inputFile.mimeType.replace('image/', '');
+    const outputFile = await this.filesService.upload(
+      outputBuffer,
+      {
+        filename: withWatermarkSuffix(inputFile.filename, format),
+        mimeType: getMimeType(format),
+        size: outputBuffer.length,
+      },
+      task.userId ?? undefined
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -136,7 +211,9 @@ export class ImageProcessor extends WorkerHost {
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job, err: Error) {
-    this.logger.error(`Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`);
+    this.logger.error(
+      `Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`
+    );
     const attemptsMade = job.attemptsMade;
     const maxAttempts = job.opts?.attempts ?? 3;
     if (attemptsMade >= maxAttempts) {
@@ -144,7 +221,7 @@ export class ImageProcessor extends WorkerHost {
       await this.tasksService.markFailed(
         taskId,
         'IMAGE_PROCESSING_FAILED',
-        err.message,
+        err.message
       );
     }
   }

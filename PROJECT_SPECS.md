@@ -131,6 +131,8 @@ bun run services:up
 docker compose ps
 ```
 
+本地后端栈统一由 Docker Compose 管理，包含 API、PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。前端开发服务可以单独本地启动，API 不再使用 `cd apps/api && bun run dev`。
+
 | 服务            | 地址                               |
 | --------------- | ---------------------------------- |
 | Web             | http://localhost:3000              |
@@ -149,8 +151,7 @@ docker compose ps
 bun install
 
 # 开发
-bun run dev
-cd apps/api && bun run dev
+bun run services:up
 cd apps/web && bun run dev
 
 # 测试/构建
@@ -217,7 +218,7 @@ cd packages/api-client && bun run generate
 
 ### Task 类型
 
-`compress`、`convert`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`。
+`compress`、`convert`、`image_watermark`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`。
 
 ## API 服务
 
@@ -253,7 +254,7 @@ cd packages/api-client && bun run generate
 
 工具清单：
 
-- 图片：压缩、格式转换、批量压缩/打包、压缩前后对比。
+- 图片：压缩、格式转换、图片水印、旋转/翻转/自动方向校正、批量压缩/打包、压缩前后对比。
 - PDF：合并、拆分、重排、旋转、图片转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
 - 字体：TTF/OTF/WOFF/WOFF2 转换。
 

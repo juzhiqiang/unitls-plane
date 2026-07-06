@@ -1,4 +1,8 @@
 import imageCompression from 'browser-image-compression';
+import {
+  transformImage,
+  type ImageTransformOptions,
+} from './image-transform-client';
 
 export interface CompressOptions {
   maxSizeMB?: number;
@@ -6,6 +10,7 @@ export interface CompressOptions {
   maxHeight?: number;
   quality?: number;
   outputType?: 'image/jpeg' | 'image/webp' | 'image/png';
+  transform?: ImageTransformOptions;
   onProgress?: (progress: number) => void;
 }
 
@@ -13,12 +18,18 @@ export async function compressImage(
   file: File,
   options: CompressOptions = {}
 ): Promise<File> {
+  const preparedFile = await transformImage(
+    file,
+    options.transform ?? {},
+    options.outputType ?? file.type,
+    options.quality ?? 0.92
+  );
   const longestEdge =
     options.maxWidth || options.maxHeight
       ? Math.max(options.maxWidth ?? 0, options.maxHeight ?? 0)
       : undefined;
 
-  return imageCompression(file, {
+  return imageCompression(preparedFile, {
     maxSizeMB: options.maxSizeMB ?? 1,
     ...(longestEdge !== undefined && { maxWidthOrHeight: longestEdge }),
     initialQuality: options.quality ?? 0.8,

@@ -133,6 +133,8 @@
       "imageOptimizeDescription": "Reduce file size while keeping visual quality visible.",
       "imageConvert": "Convert",
       "imageConvertDescription": "Move between image formats without leaving the browser.",
+      "imageProtect": "Protect",
+      "imageProtectDescription": "Add visible ownership marks for brand protection and anti-theft publishing.",
       "imageBatch": "Batch",
       "imageBatchDescription": "Process multiple images and package the result as one download.",
       "imagePreview": "Preview",
@@ -156,6 +158,10 @@
       "imageConvert": {
         "title": "Image conversion",
         "description": "Convert JPEG, PNG, WebP, and AVIF in the browser."
+      },
+      "imageWatermark": {
+        "title": "Image watermark",
+        "description": "Add visible text watermarks for anti-theft and brand protection."
       },
       "imageBatch": {
         "title": "Batch image output",
@@ -363,6 +369,7 @@
     "taskTypes": {
       "compress": "Image compression",
       "convert": "Image conversion",
+      "image_watermark": "Image watermark",
       "pdf_merge": "PDF merge",
       "pdf_split": "PDF split",
       "pdf_to_image": "PDF to image",
@@ -422,6 +429,46 @@
     "quality": "Quality",
     "start": "Convert",
     "processing": "Processing…"
+  },
+  "ImageTransform": {
+    "title": "Image transform",
+    "autoOrient": "Auto orient",
+    "rotate": "Rotate",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "resetRotation": "Reset",
+    "flip": "Flip",
+    "flipHorizontal": "Horizontal",
+    "flipVertical": "Vertical",
+    "currentRotation": "{degrees}°"
+  },
+  "ImageWatermark": {
+    "title": "Watermark images",
+    "description": "Add visible text watermarks locally or with server processing for large batches.",
+    "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB per file",
+    "text": "Watermark text",
+    "textPlaceholder": "Brand / account / copyright",
+    "position": "Position",
+    "positions": {
+      "tile": "Tile",
+      "center": "Center",
+      "bottom-right": "Bottom right"
+    },
+    "fontSize": "Font size",
+    "opacity": "Opacity",
+    "rotation": "Tilt",
+    "color": "Color",
+    "colors": {
+      "gray": "Gray",
+      "red": "Red",
+      "blue": "Blue",
+      "white": "White"
+    },
+    "outputFormat": "Output format",
+    "quality": "Quality",
+    "start": "Apply watermark",
+    "startWithCount": "Apply watermark to {count} images",
+    "processing": "Applying..."
   },
   "PdfTool": {
     "title": "PDF Tools",
@@ -737,6 +784,7 @@
     "statusRun": "...",
     "typeCompress": "Compress",
     "typeConvert": "Convert",
+    "typeImageWatermark": "Watermark",
     "typePdfMerge": "PDF Merge",
     "typePdfSplit": "PDF Split",
     "typePdfToImage": "PDF → Image",

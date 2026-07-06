@@ -27,6 +27,7 @@ function getTaskTypeCategory(type: TaskType): 'image' | 'pdf' | 'font' {
   switch (type) {
     case 'compress':
     case 'convert':
+    case 'image_watermark':
       return 'image';
     case 'pdf_merge':
     case 'pdf_split':
@@ -121,6 +122,7 @@ function TypeLabel({ type }: { type: TaskType }) {
   const labels: Record<TaskType, string> = {
     compress: t('typeCompress'),
     convert: t('typeConvert'),
+    image_watermark: t('typeImageWatermark'),
     pdf_merge: t('typePdfMerge'),
     pdf_split: t('typePdfSplit'),
     pdf_to_image: t('typePdfToImage'),

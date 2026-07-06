@@ -37,10 +37,11 @@ describe('tool metadata', () => {
 
   it('marks image compression as local-first and PDF merge as server processing', () => {
     expect(getToolByHref('/image/compress')?.processing).toBe('local-first');
+    expect(getToolByHref('/image/watermark')?.processing).toBe('local-first');
     expect(getToolByHref('/pdf/merge')?.processing).toBe('server');
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(4);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(5);
   });
 });

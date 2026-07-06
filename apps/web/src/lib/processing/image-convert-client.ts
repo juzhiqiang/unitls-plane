@@ -1,11 +1,18 @@
+import {
+  transformImage,
+  type ImageTransformOptions,
+} from './image-transform-client';
+
 export type ImageOutputType = 'image/jpeg' | 'image/webp' | 'image/png';
 
 export async function convertImageFormat(
   file: File,
   toType: ImageOutputType,
-  quality = 0.9
+  quality = 0.9,
+  transform: ImageTransformOptions = {}
 ): Promise<File> {
-  const img = await loadImage(file);
+  const preparedFile = await transformImage(file, transform, toType, quality);
+  const img = await loadImage(preparedFile);
   const canvas = document.createElement('canvas');
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
@@ -14,7 +21,7 @@ export async function convertImageFormat(
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => {
+      blob => {
         if (!blob) return reject(new Error('Conversion failed'));
         const ext = toType.split('/')[1];
         const newName = file.name.replace(/\.[^.]+$/, `.${ext}`);

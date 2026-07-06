@@ -45,7 +45,7 @@ export class TasksService {
     const queue = this.getQueue(input.type);
     const job = await queue.add(input.type, { taskId: task.id });
     this.logger.log(
-      `Job added: jobId=${job?.id}, taskId=${task.id}, queue=${queue.name}, waiting=${await queue.getWaitingCount()}, active=${await queue.getActiveCount()}`,
+      `Job added: jobId=${job?.id}, taskId=${task.id}, queue=${queue.name}, waiting=${await queue.getWaitingCount()}, active=${await queue.getActiveCount()}`
     );
 
     return task;
@@ -162,6 +162,7 @@ export class TasksService {
     switch (type) {
       case 'compress':
       case 'convert':
+      case 'image_watermark':
         return this.imageQueue;
       case 'pdf_merge':
       case 'pdf_split':

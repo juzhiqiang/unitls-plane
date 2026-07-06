@@ -13,6 +13,7 @@ import { user } from './auth';
 export const taskTypeEnum = pgEnum('task_type', [
   'compress',
   'convert',
+  'image_watermark',
   'pdf_merge',
   'pdf_split',
   'pdf_to_image',
@@ -51,7 +52,7 @@ export const tasks = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     completedAt: timestamp('completed_at'),
   },
-  (t) => ({
+  t => ({
     userCreatedIdx: index('tasks_user_created_idx').on(t.userId, t.createdAt),
     statusIdx: index('tasks_status_idx').on(t.status),
   })

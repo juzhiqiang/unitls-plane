@@ -23,9 +23,14 @@ import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
 import {
+  DEFAULT_IMAGE_TRANSFORM,
+  ImageTransformOptions,
+} from '@/components/tools/image-transform-options';
+import {
   compressImage,
   shouldProcessLocally,
 } from '@/lib/processing/image-client';
+import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
@@ -106,6 +111,7 @@ export default function CompressPage() {
     customHeight: 1080,
     outputType: 'image/jpeg',
   });
+  const [transform, setTransform] = useState(DEFAULT_IMAGE_TRANSFORM);
   const [mode, setMode] = useState<ProcessMode>('local');
   const [progress, setProgress] = useState(0);
   const [processing, setProcessing] = useState(false);
@@ -207,6 +213,7 @@ export default function CompressPage() {
         if (mode === 'local') {
           result = await compressImage(item.file, {
             ...toCompressOptions(options),
+            transform,
             onProgress: p => {
               fileProgress[i] = p;
               updateOverall();
@@ -218,6 +225,7 @@ export default function CompressPage() {
             quality: options.quality,
             ...(width !== undefined && { maxWidth: width }),
             ...(height !== undefined && { maxHeight: height }),
+            transform: toServerTransformConfig(transform),
           };
           result = await processOnServer(
             item.file,
@@ -289,6 +297,12 @@ export default function CompressPage() {
           <ImageCompressOptions
             value={options}
             onChange={setOptions}
+            disabled={processing}
+          />
+
+          <ImageTransformOptions
+            value={transform}
+            onChange={setTransform}
             disabled={processing}
           />
 

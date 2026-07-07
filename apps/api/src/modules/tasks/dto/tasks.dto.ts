@@ -24,6 +24,7 @@ const TASK_TYPES = [
   'compress',
   'convert',
   'image_watermark',
+  'image_id_photo',
   'pdf_merge',
   'pdf_split',
   'pdf_to_image',

@@ -317,7 +317,7 @@ export interface components {
     schemas: {
         CreateTaskDto: {
             /** @enum {string} */
-            type: "compress" | "convert" | "image_watermark" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
+            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
             inputFileIds: string[];
             inputConfig?: Record<string, never>;
         };
@@ -327,7 +327,7 @@ export interface components {
             /** Format: uuid */
             userId?: string;
             /** @enum {string} */
-            type: "compress" | "convert" | "image_watermark" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
+            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
             inputFileIds: string[];
@@ -369,7 +369,7 @@ export interface operations {
                 page?: number;
                 limit?: number;
                 status?: "pending" | "processing" | "completed" | "failed";
-                type?: "compress" | "convert" | "image_watermark" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
+                type?: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange";
             };
             header?: never;
             path?: never;

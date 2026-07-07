@@ -7,6 +7,7 @@ import {
   type ConvertOptions,
   type WatermarkOptions,
 } from '../services/image.service';
+import { IdPhotoError, IdPhotoService } from '../services/id-photo.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 
@@ -50,7 +51,8 @@ export class ImageProcessor extends WorkerHost {
   constructor(
     private readonly imageService: ImageService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService
+    private readonly tasksService: TasksService,
+    private readonly idPhotoService: IdPhotoService
   ) {
     super();
   }
@@ -72,14 +74,20 @@ export class ImageProcessor extends WorkerHost {
           return await this.handleConvert(task, job);
         case 'image_watermark':
           return await this.handleWatermark(task, job);
+        case 'image_id_photo':
+          return await this.handleIdPhoto(task, job);
         default:
           throw new Error(`Unknown image task type: ${task.type}`);
       }
     } catch (err) {
       try {
+        const code =
+          err instanceof IdPhotoError
+            ? err.code
+            : 'IMAGE_PROCESSING_FAILED';
         await this.tasksService.markFailed(
           taskId,
-          'IMAGE_PROCESSING_FAILED',
+          code,
           (err as Error).message
         );
       } catch (dbErr) {
@@ -199,6 +207,46 @@ export class ImageProcessor extends WorkerHost {
         filename: withWatermarkSuffix(inputFile.filename, format),
         mimeType: getMimeType(format),
         size: outputBuffer.length,
+      },
+      task.userId ?? undefined
+    );
+    await this.reportProgress(task.id, job, 95);
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await job.updateProgress(100);
+    return { outputFileId: outputFile.id };
+  }
+
+  private async handleIdPhoto(task: ImageTask, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+    const inputFile = await this.filesService.getById(fileId);
+    if (!inputFile.mimeType.startsWith('image/')) {
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not an image`
+      );
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const output = await this.idPhotoService.render(
+      inputBuffer,
+      task.inputConfig as any
+    );
+    await this.reportProgress(task.id, job, 80);
+
+    const base = inputFile.filename.replace(/\.[^.]+$/, '');
+    const preset =
+      typeof (task.inputConfig as any)?.preset === 'string'
+        ? (task.inputConfig as any).preset
+        : 'id';
+    const outputFile = await this.filesService.upload(
+      output.buffer,
+      {
+        filename: `id-photo-${preset}-${base}.${output.extension}`,
+        mimeType: output.mimeType,
+        size: output.buffer.length,
       },
       task.userId ?? undefined
     );

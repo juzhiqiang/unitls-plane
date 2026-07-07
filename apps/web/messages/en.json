@@ -163,6 +163,10 @@
         "title": "Image watermark",
         "description": "Add visible text watermarks for anti-theft and brand protection."
       },
+      "imageIdPhoto": {
+        "title": "ID photo generator",
+        "description": "Change backgrounds and crop to standard sizes."
+      },
       "imageBatch": {
         "title": "Batch image output",
         "description": "Process many images and download a single ZIP."
@@ -370,6 +374,7 @@
       "compress": "Image compression",
       "convert": "Image conversion",
       "image_watermark": "Image watermark",
+      "image_id_photo": "ID photo",
       "pdf_merge": "PDF merge",
       "pdf_split": "PDF split",
       "pdf_to_image": "PDF to image",
@@ -469,6 +474,32 @@
     "start": "Apply watermark",
     "startWithCount": "Apply watermark to {count} images",
     "processing": "Applying..."
+  },
+  "ImageIdPhoto": {
+    "title": "ID Photo Generator",
+    "description": "Change the background and crop photos to common ID sizes.",
+    "dropzoneHint": "Upload a clear front-facing portrait photo",
+    "processingLabel": "Server HD generation",
+    "selected": "{filename} · {size}",
+    "preset": "Size",
+    "background": "Background",
+    "outputType": "Output format",
+    "start": "Generate ID photo",
+    "processing": "Generating ID photo",
+    "failed": "Generation failed",
+    "resultTitle": "ID photo generated",
+    "resultSize": "Size",
+    "presets": {
+      "oneInch": "One inch",
+      "twoInch": "Two inch",
+      "smallOneInch": "Small one inch",
+      "passport": "Passport"
+    },
+    "backgrounds": {
+      "blue": "Blue",
+      "white": "White",
+      "red": "Red"
+    }
   },
   "PdfTool": {
     "title": "PDF Tools",
@@ -785,6 +816,7 @@
     "typeCompress": "Compress",
     "typeConvert": "Convert",
     "typeImageWatermark": "Watermark",
+    "typeImageIdPhoto": "ID photo",
     "typePdfMerge": "PDF Merge",
     "typePdfSplit": "PDF Split",
     "typePdfToImage": "PDF → Image",

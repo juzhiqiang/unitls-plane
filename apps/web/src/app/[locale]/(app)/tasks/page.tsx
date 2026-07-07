@@ -23,11 +23,12 @@ type StatusFilter = 'all' | TaskStatus;
 type TypeFilter = 'all' | 'image' | 'pdf' | 'font';
 type ConfigSummaryItem = { label: string; value: string };
 
-function getTaskTypeCategory(type: TaskType): 'image' | 'pdf' | 'font' {
+export function getTaskTypeCategory(type: TaskType): 'image' | 'pdf' | 'font' {
   switch (type) {
     case 'compress':
     case 'convert':
     case 'image_watermark':
+    case 'image_id_photo':
       return 'image';
     case 'pdf_merge':
     case 'pdf_split':
@@ -123,6 +124,7 @@ function TypeLabel({ type }: { type: TaskType }) {
     compress: t('typeCompress'),
     convert: t('typeConvert'),
     image_watermark: t('typeImageWatermark'),
+    image_id_photo: t('typeImageIdPhoto'),
     pdf_merge: t('typePdfMerge'),
     pdf_split: t('typePdfSplit'),
     pdf_to_image: t('typePdfToImage'),

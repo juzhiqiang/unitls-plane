@@ -163,6 +163,10 @@
         "title": "图片水印",
         "description": "为图片添加可见文字水印，用于防盗图和品牌保护。"
       },
+      "imageIdPhoto": {
+        "title": "证件照生成",
+        "description": "自动换底色并裁剪标准尺寸。"
+      },
       "imageBatch": {
         "title": "批量图片输出",
         "description": "处理多张图片并下载一个 ZIP。"
@@ -370,6 +374,7 @@
       "compress": "图片压缩",
       "convert": "图片转换",
       "image_watermark": "图片水印",
+      "image_id_photo": "证件照生成",
       "pdf_merge": "PDF 合并",
       "pdf_split": "PDF 拆分",
       "pdf_to_image": "PDF 转图片",
@@ -469,6 +474,32 @@
     "start": "添加水印",
     "startWithCount": "为 {count} 张图片添加水印",
     "processing": "添加中..."
+  },
+  "ImageIdPhoto": {
+    "title": "证件照生成",
+    "description": "自动换底色并裁剪为常用证件照尺寸。",
+    "dropzoneHint": "上传清晰的单人正面照片",
+    "processingLabel": "服务端高清生成",
+    "selected": "{filename} · {size}",
+    "preset": "规格",
+    "background": "背景色",
+    "outputType": "输出格式",
+    "start": "生成证件照",
+    "processing": "正在生成证件照",
+    "failed": "生成失败",
+    "resultTitle": "证件照已生成",
+    "resultSize": "大小",
+    "presets": {
+      "oneInch": "一寸",
+      "twoInch": "二寸",
+      "smallOneInch": "小一寸",
+      "passport": "护照照"
+    },
+    "backgrounds": {
+      "blue": "蓝底",
+      "white": "白底",
+      "red": "红底"
+    }
   },
   "PdfTool": {
     "title": "PDF 工具",
@@ -785,6 +816,7 @@
     "typeCompress": "压缩",
     "typeConvert": "转换",
     "typeImageWatermark": "水印",
+    "typeImageIdPhoto": "证件照",
     "typePdfMerge": "PDF 合并",
     "typePdfSplit": "PDF 拆分",
     "typePdfToImage": "PDF 转图片",

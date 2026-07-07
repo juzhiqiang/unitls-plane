@@ -42,6 +42,14 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(5);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(6);
+  });
+
+  it('registers the id photo generator as a server image tool', () => {
+    const tool = getToolByHref('/image/id-photo');
+
+    expect(tool?.key).toBe('imageIdPhoto');
+    expect(tool?.processing).toBe('server');
+    expect(tool?.retention).toBe('account-files');
   });
 });

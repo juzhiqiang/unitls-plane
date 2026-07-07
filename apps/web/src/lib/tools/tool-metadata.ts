@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUpDown,
+  BadgeCheck,
   FileText,
   ImageDown,
   Images,
@@ -79,6 +80,19 @@ export const imageTools: ToolMeta[] = [
     retention: 'browser-session',
     requiresLogin: false,
     tags: ['watermark', 'ownership'],
+  },
+  {
+    key: 'imageIdPhoto',
+    href: '/image/id-photo',
+    icon: BadgeCheck,
+    titleKey: 'ToolCatalog.tools.imageIdPhoto.title',
+    descriptionKey: 'ToolCatalog.tools.imageIdPhoto.description',
+    categoryKey: 'ToolCatalog.categories.imageConvert',
+    processing: 'server',
+    retention: 'account-files',
+    requiresLogin: true,
+    recommended: true,
+    tags: ['id-photo', 'background', 'crop'],
   },
   {
     key: 'imageBatch',

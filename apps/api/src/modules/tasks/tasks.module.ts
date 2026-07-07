@@ -9,8 +9,10 @@ import { FontProcessor } from './processors/font.processor';
 import { CleanupProcessor } from './processors/cleanup.processor';
 import { CleanupScheduler } from './processors/cleanup.scheduler';
 import { ImageService } from './services/image.service';
+import { IdPhotoService } from './services/id-photo.service';
 import { PdfService } from './services/pdf.service';
 import { FontService } from './services/font.service';
+import { PortraitSegmentationService } from './services/portrait-segmentation.service';
 import { FilesModule } from '../files/files.module';
 
 @Module({
@@ -27,6 +29,8 @@ import { FilesModule } from '../files/files.module';
   providers: [
     TasksService,
     ImageService,
+    IdPhotoService,
+    PortraitSegmentationService,
     PdfService,
     FontService,
     ImageProcessor,

@@ -26,12 +26,12 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@error-tracker/sdk": "file:../../../error-tracker/packages/sdk",
     "@aws-sdk/client-s3": "^3.1049.0",
     "@aws-sdk/s3-request-presigner": "^3.1049.0",
     "@bull-board/api": "^7.1.5",
     "@bull-board/express": "^7.1.5",
     "@bull-board/nestjs": "^7.1.5",
+    "@error-tracker/sdk": "file:../../../error-tracker/packages/sdk",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.21",
@@ -55,6 +55,7 @@
     "ioredis": "^5.10.1",
     "multer": "^2.1.1",
     "mupdf": "^1.27.0",
+    "onnxruntime-node": "^1.27.0",
     "pdf-lib": "^1.17.1",
     "postgres": "^3.4.6",
     "reflect-metadata": "^0.2.2",

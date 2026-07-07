@@ -5,6 +5,8 @@ node_modules/
 .pnpm-store/      # 如果使用 pnpm
 .DS_Store
 *.log
+*.err
+log/
 
 # ==========================================
 # 2. Monorepo / 工具链自身的缓存

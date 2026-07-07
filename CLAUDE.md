@@ -150,3 +150,6 @@ API 模块：
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md)
 - [AGENTS.md](./AGENTS.md)
 - [task/](./task/)
+### 日志文件规范
+
+- 本地运行产生的 `.log` 和 `.err` 文件统一放在项目根目录 `log/` 下；`log/` 不提交到 Git。

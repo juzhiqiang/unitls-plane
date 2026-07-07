@@ -136,3 +136,6 @@ cp .env.example .env.local
 3. API 修改后重新导出 OpenAPI。
 4. Windows 开发优先使用 Git Bash 或 WSL；PowerShell 路径中包含 `[locale]`、`(app)` 时要使用 literal path。
 5. `BETTER_AUTH_SECRET` 必须使用 `openssl rand -base64 32` 生成。
+### 日志文件规范
+
+- 本地运行产生的 `.log` 和 `.err` 文件统一放在项目根目录 `log/` 下；`log/` 不提交到 Git。

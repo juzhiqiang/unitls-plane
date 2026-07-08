@@ -10,6 +10,7 @@ export function ErrorTrackerInit() {
   useEffect(() => {
     const dsn = process.env.NEXT_PUBLIC_ERROR_TRACKER_DSN;
     if (!dsn) return;
+    if (process.env.NODE_ENV === 'development') return;
 
     if (!initialized) {
       initialized = true;

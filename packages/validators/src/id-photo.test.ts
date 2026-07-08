@@ -17,6 +17,19 @@ describe('id photo validators', () => {
 
     expect(result.preset).toBe('one_inch');
     expect(result.backgroundColor).toBe('#438edb');
+    expect(result.segmentationMode).toBe('local');
+  });
+
+  it('accepts ai segmentation mode', () => {
+    const result = idPhotoTaskConfigSchema.parse({
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+      segmentationMode: 'ai',
+    });
+
+    expect(result.segmentationMode).toBe('ai');
   });
 
   it('rejects invalid preset values', () => {

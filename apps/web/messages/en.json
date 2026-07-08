@@ -483,6 +483,7 @@
     "selected": "{filename} · {size}",
     "preset": "Size",
     "background": "Background",
+    "segmentationMode": "Cutout mode",
     "outputType": "Output format",
     "start": "Generate ID photo",
     "processing": "Generating ID photo",
@@ -499,6 +500,16 @@
       "blue": "Blue",
       "white": "White",
       "red": "Red"
+    },
+    "segmentationModes": {
+      "local": {
+        "label": "Standard",
+        "description": "Uses the server model"
+      },
+      "ai": {
+        "label": "AI refine",
+        "description": "Uses OpenAI-compatible AI"
+      }
     }
   },
   "PdfTool": {

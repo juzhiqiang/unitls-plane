@@ -111,6 +111,18 @@ NODE_ENV=development
 ERROR_TRACKER_DSN=
 RELEASE=dev
 
+# ID photo AI cutout (optional, OpenAI-compatible)
+# chat_mask: /v1/chat/completions returns {"mask":"data:image/png;base64,..."}
+# image_result: /v1/images/edits uses the uploaded image as a reference
+ID_PHOTO_AI_SEGMENTATION_BASE_URL=
+ID_PHOTO_AI_SEGMENTATION_API_KEY=
+ID_PHOTO_AI_SEGMENTATION_MODEL=gpt-4o-mini
+ID_PHOTO_AI_SEGMENTATION_PROVIDER=chat_mask
+ID_PHOTO_AI_IMAGE_SIZE=1024x1024
+ID_PHOTO_AI_IMAGE_QUALITY=high
+ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
+ID_PHOTO_AI_RESPONSE_FORMAT=url
+
 # Error Tracker sourcemap upload
 ERROR_TRACKER_API=http://localhost:3002
 ERROR_TRACKER_PROJECT_ID=
@@ -124,6 +136,21 @@ ADMIN_USER=<admin user>
 ADMIN_PASSWORD=<admin password>
 ```
 
+证件照生成默认使用服务器本地模型。若需要启用页面里的 AI 精修模式，需要配置 OpenAI 兼容接口：
+
+```env
+ID_PHOTO_AI_SEGMENTATION_BASE_URL=https://example.com/v1
+ID_PHOTO_AI_SEGMENTATION_API_KEY=<api key>
+ID_PHOTO_AI_SEGMENTATION_MODEL=<vision model>
+ID_PHOTO_AI_SEGMENTATION_PROVIDER=chat_mask
+ID_PHOTO_AI_IMAGE_SIZE=1024x1024
+ID_PHOTO_AI_IMAGE_QUALITY=high
+ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
+ID_PHOTO_AI_RESPONSE_FORMAT=url
+```
+
+`ID_PHOTO_AI_SEGMENTATION_PROVIDER=chat_mask` 时调用 `/v1/chat/completions`，适合能返回 JSON mask 的视觉模型；`image_result` 时调用 `/v1/images/edits`，按 OpenAI `images.createEdit` 兼容格式上传参考图并返回最终证件照。
+
 ## 本地服务
 
 ```bash
@@ -131,7 +158,7 @@ bun run services:up
 docker compose ps
 ```
 
-本地后端栈统一由 Docker Compose 管理，包含 API、PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。前端开发服务可以单独本地启动，API 不再使用 `cd apps/api && bun run dev`。
+本地 Docker Compose 只管理 PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。开发态 API 在宿主机本地启动，执行 `cd apps/api && bun run dev`；前端开发服务也在宿主机本地启动。
 
 | 服务            | 地址                               |
 | --------------- | ---------------------------------- |

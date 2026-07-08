@@ -90,14 +90,14 @@ utils-plane/
 bun install
 ```
 
-### 启动后端 Docker 服务
+### 启动后端依赖服务
 
 ```bash
 bun run services:up
 docker compose ps
 ```
 
-本地后端栈统一由 Docker Compose 启动，包含 API、PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。不要再单独执行 `cd apps/api && bun run dev`。
+本地 Docker Compose 只启动 PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。开发态 API 在宿主机本地启动，执行 `cd apps/api && bun run dev`，不要把 API dev 服务放进 Docker 容器。
 
 ### 配置环境变量
 
@@ -114,13 +114,31 @@ ADMIN_USER=<admin user>
 ADMIN_PASSWORD=<admin password>
 ```
 
+证件照生成默认使用服务器本地模型。页面里的 AI 精修模式需要 OpenAI 兼容接口配置：
+
+```env
+ID_PHOTO_AI_SEGMENTATION_BASE_URL=https://example.com/v1
+ID_PHOTO_AI_SEGMENTATION_API_KEY=<api key>
+ID_PHOTO_AI_SEGMENTATION_MODEL=<vision model>
+ID_PHOTO_AI_SEGMENTATION_PROVIDER=chat_mask
+ID_PHOTO_AI_IMAGE_SIZE=1024x1024
+ID_PHOTO_AI_IMAGE_QUALITY=high
+ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
+ID_PHOTO_AI_RESPONSE_FORMAT=url
+```
+
+`ID_PHOTO_AI_SEGMENTATION_PROVIDER` 支持两种模式：
+
+- `chat_mask`：调用 `/v1/chat/completions`，要求视觉模型返回 `{"mask":"data:image/png;base64,..."}`。
+- `image_result`：调用 `/v1/images/edits`，按 OpenAI `images.createEdit` 兼容格式上传参考图并返回最终证件照结果图。
+
 ### 启动前端开发服务
 
 ```bash
 cd apps/web && bun run dev
 ```
 
-前端仍然访问 Docker 中的 API：`http://localhost:3001`。
+前端访问本地 API：`http://localhost:3001`。
 
 ## 本地服务地址
 

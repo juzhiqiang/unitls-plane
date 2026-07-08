@@ -483,6 +483,7 @@
     "selected": "{filename} · {size}",
     "preset": "规格",
     "background": "背景色",
+    "segmentationMode": "抠图模式",
     "outputType": "输出格式",
     "start": "生成证件照",
     "processing": "正在生成证件照",
@@ -499,6 +500,16 @@
       "blue": "蓝底",
       "white": "白底",
       "red": "红底"
+    },
+    "segmentationModes": {
+      "local": {
+        "label": "标准模式",
+        "description": "使用服务器模型"
+      },
+      "ai": {
+        "label": "AI 精修",
+        "description": "使用 OpenAI 兼容 AI"
+      }
     }
   },
   "PdfTool": {

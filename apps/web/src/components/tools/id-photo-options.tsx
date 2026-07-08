@@ -9,6 +9,7 @@ export type IdPhotoOptionsState = {
   preset: 'one_inch' | 'two_inch' | 'small_one_inch' | 'passport';
   backgroundColor: string;
   outputType: 'image/jpeg' | 'image/png';
+  segmentationMode: 'local' | 'ai';
   crop: { x: number; y: number; scale: number };
 };
 
@@ -72,6 +73,34 @@ export function IdPhotoOptions({ value, onChange, t, disabled }: Props) {
                 style={{ backgroundColor: option.color }}
               />
               {t(option.labelKey)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-mono text-muted-foreground">
+          {t('segmentationMode')}
+        </label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(['local', 'ai'] as const).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ ...value, segmentationMode: mode })}
+              className={`rounded-md border px-3 py-2 text-left text-sm ${
+                value.segmentationMode === mode
+                  ? 'border-foreground bg-muted'
+                  : 'border-border'
+              }`}
+            >
+              <span className="block font-medium">
+                {t(`segmentationModes.${mode}.label`)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t(`segmentationModes.${mode}.description`)}
+              </span>
             </button>
           ))}
         </div>

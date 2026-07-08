@@ -24,6 +24,7 @@ const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   preset: 'one_inch',
   backgroundColor: '#438edb',
   outputType: 'image/jpeg',
+  segmentationMode: 'local',
   crop: { x: 0.5, y: 0.5, scale: 1 },
 };
 
@@ -91,6 +92,7 @@ export default function IdPhotoPage() {
           preset: options.preset,
           backgroundColor: options.backgroundColor,
           outputType: options.outputType,
+          segmentationMode: options.segmentationMode,
           dpi: 300,
           crop: options.crop,
         },

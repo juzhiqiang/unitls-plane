@@ -8,6 +8,7 @@ export const idPhotoPresetEnum = z.enum([
 ]);
 
 export const idPhotoOutputTypeEnum = z.enum(['image/jpeg', 'image/png']);
+export const idPhotoSegmentationModeEnum = z.enum(['local', 'ai']);
 
 export const idPhotoCropSchema = z.object({
   x: z.number().min(0).max(1),
@@ -24,6 +25,7 @@ export const idPhotoTaskConfigSchema = z.object({
   preset: idPhotoPresetEnum,
   backgroundColor: idPhotoBackgroundColorSchema,
   outputType: idPhotoOutputTypeEnum.default('image/jpeg'),
+  segmentationMode: idPhotoSegmentationModeEnum.default('local'),
   dpi: z.literal(300).default(300),
   crop: idPhotoCropSchema.optional(),
 });
@@ -61,6 +63,9 @@ export const idPhotoPresetSpecs = {
 
 export type IdPhotoPreset = z.infer<typeof idPhotoPresetEnum>;
 export type IdPhotoOutputType = z.infer<typeof idPhotoOutputTypeEnum>;
+export type IdPhotoSegmentationMode = z.infer<
+  typeof idPhotoSegmentationModeEnum
+>;
 export type IdPhotoCrop = z.infer<typeof idPhotoCropSchema>;
 export type IdPhotoTaskConfig = z.infer<typeof idPhotoTaskConfigSchema>;
 

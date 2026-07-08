@@ -535,7 +535,7 @@ export class PortraitSegmentationService {
     if (!this.sessionPromise) {
       const modelPath =
         process.env.ID_PHOTO_SEGMENTATION_MODEL ??
-        'apps/api/models/u2netp.onnx';
+        'apps/api/models/modnet.onnx';
       this.sessionPromise = ort.InferenceSession.create(modelPath);
     }
     return this.sessionPromise;

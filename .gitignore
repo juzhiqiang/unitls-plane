@@ -72,3 +72,6 @@ apps/web/public/swe-worker-*.js.map
 utils-plane-all.tar
 utils-plane-api.tar
 utils-plane-offline-all.tar
+
+# Local ML model assets.
+apps/api/models/*.onnx

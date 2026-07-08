@@ -129,6 +129,8 @@ cp .env.example .env.local
 
 关键环境变量见 `.env.example` 和 [PROJECT_SPECS.md](./PROJECT_SPECS.md)。访问 `/admin/queues` 还需要设置 `ADMIN_USER` 和 `ADMIN_PASSWORD`。
 
+本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行 `cd apps/api && bun run dev`，不要放进 Docker 容器运行。
+
 ## 注意事项
 
 1. 不要提交 `.env.local`。

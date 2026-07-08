@@ -139,6 +139,7 @@ API 模块：
 
 - 项目文档默认使用中文；除非第三方协议、API 名称、代码标识或用户明确要求，新增或更新文档时不要改用英文。
 - 不要提交 `.env.local`。
+- 本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行 `cd apps/api && bun run dev`，不要放进 Docker 容器运行。
 - 修改 API 后运行 `cd apps/api && bun run openapi:export`，必要时再运行 `cd packages/api-client && bun run generate`。
 - 修改数据库 schema 后运行 `bunx drizzle-kit generate` 和 `bunx drizzle-kit migrate`。
 - 前端新增文案必须同时更新中文和英文 message。

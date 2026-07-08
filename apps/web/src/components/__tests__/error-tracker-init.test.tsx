@@ -32,6 +32,7 @@ describe('ErrorTrackerInit', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     delete process.env.NEXT_PUBLIC_ERROR_TRACKER_DSN;
     delete process.env.NEXT_PUBLIC_ERROR_TRACKER_TOKEN;
     delete process.env.NEXT_PUBLIC_RELEASE;
@@ -53,6 +54,15 @@ describe('ErrorTrackerInit', () => {
 
   it('does not initialize when the DSN is missing', async () => {
     delete process.env.NEXT_PUBLIC_ERROR_TRACKER_DSN;
+    const { ErrorTrackerInit } = await import('../error-tracker-init');
+
+    render(<ErrorTrackerInit />);
+
+    expect(init).not.toHaveBeenCalled();
+  });
+
+  it('does not initialize in local development by default', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
     const { ErrorTrackerInit } = await import('../error-tracker-init');
 
     render(<ErrorTrackerInit />);

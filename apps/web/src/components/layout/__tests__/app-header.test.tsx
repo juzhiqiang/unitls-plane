@@ -65,8 +65,30 @@ describe('AppHeader', () => {
       'href',
       '/en/pdf'
     );
-    expect(screen.getByText('Merge')).toBeInTheDocument();
+    expect(
+      screen.getByText('ToolCatalog.tools.pdfMerge.title')
+    ).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'home' })).not.toBeInTheDocument();
+  });
+
+  it('uses translated tool titles for multi-word tool breadcrumb pages', () => {
+    mockedPathname = '/image/id-photo';
+    linkSpy.mockClear();
+
+    render(
+      <SidebarProvider>
+        <AppHeader />
+      </SidebarProvider>
+    );
+
+    expect(screen.getByRole('link', { name: 'imageTools' })).toHaveAttribute(
+      'href',
+      '/en/image'
+    );
+    expect(
+      screen.getByText('ToolCatalog.tools.imageIdPhoto.title')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Id-photo')).not.toBeInTheDocument();
   });
 
   it('renders dashboard as the current page instead of a leading crumb', () => {

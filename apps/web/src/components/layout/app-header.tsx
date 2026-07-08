@@ -25,6 +25,7 @@ import {
 import { Sun, Moon, Monitor, LogOut, Settings, Menu } from "lucide-react";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { useSidebar } from "@/components/ui/sidebar";
+import { getToolByHref } from "@/lib/tools/tool-metadata";
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -35,6 +36,7 @@ export function AppHeader() {
   const [mounted, setMounted] = React.useState(false);
   const tNav = useTranslations("Nav");
   const tLayout = useTranslations("AppLayout");
+  const t = useTranslations();
 
   React.useEffect(() => {
     setMounted(true);
@@ -78,7 +80,13 @@ export function AppHeader() {
         return tNav("taskHistory");
       case "/dashboard":
         return tNav("dashboard");
+      case "/settings":
+        return tLayout("settings");
       default:
+        const tool = getToolByHref(href);
+        if (tool) {
+          return t(tool.titleKey);
+        }
         return fallback;
     }
   };

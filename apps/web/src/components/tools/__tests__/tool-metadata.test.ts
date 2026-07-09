@@ -42,7 +42,7 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(6);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(7);
   });
 
   it('registers the id photo generator as a server image tool', () => {
@@ -51,5 +51,14 @@ describe('tool metadata', () => {
     expect(tool?.key).toBe('imageIdPhoto');
     expect(tool?.processing).toBe('server');
     expect(tool?.retention).toBe('account-files');
+  });
+
+  it('registers long image stitching as a free local image composition tool', () => {
+    const tool = getToolByHref('/image/stitch');
+
+    expect(tool?.key).toBe('imageStitch');
+    expect(tool?.processing).toBe('local');
+    expect(tool?.retention).toBe('browser-session');
+    expect(tool?.requiresLogin).toBe(false);
   });
 });

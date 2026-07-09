@@ -133,6 +133,8 @@
       "imageOptimizeDescription": "Reduce file size while keeping visual quality visible.",
       "imageConvert": "Convert",
       "imageConvertDescription": "Move between image formats without leaving the browser.",
+      "imageCompose": "Compose",
+      "imageComposeDescription": "Stitch images into publishing-ready long visuals.",
       "imageProtect": "Protect",
       "imageProtectDescription": "Add visible ownership marks for brand protection and anti-theft publishing.",
       "imageBatch": "Batch",
@@ -158,6 +160,10 @@
       "imageConvert": {
         "title": "Image conversion",
         "description": "Convert JPEG, PNG, WebP, and AVIF in the browser."
+      },
+      "imageStitch": {
+        "title": "Long image stitch",
+        "description": "Stack images into a unified long visual for product pages and social posts."
       },
       "imageWatermark": {
         "title": "Image watermark",
@@ -434,6 +440,57 @@
     "quality": "Quality",
     "start": "Convert",
     "processing": "Processing…"
+  },
+  "ImageStitch": {
+    "title": "Long image stitch",
+    "description": "Build product-page and social long images locally. Sign in to unlock commercial presets for batch widths and brand footers.",
+    "dropzoneHint": "JPG / PNG / WebP / AVIF, free tier up to 10 MB per file",
+    "processingLabel": "Local stitch",
+    "outputWidth": "Output width",
+    "customWidth": "Custom width",
+    "widthPx": "Width (px)",
+    "gap": "Gap",
+    "gapPx": "Gap (px)",
+    "background": "Background",
+    "backgrounds": {
+      "white": "White",
+      "black": "Black",
+      "transparent": "Transparent",
+      "custom": "Custom"
+    },
+    "backgroundColor": "Background color",
+    "outputFormat": "Output format",
+    "quality": "Quality",
+    "filename": "File name",
+    "filenamePlaceholder": "stitched-long-image",
+    "start": "Generate long image",
+    "startWithCount": "Generate from {count} images",
+    "processing": "Stitching...",
+    "resultTitle": "Long image ready",
+    "batchResultTitle": "{count} long images ready",
+    "loginTitle": "Commercial mode",
+    "loginDescription": "Sign in to prepare batch widths, brand footers, higher limits, and future paid-plan features.",
+    "loginAction": "Sign in for commercial mode",
+    "commercialTitle": "Commercial options",
+    "commercialDescription": "Available to signed-in users now, ready to map to paid plans later.",
+    "batchWidths": "Batch widths",
+    "batchWidthsHint": "Comma-separated widths, for example 750,1080",
+    "brandFooter": "Brand footer",
+    "brandFooterPlaceholder": "Brand / contact / copyright",
+    "brandFooterHint": "Reserved for commercial templates; first release keeps the canvas clean.",
+    "limits": {
+      "maxFiles": "Current plan supports up to {count} images.",
+      "maxFileSize": "Some images exceed the current plan file size limit.",
+      "needAtLeastTwo": "Upload at least 2 images to generate a long image.",
+      "invalidWidth": "Enter a valid output width.",
+      "invalidBatchWidths": "Enter valid batch widths separated by commas."
+    },
+    "presets": {
+      "750": "E-commerce 750",
+      "1080": "Social 1080",
+      "1242": "Mobile 1242",
+      "custom": "Custom"
+    }
   },
   "ImageTransform": {
     "title": "Image transform",

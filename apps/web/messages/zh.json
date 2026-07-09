@@ -133,6 +133,8 @@
       "imageOptimizeDescription": "在保持视觉质量的同时降低文件大小。",
       "imageConvert": "转换",
       "imageConvertDescription": "在浏览器中完成图片格式互转。",
+      "imageCompose": "拼接",
+      "imageComposeDescription": "将多张图片拼成适合发布的长图。",
       "imageProtect": "保护",
       "imageProtectDescription": "添加可见归属标记，用于品牌保护和防盗图发布。",
       "imageBatch": "批量",
@@ -158,6 +160,10 @@
       "imageConvert": {
         "title": "图片转换",
         "description": "在浏览器中转换 JPEG、PNG、WebP 和 AVIF。"
+      },
+      "imageStitch": {
+        "title": "长图拼接",
+        "description": "将多张图片拼成电商详情页、社媒长图或教程长图。"
       },
       "imageWatermark": {
         "title": "图片水印",
@@ -434,6 +440,57 @@
     "quality": "质量",
     "start": "开始转换",
     "processing": "处理中..."
+  },
+  "ImageStitch": {
+    "title": "长图拼接",
+    "description": "本地生成电商详情页、社媒长图和教程长图。登录后可使用批量宽度和品牌页尾等商业版能力。",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，免费版单文件最大 10MB",
+    "processingLabel": "本地拼接",
+    "outputWidth": "输出宽度",
+    "customWidth": "自定义宽度",
+    "widthPx": "宽度 (px)",
+    "gap": "间距",
+    "gapPx": "间距 (px)",
+    "background": "背景",
+    "backgrounds": {
+      "white": "白色",
+      "black": "黑色",
+      "transparent": "透明",
+      "custom": "自定义"
+    },
+    "backgroundColor": "背景色",
+    "outputFormat": "输出格式",
+    "quality": "质量",
+    "filename": "文件名",
+    "filenamePlaceholder": "stitched-long-image",
+    "start": "生成长图",
+    "startWithCount": "拼接 {count} 张图片",
+    "processing": "拼接中...",
+    "resultTitle": "长图已生成",
+    "batchResultTitle": "{count} 张长图已生成",
+    "loginTitle": "商业版模式",
+    "loginDescription": "登录后可使用批量宽度、品牌页尾、更高限制，并为后续付费套餐预留权益。",
+    "loginAction": "登录使用商业版模式",
+    "commercialTitle": "商业版选项",
+    "commercialDescription": "当前对登录用户开放，后续可映射到付费套餐。",
+    "batchWidths": "批量宽度",
+    "batchWidthsHint": "用英文逗号分隔，例如 750,1080",
+    "brandFooter": "品牌页尾",
+    "brandFooterPlaceholder": "品牌 / 联系方式 / 版权信息",
+    "brandFooterHint": "为商业模板预留；首版保持画布干净。",
+    "limits": {
+      "maxFiles": "当前版本最多支持 {count} 张图片。",
+      "maxFileSize": "部分图片超过当前版本的单文件大小限制。",
+      "needAtLeastTwo": "至少上传 2 张图片后才能生成长图。",
+      "invalidWidth": "请输入有效的输出宽度。",
+      "invalidBatchWidths": "请输入用英文逗号分隔的有效批量宽度。"
+    },
+    "presets": {
+      "750": "电商 750",
+      "1080": "社媒 1080",
+      "1242": "移动端 1242",
+      "custom": "自定义"
+    }
   },
   "ImageTransform": {
     "title": "图片变换",

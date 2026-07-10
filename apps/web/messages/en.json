@@ -12,6 +12,10 @@
       "ogDescription": "Image compression, PDF processing, and font conversion in one place"
     }
   },
+  "AnimationFrameList": {
+    "dragFrame": "Drag {name}",
+    "removeFrame": "Remove {name}"
+  },
   "Nav": {
     "dashboard": "Dashboard",
     "imageTools": "Image Tools",

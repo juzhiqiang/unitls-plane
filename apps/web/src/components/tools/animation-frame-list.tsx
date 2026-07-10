@@ -76,6 +76,7 @@ function SortableFrameItem({
   onRemove: (index: number) => void;
   disabled?: boolean;
 }) {
+  const t = useTranslations('AnimationFrameList');
   const tUnits = useTranslations('Common.units');
   const locale = useLocale();
   const {
@@ -106,6 +107,7 @@ function SortableFrameItem({
         type="button"
         className="flex h-8 w-8 shrink-0 cursor-grab items-center justify-center text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
         disabled={disabled}
+        aria-label={t('dragFrame', { name: item.file.name })}
         {...attributes}
         {...listeners}
       >
@@ -134,7 +136,7 @@ function SortableFrameItem({
         type="button"
         onClick={() => onRemove(index)}
         disabled={disabled}
-        aria-label={`Remove ${item.file.name}`}
+        aria-label={t('removeFrame', { name: item.file.name })}
         className="flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-destructive disabled:opacity-30"
       >
         <X className="h-3.5 w-3.5" strokeWidth={1.5} />

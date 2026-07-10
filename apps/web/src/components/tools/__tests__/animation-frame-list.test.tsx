@@ -81,6 +81,7 @@ describe('AnimationFrameList', () => {
     const onRemove = vi.fn();
     const { getByLabelText } = renderList(onRemove);
 
+    expect(getByLabelText('Drag first.png')).toBeInTheDocument();
     fireEvent.click(getByLabelText('Remove first.png'));
 
     expect(onRemove).toHaveBeenCalledWith(0);

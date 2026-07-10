@@ -12,6 +12,10 @@
       "ogDescription": "图片压缩、PDF处理、字体转换，一站式工具平台"
     }
   },
+  "AnimationFrameList": {
+    "dragFrame": "拖拽 {name}",
+    "removeFrame": "移除 {name}"
+  },
   "Nav": {
     "dashboard": "仪表盘",
     "imageTools": "图片工具",

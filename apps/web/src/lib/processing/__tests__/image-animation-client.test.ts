@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAnimationFrameLayout,
   DEFAULT_IMAGE_ANIMATION_LIMITS,
   getAnimationOutputName,
   getImageAnimationEntitlements,
   normalizeAnimationCreateOptions,
   normalizeAnimationCompressOptions,
+  resolveCompressedGifPlan,
   validateAnimationInputs,
   type AnimationCreateOptions,
 } from '../image-animation-client';
@@ -105,5 +107,33 @@ describe('image animation client helpers', () => {
         DEFAULT_IMAGE_ANIMATION_LIMITS.free
       )
     ).toThrow('Canvas is too large for the current plan');
+  });
+
+  it('centers contained frames inside the target animation canvas', () => {
+    expect(
+      buildAnimationFrameLayout(
+        { width: 1000, height: 500 },
+        { ...baseOptions, width: 500, height: 500, fit: 'contain' }
+      )
+    ).toEqual({ x: 0, y: 125, width: 500, height: 250 });
+  });
+
+  it('crops cover frames to fill the target animation canvas', () => {
+    expect(
+      buildAnimationFrameLayout(
+        { width: 1000, height: 500 },
+        { ...baseOptions, width: 500, height: 500, fit: 'cover' }
+      )
+    ).toEqual({ x: -250, y: 0, width: 1000, height: 500 });
+  });
+
+  it('keeps compressed GIF dimensions proportional to the requested width', () => {
+    expect(
+      resolveCompressedGifPlan(
+        { width: 800, height: 400, frameCount: 20 },
+        { targetWidth: 400, targetFps: 12, quality: 10, filename: 'small' },
+        DEFAULT_IMAGE_ANIMATION_LIMITS.free
+      )
+    ).toMatchObject({ width: 400, height: 200, targetFps: 12 });
   });
 });

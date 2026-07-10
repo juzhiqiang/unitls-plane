@@ -137,6 +137,8 @@
       "imageOptimizeDescription": "在保持视觉质量的同时降低文件大小。",
       "imageConvert": "转换",
       "imageConvertDescription": "在浏览器中完成图片格式互转。",
+      "imageAnimation": "动画图片",
+      "imageAnimationDescription": "制作、压缩和准备 GIF/APNG 动图素材。",
       "imageCompose": "拼接",
       "imageComposeDescription": "将多张图片拼成适合发布的长图。",
       "imageProtect": "保护",
@@ -176,6 +178,10 @@
       "imageIdPhoto": {
         "title": "证件照生成",
         "description": "自动换底色并裁剪标准尺寸。"
+      },
+      "imageAnimation": {
+        "title": "GIF/APNG 制作与压缩",
+        "description": "用图片序列制作 GIF，并为登录商业版预留 APNG 和高级压缩。"
       },
       "imageBatch": {
         "title": "批量图片输出",
@@ -494,6 +500,55 @@
       "1080": "社媒 1080",
       "1242": "移动端 1242",
       "custom": "自定义"
+    }
+  },
+  "ImageAnimation": {
+    "title": "GIF/APNG 制作与压缩",
+    "description": "制作轻量动图、压缩已有 GIF，并为登录商业版开放 APNG 和高级参数。",
+    "dropzoneCreateHint": "上传 PNG、JPG 或 WebP 图片作为动画帧。",
+    "dropzoneCompressHint": "上传一个 GIF 文件进行基础压缩。",
+    "processingLabel": "正在处理动画图片…",
+    "modes": {
+      "create": "制作",
+      "compress": "压缩",
+      "convert": "转换"
+    },
+    "outputFormat": "输出格式",
+    "canvasSize": "画布尺寸",
+    "width": "宽度",
+    "height": "高度",
+    "fit": "适配方式",
+    "contain": "完整显示",
+    "cover": "填满裁切",
+    "background": "背景色",
+    "frameDelay": "帧间隔",
+    "loop": "循环",
+    "quality": "质量",
+    "filename": "文件名",
+    "filenamePlaceholder": "animated-image",
+    "targetWidth": "目标宽度",
+    "targetFps": "目标帧率",
+    "commercialTitle": "商业版动画能力",
+    "commercialDescription": "登录后开放 APNG、更多帧数、更大尺寸和高级压缩参数。未来接入付费时复用同一套权益判断。",
+    "loginTitle": "登录解锁商业版动画能力",
+    "loginDescription": "免费版可制作 GIF；登录后可使用 APNG、高级压缩和更高处理限制。",
+    "loginAction": "登录使用商业版",
+    "convertTitle": "转换能力将复用动画处理链路",
+    "convertDescription": "首版优先完成制作和压缩；GIF/APNG/WebP 动图互转会在后续扩展。",
+    "start": "生成动画",
+    "startWithCount": "生成 {count} 帧动画",
+    "compressAction": "压缩 GIF",
+    "processing": "处理中…",
+    "resultTitle": "动画已生成",
+    "compressedResultTitle": "GIF 已压缩",
+    "resultDescription": "{name}，{size}",
+    "compressionResultDescription": "从 {before} 压缩到 {after}",
+    "limits": {
+      "needAtLeastTwo": "至少需要 2 张图片才能制作动画。",
+      "gifOnly": "压缩模式首版仅支持 GIF 文件。",
+      "apngLogin": "APNG 是登录商业版能力。",
+      "invalidSize": "请输入有效的画布尺寸。",
+      "processingFailed": "动画处理失败，请减少帧数或降低尺寸后重试。"
     }
   },
   "ImageTransform": {

@@ -1,10 +1,34 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, render } from '@testing-library/react';
+import { JSDOM } from 'jsdom';
 import { NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../../messages/en.json';
 import ImagePage from '../image/page';
 import PdfPage from '../pdf/page';
+
+const dom = new JSDOM('<!doctype html><html><body></body></html>');
+Object.defineProperty(globalThis, 'window', {
+  configurable: true,
+  value: dom.window,
+});
+Object.defineProperty(globalThis, 'document', {
+  configurable: true,
+  value: dom.window.document,
+});
+Object.defineProperty(globalThis, 'HTMLElement', {
+  configurable: true,
+  value: dom.window.HTMLElement,
+});
+Object.defineProperty(globalThis, 'Element', {
+  configurable: true,
+  value: dom.window.Element,
+});
+Object.defineProperty(globalThis, 'navigator', {
+  configurable: true,
+  value: dom.window.navigator,
+});
 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({
@@ -21,50 +45,48 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 function renderWithIntl(ui: React.ReactElement) {
-  render(
-    <NextIntlClientProvider locale="en" messages={en}>
+  return render(
+    <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
       {ui}
     </NextIntlClientProvider>
   );
 }
 
+afterEach(() => {
+  cleanup();
+});
+
 describe('tool catalog pages', () => {
   it('shows the image catalog as local-first grouped tool intents', () => {
-    renderWithIntl(<ImagePage />);
+    const { getByRole, getByText } = renderWithIntl(<ImagePage />);
 
-    expect(
-      screen.getByText('Local first, server optional')
-    ).toBeInTheDocument();
-    expect(screen.getByText('Browser session only')).toBeInTheDocument();
-    expect(screen.getByText('No sign-in required')).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Optimize' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Convert' })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Batch' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /Image compression/ })
-    ).toHaveAttribute('href', expect.stringContaining('/image/compress'));
+    expect(getByText('Local first, server optional')).toBeInTheDocument();
+    expect(getByText('Browser session only')).toBeInTheDocument();
+    expect(getByText('No sign-in required')).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Optimize' })).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Convert' })).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Batch' })).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Animation' })).toBeInTheDocument();
+    expect(getByRole('link', { name: /Image compression/ })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/image/compress')
+    );
+    expect(getByRole('link', { name: /GIF \/ APNG maker/ })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/image/animation')
+    );
   });
 
   it('shows the PDF catalog as server-processed grouped tool intents', () => {
-    renderWithIntl(<PdfPage />);
+    const { getByRole, getByText } = renderWithIntl(<PdfPage />);
 
-    expect(screen.getByText('Server processing')).toBeInTheDocument();
-    expect(screen.getByText('Saved to account files')).toBeInTheDocument();
-    expect(screen.getByText('Sign-in required')).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Organize' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Security' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Optimize' })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Merge PDF/ })).toHaveAttribute(
+    expect(getByText('Server processing')).toBeInTheDocument();
+    expect(getByText('Saved to account files')).toBeInTheDocument();
+    expect(getByText('Sign-in required')).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Organize' })).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Security' })).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Optimize' })).toBeInTheDocument();
+    expect(getByRole('link', { name: /Merge PDF/ })).toHaveAttribute(
       'href',
       expect.stringContaining('/pdf/merge')
     );

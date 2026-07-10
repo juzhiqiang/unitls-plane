@@ -137,6 +137,8 @@
       "imageOptimizeDescription": "Reduce file size while keeping visual quality visible.",
       "imageConvert": "Convert",
       "imageConvertDescription": "Move between image formats without leaving the browser.",
+      "imageAnimation": "Animation",
+      "imageAnimationDescription": "Create, compress, and prepare GIF/APNG animation assets.",
       "imageCompose": "Compose",
       "imageComposeDescription": "Stitch images into publishing-ready long visuals.",
       "imageProtect": "Protect",
@@ -176,6 +178,10 @@
       "imageIdPhoto": {
         "title": "ID photo generator",
         "description": "Change backgrounds and crop to standard sizes."
+      },
+      "imageAnimation": {
+        "title": "GIF / APNG maker",
+        "description": "Create GIFs from image sequences, with APNG and advanced compression for signed-in commercial users."
       },
       "imageBatch": {
         "title": "Batch image output",
@@ -494,6 +500,55 @@
       "1080": "Social 1080",
       "1242": "Mobile 1242",
       "custom": "Custom"
+    }
+  },
+  "ImageAnimation": {
+    "title": "GIF / APNG maker",
+    "description": "Create lightweight animations, compress existing GIFs, and unlock APNG plus advanced controls when signed in.",
+    "dropzoneCreateHint": "Upload PNG, JPG, or WebP images as animation frames.",
+    "dropzoneCompressHint": "Upload one GIF file for basic compression.",
+    "processingLabel": "Processing animated image…",
+    "modes": {
+      "create": "Create",
+      "compress": "Compress",
+      "convert": "Convert"
+    },
+    "outputFormat": "Output format",
+    "canvasSize": "Canvas size",
+    "width": "Width",
+    "height": "Height",
+    "fit": "Fit",
+    "contain": "Contain",
+    "cover": "Cover",
+    "background": "Background",
+    "frameDelay": "Frame delay",
+    "loop": "Loop",
+    "quality": "Quality",
+    "filename": "Filename",
+    "filenamePlaceholder": "animated-image",
+    "targetWidth": "Target width",
+    "targetFps": "Target FPS",
+    "commercialTitle": "Commercial animation tools",
+    "commercialDescription": "Signed-in users get APNG, more frames, larger output, and advanced compression controls. Future paid plans reuse this entitlement layer.",
+    "loginTitle": "Sign in for commercial animation tools",
+    "loginDescription": "Free users can create GIFs. Signed-in users unlock APNG, advanced compression, and higher limits.",
+    "loginAction": "Sign in for commercial",
+    "convertTitle": "Conversion will reuse the animation pipeline",
+    "convertDescription": "The first version prioritizes creation and compression. GIF/APNG/WebP animation conversion can expand here later.",
+    "start": "Generate animation",
+    "startWithCount": "Generate {count}-frame animation",
+    "compressAction": "Compress GIF",
+    "processing": "Processing…",
+    "resultTitle": "Animation ready",
+    "compressedResultTitle": "GIF compressed",
+    "resultDescription": "{name}, {size}",
+    "compressionResultDescription": "Compressed from {before} to {after}",
+    "limits": {
+      "needAtLeastTwo": "At least two images are required to create an animation.",
+      "gifOnly": "The first compression version supports GIF files only.",
+      "apngLogin": "APNG is available to signed-in commercial users.",
+      "invalidSize": "Enter a valid canvas size.",
+      "processingFailed": "Animation processing failed. Try fewer frames or a smaller size."
     }
   },
   "ImageTransform": {

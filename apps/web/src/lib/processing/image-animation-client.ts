@@ -1,11 +1,51 @@
-// @ts-expect-error -- gifenc ships JavaScript without TypeScript declarations.
-import { GIFEncoder, applyPalette, quantize } from 'gifenc';
+// prettier-ignore
+// @ts-expect-error TS7016 -- gifenc ships JavaScript without TypeScript declarations.
+import { GIFEncoder as createUntypedGifEncoder, applyPalette as applyUntypedPalette, quantize as quantizeUntyped } from 'gifenc';
 import { GifReader } from 'omggif';
 import * as UPNG from 'upng-js';
 
 export type AnimationOutputFormat = 'gif' | 'apng';
 export type AnimationFitMode = 'contain' | 'cover';
 type GifPalette = number[][];
+type GifPaletteFormat = 'rgba4444' | 'rgb565';
+type GifFrameBuffer = Uint8Array | Uint8ClampedArray;
+type GifFrameInfo = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  delay?: number;
+  disposal?: number;
+};
+type GifEncoder = {
+  writeFrame(
+    index: Uint8Array,
+    width: number,
+    height: number,
+    options: {
+      palette: GifPalette;
+      delay: number;
+      repeat: number;
+      dispose: number;
+      transparent?: boolean;
+      transparentIndex?: number;
+    }
+  ): void;
+  finish(): void;
+  bytes(): Uint8Array;
+};
+
+const GIFEncoder = createUntypedGifEncoder as () => GifEncoder;
+const applyPalette = applyUntypedPalette as (
+  frame: GifFrameBuffer,
+  palette: GifPalette,
+  format: GifPaletteFormat
+) => Uint8Array;
+const quantize = quantizeUntyped as (
+  frame: GifFrameBuffer,
+  colorCount: number,
+  options: { format: GifPaletteFormat; oneBitAlpha: number | false }
+) => GifPalette;
 
 export interface AnimationSourceSize {
   width: number;
@@ -56,6 +96,7 @@ export interface AnimationPlanLimits {
   maxFileSize: number;
   maxFrames: number;
   maxCanvasPixels: number;
+  maxTotalFramePixels: number;
   maxOutputWidth: number;
 }
 
@@ -75,6 +116,7 @@ export const DEFAULT_IMAGE_ANIMATION_LIMITS = {
     maxFileSize: 8 * 1024 * 1024,
     maxFrames: 60,
     maxCanvasPixels: 16_000_000,
+    maxTotalFramePixels: 120_000_000,
     maxOutputWidth: 960,
   },
   commercial: {
@@ -82,6 +124,7 @@ export const DEFAULT_IMAGE_ANIMATION_LIMITS = {
     maxFileSize: 50 * 1024 * 1024,
     maxFrames: 240,
     maxCanvasPixels: 64_000_000,
+    maxTotalFramePixels: 480_000_000,
     maxOutputWidth: 1920,
   },
 } satisfies Record<string, AnimationPlanLimits>;
@@ -90,9 +133,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function getTransparentPaletteIndex(palette: GifPalette): number {
+export function findTransparentPaletteIndex(
+  palette: GifPalette
+): number | undefined {
   const index = palette.findIndex(color => (color[3] ?? 255) <= 127);
-  return index >= 0 ? index : 0;
+  return index >= 0 ? index : undefined;
 }
 
 function getPaletteColorCount(quality: number): number {
@@ -127,43 +172,48 @@ function isTransparentBackground(background: string): boolean {
   return background.trim().toLowerCase() === 'transparent';
 }
 
-function encodeGif(
-  frames: Array<Uint8Array | Uint8ClampedArray>,
+function createGifWriter(
   width: number,
   height: number,
   options: {
-    delayMs: number;
     repeat: number;
     quality: number;
     transparent: boolean;
   }
-): Uint8Array {
+) {
   const gif = GIFEncoder();
   const colorCount = getPaletteColorCount(options.quality);
   const paletteFormat = options.transparent ? 'rgba4444' : 'rgb565';
 
-  for (const frame of frames) {
-    const palette = quantize(frame, colorCount, {
-      format: paletteFormat,
-      oneBitAlpha: options.transparent ? 127 : false,
-    });
-    const index = applyPalette(frame, palette, paletteFormat);
-    const transparentIndex = options.transparent
-      ? getTransparentPaletteIndex(palette)
-      : undefined;
+  return {
+    writeFrame(frame: GifFrameBuffer, delayMs: number): void {
+      const palette = quantize(frame, colorCount, {
+        format: paletteFormat,
+        oneBitAlpha: options.transparent ? 127 : false,
+      });
+      const index = applyPalette(frame, palette, paletteFormat);
+      const transparentIndex = options.transparent
+        ? findTransparentPaletteIndex(palette)
+        : undefined;
+      const frameOptions: Parameters<GifEncoder['writeFrame']>[3] = {
+        palette,
+        delay: delayMs,
+        repeat: options.repeat,
+        dispose: options.transparent ? 2 : -1,
+      };
 
-    gif.writeFrame(index, width, height, {
-      palette,
-      delay: options.delayMs,
-      repeat: options.repeat,
-      transparent: options.transparent,
-      transparentIndex,
-      dispose: options.transparent ? 2 : -1,
-    });
-  }
+      if (transparentIndex !== undefined) {
+        frameOptions.transparent = true;
+        frameOptions.transparentIndex = transparentIndex;
+      }
 
-  gif.finish();
-  return gif.bytes();
+      gif.writeFrame(index, width, height, frameOptions);
+    },
+    finish(): Uint8Array {
+      gif.finish();
+      return gif.bytes();
+    },
+  };
 }
 
 function getImageDataBuffer(imageData: ImageData): ArrayBuffer {
@@ -353,6 +403,63 @@ export function resolveCompressedGifPlan(
   };
 }
 
+export function validateAnimationFrameBudget(
+  frameCount: number,
+  outputFormat: AnimationOutputFormat,
+  limits: AnimationPlanLimits,
+  framePixels = limits.maxCanvasPixels
+): void {
+  if (outputFormat !== 'apng') {
+    return;
+  }
+
+  const totalFramePixels = Math.max(0, frameCount) * Math.max(0, framePixels);
+
+  if (totalFramePixels > limits.maxTotalFramePixels) {
+    throw new Error(
+      'Animation has too many total frame pixels for the current plan'
+    );
+  }
+}
+
+function getGifFrameDelayMs(
+  frameInfo: GifFrameInfo | undefined,
+  fallbackDelayMs: number
+): number {
+  const delayCentiseconds = frameInfo?.delay;
+
+  if (
+    typeof delayCentiseconds === 'number' &&
+    Number.isFinite(delayCentiseconds) &&
+    delayCentiseconds > 0
+  ) {
+    return Math.round(delayCentiseconds * 10);
+  }
+
+  return fallbackDelayMs;
+}
+
+export function getCompressedGifFrameDelayMs(
+  frameInfos: GifFrameInfo[],
+  startIndex: number,
+  frameStep: number,
+  targetFps: number
+): number {
+  const fallbackDelayMs = Math.round(
+    1000 / clamp(Math.round(targetFps), 1, 30)
+  );
+  const safeStart = clamp(Math.round(startIndex), 0, frameInfos.length);
+  const safeStep = Math.max(1, Math.round(frameStep));
+  const endIndex = Math.min(frameInfos.length, safeStart + safeStep);
+  let delayMs = 0;
+
+  for (let index = safeStart; index < endIndex; index += 1) {
+    delayMs += getGifFrameDelayMs(frameInfos[index], fallbackDelayMs);
+  }
+
+  return Math.max(delayMs, fallbackDelayMs);
+}
+
 export function validateAnimationInputs(
   files: File[],
   options: AnimationCreateOptions,
@@ -374,6 +481,66 @@ export function validateAnimationInputs(
   if (normalized.width > limits.maxOutputWidth) {
     throw new Error('Output width is too large for the current plan');
   }
+  validateAnimationFrameBudget(
+    files.length,
+    normalized.outputFormat,
+    limits,
+    normalized.width * normalized.height
+  );
+}
+
+function clearRgbaRect(
+  buffer: Uint8ClampedArray,
+  screenWidth: number,
+  screenHeight: number,
+  rect: Required<Pick<GifFrameInfo, 'x' | 'y' | 'width' | 'height'>>
+): void {
+  const left = clamp(Math.round(rect.x), 0, screenWidth);
+  const top = clamp(Math.round(rect.y), 0, screenHeight);
+  const right = clamp(Math.round(rect.x + rect.width), left, screenWidth);
+  const bottom = clamp(Math.round(rect.y + rect.height), top, screenHeight);
+
+  for (let y = top; y < bottom; y += 1) {
+    const rowStart = (y * screenWidth + left) * 4;
+    buffer.fill(0, rowStart, rowStart + (right - left) * 4);
+  }
+}
+
+function getGifFrameRect(
+  frameInfo: GifFrameInfo,
+  screen: AnimationSourceSize
+): Required<Pick<GifFrameInfo, 'x' | 'y' | 'width' | 'height'>> {
+  return {
+    x: frameInfo.x ?? 0,
+    y: frameInfo.y ?? 0,
+    width: frameInfo.width ?? screen.width,
+    height: frameInfo.height ?? screen.height,
+  };
+}
+
+function applyPreviousGifDisposal(
+  screenRgba: Uint8ClampedArray,
+  screen: AnimationSourceSize,
+  previousFrameInfo: GifFrameInfo | undefined,
+  restoreBuffer: Uint8ClampedArray | undefined
+): void {
+  if (!previousFrameInfo) {
+    return;
+  }
+
+  if (previousFrameInfo.disposal === 2) {
+    clearRgbaRect(
+      screenRgba,
+      screen.width,
+      screen.height,
+      getGifFrameRect(previousFrameInfo, screen)
+    );
+    return;
+  }
+
+  if (previousFrameInfo.disposal === 3 && restoreBuffer) {
+    screenRgba.set(restoreBuffer);
+  }
 }
 
 export async function createAnimationFromImages(
@@ -384,14 +551,6 @@ export async function createAnimationFromImages(
   validateAnimationInputs(files, options, limits);
 
   const normalized = normalizeAnimationCreateOptions(options);
-  const images = await Promise.all(files.map(file => loadImageFromFile(file)));
-  const frameData = images.map(image =>
-    renderFrameToImageData(
-      image,
-      { width: image.naturalWidth, height: image.naturalHeight },
-      normalized
-    )
-  );
   const transparent = isTransparentBackground(normalized.background);
   const outputName = getAnimationOutputName(
     normalized.filename,
@@ -399,8 +558,23 @@ export async function createAnimationFromImages(
   );
 
   if (normalized.outputFormat === 'apng') {
-    const buffers = frameData.map(getImageDataBuffer);
-    const delays = frameData.map(() => normalized.frameDelayMs);
+    const buffers: ArrayBuffer[] = [];
+    const delays: number[] = [];
+
+    for (const file of files) {
+      const image = await loadImageFromFile(file);
+      const frameData = renderFrameToImageData(
+        image,
+        { width: image.naturalWidth, height: image.naturalHeight },
+        normalized
+      );
+
+      buffers.push(getImageDataBuffer(frameData));
+      delays.push(normalized.frameDelayMs);
+    }
+
+    // UPNG.encode accepts frame delays here, but the upng-js API does not expose
+    // a loop-count parameter, so normalized.repeat cannot be represented.
     const encoded = UPNG.encode(
       buffers,
       normalized.width,
@@ -412,17 +586,24 @@ export async function createAnimationFromImages(
     return new File([encoded], outputName, { type: 'image/apng' });
   }
 
-  const encoded = encodeGif(
-    frameData.map(frame => frame.data),
-    normalized.width,
-    normalized.height,
-    {
-      delayMs: normalized.frameDelayMs,
-      repeat: normalized.repeat,
-      quality: normalized.quality,
-      transparent,
-    }
-  );
+  const gif = createGifWriter(normalized.width, normalized.height, {
+    repeat: normalized.repeat,
+    quality: normalized.quality,
+    transparent,
+  });
+
+  for (const file of files) {
+    const image = await loadImageFromFile(file);
+    const frameData = renderFrameToImageData(
+      image,
+      { width: image.naturalWidth, height: image.naturalHeight },
+      normalized
+    );
+
+    gif.writeFrame(frameData.data, normalized.frameDelayMs);
+  }
+
+  const encoded = gif.finish();
 
   return new File([toArrayBuffer(encoded)], outputName, { type: 'image/gif' });
 }
@@ -447,22 +628,67 @@ export async function compressGif(
   const plan = resolveCompressedGifPlan(info, normalized, limits);
   const sourceSize = { width: reader.width, height: reader.height };
   const targetSize = { width: plan.width, height: plan.height };
-  const frames: Uint8ClampedArray[] = [];
-
-  for (let index = 0; index < info.frameCount; index += plan.frameStep) {
-    const sourceRgba = new Uint8ClampedArray(
-      sourceSize.width * sourceSize.height * 4
-    );
-    reader.decodeAndBlitFrameRGBA(index, sourceRgba);
-    frames.push(scaleRgbaFrame(sourceRgba, sourceSize, targetSize).data);
-  }
-
-  const encoded = encodeGif(frames, plan.width, plan.height, {
-    delayMs: Math.round(1000 / plan.targetFps),
+  const sourceRgba = new Uint8ClampedArray(
+    sourceSize.width * sourceSize.height * 4
+  );
+  const frameInfos = Array.from(
+    { length: info.frameCount },
+    (_, index) => reader.frameInfo(index) as GifFrameInfo
+  );
+  const minOutputDelayMs = Math.round(1000 / plan.targetFps);
+  const gif = createGifWriter(plan.width, plan.height, {
     repeat: 0,
     quality: normalized.quality,
     transparent: false,
   });
+  let previousFrameInfo: GifFrameInfo | undefined;
+  let previousRestoreBuffer: Uint8ClampedArray | undefined;
+  let pendingFrame: Uint8ClampedArray | undefined;
+  let pendingFrameIndex = -1;
+  let pendingDelayMs = 0;
+
+  for (let index = 0; index < info.frameCount; index += 1) {
+    applyPreviousGifDisposal(
+      sourceRgba,
+      sourceSize,
+      previousFrameInfo,
+      previousRestoreBuffer
+    );
+
+    const frameInfo = frameInfos[index] ?? {};
+    const restoreBuffer =
+      frameInfo.disposal === 3 ? new Uint8ClampedArray(sourceRgba) : undefined;
+
+    reader.decodeAndBlitFrameRGBA(index, sourceRgba);
+
+    const shouldStartOutputFrame =
+      !pendingFrame ||
+      (pendingDelayMs >= minOutputDelayMs &&
+        index - pendingFrameIndex >= plan.frameStep);
+
+    if (shouldStartOutputFrame) {
+      if (pendingFrame) {
+        gif.writeFrame(
+          pendingFrame,
+          Math.max(pendingDelayMs, minOutputDelayMs)
+        );
+      }
+
+      pendingFrame = scaleRgbaFrame(sourceRgba, sourceSize, targetSize).data;
+      pendingFrameIndex = index;
+      pendingDelayMs = 0;
+    }
+
+    pendingDelayMs += getGifFrameDelayMs(frameInfo, minOutputDelayMs);
+    previousFrameInfo = frameInfo;
+    previousRestoreBuffer = restoreBuffer;
+  }
+
+  if (pendingFrame) {
+    gif.writeFrame(pendingFrame, Math.max(pendingDelayMs, minOutputDelayMs));
+  }
+
+  const encoded = gif.finish();
 
   return new File(
     [toArrayBuffer(encoded)],

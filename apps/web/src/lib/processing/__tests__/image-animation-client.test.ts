@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAnimationFrameLayout,
   DEFAULT_IMAGE_ANIMATION_LIMITS,
+  findTransparentPaletteIndex,
+  getCompressedGifFrameDelayMs,
   getAnimationOutputName,
   getImageAnimationEntitlements,
   normalizeAnimationCreateOptions,
   normalizeAnimationCompressOptions,
   resolveCompressedGifPlan,
+  validateAnimationFrameBudget,
   validateAnimationInputs,
   type AnimationCreateOptions,
 } from '../image-animation-client';
@@ -135,5 +138,42 @@ describe('image animation client helpers', () => {
         DEFAULT_IMAGE_ANIMATION_LIMITS.free
       )
     ).toMatchObject({ width: 400, height: 200, targetFps: 12 });
+  });
+
+  it('does not choose a transparent GIF palette index for opaque frames', () => {
+    expect(
+      findTransparentPaletteIndex([
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+      ])
+    ).toBeUndefined();
+
+    expect(
+      findTransparentPaletteIndex([
+        [255, 0, 0, 255],
+        [0, 255, 0, 12],
+      ])
+    ).toBe(1);
+  });
+
+  it('rejects APNG create options above the total frame pixel budget', () => {
+    expect(() =>
+      validateAnimationFrameBudget(61, 'apng', {
+        ...DEFAULT_IMAGE_ANIMATION_LIMITS.free,
+        maxCanvasPixels: 16_000_000,
+        maxTotalFramePixels: 60 * 16_000_000,
+      })
+    ).toThrow('Animation has too many total frame pixels for the current plan');
+  });
+
+  it('accumulates skipped GIF frame delays during compression', () => {
+    expect(
+      getCompressedGifFrameDelayMs(
+        [{ delay: 4 }, { delay: 5 }, { delay: 6 }, { delay: 7 }, { delay: 2 }],
+        0,
+        3,
+        8
+      )
+    ).toBe(150);
   });
 });

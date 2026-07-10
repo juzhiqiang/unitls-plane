@@ -119,7 +119,7 @@ export const DEFAULT_IMAGE_ANIMATION_LIMITS = {
     maxFileSize: 8 * 1024 * 1024,
     maxFrames: 60,
     maxCanvasPixels: 16_000_000,
-    maxTotalFramePixels: 120_000_000,
+    maxTotalFramePixels: 48_000_000,
     maxOutputWidth: 960,
   },
   commercial: {
@@ -127,7 +127,7 @@ export const DEFAULT_IMAGE_ANIMATION_LIMITS = {
     maxFileSize: 50 * 1024 * 1024,
     maxFrames: 240,
     maxCanvasPixels: 64_000_000,
-    maxTotalFramePixels: 480_000_000,
+    maxTotalFramePixels: 160_000_000,
     maxOutputWidth: 1920,
   },
 } satisfies Record<string, AnimationPlanLimits>;
@@ -216,6 +216,16 @@ function createGifWriter(
       gif.finish();
       return gif.bytes();
     },
+  };
+}
+
+export function getCompressedGifWriterOptions(
+  quality: number
+): Parameters<typeof createGifWriter>[2] {
+  return {
+    repeat: 0,
+    quality,
+    transparent: true,
   };
 }
 
@@ -738,11 +748,11 @@ export async function compressGif(
     (_, index) => reader.frameInfo(index) as GifFrameInfo
   );
   const minOutputDelayMs = Math.round(1000 / plan.targetFps);
-  const gif = createGifWriter(plan.width, plan.height, {
-    repeat: 0,
-    quality: normalized.quality,
-    transparent: false,
-  });
+  const gif = createGifWriter(
+    plan.width,
+    plan.height,
+    getCompressedGifWriterOptions(normalized.quality)
+  );
   let previousFrameInfo: GifFrameInfo | undefined;
   let previousRestoreBuffer: Uint8ClampedArray | undefined;
   let pendingFrame: Uint8ClampedArray | undefined;

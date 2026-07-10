@@ -4,6 +4,7 @@ import {
   DEFAULT_IMAGE_ANIMATION_LIMITS,
   findTransparentPaletteIndex,
   getCompressedGifFrameDelayMs,
+  getCompressedGifWriterOptions,
   getAnimationOutputName,
   getImageAnimationEntitlements,
   normalizeAnimationCreateOptions,
@@ -222,6 +223,23 @@ describe('image animation client helpers', () => {
     ).toBe(1);
   });
 
+  it('keeps transparency available when compressing GIFs', () => {
+    expect(getCompressedGifWriterOptions(12)).toEqual({
+      repeat: 0,
+      quality: 12,
+      transparent: true,
+    });
+  });
+
+  it('keeps APNG total-frame-pixel limits browser safe', () => {
+    expect(
+      DEFAULT_IMAGE_ANIMATION_LIMITS.free.maxTotalFramePixels
+    ).toBeLessThanOrEqual(48_000_000);
+    expect(
+      DEFAULT_IMAGE_ANIMATION_LIMITS.commercial.maxTotalFramePixels
+    ).toBeLessThanOrEqual(160_000_000);
+  });
+
   it('rejects APNG create options above the total frame pixel budget', () => {
     expect(() =>
       validateAnimationFrameBudget(61, 'apng', {
@@ -229,6 +247,17 @@ describe('image animation client helpers', () => {
         maxCanvasPixels: 16_000_000,
         maxTotalFramePixels: 60 * 16_000_000,
       })
+    ).toThrow('Animation has too many total frame pixels for the current plan');
+  });
+
+  it('rejects commercial APNG outputs above the total frame pixel budget', () => {
+    expect(() =>
+      validateAnimationFrameBudget(
+        3,
+        'apng',
+        DEFAULT_IMAGE_ANIMATION_LIMITS.commercial,
+        DEFAULT_IMAGE_ANIMATION_LIMITS.commercial.maxCanvasPixels
+      )
     ).toThrow('Animation has too many total frame pixels for the current plan');
   });
 

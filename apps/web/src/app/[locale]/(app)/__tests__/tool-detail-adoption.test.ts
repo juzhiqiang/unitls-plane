@@ -6,6 +6,7 @@ const detailPages = [
   ['/image/compress', 'src/app/[locale]/(app)/image/compress/page.tsx'],
   ['/image/convert', 'src/app/[locale]/(app)/image/convert/page.tsx'],
   ['/image/stitch', 'src/app/[locale]/(app)/image/stitch/page.tsx'],
+  ['/image/animation', 'src/app/[locale]/(app)/image/animation/page.tsx'],
   ['/image/watermark', 'src/app/[locale]/(app)/image/watermark/page.tsx'],
   ['/image/id-photo', 'src/app/[locale]/(app)/image/id-photo/page.tsx'],
   ['/font', 'src/app/[locale]/(app)/font/page.tsx'],

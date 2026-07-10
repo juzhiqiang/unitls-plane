@@ -46,6 +46,9 @@ const quantize = quantizeUntyped as (
   colorCount: number,
   options: { format: GifPaletteFormat; oneBitAlpha: number | false }
 ) => GifPalette;
+const APNG_ACTL_TYPE = [0x61, 0x63, 0x54, 0x4c] as const;
+const PNG_SIGNATURE_LENGTH = 8;
+const UINT32_MAX = 0xffffffff;
 
 export interface AnimationSourceSize {
   width: number;
@@ -228,6 +231,106 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
   ) as ArrayBuffer;
+}
+
+function toByteView(bytes: Uint8Array | ArrayBuffer): Uint8Array {
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+}
+
+function writeUint32(bytes: Uint8Array, offset: number, value: number): void {
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(
+    offset,
+    value
+  );
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = UINT32_MAX;
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    crc ^= bytes[index] ?? 0;
+
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+
+  return (crc ^ UINT32_MAX) >>> 0;
+}
+
+function isActlChunk(bytes: Uint8Array, typeOffset: number): boolean {
+  return APNG_ACTL_TYPE.every(
+    (byte, index) => bytes[typeOffset + index] === byte
+  );
+}
+
+function findApngActlChunkOffset(bytes: Uint8Array): number | undefined {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = PNG_SIGNATURE_LENGTH;
+
+  while (offset + 12 <= bytes.byteLength) {
+    const dataLength = view.getUint32(offset);
+    const chunkEnd = offset + 12 + dataLength;
+
+    if (chunkEnd > bytes.byteLength) {
+      return undefined;
+    }
+
+    if (dataLength === 8 && isActlChunk(bytes, offset + 4)) {
+      return offset;
+    }
+
+    offset = chunkEnd;
+  }
+
+  return undefined;
+}
+
+function normalizeApngRepeatCount(repeat: number): number {
+  if (!Number.isFinite(repeat)) {
+    return 0;
+  }
+
+  return clamp(Math.round(repeat), 0, UINT32_MAX);
+}
+
+export function readApngRepeatCount(
+  bytes: Uint8Array | ArrayBuffer
+): number | undefined {
+  const byteView = toByteView(bytes);
+  const actlOffset = findApngActlChunkOffset(byteView);
+
+  if (actlOffset === undefined) {
+    return undefined;
+  }
+
+  return new DataView(
+    byteView.buffer,
+    byteView.byteOffset,
+    byteView.byteLength
+  ).getUint32(actlOffset + 12);
+}
+
+export function patchApngRepeatCount(
+  bytes: Uint8Array | ArrayBuffer,
+  repeat: number
+): Uint8Array {
+  const byteView = toByteView(bytes);
+  const patched = new Uint8Array(byteView);
+  const actlOffset = findApngActlChunkOffset(patched);
+
+  if (actlOffset === undefined) {
+    return patched;
+  }
+
+  writeUint32(patched, actlOffset + 12, normalizeApngRepeatCount(repeat));
+  writeUint32(
+    patched,
+    actlOffset + 16,
+    crc32(patched.subarray(actlOffset + 4, actlOffset + 16))
+  );
+
+  return patched;
 }
 
 function loadImageFromFile(file: File): Promise<HTMLImageElement> {
@@ -573,8 +676,6 @@ export async function createAnimationFromImages(
       delays.push(normalized.frameDelayMs);
     }
 
-    // UPNG.encode accepts frame delays here, but the upng-js API does not expose
-    // a loop-count parameter, so normalized.repeat cannot be represented.
     const encoded = UPNG.encode(
       buffers,
       normalized.width,
@@ -582,8 +683,9 @@ export async function createAnimationFromImages(
       getPaletteColorCount(normalized.quality),
       delays
     );
+    const apng = patchApngRepeatCount(encoded, normalized.repeat);
 
-    return new File([encoded], outputName, { type: 'image/apng' });
+    return new File([toArrayBuffer(apng)], outputName, { type: 'image/apng' });
   }
 
   const gif = createGifWriter(normalized.width, normalized.height, {

@@ -8,6 +8,8 @@ import {
   getImageAnimationEntitlements,
   normalizeAnimationCreateOptions,
   normalizeAnimationCompressOptions,
+  patchApngRepeatCount,
+  readApngRepeatCount,
   resolveCompressedGifPlan,
   validateAnimationFrameBudget,
   validateAnimationInputs,
@@ -25,6 +27,68 @@ const baseOptions: AnimationCreateOptions = {
   quality: 12,
   filename: 'promo-loop',
 };
+
+const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+const textEncoder = new TextEncoder();
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+
+  for (const byte of bytes) {
+    crc ^= byte;
+
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint32(bytes: Uint8Array, offset: number, value: number): void {
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(
+    offset,
+    value
+  );
+}
+
+function buildChunk(type: string, data: number[]): Uint8Array {
+  const typeBytes = textEncoder.encode(type);
+  const chunk = new Uint8Array(12 + data.length);
+  writeUint32(chunk, 0, data.length);
+  chunk.set(typeBytes, 4);
+  chunk.set(data, 8);
+  writeUint32(
+    chunk,
+    8 + data.length,
+    crc32(chunk.subarray(4, 8 + data.length))
+  );
+  return chunk;
+}
+
+function buildMinimalApng(numPlays: number): Uint8Array {
+  const actl = buildChunk('acTL', [0, 0, 0, 2, 0, 0, 0, numPlays]);
+  const iend = buildChunk('IEND', []);
+  const bytes = new Uint8Array(pngSignature.length + actl.length + iend.length);
+  bytes.set(pngSignature, 0);
+  bytes.set(actl, pngSignature.length);
+  bytes.set(iend, pngSignature.length + actl.length);
+  return bytes;
+}
+
+function readActlStoredCrc(bytes: Uint8Array): number {
+  return new DataView(
+    bytes.buffer,
+    bytes.byteOffset,
+    bytes.byteLength
+  ).getUint32(pngSignature.length + 8 + 8);
+}
+
+function readActlComputedCrc(bytes: Uint8Array): number {
+  const actlTypeAndDataStart = pngSignature.length + 4;
+  const actlTypeAndDataEnd = actlTypeAndDataStart + 4 + 8;
+  return crc32(bytes.subarray(actlTypeAndDataStart, actlTypeAndDataEnd));
+}
 
 describe('image animation client helpers', () => {
   it('gives logged-in users commercial APNG and advanced compression flags', () => {
@@ -60,12 +124,14 @@ describe('image animation client helpers', () => {
         width: 640.8,
         height: 0,
         frameDelayMs: 7,
+        repeat: -3.6,
         quality: 99,
       })
     ).toMatchObject({
       width: 641,
       height: 1,
       frameDelayMs: 20,
+      repeat: 0,
       quality: 30,
     });
   });
@@ -175,5 +241,28 @@ describe('image animation client helpers', () => {
         8
       )
     ).toBe(150);
+  });
+
+  it('reads the APNG acTL repeat count from a byte array', () => {
+    expect(readApngRepeatCount(buildMinimalApng(0))).toBe(0);
+    expect(readApngRepeatCount(buildMinimalApng(3))).toBe(3);
+  });
+
+  it('patches APNG acTL repeat count and updates the chunk CRC', () => {
+    const bytes = buildMinimalApng(0);
+    const originalCrc = readActlStoredCrc(bytes);
+    const patched = patchApngRepeatCount(bytes, 5);
+
+    expect(patched).not.toBe(bytes);
+    expect(readApngRepeatCount(patched)).toBe(5);
+    expect(readActlStoredCrc(patched)).not.toBe(originalCrc);
+    expect(readActlStoredCrc(patched)).toBe(readActlComputedCrc(patched));
+  });
+
+  it('keeps APNG repeat count infinite when repeat is zero', () => {
+    const patched = patchApngRepeatCount(buildMinimalApng(4), 0);
+
+    expect(readApngRepeatCount(patched)).toBe(0);
+    expect(readActlStoredCrc(patched)).toBe(readActlComputedCrc(patched));
   });
 });

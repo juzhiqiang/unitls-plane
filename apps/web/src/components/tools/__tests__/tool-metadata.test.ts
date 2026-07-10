@@ -42,7 +42,7 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(7);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(8);
   });
 
   it('registers the id photo generator as a server image tool', () => {
@@ -60,5 +60,17 @@ describe('tool metadata', () => {
     expect(tool?.processing).toBe('local');
     expect(tool?.retention).toBe('browser-session');
     expect(tool?.requiresLogin).toBe(false);
+  });
+
+  it('registers animated images as a free local-first commercial-ready tool', () => {
+    const tool = getToolByHref('/image/animation');
+
+    expect(tool?.key).toBe('imageAnimation');
+    expect(tool?.processing).toBe('local-first');
+    expect(tool?.retention).toBe('browser-session');
+    expect(tool?.requiresLogin).toBe(false);
+    expect(tool?.tags).toEqual(
+      expect.arrayContaining(['gif', 'apng', 'animation', 'compress'])
+    );
   });
 });

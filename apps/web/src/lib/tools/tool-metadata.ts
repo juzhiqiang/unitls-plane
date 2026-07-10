@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUpDown,
   BadgeCheck,
+  Film,
   FileText,
   ImageDown,
   Images,
@@ -69,6 +70,19 @@ export const imageTools: ToolMeta[] = [
     requiresLogin: false,
     recommended: true,
     tags: ['local', 'format'],
+  },
+  {
+    key: 'imageAnimation',
+    href: '/image/animation',
+    icon: Film,
+    titleKey: 'ToolCatalog.tools.imageAnimation.title',
+    descriptionKey: 'ToolCatalog.tools.imageAnimation.description',
+    categoryKey: 'ToolCatalog.categories.imageAnimation',
+    processing: 'local-first',
+    retention: 'browser-session',
+    requiresLogin: false,
+    recommended: true,
+    tags: ['gif', 'apng', 'animation', 'compress'],
   },
   {
     key: 'imageStitch',

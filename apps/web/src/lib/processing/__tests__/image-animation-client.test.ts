@@ -31,13 +31,15 @@ describe('image animation client helpers', () => {
       canUseAdvancedCompression: false,
     });
 
-    expect(getImageAnimationEntitlements({ user: { id: 'u1' } })).toMatchObject({
-      isLoggedIn: true,
-      isCommercial: true,
-      canExportGif: true,
-      canExportApng: true,
-      canUseAdvancedCompression: true,
-    });
+    expect(getImageAnimationEntitlements({ user: { id: 'u1' } })).toMatchObject(
+      {
+        isLoggedIn: true,
+        isCommercial: true,
+        canExportGif: true,
+        canExportApng: true,
+        canUseAdvancedCompression: true,
+      }
+    );
   });
 
   it('builds stable output names for GIF and APNG', () => {
@@ -86,12 +88,19 @@ describe('image animation client helpers', () => {
     );
 
     expect(() =>
-      validateAnimationInputs(files, baseOptions, DEFAULT_IMAGE_ANIMATION_LIMITS.free)
+      validateAnimationInputs(
+        files,
+        baseOptions,
+        DEFAULT_IMAGE_ANIMATION_LIMITS.free
+      )
     ).toThrow('Too many frames for the current plan');
 
     expect(() =>
       validateAnimationInputs(
-        [new File(['x'], 'a.png', { type: 'image/png' }), new File(['x'], 'b.png', { type: 'image/png' })],
+        [
+          new File(['x'], 'a.png', { type: 'image/png' }),
+          new File(['x'], 'b.png', { type: 'image/png' }),
+        ],
         { ...baseOptions, width: 10000, height: 10000 },
         DEFAULT_IMAGE_ANIMATION_LIMITS.free
       )

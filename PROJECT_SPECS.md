@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字体、文件管理和异步任务管理。前端提供本地优先与服务端处理并存的工具体验，后端负责认证、文件存储、任务队列、处理器和 API 文档。
+Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字体、文件管理和异步任务管理。前端提供本地优先与服务端处理并存的工具体验，后端负责认证、文件存储、任务队列、处理器和 API 文档。当前已包含长图拼接、GIF/APNG 动图工具、证件照生成、Markdown / Word 转 PDF 等面向商业化扩展的工具能力。
 
 ## 技术栈
 
@@ -245,7 +245,7 @@ cd packages/api-client && bun run generate
 
 ### Task 类型
 
-`compress`、`convert`、`image_watermark`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`。
+`compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`。
 
 ## API 服务
 
@@ -281,15 +281,18 @@ cd packages/api-client && bun run generate
 
 工具清单：
 
-- 图片：压缩、格式转换、图片水印、旋转/翻转/自动方向校正、批量压缩/打包、压缩前后对比。
-- PDF：合并、拆分、重排、旋转、图片转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
+- 图片：压缩、格式转换、水印、长图拼接、GIF/APNG 制作与 GIF 压缩、证件照生成、批量处理、压缩前后对比。
+- PDF：合并、拆分、重排、旋转、图片转 PDF、Markdown / Word 转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
 - 字体：TTF/OTF/WOFF/WOFF2 转换。
 
 ## 文件与任务策略
 
 - 匿名上传单文件上限 10MB，登录用户单文件上限 50MB。
 - 匿名文件默认 24 小时过期，登录用户文件归入账号文件。
-- 图片压缩和图片格式转换支持浏览器本地处理；PDF 和字体工具主要走服务端任务。
+- 图片压缩、图片格式转换、长图拼接、GIF/APNG 制作优先支持浏览器本地处理。
+- Markdown 转 PDF 支持在线编辑、预览和本地导出；登录后可选择服务端导出。Word/DOCX 转 PDF 走服务端任务。
+- 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；生产组合镜像内置 `libreoffice-writer` 和 CJK 字体，服务端仍保留 PDF fallback。
+- PDF 和字体的重型处理主要走服务端任务。
 - 任务状态：`pending`、`processing`、`completed`、`failed`。
 - 文件支持软删除、恢复、永久删除和清空回收站。
 

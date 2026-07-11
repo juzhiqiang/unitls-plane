@@ -21,8 +21,11 @@ Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片�
 
 - 图片压缩
 - 图片格式转换
+- GIF/APNG 制作与 GIF 压缩
+- 长图拼接
 - 图片加水印
 - 图片旋转、水平/垂直翻转、自动方向校正
+- 证件照生成与背景处理
 - 批量处理与 zip 下载
 - 压缩前后对比
 
@@ -30,6 +33,7 @@ Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片�
 
 - 合并、拆分、重排、旋转
 - 图片转 PDF、PDF 转图片
+- Markdown / Word 转 PDF，支持 Markdown 在线编辑、预览和本地导出
 - PDF 转文本/Markdown
 - 元数据编辑
 - 加密、水印、压缩
@@ -139,6 +143,8 @@ cd apps/web && bun run dev
 ```
 
 前端访问本地 API：`http://localhost:3001`。
+
+Markdown / Word 转 PDF 的服务端导出会优先调用 LibreOffice。Docker 组合镜像已安装 `libreoffice-writer` 和 CJK 字体；宿主机本地运行 API 时，如果需要更高保真服务端转换，可安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。Markdown 本地导出不依赖服务端。
 
 ## 本地服务地址
 
@@ -352,7 +358,7 @@ docker stop utils-plane-all
 docker stop utils-plane-api
 ```
 
-API 仍然需要能访问 PostgreSQL、Redis 和 MinIO。请在 `.env.prod` 中配置 `DATABASE_URL`、`REDIS_URL`、`S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL` 和 `CORS_ORIGIN` 等变量。
+API 仍然需要能访问 PostgreSQL、Redis 和 MinIO。请在 `.env.prod` 中配置 `DATABASE_URL`、`REDIS_URL`、`S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL` 和 `CORS_ORIGIN` 等变量。组合镜像内置 LibreOffice 和 CJK 字体，用于 Markdown / Word 转 PDF 的服务端导出。
 
 ## 常用脚本
 
@@ -391,7 +397,8 @@ cd packages/api-client && bun run generate
 
 ```text
 Next.js Web
-  ├─ 本地图片处理
+  ├─ 本地图片处理 / 长图拼接 / GIF 制作
+  ├─ Markdown 编辑预览与本地 PDF 导出
   ├─ 工具 UI / 多语言 / PWA
   └─ @utils-plane/api-client
            |
@@ -399,7 +406,7 @@ Next.js Web
 NestJS API
   ├─ AuthModule  -> Better-Auth
   ├─ FilesModule -> MinIO + PostgreSQL
-  ├─ TasksModule -> BullMQ processors
+  ├─ TasksModule -> BullMQ processors / PDF 文档转换
   └─ HealthModule
            |
            v
@@ -408,8 +415,10 @@ PostgreSQL + Redis + MinIO
 
 ## 处理策略
 
-- 图片压缩、图片格式转换优先在浏览器本地处理。
-- PDF 和字体工具主要走服务端任务队列。
+- 图片压缩、图片格式转换、长图拼接、GIF/APNG 制作优先在浏览器本地处理。
+- Markdown 转 PDF 默认支持本地编辑、预览和浏览器导出；登录后也可选择服务端导出。
+- Word/DOCX 转 PDF 走服务端任务队列；Docker 生产镜像内置 LibreOffice，服务端仍保留 PDF fallback。
+- PDF 和字体的重型处理主要走服务端任务队列。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 匿名上传单文件上限 10MB，登录用户单文件上限 50MB。
 - 匿名文件默认 24 小时过期。
@@ -449,4 +458,4 @@ bunx drizzle-kit migrate
 
 ## 当前进度
 
-项目已完成基础 monorepo、认证、数据库、文件模块、任务队列、Web 工具页、文件/任务管理和关键设计原则页面优化。后续开发应以当前代码和 `PROJECT_SPECS.md` 为准，避免引用早期 phase 文档中的过时状态。
+项目已完成基础 monorepo、认证、数据库、文件模块、任务队列、Web 工具页、文件/任务管理、图片长图拼接、GIF/APNG 动图工具、Markdown / Word 转 PDF 和关键设计原则页面优化。后续开发应以当前代码和 `PROJECT_SPECS.md` 为准，避免引用早期 phase 文档中的过时状态。

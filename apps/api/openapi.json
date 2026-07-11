@@ -94,7 +94,8 @@
                 "pdf_encrypt",
                 "pdf_compress",
                 "pdf_metadata",
-                "pdf_rearrange"
+                "pdf_rearrange",
+                "pdf_from_document"
               ]
             }
           }
@@ -759,7 +760,8 @@
               "pdf_encrypt",
               "pdf_compress",
               "pdf_metadata",
-              "pdf_rearrange"
+              "pdf_rearrange",
+              "pdf_from_document"
             ]
           },
           "inputFileIds": {
@@ -807,7 +809,8 @@
               "pdf_encrypt",
               "pdf_compress",
               "pdf_metadata",
-              "pdf_rearrange"
+              "pdf_rearrange",
+              "pdf_from_document"
             ]
           },
           "status": {

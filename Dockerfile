@@ -52,6 +52,13 @@ ENV PORT=3001
 ENV WEB_PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libreoffice-writer \
+        fonts-dejavu \
+        fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/packages/auth/package.json ./packages/auth/package.json

@@ -20,6 +20,7 @@ import {
   stitchImages,
   type ImageStitchOutputType,
 } from '@/lib/processing/image-stitch-client';
+import { createBrowserId } from '@/lib/browser-id';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
@@ -63,7 +64,7 @@ const OUTPUT_LABELS: Record<ImageStitchOutputType, string> = {
 };
 
 function makeImageId(file: File): string {
-  return `${file.name}-${file.lastModified}-${file.size}-${crypto.randomUUID()}`;
+  return `${file.name}-${file.lastModified}-${file.size}-${createBrowserId()}`;
 }
 
 function resolveWidth(options: StitchOptionsState): number {

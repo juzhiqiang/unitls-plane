@@ -37,6 +37,7 @@ const TASK_TYPES = [
   'pdf_compress',
   'pdf_metadata',
   'pdf_rearrange',
+  'pdf_from_document',
 ] as const;
 
 type TaskTypeValue = (typeof TASK_TYPES)[number];

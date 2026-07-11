@@ -17,6 +17,7 @@ export const taskTypeEnum = z.enum([
   'pdf_compress',
   'pdf_metadata',
   'pdf_rearrange',
+  'pdf_from_document',
 ]);
 
 export const createTaskSchema = z.object({

@@ -14,6 +14,7 @@ interface ToolPageShellProps {
   stage: ToolStage;
   children: ReactNode;
   aside?: ReactNode;
+  maxWidth?: 'default' | 'wide';
 }
 
 export function ToolPageShell({
@@ -26,9 +27,16 @@ export function ToolPageShell({
   stage,
   children,
   aside,
+  maxWidth = 'default',
 }: ToolPageShellProps) {
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div
+      className={
+        maxWidth === 'wide'
+          ? 'mx-auto max-w-7xl space-y-6'
+          : 'mx-auto max-w-6xl space-y-6'
+      }
+    >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
         <div>
           <h1 className="text-xl font-medium tracking-tight">{title}</h1>
@@ -44,7 +52,13 @@ export function ToolPageShell({
         requiresLogin={requiresLogin}
         recovery={recovery}
       />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div
+        className={
+          aside
+            ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'
+            : 'grid grid-cols-1 gap-6'
+        }
+      >
         <div className="min-w-0 space-y-6">{children}</div>
         {aside && <aside className="min-w-0 space-y-4">{aside}</aside>}
       </div>

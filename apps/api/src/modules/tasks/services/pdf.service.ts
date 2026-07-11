@@ -1,10 +1,19 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, extname, join } from 'node:path';
+import { promisify } from 'node:util';
+import { inflateRawSync } from 'node:zlib';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PDFDocument, degrees, rgb, StandardFonts } from 'pdf-lib';
+import { marked } from 'marked';
 import TurndownService from 'turndown';
+
+const execFileAsync = promisify(execFile);
 
 type MupdfModule = typeof import('mupdf');
 const nativeImport = new Function('specifier', 'return import(specifier)') as (
-  specifier: string,
+  specifier: string
 ) => Promise<MupdfModule>;
 let mupdfPromise: Promise<MupdfModule> | undefined;
 
@@ -73,6 +82,170 @@ export interface RearrangeOptions {
   pageOrder: number[];
 }
 
+export interface DocumentToPdfOptions {
+  sourceFormat: 'markdown' | 'docx';
+  outputFilename?: string;
+}
+
+const MARKDOWN_HTML_STYLE = `
+  @page { size: A4; margin: 22mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: #111827;
+    font-family: "Noto Sans", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.65;
+  }
+  h1, h2, h3, h4 {
+    color: #0f172a;
+    line-height: 1.25;
+    margin: 1.4em 0 0.5em;
+    page-break-after: avoid;
+  }
+  h1 { font-size: 26pt; border-bottom: 1px solid #d1d5db; padding-bottom: 0.25em; }
+  h2 { font-size: 18pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.2em; }
+  h3 { font-size: 14pt; }
+  p, ul, ol, blockquote, table, pre { margin: 0.75em 0; }
+  a { color: #0f766e; text-decoration: none; }
+  code {
+    font-family: "JetBrains Mono", Consolas, monospace;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 3px;
+    padding: 0.1em 0.25em;
+  }
+  pre {
+    background: #111827;
+    color: #f9fafb;
+    border-radius: 6px;
+    padding: 12px;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+  }
+  pre code { background: transparent; border: 0; color: inherit; padding: 0; }
+  blockquote { border-left: 3px solid #14b8a6; padding-left: 12px; color: #4b5563; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 8px; vertical-align: top; }
+  th { background: #f3f4f6; text-align: left; }
+  img { max-width: 100%; height: auto; }
+`;
+
+function stripUnsafeHtml(html: string): string {
+  return html
+    .replace(
+      /<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+      ''
+    )
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*\/?>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, '');
+}
+
+export function buildMarkdownDocumentHtml(markdown: string): string {
+  marked.setOptions({
+    async: false,
+    breaks: false,
+    gfm: true,
+  });
+
+  const body = stripUnsafeHtml(marked.parse(markdown) as string);
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>${MARKDOWN_HTML_STYLE}</style>
+</head>
+<body>
+${body}
+</body>
+</html>`;
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function readZipEntry(input: Buffer, targetName: string): Buffer | null {
+  const endSignature = 0x06054b50;
+  let endOffset = -1;
+  for (let i = input.length - 22; i >= 0; i--) {
+    if (input.readUInt32LE(i) === endSignature) {
+      endOffset = i;
+      break;
+    }
+  }
+
+  if (endOffset === -1) return null;
+
+  const centralDirectoryOffset = input.readUInt32LE(endOffset + 16);
+  let offset = centralDirectoryOffset;
+  while (offset + 46 <= input.length) {
+    if (input.readUInt32LE(offset) !== 0x02014b50) break;
+
+    const compressionMethod = input.readUInt16LE(offset + 10);
+    const compressedSize = input.readUInt32LE(offset + 20);
+    const filenameLength = input.readUInt16LE(offset + 28);
+    const extraLength = input.readUInt16LE(offset + 30);
+    const commentLength = input.readUInt16LE(offset + 32);
+    const localHeaderOffset = input.readUInt32LE(offset + 42);
+    const filename = input
+      .subarray(offset + 46, offset + 46 + filenameLength)
+      .toString('utf8');
+
+    if (filename === targetName) {
+      if (
+        localHeaderOffset + 30 > input.length ||
+        input.readUInt32LE(localHeaderOffset) !== 0x04034b50
+      ) {
+        return null;
+      }
+      const localFilenameLength = input.readUInt16LE(localHeaderOffset + 26);
+      const localExtraLength = input.readUInt16LE(localHeaderOffset + 28);
+      const dataStart =
+        localHeaderOffset + 30 + localFilenameLength + localExtraLength;
+      const compressed = input.subarray(dataStart, dataStart + compressedSize);
+      if (compressionMethod === 0) return compressed;
+      if (compressionMethod === 8) return inflateRawSync(compressed);
+      throw new BadRequestException(
+        `Unsupported DOCX compression method: ${compressionMethod}`
+      );
+    }
+
+    offset += 46 + filenameLength + extraLength + commentLength;
+  }
+
+  return null;
+}
+
+export function extractDocxPlainText(input: Buffer): string {
+  const documentXml = readZipEntry(input, 'word/document.xml');
+  if (!documentXml) {
+    throw new BadRequestException('DOCX document body not found');
+  }
+
+  const xml = documentXml.toString('utf8');
+  return xml
+    .replace(/<w:tab\b[^>]*\/>/g, '\t')
+    .replace(/<w:br\b[^>]*\/>/g, '\n')
+    .replace(/<\/w:p>/g, '\n')
+    .match(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>|[\t\n]/g)
+    ?.map(part => {
+      if (part === '\t' || part === '\n') return part;
+      const match = part.match(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/);
+      return match ? decodeXmlText(match[1]!) : '';
+    })
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim() ?? '';
+}
+
 @Injectable()
 export class PdfService {
   async merge(inputs: Buffer[]): Promise<Buffer> {
@@ -81,7 +254,7 @@ export class PdfService {
     for (const input of inputs) {
       const doc = await PDFDocument.load(input);
       const copiedPages = await merged.copyPages(doc, doc.getPageIndices());
-      copiedPages.forEach((page) => merged.addPage(page));
+      copiedPages.forEach(page => merged.addPage(page));
     }
 
     return Buffer.from(await merged.save());
@@ -99,7 +272,7 @@ export class PdfService {
     for (const range of ranges) {
       const target = await PDFDocument.create();
       const pages = await target.copyPages(src, range);
-      pages.forEach((p) => target.addPage(p));
+      pages.forEach(p => target.addPage(p));
       outputs.push(Buffer.from(await target.save()));
     }
 
@@ -117,12 +290,15 @@ export class PdfService {
     const mupdf = await getMupdf();
     const doc = mupdf.Document.openDocument(input, 'application/pdf');
     const totalPages = doc.countPages();
-    const pageIndices = opts.pages ?? Array.from({ length: totalPages }, (_, i) => i);
+    const pageIndices =
+      opts.pages ?? Array.from({ length: totalPages }, (_, i) => i);
     const parts: string[] = [];
 
     for (const idx of pageIndices) {
       if (idx < 0 || idx >= totalPages) {
-        throw new BadRequestException(`Invalid page index ${idx}, total pages: ${totalPages}`);
+        throw new BadRequestException(
+          `Invalid page index ${idx}, total pages: ${totalPages}`
+        );
       }
       const page = doc.loadPage(idx);
       const stext = page.toStructuredText();
@@ -141,7 +317,10 @@ export class PdfService {
 
   // ─── Images → PDF ─────────────────────────────────────────────────
 
-  async imagesToPdf(images: { buffer: Buffer; mimeType: string }[], opts: ImageToPdfOptions): Promise<Buffer> {
+  async imagesToPdf(
+    images: { buffer: Buffer; mimeType: string }[],
+    opts: ImageToPdfOptions
+  ): Promise<Buffer> {
     const doc = await PDFDocument.create();
 
     const A4_WIDTH = 595.28;
@@ -150,7 +329,8 @@ export class PdfService {
     const LETTER_HEIGHT = 792;
 
     for (const img of images) {
-      const isJpeg = img.mimeType === 'image/jpeg' || img.mimeType === 'image/jpg';
+      const isJpeg =
+        img.mimeType === 'image/jpeg' || img.mimeType === 'image/jpg';
       const embedded = isJpeg
         ? await doc.embedJpg(img.buffer)
         : await doc.embedPng(img.buffer);
@@ -201,6 +381,205 @@ export class PdfService {
     return Buffer.from(await doc.save());
   }
 
+  async documentToPdf(
+    input: { buffer: Buffer; filename: string; mimeType?: string },
+    opts: DocumentToPdfOptions
+  ): Promise<Buffer> {
+    const sourceExt = opts.sourceFormat === 'markdown' ? '.html' : '.docx';
+    const tempDir = await mkdtemp(join(tmpdir(), 'utils-plane-doc-pdf-'));
+    const sourcePath = join(
+      tempDir,
+      `${basename(input.filename, extname(input.filename))}${sourceExt}`
+    );
+
+    try {
+      if (opts.sourceFormat === 'markdown') {
+        const markdown = input.buffer.toString('utf8');
+        await writeFile(
+          sourcePath,
+          buildMarkdownDocumentHtml(markdown),
+          'utf8'
+        );
+      } else {
+        await writeFile(sourcePath, input.buffer);
+      }
+
+      try {
+        const outputPath = await this.convertWithLibreOffice(
+          sourcePath,
+          tempDir
+        );
+        return await readFile(outputPath);
+      } catch (err) {
+        if (opts.sourceFormat === 'markdown') {
+          return await this.renderMarkdownFallbackPdf(
+            input.buffer.toString('utf8')
+          );
+        }
+        return await this.renderPlainTextFallbackPdf(
+          extractDocxPlainText(input.buffer)
+        );
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  private async renderMarkdownFallbackPdf(markdown: string): Promise<Buffer> {
+    const doc = await PDFDocument.create();
+    const regularFont = await doc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    const pageSize = { width: 595.28, height: 841.89 };
+    const margin = 56;
+    const maxWidth = pageSize.width - margin * 2;
+    let page = doc.addPage([pageSize.width, pageSize.height]);
+    let y = pageSize.height - margin;
+
+    const ensureSpace = (lineHeight: number) => {
+      if (y - lineHeight < margin) {
+        page = doc.addPage([pageSize.width, pageSize.height]);
+        y = pageSize.height - margin;
+      }
+    };
+
+    const drawWrapped = (
+      text: string,
+      options: { size: number; lineHeight: number; bold?: boolean; indent?: number }
+    ) => {
+      const font = options.bold ? boldFont : regularFont;
+      const indent = options.indent ?? 0;
+      const lines = this.wrapPdfText(
+        this.toWinAnsiText(text),
+        font,
+        options.size,
+        maxWidth - indent
+      );
+
+      for (const line of lines.length > 0 ? lines : ['']) {
+        ensureSpace(options.lineHeight);
+        page.drawText(line, {
+          x: margin + indent,
+          y,
+          size: options.size,
+          font,
+          color: rgb(0.08, 0.1, 0.15),
+        });
+        y -= options.lineHeight;
+      }
+    };
+
+    const tokens = marked.lexer(markdown, { gfm: true, breaks: false });
+    for (const token of tokens) {
+      switch (token.type) {
+        case 'heading':
+          y -= token.depth === 1 ? 8 : 4;
+          drawWrapped(token.text, {
+            size: token.depth === 1 ? 22 : token.depth === 2 ? 16 : 13,
+            lineHeight: token.depth === 1 ? 28 : 22,
+            bold: true,
+          });
+          y -= 4;
+          break;
+        case 'list':
+          for (const item of token.items) {
+            drawWrapped(`- ${item.text.replace(/\s+/g, ' ')}`, {
+              size: 11,
+              lineHeight: 17,
+              indent: 14,
+            });
+          }
+          y -= 4;
+          break;
+        case 'code':
+          drawWrapped(token.text, {
+            size: 9,
+            lineHeight: 14,
+            indent: 14,
+          });
+          y -= 4;
+          break;
+        case 'space':
+          y -= 8;
+          break;
+        default:
+          if ('text' in token && typeof token.text === 'string') {
+            drawWrapped(token.text.replace(/\s+/g, ' '), {
+              size: 11,
+              lineHeight: 17,
+            });
+            y -= 4;
+          }
+          break;
+      }
+    }
+
+    return Buffer.from(await doc.save());
+  }
+
+  private async renderPlainTextFallbackPdf(text: string): Promise<Buffer> {
+    const doc = await PDFDocument.create();
+    const regularFont = await doc.embedFont(StandardFonts.Helvetica);
+    const pageSize = { width: 595.28, height: 841.89 };
+    const margin = 56;
+    const maxWidth = pageSize.width - margin * 2;
+    let page = doc.addPage([pageSize.width, pageSize.height]);
+    let y = pageSize.height - margin;
+    const lineHeight = 17;
+
+    for (const paragraph of text.split(/\n+/).filter(Boolean)) {
+      for (const line of this.wrapPdfText(
+        this.toWinAnsiText(paragraph),
+        regularFont,
+        11,
+        maxWidth
+      )) {
+        if (y - lineHeight < margin) {
+          page = doc.addPage([pageSize.width, pageSize.height]);
+          y = pageSize.height - margin;
+        }
+        page.drawText(line, {
+          x: margin,
+          y,
+          size: 11,
+          font: regularFont,
+          color: rgb(0.08, 0.1, 0.15),
+        });
+        y -= lineHeight;
+      }
+      y -= 4;
+    }
+
+    return Buffer.from(await doc.save());
+  }
+
+  private wrapPdfText(
+    text: string,
+    font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+    size: number,
+    maxWidth: number
+  ): string[] {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = '';
+
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        current = candidate;
+        continue;
+      }
+      if (current) lines.push(current);
+      current = word;
+    }
+
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  private toWinAnsiText(text: string): string {
+    return text.replace(/[^\x09\x0a\x0d\x20-\x7e\xa0-\xff]/g, '?');
+  }
+
   // ─── Rotate Pages ─────────────────────────────────────────────────
 
   async rotate(input: Buffer, opts: RotateOptions): Promise<Buffer> {
@@ -209,7 +588,9 @@ export class PdfService {
 
     for (const idx of opts.pages) {
       if (idx < 0 || idx >= totalPages) {
-        throw new BadRequestException(`Invalid page index ${idx}, total pages: ${totalPages}`);
+        throw new BadRequestException(
+          `Invalid page index ${idx}, total pages: ${totalPages}`
+        );
       }
       const page = doc.getPage(idx);
       const current = page.getRotation().angle;
@@ -269,7 +650,10 @@ export class PdfService {
 
   async encrypt(input: Buffer, opts: EncryptOptions): Promise<Buffer> {
     const mupdf = await getMupdf();
-    const doc = mupdf.Document.openDocument(input, 'application/pdf') as import('mupdf').PDFDocument;
+    const doc = mupdf.Document.openDocument(
+      input,
+      'application/pdf'
+    ) as import('mupdf').PDFDocument;
 
     const perms = opts.permissions ?? {};
     let permBits = 0;
@@ -278,14 +662,11 @@ export class PdfService {
     if (perms.modify !== false) permBits |= 0b000000001000;
     if (perms.annotate !== false) permBits |= 0b000000100000;
 
-    const result = (doc as any).saveToBuffer(
-      'compress,incremental',
-      {
-        userPassword: opts.userPassword ?? '',
-        ownerPassword: opts.ownerPassword,
-        permissions: permBits,
-      },
-    );
+    const result = (doc as any).saveToBuffer('compress,incremental', {
+      userPassword: opts.userPassword ?? '',
+      ownerPassword: opts.ownerPassword,
+      permissions: permBits,
+    });
     return Buffer.from(result.asUint8Array());
   }
 
@@ -295,7 +676,10 @@ export class PdfService {
     const mupdf = await getMupdf();
 
     if (opts.level === 'light') {
-      const doc = mupdf.Document.openDocument(input, 'application/pdf') as import('mupdf').PDFDocument;
+      const doc = mupdf.Document.openDocument(
+        input,
+        'application/pdf'
+      ) as import('mupdf').PDFDocument;
       const result = doc.saveToBuffer('compress,garbage=4,linearize');
       return Buffer.from(result.asUint8Array());
     }
@@ -311,7 +695,7 @@ export class PdfService {
       const page = srcDoc.loadPage(i);
       const pixmap = page.toPixmap(
         mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
+        mupdf.ColorSpace.DeviceRGB
       );
 
       const jpegData = pixmap.asJPEG(quality);
@@ -341,7 +725,11 @@ export class PdfService {
       title: doc.getTitle() ?? undefined,
       author: doc.getAuthor() ?? undefined,
       subject: doc.getSubject() ?? undefined,
-      keywords: doc.getKeywords()?.split(',').map(k => k.trim()).filter(Boolean),
+      keywords: doc
+        .getKeywords()
+        ?.split(',')
+        .map(k => k.trim())
+        .filter(Boolean),
       creator: doc.getCreator() ?? undefined,
       producer: doc.getProducer() ?? undefined,
     };
@@ -368,7 +756,9 @@ export class PdfService {
 
     for (const idx of opts.pageOrder) {
       if (idx < 0 || idx >= totalPages) {
-        throw new BadRequestException(`Invalid page index ${idx}, total pages: ${totalPages}`);
+        throw new BadRequestException(
+          `Invalid page index ${idx}, total pages: ${totalPages}`
+        );
       }
     }
 
@@ -378,7 +768,7 @@ export class PdfService {
 
     const target = await PDFDocument.create();
     const copiedPages = await target.copyPages(src, opts.pageOrder);
-    copiedPages.forEach((page) => target.addPage(page));
+    copiedPages.forEach(page => target.addPage(page));
 
     return Buffer.from(await target.save());
   }
@@ -387,12 +777,14 @@ export class PdfService {
     switch (opts.mode) {
       case 'ranges': {
         if (!opts.ranges || opts.ranges.length === 0) {
-          throw new BadRequestException('ranges must be provided and non-empty');
+          throw new BadRequestException(
+            'ranges must be provided and non-empty'
+          );
         }
         for (const [start, end] of opts.ranges) {
           if (start < 0 || end >= totalPages || start > end) {
             throw new BadRequestException(
-              `Invalid range [${start}, ${end}], total pages: ${totalPages}`,
+              `Invalid range [${start}, ${end}], total pages: ${totalPages}`
             );
           }
         }
@@ -405,7 +797,7 @@ export class PdfService {
         for (const p of opts.pages) {
           if (p < 0 || p >= totalPages) {
             throw new BadRequestException(
-              `Invalid page ${p}, total pages: ${totalPages}`,
+              `Invalid page ${p}, total pages: ${totalPages}`
             );
           }
         }
@@ -424,22 +816,66 @@ export class PdfService {
     switch (opts.mode) {
       case 'ranges':
         return opts.ranges!.map(([start, end]) =>
-          Array.from({ length: end - start + 1 }, (_, i) => start + i),
+          Array.from({ length: end - start + 1 }, (_, i) => start + i)
         );
       case 'pages':
-        return opts.pages!.map((p) => [p]);
+        return opts.pages!.map(p => [p]);
       case 'every': {
         const result: number[][] = [];
         for (let i = 0; i < total; i += opts.every!) {
           result.push(
             Array.from(
               { length: Math.min(opts.every!, total - i) },
-              (_, j) => i + j,
-            ),
+              (_, j) => i + j
+            )
           );
         }
         return result;
       }
     }
+  }
+
+  private async convertWithLibreOffice(
+    sourcePath: string,
+    outputDir: string
+  ): Promise<string> {
+    const commands = process.env.LIBREOFFICE_BIN
+      ? [process.env.LIBREOFFICE_BIN]
+      : ['soffice', 'libreoffice'];
+    let lastError: unknown;
+
+    for (const command of commands) {
+      try {
+        await execFileAsync(
+          command,
+          [
+            '--headless',
+            '--nologo',
+            '--nofirststartwizard',
+            '--convert-to',
+            'pdf',
+            '--outdir',
+            outputDir,
+            sourcePath,
+          ],
+          { timeout: 120_000, windowsHide: true }
+        );
+
+        const outputPath = join(
+          outputDir,
+          `${basename(sourcePath, extname(sourcePath))}.pdf`
+        );
+        await readFile(outputPath);
+        return outputPath;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    const detail =
+      lastError instanceof Error ? lastError.message : String(lastError);
+    throw new BadRequestException(
+      `LibreOffice is required for Markdown/Word to PDF conversion. Install LibreOffice or set LIBREOFFICE_BIN. ${detail}`
+    );
   }
 }

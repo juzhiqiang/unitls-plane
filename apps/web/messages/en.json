@@ -211,6 +211,10 @@
         "title": "Image to PDF",
         "description": "Turn multiple images into a PDF document."
       },
+      "pdfFromDocument": {
+        "title": "Markdown / Word to PDF",
+        "description": "Edit Markdown online or upload DOCX, then generate a previewable PDF."
+      },
       "pdfToImage": {
         "title": "PDF to image",
         "description": "Export PDF pages as PNG or JPEG files."
@@ -402,6 +406,7 @@
       "pdf_compress": "PDF compression",
       "pdf_metadata": "PDF metadata",
       "pdf_rearrange": "PDF rearrange",
+      "pdf_from_document": "Document to PDF",
       "font_convert": "Font conversion"
     }
   },
@@ -654,6 +659,10 @@
         "title": "Images to PDF",
         "description": "Combine multiple images into a single PDF"
       },
+      "fromDocument": {
+        "title": "Markdown / Word to PDF",
+        "description": "Edit Markdown online or upload a DOCX file, then convert it to PDF"
+      },
       "rotate": {
         "title": "Rotate pages",
         "description": "Rotate selected PDF pages 90°/180°/270° clockwise"
@@ -753,6 +762,21 @@
       "fitFit": "Fit",
       "fitFill": "Fill",
       "fitStretch": "Stretch",
+      "start": "Convert",
+      "processing": "Converting..."
+    },
+    "fromDocument": {
+      "title": "Markdown / Word to PDF",
+      "description": "Write or upload Markdown for online preview, or upload a DOCX file for server conversion.",
+      "markdown": "Markdown",
+      "preview": "Preview",
+      "source": "Source",
+      "outputFilename": "Output filename",
+      "changeFile": "Change file",
+      "resultPreview": "PDF preview",
+      "localExport": "Export locally",
+      "serverExport": "Server high-quality export",
+      "localExportUnavailable": "Preview is not ready. Switch back to preview and try again.",
       "start": "Convert",
       "processing": "Converting..."
     },
@@ -956,6 +980,7 @@
     "typePdfCompress": "PDF Compress",
     "typePdfMetadata": "PDF Metadata",
     "typePdfRearrange": "PDF Rearrange",
+    "typePdfFromDocument": "Document to PDF",
     "typeFontConvert": "Font Convert"
   },
   "ToolsShared": {

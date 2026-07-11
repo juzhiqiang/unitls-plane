@@ -45,4 +45,16 @@ describe('FilesController route order', () => {
     expect(dtoSource).toContain('@ArrayNotEmpty()');
     expect(dtoSource).toContain("@IsUUID('4', { each: true })");
   });
+
+  it('allows document source mime types used by Markdown and Word to PDF', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'files.service.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain("'text/markdown'");
+    expect(source).toContain(
+      "'application/vnd.openxmlformats-officedocument.wordprocessingml.document'"
+    );
+  });
 });

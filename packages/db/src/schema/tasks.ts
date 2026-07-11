@@ -27,6 +27,7 @@ export const taskTypeEnum = pgEnum('task_type', [
   'pdf_compress',
   'pdf_metadata',
   'pdf_rearrange',
+  'pdf_from_document',
 ]);
 
 export const taskStatusEnum = pgEnum('task_status', [

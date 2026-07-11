@@ -16,6 +16,8 @@ import { cn } from '@/lib/utils';
 interface MarkdownPreviewProps {
   content: string;
   format: 'markdown' | 'text';
+  className?: string;
+  viewportClassName?: string;
   labelPreview?: string;
   labelSource?: string;
   labelCopy?: string;
@@ -28,9 +30,8 @@ interface MarkdownPreviewProps {
 function countStats(content: string) {
   const lines = content.length === 0 ? 0 : content.split('\n').length;
   const chars = content.length;
-  const words = content.trim().length === 0
-    ? 0
-    : content.trim().split(/\s+/).length;
+  const words =
+    content.trim().length === 0 ? 0 : content.trim().split(/\s+/).length;
   return { lines, chars, words };
 }
 
@@ -59,7 +60,13 @@ interface CodeBlockProps {
   copiedLabel: string;
 }
 
-function CodeBlock({ language, rawText, children, copyLabel, copiedLabel }: CodeBlockProps) {
+function CodeBlock({
+  language,
+  rawText,
+  children,
+  copyLabel,
+  copiedLabel,
+}: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     try {
@@ -84,7 +91,7 @@ function CodeBlock({ language, rawText, children, copyLabel, copiedLabel }: Code
             'text-[10px] font-mono uppercase tracking-wider px-1.5 h-5 rounded transition-colors border',
             copied
               ? 'border-accent text-accent bg-accent/10'
-              : 'border-transparent text-muted-foreground/70 hover:text-foreground hover:border-border',
+              : 'border-transparent text-muted-foreground/70 hover:text-foreground hover:border-border'
           )}
         >
           {copied ? copiedLabel : copyLabel}
@@ -103,7 +110,10 @@ function createComponents(copyLabel: string, copiedLabel: string) {
   return {
     h1: ({ children, ...props }: ComponentPropsWithoutRef<'h1'>) => (
       <h1
-        className={cn(headingBase, 'text-2xl mt-8 mb-4 pb-2 border-b border-border first:mt-0')}
+        className={cn(
+          headingBase,
+          'text-2xl mt-8 mb-4 pb-2 border-b border-border first:mt-0'
+        )}
         {...props}
       >
         {children}
@@ -111,24 +121,36 @@ function createComponents(copyLabel: string, copiedLabel: string) {
     ),
     h2: ({ children, ...props }: ComponentPropsWithoutRef<'h2'>) => (
       <h2
-        className={cn(headingBase, 'text-xl mt-7 mb-3 pb-1.5 border-b border-border/60 first:mt-0')}
+        className={cn(
+          headingBase,
+          'text-xl mt-7 mb-3 pb-1.5 border-b border-border/60 first:mt-0'
+        )}
         {...props}
       >
         {children}
       </h2>
     ),
     h3: ({ children, ...props }: ComponentPropsWithoutRef<'h3'>) => (
-      <h3 className={cn(headingBase, 'text-lg mt-6 mb-2 first:mt-0')} {...props}>
+      <h3
+        className={cn(headingBase, 'text-lg mt-6 mb-2 first:mt-0')}
+        {...props}
+      >
         {children}
       </h3>
     ),
     h4: ({ children, ...props }: ComponentPropsWithoutRef<'h4'>) => (
-      <h4 className={cn(headingBase, 'text-base mt-5 mb-2 first:mt-0')} {...props}>
+      <h4
+        className={cn(headingBase, 'text-base mt-5 mb-2 first:mt-0')}
+        {...props}
+      >
         {children}
       </h4>
     ),
     h5: ({ children, ...props }: ComponentPropsWithoutRef<'h5'>) => (
-      <h5 className={cn(headingBase, 'text-sm mt-4 mb-2 first:mt-0')} {...props}>
+      <h5
+        className={cn(headingBase, 'text-sm mt-4 mb-2 first:mt-0')}
+        {...props}
+      >
         {children}
       </h5>
     ),
@@ -136,7 +158,7 @@ function createComponents(copyLabel: string, copiedLabel: string) {
       <h6
         className={cn(
           headingBase,
-          'text-xs mt-4 mb-2 uppercase tracking-wider text-muted-foreground first:mt-0',
+          'text-xs mt-4 mb-2 uppercase tracking-wider text-muted-foreground first:mt-0'
         )}
         {...props}
       >
@@ -179,7 +201,10 @@ function createComponents(copyLabel: string, copiedLabel: string) {
         {children}
       </li>
     ),
-    blockquote: ({ children, ...props }: ComponentPropsWithoutRef<'blockquote'>) => (
+    blockquote: ({
+      children,
+      ...props
+    }: ComponentPropsWithoutRef<'blockquote'>) => (
       <blockquote
         className="border-l-2 border-accent pl-4 my-4 text-muted-foreground [&>p]:my-1.5"
         {...props}
@@ -200,7 +225,11 @@ function createComponents(copyLabel: string, copiedLabel: string) {
         {children}
       </em>
     ),
-    code: ({ children, className, ...props }: ComponentPropsWithoutRef<'code'>) => {
+    code: ({
+      children,
+      className,
+      ...props
+    }: ComponentPropsWithoutRef<'code'>) => {
       const isBlock = /\blanguage-/.test(className ?? '');
       if (isBlock) {
         return (
@@ -222,7 +251,8 @@ function createComponents(copyLabel: string, copiedLabel: string) {
       const child = Array.isArray(children) ? children[0] : children;
       let language = '';
       if (isValidElement(child)) {
-        const childProps = (child as ReactElement<{ className?: string }>).props;
+        const childProps = (child as ReactElement<{ className?: string }>)
+          .props;
         const match = /language-(\w+)/.exec(childProps.className ?? '');
         if (match) language = match[1] ?? '';
       }
@@ -259,7 +289,10 @@ function createComponents(copyLabel: string, copiedLabel: string) {
       </th>
     ),
     td: ({ children, ...props }: ComponentPropsWithoutRef<'td'>) => (
-      <td className="px-3 py-2 border-b border-border/40 text-foreground/90" {...props}>
+      <td
+        className="px-3 py-2 border-b border-border/40 text-foreground/90"
+        {...props}
+      >
         {children}
       </td>
     ),
@@ -317,6 +350,8 @@ function SourceView({ content, ariaLabel }: SourceViewProps) {
 export function MarkdownPreview({
   content,
   format,
+  className,
+  viewportClassName,
   labelPreview = '预览',
   labelSource = '源码',
   labelCopy = '复制',
@@ -331,7 +366,7 @@ export function MarkdownPreview({
   const stats = useMemo(() => countStats(content), [content]);
   const components = useMemo(
     () => createComponents(labelCopy, labelCopied),
-    [labelCopy, labelCopied],
+    [labelCopy, labelCopied]
   );
   const isMarkdown = format === 'markdown';
   const typeBadge = isMarkdown ? 'MD' : 'TXT';
@@ -347,7 +382,12 @@ export function MarkdownPreview({
   };
 
   return (
-    <div className="border border-border rounded-md overflow-hidden bg-card">
+    <div
+      className={cn(
+        'overflow-hidden rounded-md border border-border bg-card',
+        className
+      )}
+    >
       <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/10 px-3 h-9">
         <div className="flex items-center gap-4 min-w-0">
           <span className="text-[10px] font-mono text-muted-foreground tracking-wider shrink-0">
@@ -362,7 +402,7 @@ export function MarkdownPreview({
                   'h-9 px-0 mr-4 text-[10px] font-mono uppercase tracking-wider transition-colors border-b-[1.5px] -mb-px',
                   !showSource
                     ? 'border-foreground text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
                 )}
                 aria-pressed={!showSource}
               >
@@ -375,7 +415,7 @@ export function MarkdownPreview({
                   'h-9 px-0 text-[10px] font-mono uppercase tracking-wider transition-colors border-b-[1.5px] -mb-px',
                   showSource
                     ? 'border-foreground text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
                 )}
                 aria-pressed={showSource}
               >
@@ -391,20 +431,32 @@ export function MarkdownPreview({
             aria-label={`${stats.lines} ${labelLines}, ${stats.chars} ${labelChars}, ${stats.words} ${labelWords}`}
           >
             <span>
-              <span className="text-foreground/80">{formatNumber(stats.lines)}</span>
-              <span className="ml-1 uppercase tracking-wider">{labelLines}</span>
+              <span className="text-foreground/80">
+                {formatNumber(stats.lines)}
+              </span>
+              <span className="ml-1 uppercase tracking-wider">
+                {labelLines}
+              </span>
             </span>
             <span className="text-border">·</span>
             <span>
-              <span className="text-foreground/80">{formatNumber(stats.chars)}</span>
-              <span className="ml-1 uppercase tracking-wider">{labelChars}</span>
+              <span className="text-foreground/80">
+                {formatNumber(stats.chars)}
+              </span>
+              <span className="ml-1 uppercase tracking-wider">
+                {labelChars}
+              </span>
             </span>
             {isMarkdown && (
               <>
                 <span className="text-border">·</span>
                 <span>
-                  <span className="text-foreground/80">{formatNumber(stats.words)}</span>
-                  <span className="ml-1 uppercase tracking-wider">{labelWords}</span>
+                  <span className="text-foreground/80">
+                    {formatNumber(stats.words)}
+                  </span>
+                  <span className="ml-1 uppercase tracking-wider">
+                    {labelWords}
+                  </span>
                 </span>
               </>
             )}
@@ -416,7 +468,7 @@ export function MarkdownPreview({
               'h-6 px-2 text-[10px] font-mono uppercase tracking-wider border rounded transition-colors',
               copied
                 ? 'border-accent text-accent bg-accent/10'
-                : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/60',
+                : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/60'
             )}
             aria-label={copied ? labelCopied : labelCopy}
           >
@@ -425,7 +477,12 @@ export function MarkdownPreview({
         </div>
       </div>
 
-      <div className="overflow-auto preview-scroll max-h-[640px]">
+      <div
+        className={cn(
+          'preview-scroll max-h-[640px] overflow-auto',
+          viewportClassName
+        )}
+      >
         {isMarkdown && !showSource ? (
           <div className="markdown-body px-6 py-5 text-sm text-foreground">
             {content.trim().length === 0 ? (
@@ -433,7 +490,9 @@ export function MarkdownPreview({
             ) : (
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+                rehypePlugins={[
+                  [rehypeHighlight, { detect: true, ignoreMissing: true }],
+                ]}
                 components={components as never}
               >
                 {content}
@@ -447,7 +506,10 @@ export function MarkdownPreview({
                 <EmptyHint />
               </div>
             ) : (
-              <SourceView content={content} ariaLabel={isMarkdown ? labelSource : undefined} />
+              <SourceView
+                content={content}
+                ariaLabel={isMarkdown ? labelSource : undefined}
+              />
             )}
           </div>
         )}

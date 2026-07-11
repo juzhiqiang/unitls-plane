@@ -33,6 +33,8 @@ const ALLOWED_MIME_TYPES = [
   'font/woff',
   'font/woff2',
   'application/octet-stream',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/markdown',
   'text/plain',
 ];
 

@@ -20,6 +20,7 @@ export function getTaskTypeCategory(type: TaskType): TaskTypeCategory {
     case 'pdf_compress':
     case 'pdf_metadata':
     case 'pdf_rearrange':
+    case 'pdf_from_document':
       return 'pdf';
     case 'font_convert':
       return 'font';

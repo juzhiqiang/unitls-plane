@@ -50,6 +50,13 @@
       "when": 1783438692169,
       "tag": "0006_image_id_photo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783738800000,
+      "tag": "0007_pdf_from_document",
+      "breakpoints": true
     }
   ]
 }

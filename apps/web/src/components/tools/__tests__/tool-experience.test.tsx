@@ -7,6 +7,7 @@ import { FailureRecoveryPanel } from '../failure-recovery-panel';
 import { ModeToggle } from '../mode-toggle';
 import { ResultPanel } from '../result-panel';
 import { ToolCatalogGrid } from '../tool-catalog-grid';
+import { ToolPageShell } from '../tool-page-shell';
 import { ToolStepRail } from '../tool-step-rail';
 import { ToolTrustStrip } from '../tool-trust-strip';
 
@@ -121,5 +122,50 @@ describe('tool experience components', () => {
         'Sign in to use server processing, task history, and account file storage.'
       )
     ).toBeInTheDocument();
+  });
+
+  it('lets tool content span the full shell width when no aside is present', () => {
+    renderWithIntl(
+      <ToolPageShell
+        title="Document tool"
+        description="Convert documents."
+        processing="server"
+        retention="account-files"
+        requiresLogin
+        recovery="Retry with another file."
+        stage="configure"
+      >
+        <div>Full-width workbench</div>
+      </ToolPageShell>
+    );
+
+    const grid = screen.getByText('Full-width workbench').parentElement
+      ?.parentElement;
+
+    expect(grid).toHaveClass('grid-cols-1');
+    expect(grid).not.toHaveClass('lg:grid-cols-[minmax(0,1fr)_320px]');
+  });
+
+  it('keeps the secondary column only when tool aside content exists', () => {
+    renderWithIntl(
+      <ToolPageShell
+        title="Document tool"
+        description="Convert documents."
+        processing="server"
+        retention="account-files"
+        requiresLogin
+        recovery="Retry with another file."
+        stage="configure"
+        aside={<div>Side preview</div>}
+      >
+        <div>Narrow workbench</div>
+      </ToolPageShell>
+    );
+
+    const grid =
+      screen.getByText('Narrow workbench').parentElement?.parentElement;
+
+    expect(grid).toHaveClass('lg:grid-cols-[minmax(0,1fr)_320px]');
+    expect(screen.getByText('Side preview')).toBeInTheDocument();
   });
 });

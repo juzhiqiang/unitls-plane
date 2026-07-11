@@ -26,4 +26,13 @@ describe('TaskQueryDto', () => {
 
     expect(source).toContain("'image_watermark'");
   });
+
+  it('includes the document-to-PDF task type in the API boundary', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'tasks.dto.ts'),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
+
+    expect(source).toContain("'pdf_from_document'");
+  });
 });

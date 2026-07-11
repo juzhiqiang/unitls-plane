@@ -211,6 +211,10 @@
         "title": "图片转 PDF",
         "description": "将多张图片转成一个 PDF 文档。"
       },
+      "pdfFromDocument": {
+        "title": "Markdown / Word 转 PDF",
+        "description": "在线编辑 Markdown 或上传 DOCX，生成可预览的 PDF。"
+      },
       "pdfToImage": {
         "title": "PDF 转图片",
         "description": "将 PDF 页面导出为 PNG 或 JPEG。"
@@ -402,6 +406,7 @@
       "pdf_compress": "PDF 压缩",
       "pdf_metadata": "PDF 元数据",
       "pdf_rearrange": "PDF 重排",
+      "pdf_from_document": "文档转 PDF",
       "font_convert": "字体转换"
     }
   },
@@ -654,6 +659,10 @@
         "title": "图片转 PDF",
         "description": "将多张图片合并为一个 PDF 文件"
       },
+      "fromDocument": {
+        "title": "Markdown / Word 转 PDF",
+        "description": "在线编辑 Markdown 或上传 DOCX 文件，然后转换为 PDF"
+      },
       "rotate": {
         "title": "旋转页面",
         "description": "顺时针旋转 PDF 选中页面 90°/180°/270°"
@@ -753,6 +762,21 @@
       "fitFit": "适应",
       "fitFill": "填充",
       "fitStretch": "拉伸",
+      "start": "开始转换",
+      "processing": "转换中..."
+    },
+    "fromDocument": {
+      "title": "Markdown / Word 转 PDF",
+      "description": "在线编写或上传 Markdown 并实时预览，也可以上传 DOCX 交给服务器转换。",
+      "markdown": "Markdown",
+      "preview": "预览",
+      "source": "源码",
+      "outputFilename": "输出文件名",
+      "changeFile": "更换文件",
+      "resultPreview": "PDF 预览",
+      "localExport": "本地导出 PDF",
+      "serverExport": "服务端高质量导出",
+      "localExportUnavailable": "预览尚未准备好，请切回预览后重试。",
       "start": "开始转换",
       "processing": "转换中..."
     },
@@ -956,6 +980,7 @@
     "typePdfCompress": "PDF 压缩",
     "typePdfMetadata": "PDF 元数据",
     "typePdfRearrange": "PDF 重排",
+    "typePdfFromDocument": "文档转 PDF",
     "typeFontConvert": "字体转换"
   },
   "ToolsShared": {

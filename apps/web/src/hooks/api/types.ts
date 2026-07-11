@@ -14,7 +14,8 @@ export type TaskTypeValue =
   | 'pdf_encrypt'
   | 'pdf_compress'
   | 'pdf_metadata'
-  | 'pdf_rearrange';
+  | 'pdf_rearrange'
+  | 'pdf_from_document';
 
 export interface CreateTaskDto {
   type: TaskTypeValue;

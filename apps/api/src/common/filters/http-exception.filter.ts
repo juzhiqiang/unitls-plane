@@ -19,16 +19,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const isHttp = exception instanceof HttpException;
     const status = isHttp ? exception.getStatus() : 500;
     const errorResponse = isHttp ? exception.getResponse() : null;
+    const hasObjectResponse =
+      typeof errorResponse === 'object' && errorResponse !== null;
 
     const body = {
-      code:
-        typeof errorResponse === 'object'
-          ? ((errorResponse as any).code ?? 'INTERNAL_ERROR')
-          : 'INTERNAL_ERROR',
+      code: hasObjectResponse
+        ? ((errorResponse as any).code ?? 'INTERNAL_ERROR')
+        : 'INTERNAL_ERROR',
       message:
         typeof errorResponse === 'string'
           ? errorResponse
-          : ((errorResponse as any)?.message ?? 'Internal server error'),
+          : hasObjectResponse
+            ? ((errorResponse as any).message ?? 'Internal server error')
+            : 'Internal server error',
       timestamp: new Date().toISOString(),
       path: request.url,
     };

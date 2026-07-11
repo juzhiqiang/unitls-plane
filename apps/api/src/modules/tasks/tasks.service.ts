@@ -176,6 +176,7 @@ export class TasksService {
       case 'pdf_compress':
       case 'pdf_metadata':
       case 'pdf_rearrange':
+      case 'pdf_from_document':
         return this.pdfQueue;
       case 'font_convert':
         return this.fontQueue;

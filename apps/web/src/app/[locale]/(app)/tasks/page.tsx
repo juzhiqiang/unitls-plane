@@ -113,6 +113,7 @@ function TypeLabel({ type }: { type: TaskType }) {
     pdf_compress: t('typePdfCompress'),
     pdf_metadata: t('typePdfMetadata'),
     pdf_rearrange: t('typePdfRearrange'),
+    pdf_from_document: t('typePdfFromDocument'),
     font_convert: t('typeFontConvert'),
   };
 

@@ -15,6 +15,7 @@ const detailPages = [
   ['/pdf/to-image', 'src/app/[locale]/(app)/pdf/to-image/page.tsx'],
   ['/pdf/to-text', 'src/app/[locale]/(app)/pdf/to-text/page.tsx'],
   ['/pdf/from-image', 'src/app/[locale]/(app)/pdf/from-image/page.tsx'],
+  ['/pdf/from-document', 'src/app/[locale]/(app)/pdf/from-document/page.tsx'],
   ['/pdf/rotate', 'src/app/[locale]/(app)/pdf/rotate/page.tsx'],
   ['/pdf/watermark', 'src/app/[locale]/(app)/pdf/watermark/page.tsx'],
   ['/pdf/encrypt', 'src/app/[locale]/(app)/pdf/encrypt/page.tsx'],

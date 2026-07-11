@@ -14,6 +14,7 @@ export interface FileDropzoneProps {
   className?: string;
   hint?: string;
   processingLabel?: string;
+  density?: 'default' | 'compact';
 }
 
 function formatMaxSize(bytes?: number): string | null {
@@ -32,6 +33,7 @@ export function FileDropzone({
   className,
   hint,
   processingLabel,
+  density = 'default',
 }: FileDropzoneProps) {
   const t = useTranslations('ToolsShared');
   const maxSizeLabel = formatMaxSize(maxSize);
@@ -53,6 +55,8 @@ export function FileDropzone({
           'flex flex-col items-center justify-center gap-3',
           'cursor-pointer transition-colors',
           'hover:bg-muted/40',
+          density === 'compact' &&
+            'px-4 py-5 sm:flex-row sm:justify-start sm:text-left',
           isDragActive && 'bg-muted/60 border-accent',
           disabled && 'opacity-50 cursor-not-allowed'
         )}

@@ -13,13 +13,14 @@ import {
   type CompressPdfOptions,
   type PdfMetadata,
   type RearrangeOptions,
+  type DocumentToPdfOptions,
 } from '../services/pdf.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 
 type MupdfModule = typeof import('mupdf');
 const nativeImport = new Function('specifier', 'return import(specifier)') as (
-  specifier: string,
+  specifier: string
 ) => Promise<MupdfModule>;
 let mupdfPromise: Promise<MupdfModule> | undefined;
 
@@ -41,6 +42,40 @@ function streamToBuffer(archive: archiver.Archiver): Promise<Buffer> {
 const MAX_TOTAL_PAGES = 500;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
+function inferDocumentFormat(
+  filename: string,
+  mimeType: string | null | undefined
+): DocumentToPdfOptions['sourceFormat'] | null {
+  const lowerName = filename.toLowerCase();
+  if (
+    lowerName.endsWith('.md') ||
+    lowerName.endsWith('.markdown') ||
+    mimeType === 'text/markdown'
+  ) {
+    return 'markdown';
+  }
+  if (
+    lowerName.endsWith('.docx') ||
+    mimeType ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    return 'docx';
+  }
+  if (mimeType === 'text/plain') {
+    return 'markdown';
+  }
+  return null;
+}
+
+function normalizePdfFilename(
+  filename: string | undefined,
+  fallback: string
+): string {
+  const value = (filename ?? fallback).trim();
+  const withExt = value.toLowerCase().endsWith('.pdf') ? value : `${value}.pdf`;
+  return withExt.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || fallback;
+}
+
 @Processor('pdf-queue', {
   concurrency: 2,
   lockDuration: 300000,
@@ -51,14 +86,16 @@ export class PdfProcessor extends WorkerHost {
   constructor(
     private readonly pdfService: PdfService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService,
+    private readonly tasksService: TasksService
   ) {
     super();
   }
 
   async process(job: Job<{ taskId: string }>): Promise<unknown> {
     const { taskId } = job.data;
-    this.logger.log(`[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`);
+    this.logger.log(
+      `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
+    );
     const task = await this.tasksService.getById(taskId);
 
     try {
@@ -87,6 +124,8 @@ export class PdfProcessor extends WorkerHost {
           return await this.handleMetadata(task, job);
         case 'pdf_rearrange':
           return await this.handleRearrange(task, job);
+        case 'pdf_from_document':
+          return await this.handleDocumentToPdf(task, job);
         default:
           throw new Error(`Unknown pdf task type: ${task.type}`);
       }
@@ -95,10 +134,12 @@ export class PdfProcessor extends WorkerHost {
         await this.tasksService.markFailed(
           taskId,
           'PDF_PROCESSING_FAILED',
-          (err as Error).message,
+          (err as Error).message
         );
       } catch (dbErr) {
-        this.logger.error(`Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`);
+        this.logger.error(
+          `Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`
+        );
       }
       throw err;
     }
@@ -112,7 +153,10 @@ export class PdfProcessor extends WorkerHost {
   }
 
   private async handleMerge(task: any, job: Job): Promise<unknown> {
-    const config = task.inputConfig as { order?: string[]; outputFilename?: string };
+    const config = task.inputConfig as {
+      order?: string[];
+      outputFilename?: string;
+    };
     const orderedIds: string[] = config.order ?? task.inputFileIds;
 
     if (!orderedIds || orderedIds.length === 0) {
@@ -126,7 +170,9 @@ export class PdfProcessor extends WorkerHost {
       const file = await this.filesService.getById(orderedIds[i]!);
 
       if (file.mimeType !== 'application/pdf') {
-        throw new Error(`INVALID_FILE_TYPE: File ${file.filename} is not a PDF`);
+        throw new Error(
+          `INVALID_FILE_TYPE: File ${file.filename} is not a PDF`
+        );
       }
 
       if (file.originalSize > MAX_FILE_SIZE) {
@@ -138,11 +184,17 @@ export class PdfProcessor extends WorkerHost {
       totalPages += pageCount;
 
       if (totalPages > MAX_TOTAL_PAGES) {
-        throw new Error(`Total page count (${totalPages}) exceeds limit of ${MAX_TOTAL_PAGES}`);
+        throw new Error(
+          `Total page count (${totalPages}) exceeds limit of ${MAX_TOTAL_PAGES}`
+        );
       }
 
       inputs.push(buffer);
-      await this.reportProgress(task.id, job, Math.floor(((i + 1) / orderedIds.length) * 40));
+      await this.reportProgress(
+        task.id,
+        job,
+        Math.floor(((i + 1) / orderedIds.length) * 40)
+      );
     }
 
     const merged = await this.pdfService.merge(inputs);
@@ -155,7 +207,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: merged.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -172,7 +224,9 @@ export class PdfProcessor extends WorkerHost {
     const inputFile = await this.filesService.getById(fileId);
 
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -209,7 +263,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: outputMime,
         size: outputBuffer.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -224,7 +278,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -244,7 +300,8 @@ export class PdfProcessor extends WorkerHost {
     const mupdf = await getMupdf();
     const doc = mupdf.Document.openDocument(inputBuffer, 'application/pdf');
     const totalPages = doc.countPages();
-    const pageIndices: number[] = config.pages ?? Array.from({ length: totalPages }, (_, i) => i);
+    const pageIndices: number[] =
+      config.pages ?? Array.from({ length: totalPages }, (_, i) => i);
 
     if (pageIndices.length === 0) {
       throw new Error('No pages selected for conversion');
@@ -255,13 +312,15 @@ export class PdfProcessor extends WorkerHost {
     for (let i = 0; i < pageIndices.length; i++) {
       const pageIdx = pageIndices[i]!;
       if (pageIdx < 0 || pageIdx >= totalPages) {
-        throw new Error(`Invalid page index ${pageIdx}, total pages: ${totalPages}`);
+        throw new Error(
+          `Invalid page index ${pageIdx}, total pages: ${totalPages}`
+        );
       }
 
       const page = doc.loadPage(pageIdx);
       const pixmap = page.toPixmap(
         mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
+        mupdf.ColorSpace.DeviceRGB
       );
 
       let imageData: Buffer;
@@ -281,7 +340,7 @@ export class PdfProcessor extends WorkerHost {
       await this.reportProgress(
         task.id,
         job,
-        10 + Math.floor(((i + 1) / pageIndices.length) * 70),
+        10 + Math.floor(((i + 1) / pageIndices.length) * 70)
       );
     }
 
@@ -313,7 +372,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: outputMime,
         size: outputBuffer.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -328,7 +387,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -365,7 +426,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'text/plain',
         size: outputBuffer.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -392,11 +453,17 @@ export class PdfProcessor extends WorkerHost {
     for (let i = 0; i < orderedIds.length; i++) {
       const file = await this.filesService.getById(orderedIds[i]!);
       if (!file.mimeType.startsWith('image/')) {
-        throw new Error(`INVALID_FILE_TYPE: File ${file.filename} is not an image`);
+        throw new Error(
+          `INVALID_FILE_TYPE: File ${file.filename} is not an image`
+        );
       }
       const buffer = await this.filesService.download(file.storageKey);
       images.push({ buffer, mimeType: file.mimeType });
-      await this.reportProgress(task.id, job, Math.floor(((i + 1) / orderedIds.length) * 50));
+      await this.reportProgress(
+        task.id,
+        job,
+        Math.floor(((i + 1) / orderedIds.length) * 50)
+      );
     }
 
     const pdfBuffer = await this.pdfService.imagesToPdf(images, {
@@ -412,7 +479,65 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: pdfBuffer.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
+    );
+
+    await this.tasksService.markCompleted(task.id, outputFile.id);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id };
+  }
+
+  private async handleDocumentToPdf(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) throw new Error('No input file specified');
+
+    const inputFile = await this.filesService.getById(fileId);
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    await this.reportProgress(task.id, job, 20);
+
+    const config = task.inputConfig as {
+      sourceFormat?: 'markdown' | 'docx';
+      outputFilename?: string;
+    };
+    const sourceFormat =
+      config.sourceFormat ??
+      inferDocumentFormat(inputFile.filename, inputFile.mimeType);
+
+    if (!sourceFormat) {
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not Markdown or Word`
+      );
+    }
+
+    if (inputFile.originalSize > MAX_FILE_SIZE) {
+      throw new Error(`File ${inputFile.filename} exceeds 50MB limit`);
+    }
+
+    const result = await this.pdfService.documentToPdf(
+      {
+        buffer: inputBuffer,
+        filename: inputFile.filename,
+        mimeType: inputFile.mimeType,
+      },
+      {
+        sourceFormat,
+      } satisfies DocumentToPdfOptions
+    );
+    await this.reportProgress(task.id, job, 85);
+
+    const baseName = inputFile.filename.replace(/\.(md|markdown|docx)$/i, '');
+    const outputName = normalizePdfFilename(
+      config.outputFilename,
+      `${baseName}.pdf`
+    );
+    const outputFile = await this.filesService.upload(
+      result,
+      {
+        filename: outputName,
+        mimeType: 'application/pdf',
+        size: result.length,
+      },
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -426,13 +551,18 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
     await this.reportProgress(task.id, job, 20);
 
-    const config = task.inputConfig as { pages: number[]; angle: 0 | 90 | 180 | 270 };
+    const config = task.inputConfig as {
+      pages: number[];
+      angle: 0 | 90 | 180 | 270;
+    };
     if (!Array.isArray(config.pages) || config.pages.length === 0) {
       throw new Error('At least one page must be selected');
     }
@@ -450,7 +580,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -464,7 +594,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -499,7 +631,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -513,7 +645,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -547,7 +681,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -561,7 +695,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -581,7 +717,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -599,7 +735,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -624,7 +762,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -638,7 +776,9 @@ export class PdfProcessor extends WorkerHost {
 
     const inputFile = await this.filesService.getById(fileId);
     if (inputFile.mimeType !== 'application/pdf') {
-      throw new Error(`INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`);
+      throw new Error(
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
     }
 
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
@@ -661,7 +801,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined,
+      task.userId ?? undefined
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -671,7 +811,9 @@ export class PdfProcessor extends WorkerHost {
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job, err: Error) {
-    this.logger.error(`Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`);
+    this.logger.error(
+      `Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`
+    );
     const attemptsMade = job.attemptsMade;
     const maxAttempts = job.opts?.attempts ?? 3;
     if (attemptsMade >= maxAttempts) {
@@ -679,7 +821,7 @@ export class PdfProcessor extends WorkerHost {
       await this.tasksService.markFailed(
         taskId,
         'PDF_PROCESSING_FAILED',
-        err.message,
+        err.message
       );
     }
   }

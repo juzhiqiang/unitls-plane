@@ -26,6 +26,7 @@ describe('tool metadata', () => {
       '/pdf/rearrange',
       '/pdf/rotate',
       '/pdf/from-image',
+      '/pdf/from-document',
       '/pdf/to-image',
       '/pdf/to-text',
       '/pdf/metadata',
@@ -71,6 +72,18 @@ describe('tool metadata', () => {
     expect(tool?.requiresLogin).toBe(false);
     expect(tool?.tags).toEqual(
       expect.arrayContaining(['gif', 'apng', 'animation', 'compress'])
+    );
+  });
+
+  it('registers document to PDF as local-first with optional server export', () => {
+    const tool = getToolByHref('/pdf/from-document');
+
+    expect(tool?.key).toBe('pdfFromDocument');
+    expect(tool?.processing).toBe('local-first');
+    expect(tool?.retention).toBe('browser-session');
+    expect(tool?.requiresLogin).toBe(false);
+    expect(tool?.tags).toEqual(
+      expect.arrayContaining(['markdown', 'docx', 'editor'])
     );
   });
 });

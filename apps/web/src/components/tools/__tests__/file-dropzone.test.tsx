@@ -27,4 +27,17 @@ describe('FileDropzone', () => {
     expect(screen.getByText('50 MB max')).toBeInTheDocument();
     expect(screen.getByText('Local first')).toBeInTheDocument();
   });
+
+  it('can render as a compact import control', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <FileDropzone onDrop={vi.fn()} hint="MD" density="compact" />
+      </NextIntlClientProvider>
+    );
+
+    const dropzone = screen.getByText('Click or drag files here').parentElement;
+    expect(dropzone).toHaveClass('py-5');
+    expect(dropzone).toHaveClass('sm:flex-row');
+    expect(dropzone).not.toHaveClass('flex-row');
+  });
 });

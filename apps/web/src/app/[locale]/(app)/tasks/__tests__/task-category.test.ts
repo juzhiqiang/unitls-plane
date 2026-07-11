@@ -5,4 +5,8 @@ describe('task category labels', () => {
   it('classifies image_id_photo as an image task', () => {
     expect(getTaskTypeCategory('image_id_photo')).toBe('image');
   });
+
+  it('classifies document-to-PDF as a PDF task', () => {
+    expect(getTaskTypeCategory('pdf_from_document')).toBe('pdf');
+  });
 });

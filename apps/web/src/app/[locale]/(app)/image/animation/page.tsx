@@ -22,6 +22,7 @@ import {
   type AnimationOutputFormat,
 } from '@/lib/processing/image-animation-client';
 import { formatBytes } from '@/lib/format';
+import { createBrowserId } from '@/lib/browser-id';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
@@ -57,7 +58,7 @@ const OUTPUT_FORMAT_LABELS: Record<AnimationOutputFormat, string> = {
 };
 
 function makeFrameId(file: File): string {
-  return `${file.name}-${file.lastModified}-${file.size}-${crypto.randomUUID()}`;
+  return `${file.name}-${file.lastModified}-${file.size}-${createBrowserId()}`;
 }
 
 function isGifFile(file: File): boolean {

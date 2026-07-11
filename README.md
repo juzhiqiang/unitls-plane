@@ -195,6 +195,8 @@ EMAIL_VERIFICATION_CALLBACK_URL=http://localhost:3000/zh/login?verified=1
 
 项目支持在本地构建 Docker 镜像，导出为 `.tar` 镜像包后上传到自有服务器，再在服务器上直接加载运行，不需要在服务器上重新构建源码。
 
+离线部署、更新镜像、更新 `.env.prod` / `docker-compose.prod.yml` 并保留历史数据的详细流程见 [Docker 离线部署与保留数据更新指南](./docs/docker-offline-deployment.md)。
+
 当前提供两种镜像：
 
 - `utils-plane:all`：Web + API 在同一个容器中运行，暴露 `3000` 和 `3001`。

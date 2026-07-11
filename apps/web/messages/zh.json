@@ -543,6 +543,7 @@
     "compressedResultTitle": "GIF 已压缩",
     "resultDescription": "{name}，{size}",
     "compressionResultDescription": "从 {before} 压缩到 {after}",
+    "previewAlt": "动画结果预览",
     "limits": {
       "needAtLeastTwo": "至少需要 2 张图片才能制作动画。",
       "gifOnly": "压缩模式首版仅支持 GIF 文件。",

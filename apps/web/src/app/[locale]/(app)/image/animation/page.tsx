@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { authClient } from '@/lib/auth-client';
@@ -62,6 +62,40 @@ function makeFrameId(file: File): string {
 
 function isGifFile(file: File): boolean {
   return file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+}
+
+function AnimationResultPreview({
+  file,
+  label,
+}: {
+  file: File;
+  label: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
+
+  if (!url) return null;
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-muted/30">
+      {/* GIF/APNG playback is handled by the browser image decoder. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={label}
+        className="mx-auto max-h-[420px] w-full object-contain"
+        draggable={false}
+      />
+    </div>
+  );
 }
 
 export default function ImageAnimationPage() {
@@ -756,6 +790,9 @@ export default function ImageAnimationPage() {
                   name: result.name,
                   size: formatBytes(result.size, tUnits, locale),
                 })
+          }
+          preview={
+            <AnimationResultPreview file={result} label={t('previewAlt')} />
           }
           action={<DownloadButton file={result} />}
         />

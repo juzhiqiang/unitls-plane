@@ -96,11 +96,15 @@ describe('tool experience components', () => {
           { label: 'Original', value: '2 MB' },
           { label: 'Result', value: '900 KB' },
         ]}
+        preview={<div role="img" aria-label="Result preview" />}
         action={<button type="button">Download</button>}
       />
     );
 
     expect(screen.getByText('compressed.png')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Result preview' })
+    ).toBeInTheDocument();
     expect(screen.getByText('Original')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Download' })
@@ -109,11 +113,7 @@ describe('tool experience components', () => {
 
   it('explains that server mode needs sign-in before server processing can run', () => {
     renderWithIntl(
-      <ModeToggle
-        value="server"
-        onChange={vi.fn()}
-        serverLoginRequired
-      />
+      <ModeToggle value="server" onChange={vi.fn()} serverLoginRequired />
     );
 
     expect(

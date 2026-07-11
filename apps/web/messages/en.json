@@ -543,6 +543,7 @@
     "compressedResultTitle": "GIF compressed",
     "resultDescription": "{name}, {size}",
     "compressionResultDescription": "Compressed from {before} to {after}",
+    "previewAlt": "Animated result preview",
     "limits": {
       "needAtLeastTwo": "At least two images are required to create an animation.",
       "gifOnly": "The first compression version supports GIF files only.",

@@ -14,5 +14,9 @@ export async function getTaskOutputOwner(
     .where(eq(userTable.id, userId))
     .limit(1);
 
-  return owner ?? null;
+  if (!owner) {
+    throw new Error(`Task output owner ${userId} was not found`);
+  }
+
+  return owner;
 }

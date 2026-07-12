@@ -105,6 +105,9 @@ describe('FilesController route order', () => {
     expect(uploadStart).toBeGreaterThanOrEqual(0);
     expect(uploadEnd).toBeGreaterThan(uploadStart);
     expect(uploadSource).toContain(
+      "user: Pick<User, 'id' | 'plan' | 'role'> | null"
+    );
+    expect(uploadSource).not.toContain(
       "user?: Pick<User, 'id' | 'plan' | 'role'> | null"
     );
     expect(uploadSource).not.toContain('userId?: string): Promise<File>');

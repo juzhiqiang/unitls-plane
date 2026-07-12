@@ -61,7 +61,7 @@ export class FilesService {
   async upload(
     file: Buffer,
     meta: UploadMeta,
-    user?: Pick<User, 'id' | 'plan' | 'role'> | null
+    user: Pick<User, 'id' | 'plan' | 'role'> | null
   ): Promise<File> {
     let entitlementUser:
       | (Pick<User, 'id' | 'plan' | 'role'> & EntitlementUser)

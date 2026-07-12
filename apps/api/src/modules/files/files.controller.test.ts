@@ -80,6 +80,19 @@ describe('FilesController route order', () => {
     expect(source).not.toContain('USER_MAX_SIZE');
   });
 
+  it('uses the shared highest plan upload limit for the Multer transport cap', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'files.controller.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain("import { getLimit } from '@utils-plane/utils'");
+    expect(source).toContain('const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(');
+    expect(source).toContain("plan: 'private'");
+    expect(source).toContain('limits: { fileSize: MAX_UPLOAD_TRANSPORT_SIZE }');
+    expect(source).not.toContain('50 * 1024 * 1024');
+  });
+
   it('only accepts a user object or null for upload entitlement checks', () => {
     const source = readFileSync(
       join(import.meta.dir, 'files.service.ts'),

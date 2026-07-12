@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { FontService, type FontConvertOptions } from '../services/font.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
+import { getTaskOutputOwner } from './task-output-owner';
 
 @Processor('font-queue', {
   concurrency: 2,
@@ -67,9 +68,7 @@ export class FontProcessor extends WorkerHost {
 
     const ext = opts.toFormat;
     const baseName = inputFile.filename.replace(/\.[^.]+$/, '');
-    const outputOwner = task.userId
-      ? { id: task.userId, plan: 'free', role: 'user' }
-      : null;
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       output,
       {

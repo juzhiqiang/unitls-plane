@@ -17,6 +17,7 @@ import { FilesService } from './files.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { User } from '@utils-plane/db';
+import { getLimit } from '@utils-plane/utils';
 import {
   ApiTags,
   ApiOperation,
@@ -25,6 +26,11 @@ import {
 } from '@nestjs/swagger';
 import { normalizeUploadedFilename } from './filename.util';
 import { FileIdsDto } from './dto/file-ids.dto';
+
+const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(
+  { userId: 'transport-cap', plan: 'private' },
+  'upload.maxFileSize'
+);
 
 interface FileMetadata {
   fieldname: string;
@@ -47,7 +53,7 @@ export class FilesController {
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 50 * 1024 * 1024 },
+      limits: { fileSize: MAX_UPLOAD_TRANSPORT_SIZE },
     })
   )
   @ApiOperation({ summary: 'Upload a file' })

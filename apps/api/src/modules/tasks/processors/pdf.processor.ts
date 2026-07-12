@@ -17,6 +17,7 @@ import {
 } from '../services/pdf.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
+import { getTaskOutputOwner } from './task-output-owner';
 
 type MupdfModule = typeof import('mupdf');
 const nativeImport = new Function('specifier', 'return import(specifier)') as (
@@ -74,13 +75,6 @@ function normalizePdfFilename(
   const value = (filename ?? fallback).trim();
   const withExt = value.toLowerCase().endsWith('.pdf') ? value : `${value}.pdf`;
   return withExt.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || fallback;
-}
-
-function getOutputOwner(task: { userId?: string | null }) {
-  const outputOwner = task.userId
-    ? { id: task.userId, plan: 'free', role: 'user' }
-    : null;
-  return outputOwner;
 }
 
 @Processor('pdf-queue', {
@@ -207,6 +201,7 @@ export class PdfProcessor extends WorkerHost {
     const merged = await this.pdfService.merge(inputs);
     await this.reportProgress(task.id, job, 80);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       merged,
       {
@@ -214,7 +209,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: merged.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -263,6 +258,7 @@ export class PdfProcessor extends WorkerHost {
     }
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -270,7 +266,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: outputMime,
         size: outputBuffer.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -372,6 +368,7 @@ export class PdfProcessor extends WorkerHost {
     }
     await this.reportProgress(task.id, job, 90);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -379,7 +376,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: outputMime,
         size: outputBuffer.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -426,6 +423,7 @@ export class PdfProcessor extends WorkerHost {
     const baseName = inputFile.filename.replace(/\.pdf$/i, '');
     const outputBuffer = Buffer.from(result, 'utf-8');
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -433,7 +431,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'text/plain',
         size: outputBuffer.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -479,6 +477,7 @@ export class PdfProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       pdfBuffer,
       {
@@ -486,7 +485,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: pdfBuffer.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -537,6 +536,7 @@ export class PdfProcessor extends WorkerHost {
       config.outputFilename,
       `${baseName}.pdf`
     );
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -544,7 +544,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -580,6 +580,7 @@ export class PdfProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -587,7 +588,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -631,6 +632,7 @@ export class PdfProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -638,7 +640,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -681,6 +683,7 @@ export class PdfProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -688,7 +691,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -717,6 +720,7 @@ export class PdfProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -724,7 +728,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -762,6 +766,7 @@ export class PdfProcessor extends WorkerHost {
     const result = await this.pdfService.editMetadata(inputBuffer, config);
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -769,7 +774,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -801,6 +806,7 @@ export class PdfProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 85);
 
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       result,
       {
@@ -808,7 +814,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      getOutputOwner(task)
+      outputOwner
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);

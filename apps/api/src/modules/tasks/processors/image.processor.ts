@@ -10,6 +10,7 @@ import {
 import { IdPhotoError, IdPhotoService } from '../services/id-photo.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
+import { getTaskOutputOwner } from './task-output-owner';
 
 function getMimeType(format?: string): string {
   switch (format) {
@@ -126,9 +127,7 @@ export class ImageProcessor extends WorkerHost {
       `[compress] taskId=${task.id} sharp done, output=${outputBuffer.length} bytes`
     );
     await this.reportProgress(task.id, job, 70);
-    const outputOwner = task.userId
-      ? { id: task.userId, plan: 'free', role: 'user' }
-      : null;
+    const outputOwner = await getTaskOutputOwner(task.userId);
 
     const outputFile = await this.filesService.upload(
       outputBuffer,
@@ -163,9 +162,7 @@ export class ImageProcessor extends WorkerHost {
 
     const ext = opts.toFormat;
     const newFilename = inputFile.filename.replace(/\.[^.]+$/, `.${ext}`);
-    const outputOwner = task.userId
-      ? { id: task.userId, plan: 'free', role: 'user' }
-      : null;
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -205,9 +202,7 @@ export class ImageProcessor extends WorkerHost {
 
     const format =
       opts.outputFormat ?? inputFile.mimeType.replace('image/', '');
-    const outputOwner = task.userId
-      ? { id: task.userId, plan: 'free', role: 'user' }
-      : null;
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -248,9 +243,7 @@ export class ImageProcessor extends WorkerHost {
       typeof (task.inputConfig as any)?.preset === 'string'
         ? (task.inputConfig as any).preset
         : 'id';
-    const outputOwner = task.userId
-      ? { id: task.userId, plan: 'free', role: 'user' }
-      : null;
+    const outputOwner = await getTaskOutputOwner(task.userId);
     const outputFile = await this.filesService.upload(
       output.buffer,
       {

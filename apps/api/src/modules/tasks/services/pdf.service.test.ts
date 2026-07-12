@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { PDFDocument } from 'pdf-lib';
 import {
   buildMarkdownDocumentHtml,
   extractDocxPlainText,
@@ -116,6 +119,41 @@ describe('PdfService.documentToPdf', () => {
       } else {
         process.env.LIBREOFFICE_BIN = previousLibreOfficeBin;
       }
+    }
+  });
+
+  it('falls back when LibreOffice creates a blank Markdown PDF', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const doc = await PDFDocument.create();
+      doc.addPage([595.28, 841.89]);
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(outputPath, await doc.save());
+      return outputPath;
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from('# Server Export\n\n- Content survives', 'utf8'),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(text).toContain('Server Export');
+      expect(text).toContain('Content survives');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
     }
   });
 

@@ -409,7 +409,14 @@ export class PdfService {
           sourcePath,
           tempDir
         );
-        return await readFile(outputPath);
+        const output = await readFile(outputPath);
+        if (opts.sourceFormat === 'markdown') {
+          await this.ensureMarkdownPdfHasContent(
+            output,
+            input.buffer.toString('utf8')
+          );
+        }
+        return output;
       } catch (err) {
         if (opts.sourceFormat === 'markdown') {
           return await this.renderMarkdownFallbackPdf(
@@ -422,6 +429,22 @@ export class PdfService {
       }
     } finally {
       await rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  private async ensureMarkdownPdfHasContent(
+    pdf: Buffer,
+    markdown: string
+  ): Promise<void> {
+    if (markdown.trim().length === 0) return;
+
+    const text = await this.toText(pdf, {
+      format: 'text',
+      pageBreak: '\n',
+    });
+
+    if (text.trim().length === 0) {
+      throw new Error('LibreOffice produced a blank Markdown PDF');
     }
   }
 
@@ -853,7 +876,7 @@ export class PdfService {
             '--nologo',
             '--nofirststartwizard',
             '--convert-to',
-            'pdf',
+            'pdf:writer_pdf_Export',
             '--outdir',
             outputDir,
             sourcePath,

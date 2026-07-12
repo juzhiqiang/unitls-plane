@@ -44,14 +44,14 @@ export class TasksController {
     type: TaskResponseDto,
   })
   async create(@Body() dto: CreateTaskDto, @Req() req: AuthenticatedRequest) {
-    const userId = req.user?.id;
+    const user = req.user;
     return this.tasksService.create(
       {
         type: dto.type,
         inputFileIds: dto.inputFileIds,
         inputConfig: dto.inputConfig ?? {},
       },
-      userId
+      user ?? null
     );
   }
 
@@ -106,17 +106,21 @@ export class TasksController {
   @Post(':id/retry')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Retry a failed task' })
-  @ApiResponse({ status: 201, description: 'New task created', type: TaskResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: 'New task created',
+    type: TaskResponseDto,
+  })
   async retry(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    const userId = req.user?.id;
-    const original = await this.tasksService.getById(id, userId);
+    const user = req.user;
+    const original = await this.tasksService.getById(id, user?.id);
     return this.tasksService.create(
       {
         type: original.type,
         inputFileIds: original.inputFileIds as string[],
         inputConfig: (original.inputConfig as Record<string, unknown>) ?? {},
       },
-      userId,
+      user ?? null
     );
   }
 }

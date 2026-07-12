@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { db, tasks } from '@utils-plane/db';
+import { db, tasks, type User } from '@utils-plane/db';
+import { canUseFeature, type EntitlementUser } from '@utils-plane/utils';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
@@ -26,11 +27,16 @@ export class TasksService {
     @InjectQueue('font-queue') private fontQueue: Queue
   ) {}
 
-  async create(input: CreateTaskInput, userId?: string): Promise<Task> {
+  async create(
+    input: CreateTaskInput,
+    user?: Pick<User, 'id' | 'plan' | 'role'> | null
+  ): Promise<Task> {
+    this.assertCanCreateTask(input.type, user);
+
     const [task] = await db
       .insert(tasks)
       .values({
-        userId: userId ?? null,
+        userId: user?.id ?? null,
         type: input.type,
         status: 'pending',
         inputFileIds: input.inputFileIds,
@@ -156,6 +162,52 @@ export class TasksService {
       .returning();
 
     return task?.retryCount ?? 0;
+  }
+
+  private assertCanCreateTask(
+    type: TaskType,
+    currentUser?: Pick<User, 'id' | 'plan' | 'role'> | null
+  ): void {
+    if (!this.isServerTask(type)) return;
+
+    const user: EntitlementUser | null = currentUser
+      ? {
+          userId: currentUser.id,
+          plan: currentUser.plan,
+          role: currentUser.role,
+        }
+      : null;
+
+    if (!canUseFeature(user, 'task.serverProcessing')) {
+      throw new ForbiddenException({
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Sign in is required for server processing tasks',
+      });
+    }
+  }
+
+  private isServerTask(type: TaskType): boolean {
+    switch (type) {
+      case 'compress':
+      case 'convert':
+      case 'image_watermark':
+        return false;
+      case 'image_id_photo':
+      case 'pdf_merge':
+      case 'pdf_split':
+      case 'pdf_to_image':
+      case 'pdf_to_text':
+      case 'image_to_pdf':
+      case 'pdf_rotate':
+      case 'pdf_watermark':
+      case 'pdf_encrypt':
+      case 'pdf_compress':
+      case 'pdf_metadata':
+      case 'pdf_rearrange':
+      case 'pdf_from_document':
+      case 'font_convert':
+        return true;
+    }
   }
 
   private getQueue(type: TaskType): Queue {

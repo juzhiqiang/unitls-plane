@@ -3,6 +3,27 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('TasksService queue routing', () => {
+  it('checks server task entitlement before creating a task', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'tasks.service.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain("canUseFeature(user, 'task.serverProcessing')");
+    expect(source).toContain('assertCanCreateTask');
+  });
+
+  it('receives the full current user from task controller', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'tasks.controller.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('const user = req.user');
+    expect(source).toContain('this.tasksService.create(');
+    expect(source).toContain('user ?? null');
+  });
+
   it('routes image processing tasks to the image queue', () => {
     const source = readFileSync(
       join(import.meta.dir, 'tasks.service.ts'),

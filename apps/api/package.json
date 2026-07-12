@@ -42,6 +42,7 @@
     "@nestjs/throttler": "^6.4.0",
     "@utils-plane/auth": "workspace:*",
     "@utils-plane/db": "workspace:*",
+    "@utils-plane/utils": "workspace:*",
     "@utils-plane/validators": "workspace:*",
     "archiver": "^8.0.0",
     "bullmq": "^5.76.10",

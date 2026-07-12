@@ -7,9 +7,9 @@
       "gb": "GB"
     },
     "meta": {
-      "title": "Utils Plane - Free Online Toolkit",
-      "description": "Image compression, PDF processing, and font conversion in one place. Privacy-first client-side processing, fast and free.",
-      "ogDescription": "Image compression, PDF processing, and font conversion in one place"
+      "title": "Utils Plane - File Evolution Core",
+      "description": "Let images, PDFs, documents, and fonts evolve inside one processing core. Local first, server-ready for heavy jobs, previewable results, and recoverable failures.",
+      "ogDescription": "A file evolution core for image, PDF, document, and font workflows"
     }
   },
   "AnimationFrameList": {
@@ -41,16 +41,16 @@
       "privacy": "Privacy"
     },
     "hero": {
-      "titleLine1": "Your desktop",
-      "titleLine2": "toolbox",
-      "subtitle": "Image compression, PDF processing, and font conversion with clear local-first and server-side processing paths.",
-      "ctaPrimary": "Get started",
-      "ctaSecondary": "Merge PDF"
+      "titleLine1": "Files Evolve",
+      "titleLine2": "In One Core",
+      "subtitle": "Images, PDFs, documents, and fonts move through one core for compression, conversion, preview, and recovery. Local first, server-ready for heavy jobs.",
+      "ctaPrimary": "Process images",
+      "ctaSecondary": "Convert PDF"
     },
     "tools": {
-      "heading": "Start with a real tool",
-      "description": "High-frequency workflows are ready from the first screen.",
-      "recovery": "Retry, replace files, or review task history when processing fails."
+      "heading": "Processing, arranged like products",
+      "description": "Common paths become a focused product matrix: compression, stitching, document generation, and animation creation, all opening into usable workflows.",
+      "recovery": "Retry failures, replace files, and keep tracking work in task history after sign-in."
     },
     "features": {
       "label": "Features",
@@ -69,24 +69,24 @@
       }
     },
     "highlights": {
-      "label": "Highlights",
-      "heading": "Why choose us",
+      "label": "Workflow capability",
+      "heading": "Less clutter. More certainty.",
       "performance": {
-        "title": "High performance",
-        "description": "Client-side processing means no waiting on uploads"
+        "title": "Local when it fits",
+        "description": "Work that fits in the browser stays in the browser, reducing wait time and unnecessary uploads."
       },
       "privacy": {
-        "title": "Transparent processing",
-        "description": "Each tool states whether files stay local, go to the server, or require sign-in"
+        "title": "Visible boundaries",
+        "description": "Processing location, retention rules, and sign-in requirements stay visible in the interface."
       },
       "free": {
-        "title": "Free to use",
-        "description": "No signup required and every feature is free"
+        "title": "Ready for commercial workflows",
+        "description": "Signed-in users can grow into task history, account files, higher limits, and server-side capabilities without changing the flow."
       }
     },
     "cta": {
-      "heading": "Move into the workbench",
-      "description": "Continue from tools into files, task history, and recovery paths without losing context.",
+      "heading": "Ready for the next file workflow",
+      "description": "Open the workbench and keep processing, preview, task history, and recovery in one continuous space.",
       "button": "Open dashboard"
     }
   },

@@ -7,9 +7,9 @@
       "gb": "GB"
     },
     "meta": {
-      "title": "Utils Plane - 免费在线工具平台",
-      "description": "图片压缩、PDF处理、字体转换，一站式工具平台。客户端处理保护隐私，高性能免费使用。",
-      "ogDescription": "图片压缩、PDF处理、字体转换，一站式工具平台"
+      "title": "Utils Plane - 文件进化处理核心",
+      "description": "让图片、PDF、文档和字体在同一个处理核心里完成压缩、转换、预览和恢复。本地优先，重任务交给服务端。",
+      "ogDescription": "让图片、PDF、文档和字体在同一个处理核心里完成进化"
     }
   },
   "AnimationFrameList": {
@@ -41,16 +41,16 @@
       "privacy": "隐私政策"
     },
     "hero": {
-      "titleLine1": "你的桌面",
-      "titleLine2": "工具箱",
-      "subtitle": "图片压缩、PDF 处理、字体转换。清楚区分本地优先和服务端处理路径。",
-      "ctaPrimary": "开始使用",
-      "ctaSecondary": "合并 PDF"
+      "titleLine1": "文件开始进化",
+      "titleLine2": "同一处理核心",
+      "subtitle": "图片、PDF、文档和字体在一个核心里完成压缩、转换、预览和恢复。本地优先，重任务交给服务端。",
+      "ctaPrimary": "开始处理图片",
+      "ctaSecondary": "转换 PDF"
     },
     "tools": {
-      "heading": "直接进入真实工具",
-      "description": "高频工作流在首屏就能开始，不需要先读宣传页。",
-      "recovery": "处理失败后可重试、更换文件或查看任务记录。"
+      "heading": "像产品一样组织处理能力",
+      "description": "常用路径被整理成清晰的产品矩阵：压缩、拼接、文档生成和动图制作，从第一屏继续到可操作界面。",
+      "recovery": "失败可重试，文件可替换，登录后可在任务记录里继续追踪。"
     },
     "features": {
       "label": "功能",
@@ -69,24 +69,24 @@
       }
     },
     "highlights": {
-      "label": "特点",
-      "heading": "为何选择我们",
+      "label": "工作流能力",
+      "heading": "少一点杂乱，多一点确定性",
       "performance": {
-        "title": "高性能",
-        "description": "客户端处理，原地上传无需等待"
+        "title": "本地先完成",
+        "description": "适合浏览器完成的处理留在本地，减少等待，也减少不必要的上传。"
       },
       "privacy": {
-        "title": "处理透明",
-        "description": "每个工具都会说明文件留在本地、上传服务端，或是否需要登录"
+        "title": "边界可见",
+        "description": "处理位置、保留规则和登录要求都放在界面里，文件怎么流转一眼可见。"
       },
       "free": {
-        "title": "免费使用",
-        "description": "无需注册，所有功能完全免费"
+        "title": "为商业工作流预留",
+        "description": "登录后接入任务记录、账户文件、更高处理限制和服务端能力，后续付费体系可以平滑承接。"
       }
     },
     "cta": {
-      "heading": "进入工作台",
-      "description": "从工具继续到文件、任务记录和失败恢复路径，不丢上下文。",
+      "heading": "准备好让文件进入下一段工作流",
+      "description": "打开工作台，把处理、预览、任务记录和失败恢复放进同一个连续空间。",
       "button": "打开仪表盘"
     }
   },

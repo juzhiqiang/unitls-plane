@@ -149,3 +149,10 @@ Markdown / Word 转 PDF 的服务端导出优先使用 LibreOffice。生产组�
 ### 日志文件规范
 
 - 本地运行产生的 `.log` 和 `.err` 文件统一放在项目根目录 `log/` 下；`log/` 不提交到 Git。
+
+### 核对截图规范
+
+- 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/` 下；不要直接保存到项目根目录。
+- 调用截图工具时显式使用 `artifacts/screenshots/<name>.png` 作为输出路径。
+- `artifacts/screenshots/` 只作为本地验证产物目录，不提交到 Git。
+- Playwright MCP 自动生成的 `.playwright-mcp/` 目录也属于本地验证产物，不提交到 Git。

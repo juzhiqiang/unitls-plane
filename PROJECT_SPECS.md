@@ -340,3 +340,4 @@ feat, fix, update, refactor, docs, test, chore
 3. API 修改后重新导出 OpenAPI，并同步 api-client 类型。
 4. 前端新增文案时同时维护中英文。
 5. Windows 开发中，包含 `[locale]` 或 `(app)` 的路径需要 literal path。
+6. 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/`；调用截图工具时显式使用 `artifacts/screenshots/<name>.png`，不要直接散落在项目根目录，该目录不提交到 Git。Playwright MCP 的 `.playwright-mcp/` 输出也属于本地验证产物，不提交到 Git。

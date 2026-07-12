@@ -7,6 +7,8 @@ node_modules/
 *.log
 *.err
 log/
+artifacts/screenshots/
+.playwright-mcp/
 
 # ==========================================
 # 2. Monorepo / 工具链自身的缓存

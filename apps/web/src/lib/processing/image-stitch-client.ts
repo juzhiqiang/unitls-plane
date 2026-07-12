@@ -1,7 +1,6 @@
-export type ImageStitchOutputType =
-  | 'image/png'
-  | 'image/jpeg'
-  | 'image/webp';
+import { canUseFeature, getLimit } from '@utils-plane/utils';
+
+export type ImageStitchOutputType = 'image/png' | 'image/jpeg' | 'image/webp';
 
 export interface ImageStitchOptions {
   width: number;
@@ -63,17 +62,17 @@ export const DEFAULT_IMAGE_STITCH_LIMITS = {
 export function getImageStitchEntitlements(
   session: unknown
 ): ImageStitchEntitlements {
+  const user = session ? { userId: 'signed-in' } : null;
   const isLoggedIn = Boolean(session);
-  const limits = isLoggedIn
-    ? DEFAULT_IMAGE_STITCH_LIMITS.commercial
-    : DEFAULT_IMAGE_STITCH_LIMITS.free;
 
   return {
-    ...limits,
+    maxFiles: getLimit(user, 'image.stitch.maxFiles'),
+    maxFileSize: getLimit(user, 'image.stitch.maxFileSize'),
+    maxCanvasPixels: getLimit(user, 'image.stitch.maxCanvasPixels'),
     isLoggedIn,
-    canBatchExport: isLoggedIn,
-    canUseBrandFooter: isLoggedIn,
-    canUseWatermarkTemplate: isLoggedIn,
+    canBatchExport: canUseFeature(user, 'image.stitch.batch'),
+    canUseBrandFooter: canUseFeature(user, 'image.stitch.brandFooter'),
+    canUseWatermarkTemplate: canUseFeature(user, 'image.stitch.brandFooter'),
     canSaveHistory: isLoggedIn,
   };
 }

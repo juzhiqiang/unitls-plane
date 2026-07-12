@@ -1,6 +1,7 @@
 // prettier-ignore
 // @ts-expect-error TS7016 -- gifenc ships JavaScript without TypeScript declarations.
 import { GIFEncoder as createUntypedGifEncoder, applyPalette as applyUntypedPalette, quantize as quantizeUntyped } from 'gifenc';
+import { canUseFeature, getLimit } from '@utils-plane/utils';
 import { GifReader } from 'omggif';
 import * as UPNG from 'upng-js';
 
@@ -416,19 +417,25 @@ function scaleRgbaFrame(
 export function getImageAnimationEntitlements(
   session: unknown
 ): AnimationEntitlements {
+  const user = session ? { userId: 'signed-in' } : null;
   const isLoggedIn = Boolean(session);
-  const limits = isLoggedIn
-    ? DEFAULT_IMAGE_ANIMATION_LIMITS.commercial
-    : DEFAULT_IMAGE_ANIMATION_LIMITS.free;
 
   return {
-    ...limits,
+    maxInputFiles: getLimit(user, 'image.animation.maxInputFiles'),
+    maxFileSize: getLimit(user, 'image.animation.maxFileSize'),
+    maxFrames: getLimit(user, 'image.animation.maxFrames'),
+    maxCanvasPixels: getLimit(user, 'image.animation.maxCanvasPixels'),
+    maxTotalFramePixels: getLimit(user, 'image.animation.maxTotalFramePixels'),
+    maxOutputWidth: getLimit(user, 'image.animation.maxOutputWidth'),
     isLoggedIn,
     isCommercial: isLoggedIn,
-    canExportGif: true,
-    canExportApng: isLoggedIn,
-    canUseAdvancedCompression: isLoggedIn,
-    canBatchProcess: isLoggedIn,
+    canExportGif: canUseFeature(user, 'image.animation.gif'),
+    canExportApng: canUseFeature(user, 'image.animation.apng'),
+    canUseAdvancedCompression: canUseFeature(
+      user,
+      'image.animation.advancedCompression'
+    ),
+    canBatchProcess: canUseFeature(user, 'image.animation.batch'),
     canSaveHistory: isLoggedIn,
   };
 }

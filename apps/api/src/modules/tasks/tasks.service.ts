@@ -16,6 +16,7 @@ import type {
   TaskStatus,
 } from '@utils-plane/validators';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class TasksService {
@@ -24,7 +25,8 @@ export class TasksService {
   constructor(
     @InjectQueue('image-queue') private imageQueue: Queue,
     @InjectQueue('pdf-queue') private pdfQueue: Queue,
-    @InjectQueue('font-queue') private fontQueue: Queue
+    @InjectQueue('font-queue') private fontQueue: Queue,
+    private readonly filesService: FilesService
   ) {}
 
   async create(
@@ -32,6 +34,7 @@ export class TasksService {
     user?: Pick<User, 'id' | 'plan' | 'role'> | null
   ): Promise<Task> {
     this.assertCanCreateTask(input.type, user);
+    await this.assertCanAccessInputFiles(input.inputFileIds, user);
 
     const [task] = await db
       .insert(tasks)
@@ -162,6 +165,22 @@ export class TasksService {
       .returning();
 
     return task?.retryCount ?? 0;
+  }
+
+  private async assertCanAccessInputFiles(
+    inputFileIds: string[],
+    user?: Pick<User, 'id'> | null
+  ): Promise<void> {
+    for (const fileId of inputFileIds) {
+      const file = await this.filesService.getById(fileId);
+      if (!file.userId) continue;
+      if (user?.id === file.userId) continue;
+
+      throw new ForbiddenException({
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Access denied',
+      });
+    }
   }
 
   private assertCanCreateTask(

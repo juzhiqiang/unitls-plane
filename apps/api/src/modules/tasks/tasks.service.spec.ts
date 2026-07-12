@@ -15,7 +15,8 @@ describe('TasksService queue routing', () => {
     const service = new TasksService(
       queue('image-queue') as any,
       queue('pdf-queue') as any,
-      queue('font-queue') as any
+      queue('font-queue') as any,
+      { getById: vi.fn() } as any
     );
 
     expect((service as any).getQueue('image_id_photo').name).toBe(

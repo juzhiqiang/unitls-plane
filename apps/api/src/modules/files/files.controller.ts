@@ -64,7 +64,7 @@ export class FilesController {
         mimeType: file.mimetype,
         size: file.size,
       },
-      user?.id
+      user ?? null
     );
 
     return result;

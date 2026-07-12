@@ -16,7 +16,8 @@ import {
   inArray,
   sql,
 } from 'drizzle-orm';
-import { db, files, type File } from '@utils-plane/db';
+import { db, files, type File, type User } from '@utils-plane/db';
+import { getLimit, type EntitlementUser } from '@utils-plane/utils';
 import { MinioService } from './minio.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { normalizeUploadedFilename } from './filename.util';
@@ -38,9 +39,6 @@ const ALLOWED_MIME_TYPES = [
   'text/plain',
 ];
 
-const ANONYMOUS_MAX_SIZE = 10 * 1024 * 1024; // 10MB
-const USER_MAX_SIZE = 50 * 1024 * 1024; // 50MB
-
 function normalizeFileRecord(file: File): File {
   return {
     ...file,
@@ -60,7 +58,26 @@ export class FilesService {
 
   constructor(private readonly minioService: MinioService) {}
 
-  async upload(file: Buffer, meta: UploadMeta, userId?: string): Promise<File> {
+  async upload(
+    file: Buffer,
+    meta: UploadMeta,
+    user?: Pick<User, 'id' | 'plan' | 'role'> | null
+  ): Promise<File>;
+  async upload(file: Buffer, meta: UploadMeta, userId?: string): Promise<File>;
+  async upload(
+    file: Buffer,
+    meta: UploadMeta,
+    uploadUser?: Pick<User, 'id' | 'plan' | 'role'> | string | null
+  ): Promise<File> {
+    let user: (Pick<User, 'id' | 'plan' | 'role'> & EntitlementUser) | null =
+      typeof uploadUser === 'string'
+        ? { id: uploadUser, userId: uploadUser, plan: null, role: null }
+        : (uploadUser ?? null);
+
+    if (user) {
+      user = { ...user, userId: user.id };
+    }
+
     // 验证文件类型
     if (!this.isAllowedMimeType(meta.mimeType)) {
       throw new BadRequestException({
@@ -70,7 +87,7 @@ export class FilesService {
     }
 
     // 验证文件大小
-    const maxSize = userId ? USER_MAX_SIZE : ANONYMOUS_MAX_SIZE;
+    const maxSize = getLimit(user, 'upload.maxFileSize');
     if (meta.size > maxSize) {
       throw new BadRequestException({
         code: ErrorCodes.FILE_TOO_LARGE,
@@ -79,14 +96,14 @@ export class FilesService {
     }
 
     const fileId = globalThis.crypto.randomUUID();
-    const prefix = userId ?? 'anonymous';
+    const prefix = user?.id ?? 'anonymous';
     const storageKey = `${prefix}/${fileId}/${meta.filename}`;
 
     // 上传到 MinIO
     await this.minioService.upload(storageKey, file, meta.mimeType);
 
     // 计算过期时间（匿名用户 24 小时）
-    const expiresAt = userId
+    const expiresAt = user?.id
       ? null
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -94,7 +111,7 @@ export class FilesService {
     const [newFile] = await db
       .insert(files)
       .values({
-        userId: userId ?? null,
+        userId: user?.id ?? null,
         filename: meta.filename,
         originalSize: meta.size,
         storageKey,
@@ -108,7 +125,7 @@ export class FilesService {
     }
 
     this.logger.log(
-      `Uploaded file ${newFile.id} by user ${userId ?? 'anonymous'}`
+      `Uploaded file ${newFile.id} by user ${user?.id ?? 'anonymous'}`
     );
     return normalizeFileRecord(newFile);
   }

@@ -57,4 +57,26 @@ describe('FilesController route order', () => {
       "'application/vnd.openxmlformats-officedocument.wordprocessingml.document'"
     );
   });
+
+  it('passes the current user into file upload entitlement checks', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'files.controller.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('user');
+    expect(source).toContain('this.filesService.upload(');
+    expect(source).toContain('user ?? null');
+  });
+
+  it('uses shared entitlement upload limits instead of local constants', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'files.service.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain("getLimit(user, 'upload.maxFileSize')");
+    expect(source).not.toContain('ANONYMOUS_MAX_SIZE');
+    expect(source).not.toContain('USER_MAX_SIZE');
+  });
 });

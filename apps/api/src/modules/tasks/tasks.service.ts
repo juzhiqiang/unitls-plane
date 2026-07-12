@@ -34,7 +34,7 @@ export class TasksService {
     user?: Pick<User, 'id' | 'plan' | 'role'> | null
   ): Promise<Task> {
     this.assertCanCreateTask(input.type, user);
-    await this.assertCanAccessInputFiles(input.inputFileIds, user);
+    await this.assertCanAccessInputFiles(input, user);
 
     const [task] = await db
       .insert(tasks)
@@ -168,18 +168,22 @@ export class TasksService {
   }
 
   private async assertCanAccessInputFiles(
-    inputFileIds: string[],
+    input: CreateTaskInput,
     user?: Pick<User, 'id'> | null
   ): Promise<void> {
-    for (const fileId of inputFileIds) {
-      const file = await this.filesService.getById(fileId);
-      if (!file.userId) continue;
-      if (user?.id === file.userId) continue;
+    const fileIds = new Set<string>(input.inputFileIds);
+    const order = (input.inputConfig as { order?: unknown }).order;
 
-      throw new ForbiddenException({
-        code: ErrorCodes.UNAUTHORIZED,
-        message: 'Access denied',
-      });
+    if (Array.isArray(order)) {
+      for (const entry of order) {
+        if (typeof entry === 'string' && entry.length > 0) {
+          fileIds.add(entry);
+        }
+      }
+    }
+
+    for (const fileId of fileIds) {
+      await this.filesService.getById(fileId, user?.id ?? null);
     }
   }
 

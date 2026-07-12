@@ -126,7 +126,7 @@ export class FilesService {
     return normalizeFileRecord(newFile);
   }
 
-  async getById(id: string, userId?: string): Promise<File> {
+  async getById(id: string, userId?: string | null): Promise<File> {
     const file = await db.query.files.findFirst({
       where: eq(files.id, id),
     });
@@ -139,7 +139,7 @@ export class FilesService {
     }
 
     // 检查权限
-    if (file.userId && userId && file.userId !== userId) {
+    if (file.userId && (!userId || file.userId !== userId)) {
       throw new ForbiddenException({
         code: ErrorCodes.UNAUTHORIZED,
         message: 'Access denied',

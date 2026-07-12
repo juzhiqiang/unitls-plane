@@ -58,7 +58,10 @@ export class FontProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
     await this.reportProgress(task.id, job, 20);
 

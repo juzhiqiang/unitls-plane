@@ -111,7 +111,10 @@ export class ImageProcessor extends WorkerHost {
     this.logger.log(
       `[compress] taskId=${task.id} downloading fileId=${fileId}`
     );
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
     this.logger.log(
       `[compress] taskId=${task.id} downloaded ${inputBuffer.length} bytes`
@@ -148,7 +151,10 @@ export class ImageProcessor extends WorkerHost {
   private async handleConvert(task: ImageTask, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
     await this.reportProgress(task.id, job, 20);
 
@@ -182,7 +188,10 @@ export class ImageProcessor extends WorkerHost {
   private async handleWatermark(task: ImageTask, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (!inputFile.mimeType.startsWith('image/')) {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not an image`
@@ -222,7 +231,10 @@ export class ImageProcessor extends WorkerHost {
   private async handleIdPhoto(task: ImageTask, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (!inputFile.mimeType.startsWith('image/')) {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not an image`

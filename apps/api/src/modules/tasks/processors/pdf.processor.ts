@@ -168,7 +168,10 @@ export class PdfProcessor extends WorkerHost {
     let totalPages = 0;
 
     for (let i = 0; i < orderedIds.length; i++) {
-      const file = await this.filesService.getById(orderedIds[i]!);
+      const file = await this.filesService.getById(
+        orderedIds[i]!,
+        task.userId ?? null
+      );
 
       if (file.mimeType !== 'application/pdf') {
         throw new Error(
@@ -223,7 +226,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
 
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
@@ -279,7 +285,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -389,7 +398,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -456,7 +468,10 @@ export class PdfProcessor extends WorkerHost {
 
     const images: { buffer: Buffer; mimeType: string }[] = [];
     for (let i = 0; i < orderedIds.length; i++) {
-      const file = await this.filesService.getById(orderedIds[i]!);
+      const file = await this.filesService.getById(
+        orderedIds[i]!,
+        task.userId ?? null
+      );
       if (!file.mimeType.startsWith('image/')) {
         throw new Error(
           `INVALID_FILE_TYPE: File ${file.filename} is not an image`
@@ -497,7 +512,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     const inputBuffer = await this.filesService.download(inputFile.storageKey);
     await this.reportProgress(task.id, job, 20);
 
@@ -556,7 +574,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -600,7 +621,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -652,7 +676,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -703,7 +730,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -744,7 +774,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
@@ -786,7 +819,10 @@ export class PdfProcessor extends WorkerHost {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
 
-    const inputFile = await this.filesService.getById(fileId);
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
     if (inputFile.mimeType !== 'application/pdf') {
       throw new Error(
         `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`

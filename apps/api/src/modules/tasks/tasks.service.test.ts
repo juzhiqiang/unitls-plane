@@ -154,7 +154,7 @@ describe('TasksService task creation entitlements', () => {
       null
     );
 
-    expect(filesService.getById).toHaveBeenCalledWith('file-1');
+    expect(filesService.getById).toHaveBeenCalledWith('file-1', null);
     expect(task.userId).toBeNull();
     expect(insertedTask?.userId).toBeNull();
     expect(imageQueue.add).toHaveBeenCalledWith('compress', {
@@ -164,7 +164,12 @@ describe('TasksService task creation entitlements', () => {
 
   it('allows signed-in users to create server tasks', async () => {
     const { service, filesService, pdfQueue } = createService({
-      getById: vi.fn().mockResolvedValue({ id: 'file-1', userId: 'user-1' }),
+      getById: vi.fn((fileId: string, userId?: string | null) => {
+        if (fileId !== 'file-1' || userId !== 'user-1') {
+          throw new Error('Access denied');
+        }
+        return Promise.resolve({ id: 'file-1', userId: 'user-1' });
+      }),
     });
 
     const task = await service.create(
@@ -176,7 +181,7 @@ describe('TasksService task creation entitlements', () => {
       { id: 'user-1', plan: 'free', role: 'user' }
     );
 
-    expect(filesService.getById).toHaveBeenCalledWith('file-1');
+    expect(filesService.getById).toHaveBeenCalledWith('file-1', 'user-1');
     expect(task.userId).toBe('user-1');
     expect(insertedTask?.userId).toBe('user-1');
     expect(pdfQueue.add).toHaveBeenCalledWith('pdf_merge', {
@@ -186,7 +191,12 @@ describe('TasksService task creation entitlements', () => {
 
   it('rejects anonymous local tasks that reference user-owned files', async () => {
     const { service, filesService, imageQueue } = createService({
-      getById: vi.fn().mockResolvedValue({ id: 'file-1', userId: 'user-1' }),
+      getById: vi.fn((fileId: string, userId?: string | null) => {
+        if (fileId === 'file-1' && !userId) {
+          throw new Error('Access denied');
+        }
+        return Promise.resolve({ id: fileId, userId: userId ?? null });
+      }),
     });
 
     await expect(
@@ -200,8 +210,40 @@ describe('TasksService task creation entitlements', () => {
       )
     ).rejects.toThrow('Access denied');
 
-    expect(filesService.getById).toHaveBeenCalledWith('file-1');
+    expect(filesService.getById).toHaveBeenCalledWith('file-1', null);
     expect(insert).not.toHaveBeenCalled();
     expect(imageQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('validates ordered file ids before creating PDF merge tasks', async () => {
+    const { service, filesService, pdfQueue } = createService({
+      getById: vi.fn((fileId: string, userId?: string | null) => {
+        const ownerId = fileId === 'owned-file' ? 'user-1' : 'user-2';
+
+        if (userId !== ownerId) {
+          throw new Error('Access denied');
+        }
+
+        return Promise.resolve({
+          id: fileId,
+          userId: ownerId,
+        });
+      }),
+    });
+
+    await expect(
+      service.create(
+        {
+          type: 'pdf_merge',
+          inputFileIds: ['owned-file'],
+          inputConfig: { order: ['owned-file', 'foreign-file'] },
+        },
+        { id: 'user-1', plan: 'free', role: 'user' }
+      )
+    ).rejects.toThrow('Access denied');
+
+    expect(filesService.getById).toHaveBeenCalledWith('foreign-file', 'user-1');
+    expect(insert).not.toHaveBeenCalled();
+    expect(pdfQueue.add).not.toHaveBeenCalled();
   });
 });

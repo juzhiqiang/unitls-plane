@@ -62,20 +62,16 @@ export class FilesService {
     file: Buffer,
     meta: UploadMeta,
     user?: Pick<User, 'id' | 'plan' | 'role'> | null
-  ): Promise<File>;
-  async upload(file: Buffer, meta: UploadMeta, userId?: string): Promise<File>;
-  async upload(
-    file: Buffer,
-    meta: UploadMeta,
-    uploadUser?: Pick<User, 'id' | 'plan' | 'role'> | string | null
   ): Promise<File> {
-    let user: (Pick<User, 'id' | 'plan' | 'role'> & EntitlementUser) | null =
-      typeof uploadUser === 'string'
-        ? { id: uploadUser, userId: uploadUser, plan: null, role: null }
-        : (uploadUser ?? null);
+    let entitlementUser:
+      | (Pick<User, 'id' | 'plan' | 'role'> & EntitlementUser)
+      | null = user ?? null;
 
-    if (user) {
-      user = { ...user, userId: user.id };
+    if (entitlementUser) {
+      entitlementUser = {
+        ...entitlementUser,
+        userId: entitlementUser.id,
+      };
     }
 
     // 验证文件类型
@@ -87,7 +83,7 @@ export class FilesService {
     }
 
     // 验证文件大小
-    const maxSize = getLimit(user, 'upload.maxFileSize');
+    const maxSize = getLimit(entitlementUser, 'upload.maxFileSize');
     if (meta.size > maxSize) {
       throw new BadRequestException({
         code: ErrorCodes.FILE_TOO_LARGE,
@@ -96,14 +92,14 @@ export class FilesService {
     }
 
     const fileId = globalThis.crypto.randomUUID();
-    const prefix = user?.id ?? 'anonymous';
+    const prefix = entitlementUser?.id ?? 'anonymous';
     const storageKey = `${prefix}/${fileId}/${meta.filename}`;
 
     // 上传到 MinIO
     await this.minioService.upload(storageKey, file, meta.mimeType);
 
     // 计算过期时间（匿名用户 24 小时）
-    const expiresAt = user?.id
+    const expiresAt = entitlementUser?.id
       ? null
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -111,7 +107,7 @@ export class FilesService {
     const [newFile] = await db
       .insert(files)
       .values({
-        userId: user?.id ?? null,
+        userId: entitlementUser?.id ?? null,
         filename: meta.filename,
         originalSize: meta.size,
         storageKey,
@@ -125,7 +121,7 @@ export class FilesService {
     }
 
     this.logger.log(
-      `Uploaded file ${newFile.id} by user ${user?.id ?? 'anonymous'}`
+      `Uploaded file ${newFile.id} by user ${entitlementUser?.id ?? 'anonymous'}`
     );
     return normalizeFileRecord(newFile);
   }

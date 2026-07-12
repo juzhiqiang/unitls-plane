@@ -75,8 +75,29 @@ describe('FilesController route order', () => {
       'utf8'
     );
 
-    expect(source).toContain("getLimit(user, 'upload.maxFileSize')");
+    expect(source).toContain("getLimit(entitlementUser, 'upload.maxFileSize')");
     expect(source).not.toContain('ANONYMOUS_MAX_SIZE');
     expect(source).not.toContain('USER_MAX_SIZE');
+  });
+
+  it('only accepts a user object or null for upload entitlement checks', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'files.service.ts'),
+      'utf8'
+    );
+    const uploadStart = source.indexOf('async upload(');
+    const uploadEnd = source.indexOf('async getById(');
+    const uploadSource = source.slice(uploadStart, uploadEnd);
+
+    expect(uploadStart).toBeGreaterThanOrEqual(0);
+    expect(uploadEnd).toBeGreaterThan(uploadStart);
+    expect(uploadSource).toContain(
+      "user?: Pick<User, 'id' | 'plan' | 'role'> | null"
+    );
+    expect(uploadSource).not.toContain('userId?: string): Promise<File>');
+    expect(uploadSource).not.toContain(
+      "Pick<User, 'id' | 'plan' | 'role'> | string | null"
+    );
+    expect(uploadSource).not.toContain("typeof uploadUser === 'string'");
   });
 });

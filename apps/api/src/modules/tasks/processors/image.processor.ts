@@ -82,9 +82,7 @@ export class ImageProcessor extends WorkerHost {
     } catch (err) {
       try {
         const code =
-          err instanceof IdPhotoError
-            ? err.code
-            : 'IMAGE_PROCESSING_FAILED';
+          err instanceof IdPhotoError ? err.code : 'IMAGE_PROCESSING_FAILED';
         await this.tasksService.markFailed(
           taskId,
           code,
@@ -128,6 +126,9 @@ export class ImageProcessor extends WorkerHost {
       `[compress] taskId=${task.id} sharp done, output=${outputBuffer.length} bytes`
     );
     await this.reportProgress(task.id, job, 70);
+    const outputOwner = task.userId
+      ? { id: task.userId, plan: 'free', role: 'user' }
+      : null;
 
     const outputFile = await this.filesService.upload(
       outputBuffer,
@@ -136,7 +137,7 @@ export class ImageProcessor extends WorkerHost {
         mimeType: getMimeType(opts.format),
         size: outputBuffer.length,
       },
-      task.userId ?? undefined
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -162,6 +163,9 @@ export class ImageProcessor extends WorkerHost {
 
     const ext = opts.toFormat;
     const newFilename = inputFile.filename.replace(/\.[^.]+$/, `.${ext}`);
+    const outputOwner = task.userId
+      ? { id: task.userId, plan: 'free', role: 'user' }
+      : null;
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -169,7 +173,7 @@ export class ImageProcessor extends WorkerHost {
         mimeType: getMimeType(ext),
         size: outputBuffer.length,
       },
-      task.userId ?? undefined
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -201,6 +205,9 @@ export class ImageProcessor extends WorkerHost {
 
     const format =
       opts.outputFormat ?? inputFile.mimeType.replace('image/', '');
+    const outputOwner = task.userId
+      ? { id: task.userId, plan: 'free', role: 'user' }
+      : null;
     const outputFile = await this.filesService.upload(
       outputBuffer,
       {
@@ -208,7 +215,7 @@ export class ImageProcessor extends WorkerHost {
         mimeType: getMimeType(format),
         size: outputBuffer.length,
       },
-      task.userId ?? undefined
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -241,6 +248,9 @@ export class ImageProcessor extends WorkerHost {
       typeof (task.inputConfig as any)?.preset === 'string'
         ? (task.inputConfig as any).preset
         : 'id';
+    const outputOwner = task.userId
+      ? { id: task.userId, plan: 'free', role: 'user' }
+      : null;
     const outputFile = await this.filesService.upload(
       output.buffer,
       {
@@ -248,7 +258,7 @@ export class ImageProcessor extends WorkerHost {
         mimeType: output.mimeType,
         size: output.buffer.length,
       },
-      task.userId ?? undefined
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 

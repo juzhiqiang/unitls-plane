@@ -59,7 +59,7 @@ it('processes image_id_photo tasks through IdPhotoService', async () => {
       filename: 'id-photo-one_inch-portrait.jpg',
       mimeType: 'image/jpeg',
     }),
-    'user-1'
+    { id: 'user-1', plan: 'free', role: 'user' }
   );
   expect(tasksService.markCompleted).toHaveBeenCalledWith('task-1', 'output-1');
 });

@@ -15,14 +15,16 @@ export class FontProcessor extends WorkerHost {
   constructor(
     private readonly fontService: FontService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService,
+    private readonly tasksService: TasksService
   ) {
     super();
   }
 
   async process(job: Job<{ taskId: string }>): Promise<unknown> {
     const { taskId } = job.data;
-    this.logger.log(`[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`);
+    this.logger.log(
+      `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
+    );
     const task = await this.tasksService.getById(taskId);
 
     try {
@@ -33,10 +35,12 @@ export class FontProcessor extends WorkerHost {
         await this.tasksService.markFailed(
           taskId,
           'FONT_PROCESSING_FAILED',
-          (err as Error).message,
+          (err as Error).message
         );
       } catch (dbErr) {
-        this.logger.error(`Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`);
+        this.logger.error(
+          `Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`
+        );
       }
       throw err;
     }
@@ -63,6 +67,9 @@ export class FontProcessor extends WorkerHost {
 
     const ext = opts.toFormat;
     const baseName = inputFile.filename.replace(/\.[^.]+$/, '');
+    const outputOwner = task.userId
+      ? { id: task.userId, plan: 'free', role: 'user' }
+      : null;
     const outputFile = await this.filesService.upload(
       output,
       {
@@ -70,7 +77,7 @@ export class FontProcessor extends WorkerHost {
         mimeType: `font/${ext}`,
         size: output.length,
       },
-      task.userId ?? undefined,
+      outputOwner
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -82,7 +89,9 @@ export class FontProcessor extends WorkerHost {
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job, err: Error) {
-    this.logger.error(`Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`);
+    this.logger.error(
+      `Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`
+    );
     const attemptsMade = job.attemptsMade;
     const maxAttempts = job.opts?.attempts ?? 3;
     if (attemptsMade >= maxAttempts) {
@@ -90,7 +99,7 @@ export class FontProcessor extends WorkerHost {
       await this.tasksService.markFailed(
         taskId,
         'FONT_PROCESSING_FAILED',
-        err.message,
+        err.message
       );
     }
   }

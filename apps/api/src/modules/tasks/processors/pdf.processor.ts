@@ -76,6 +76,13 @@ function normalizePdfFilename(
   return withExt.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || fallback;
 }
 
+function getOutputOwner(task: { userId?: string | null }) {
+  const outputOwner = task.userId
+    ? { id: task.userId, plan: 'free', role: 'user' }
+    : null;
+  return outputOwner;
+}
+
 @Processor('pdf-queue', {
   concurrency: 2,
   lockDuration: 300000,
@@ -207,7 +214,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: merged.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -263,7 +270,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: outputMime,
         size: outputBuffer.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -372,7 +379,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: outputMime,
         size: outputBuffer.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -426,7 +433,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'text/plain',
         size: outputBuffer.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
     await this.reportProgress(task.id, job, 95);
 
@@ -479,7 +486,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: pdfBuffer.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -537,7 +544,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -580,7 +587,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -631,7 +638,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -681,7 +688,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -717,7 +724,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -762,7 +769,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);
@@ -801,7 +808,7 @@ export class PdfProcessor extends WorkerHost {
         mimeType: 'application/pdf',
         size: result.length,
       },
-      task.userId ?? undefined
+      getOutputOwner(task)
     );
 
     await this.tasksService.markCompleted(task.id, outputFile.id);

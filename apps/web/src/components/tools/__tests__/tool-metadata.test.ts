@@ -86,4 +86,23 @@ describe('tool metadata', () => {
       expect.arrayContaining(['markdown', 'docx', 'editor'])
     );
   });
+
+  it('assigns entitlement feature keys to commercial-ready tools', () => {
+    expect(getToolByHref('/image/animation')?.featureKeys).toEqual(
+      expect.arrayContaining([
+        'image.animation.gif',
+        'image.animation.apng',
+        'image.animation.advancedCompression',
+      ])
+    );
+    expect(getToolByHref('/image/stitch')?.featureKeys).toEqual(
+      expect.arrayContaining(['image.stitch.basic', 'image.stitch.brandFooter'])
+    );
+    expect(getToolByHref('/pdf/from-document')?.featureKeys).toEqual(
+      expect.arrayContaining([
+        'pdf.document.localExport',
+        'pdf.document.serverExport',
+      ])
+    );
+  });
 });

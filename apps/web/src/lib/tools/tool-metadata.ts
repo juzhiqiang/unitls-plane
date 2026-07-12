@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import type { FeatureKey, LimitKey } from '@utils-plane/utils';
 import {
   ArrowUpDown,
   BadgeCheck,
@@ -32,6 +33,8 @@ export interface ToolMeta {
   retention: ToolRetention;
   requiresLogin: boolean;
   recommended?: boolean;
+  featureKeys?: FeatureKey[];
+  limitKeys?: LimitKey[];
   tags: string[];
 }
 
@@ -82,6 +85,17 @@ export const imageTools: ToolMeta[] = [
     retention: 'browser-session',
     requiresLogin: false,
     recommended: true,
+    featureKeys: [
+      'image.animation.gif',
+      'image.animation.apng',
+      'image.animation.advancedCompression',
+    ],
+    limitKeys: [
+      'image.animation.maxInputFiles',
+      'image.animation.maxFileSize',
+      'image.animation.maxFrames',
+      'image.animation.maxOutputWidth',
+    ],
     tags: ['gif', 'apng', 'animation', 'compress'],
   },
   {
@@ -95,6 +109,12 @@ export const imageTools: ToolMeta[] = [
     retention: 'browser-session',
     requiresLogin: false,
     recommended: true,
+    featureKeys: ['image.stitch.basic', 'image.stitch.brandFooter'],
+    limitKeys: [
+      'image.stitch.maxFiles',
+      'image.stitch.maxFileSize',
+      'image.stitch.maxCanvasPixels',
+    ],
     tags: ['stitch', 'long-image', 'ecommerce'],
   },
   {
@@ -222,6 +242,7 @@ export const pdfTools: ToolMeta[] = [
     retention: 'browser-session',
     requiresLogin: false,
     recommended: true,
+    featureKeys: ['pdf.document.localExport', 'pdf.document.serverExport'],
     tags: ['markdown', 'docx', 'editor'],
   },
   {

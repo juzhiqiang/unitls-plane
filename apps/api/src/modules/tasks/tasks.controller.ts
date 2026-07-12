@@ -36,6 +36,7 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @Public()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new task' })
   @ApiResponse({

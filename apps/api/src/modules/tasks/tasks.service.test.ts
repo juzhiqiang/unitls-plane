@@ -19,6 +19,7 @@ describe('TasksService queue routing', () => {
       'utf8'
     );
 
+    expect(source).toMatch(/@Post\(\)\s+@Public\(\)/);
     expect(source).toContain('const user = req.user');
     expect(source).toContain('this.tasksService.create(');
     expect(source).toContain('user ?? null');

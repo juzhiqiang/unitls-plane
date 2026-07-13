@@ -9,6 +9,7 @@
     "openapi:export": "bun src/scripts/export-openapi.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "test": "bun test src",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "rm -rf dist"

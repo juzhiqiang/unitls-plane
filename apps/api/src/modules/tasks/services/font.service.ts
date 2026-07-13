@@ -30,7 +30,9 @@ export class FontService {
     }
 
     const readType = fromType === 'woff2' ? 'ttf' : fromType;
-    const subset = opts.subsetText ? this.charsToCodes(opts.subsetText) : undefined;
+    const subset = opts.subsetText
+      ? this.charsToCodes(opts.subsetText)
+      : undefined;
 
     const font = Font.create(workingBuffer, {
       type: readType,
@@ -39,7 +41,11 @@ export class FontService {
     });
 
     if (toType === 'woff2') {
-      const ttfBuffer = font.write({ type: 'ttf', toBuffer: true, hinting: true });
+      const ttfBuffer = font.write({
+        type: 'ttf',
+        toBuffer: true,
+        hinting: true,
+      });
       const compressed = await wawoff2.compress(ttfBuffer);
       return Buffer.from(compressed);
     }

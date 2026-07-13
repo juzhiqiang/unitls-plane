@@ -41,8 +41,6 @@ import { BasicAuthMiddleware } from './common/middleware/basic-auth.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(BasicAuthMiddleware)
-      .forRoutes('/admin/queues');
+    consumer.apply(BasicAuthMiddleware).forRoutes('/admin/queues');
   }
 }

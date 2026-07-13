@@ -219,9 +219,7 @@ async function bufferFromGeneratedImagePayload(
   throw new Error('OpenAI-compatible image response missing generated image');
 }
 
-export class OpenAiCompatiblePortraitSegmentationProvider
-  implements PortraitAiProvider
-{
+export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiProvider {
   private readonly chatUrl: string;
   private readonly imageEditUrl: string;
   private readonly apiKey?: string;
@@ -232,13 +230,11 @@ export class OpenAiCompatiblePortraitSegmentationProvider
   constructor({
     baseUrl = process.env.ID_PHOTO_AI_SEGMENTATION_BASE_URL,
     apiKey = process.env.ID_PHOTO_AI_SEGMENTATION_API_KEY,
-    model =
-      process.env.ID_PHOTO_AI_SEGMENTATION_MODEL ??
+    model = process.env.ID_PHOTO_AI_SEGMENTATION_MODEL ??
       DEFAULT_OPENAI_SEGMENTATION_MODEL,
-    provider =
-      (process.env.ID_PHOTO_AI_SEGMENTATION_PROVIDER as
-        | PortraitAiProviderMode
-        | undefined) ?? DEFAULT_OPENAI_SEGMENTATION_PROVIDER,
+    provider = (process.env.ID_PHOTO_AI_SEGMENTATION_PROVIDER as
+      | PortraitAiProviderMode
+      | undefined) ?? DEFAULT_OPENAI_SEGMENTATION_PROVIDER,
     fetch: fetchImpl = fetch,
   }: OpenAiCompatiblePortraitSegmentationProviderOptions = {}) {
     if (!baseUrl) {
@@ -295,7 +291,9 @@ export class OpenAiCompatiblePortraitSegmentationProvider
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI-compatible segmentation failed: ${response.status}`);
+      throw new Error(
+        `OpenAI-compatible segmentation failed: ${response.status}`
+      );
     }
 
     const payload = (await response.json()) as {
@@ -303,7 +301,9 @@ export class OpenAiCompatiblePortraitSegmentationProvider
     };
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI-compatible segmentation response missing content');
+      throw new Error(
+        'OpenAI-compatible segmentation response missing content'
+      );
     }
 
     const maskReference = parseMaskReferenceFromOpenAiContent(content);
@@ -353,12 +353,22 @@ export class OpenAiCompatiblePortraitSegmentationProvider
     ].join(' ');
     const form = new FormData();
     form.set('model', this.model);
-    form.set('image', new Blob([orientedInput], { type: 'image/png' }), 'portrait.png');
+    form.set(
+      'image',
+      new Blob([orientedInput], { type: 'image/png' }),
+      'portrait.png'
+    );
     form.set('prompt', prompt);
     form.set('size', process.env.ID_PHOTO_AI_IMAGE_SIZE ?? '1024x1024');
     form.set('quality', process.env.ID_PHOTO_AI_IMAGE_QUALITY ?? 'high');
-    form.set('background', process.env.ID_PHOTO_AI_IMAGE_BACKGROUND ?? 'opaque');
-    form.set('response_format', process.env.ID_PHOTO_AI_RESPONSE_FORMAT ?? 'url');
+    form.set(
+      'background',
+      process.env.ID_PHOTO_AI_IMAGE_BACKGROUND ?? 'opaque'
+    );
+    form.set(
+      'response_format',
+      process.env.ID_PHOTO_AI_RESPONSE_FORMAT ?? 'url'
+    );
 
     const response = await this.fetchImpl(this.imageEditUrl, {
       method: 'POST',

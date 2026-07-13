@@ -112,3 +112,4 @@ bun.lockb
 
 # Generated files
 *.d.ts.map
+packages/api-client/src/schema.ts

@@ -37,12 +37,16 @@ export class AuthController {
       const response = await auth.handler(request);
 
       const setCookies =
-        typeof (response.headers as Headers & {
-          getSetCookie?: () => string[];
-        }).getSetCookie === 'function'
-          ? (response.headers as Headers & {
-              getSetCookie: () => string[];
-            }).getSetCookie()
+        typeof (
+          response.headers as Headers & {
+            getSetCookie?: () => string[];
+          }
+        ).getSetCookie === 'function'
+          ? (
+              response.headers as Headers & {
+                getSetCookie: () => string[];
+              }
+            ).getSetCookie()
           : [];
 
       response.headers.forEach((value, key) => {

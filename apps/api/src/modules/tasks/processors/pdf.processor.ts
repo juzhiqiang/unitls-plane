@@ -74,6 +74,7 @@ function normalizePdfFilename(
 ): string {
   const value = (filename ?? fallback).trim();
   const withExt = value.toLowerCase().endsWith('.pdf') ? value : `${value}.pdf`;
+  // eslint-disable-next-line no-control-regex -- Intentionally strips ASCII control characters from PDF filenames.
   return withExt.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || fallback;
 }
 

@@ -231,19 +231,21 @@ export function extractDocxPlainText(input: Buffer): string {
   }
 
   const xml = documentXml.toString('utf8');
-  return xml
-    .replace(/<w:tab\b[^>]*\/>/g, '\t')
-    .replace(/<w:br\b[^>]*\/>/g, '\n')
-    .replace(/<\/w:p>/g, '\n')
-    .match(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>|[\t\n]/g)
-    ?.map(part => {
-      if (part === '\t' || part === '\n') return part;
-      const match = part.match(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/);
-      return match ? decodeXmlText(match[1]!) : '';
-    })
-    .join('')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim() ?? '';
+  return (
+    xml
+      .replace(/<w:tab\b[^>]*\/>/g, '\t')
+      .replace(/<w:br\b[^>]*\/>/g, '\n')
+      .replace(/<\/w:p>/g, '\n')
+      .match(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>|[\t\n]/g)
+      ?.map(part => {
+        if (part === '\t' || part === '\n') return part;
+        const match = part.match(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/);
+        return match ? decodeXmlText(match[1]!) : '';
+      })
+      .join('')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim() ?? ''
+  );
 }
 
 @Injectable()
@@ -467,7 +469,12 @@ export class PdfService {
 
     const drawWrapped = (
       text: string,
-      options: { size: number; lineHeight: number; bold?: boolean; indent?: number }
+      options: {
+        size: number;
+        lineHeight: number;
+        bold?: boolean;
+        indent?: number;
+      }
     ) => {
       const font = options.bold ? boldFont : regularFont;
       const indent = options.indent ?? 0;
@@ -600,6 +607,7 @@ export class PdfService {
   }
 
   private toWinAnsiText(text: string): string {
+    // eslint-disable-next-line no-control-regex -- Intentionally replaces unsupported ASCII control characters before WinAnsi encoding.
     return text.replace(/[^\x09\x0a\x0d\x20-\x7e\xa0-\xff]/g, '?');
   }
 

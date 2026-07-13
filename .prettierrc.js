@@ -17,7 +17,7 @@ module.exports = {
   arrowParens: 'avoid',
 
   // 换行符
-  endOfLine: 'lf',
+  endOfLine: 'auto',
 
   // 文件类型特定配置
   overrides: [

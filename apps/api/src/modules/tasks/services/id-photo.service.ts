@@ -552,13 +552,15 @@ export class IdPhotoService {
     config: IdPhotoTaskConfig
   ): Promise<IdPhotoRenderResult> {
     const preset = idPhotoPresetSpecs[config.preset];
-    const image = sharp(input).rotate().resize({
-      width: preset.widthPx,
-      height: preset.heightPx,
-      fit: 'cover',
-      position: 'centre',
-      background: hexToRgb(config.backgroundColor),
-    });
+    const image = sharp(input)
+      .rotate()
+      .resize({
+        width: preset.widthPx,
+        height: preset.heightPx,
+        fit: 'cover',
+        position: 'centre',
+        background: hexToRgb(config.backgroundColor),
+      });
 
     if (config.outputType === 'image/png') {
       return {

@@ -21,7 +21,9 @@ export class MinioService implements OnModuleInit {
     const secretKey = process.env.S3_SECRET_KEY;
     const endpoint = process.env.S3_ENDPOINT;
 
-    this.logger.log(`S3_CONFIG: endpoint=${endpoint}, accessKey=${accessKey ? 'set' : 'NOT SET'}, secretKey=${secretKey ? 'set' : 'NOT SET'}`);
+    this.logger.log(
+      `S3_CONFIG: endpoint=${endpoint}, accessKey=${accessKey ? 'set' : 'NOT SET'}, secretKey=${secretKey ? 'set' : 'NOT SET'}`
+    );
 
     this.client = new S3Client({
       endpoint: endpoint,

@@ -26,9 +26,11 @@ export const files = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
-  (t) => ({
+  t => ({
     userCreatedIdx: index('files_user_created_idx').on(t.userId, t.createdAt),
-    expiresIdx: index('files_expires_idx').on(t.expiresAt).where(sql`expires_at IS NOT NULL`),
+    expiresIdx: index('files_expires_idx')
+      .on(t.expiresAt)
+      .where(sql`expires_at IS NOT NULL`),
   })
 );
 

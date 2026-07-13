@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 
+const repoRoot = join(import.meta.dir, '../../../..');
+
 describe('Dockerfile runtime assets', () => {
   it('copies portrait segmentation ONNX models into the runtime image', () => {
-    const source = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
+    const source = readFileSync(join(repoRoot, 'Dockerfile'), 'utf8');
 
     expect(source).toContain(
       'COPY --from=builder /app/apps/api/models ./models'
@@ -13,8 +15,8 @@ describe('Dockerfile runtime assets', () => {
 
   it('builds and copies the shared utils package into runtime images', () => {
     const dockerfiles = [
-      readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8'),
-      readFileSync(join(process.cwd(), 'apps/api/Dockerfile'), 'utf8'),
+      readFileSync(join(repoRoot, 'Dockerfile'), 'utf8'),
+      readFileSync(join(repoRoot, 'apps/api/Dockerfile'), 'utf8'),
     ];
 
     for (const source of dockerfiles) {

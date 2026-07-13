@@ -97,7 +97,6 @@ export class MinioService implements OnModuleInit {
         Key: key,
       })
     );
-    this.logger.debug(`Deleted ${key} from ${this.bucket}`);
   }
 
   async exists(key: string): Promise<boolean> {

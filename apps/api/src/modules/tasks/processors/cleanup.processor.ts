@@ -1,15 +1,28 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
+import { FilesService, type CleanupSummary } from '../../files/files.service';
 
 @Processor('cleanup-queue')
 export class CleanupProcessor extends WorkerHost {
   private readonly logger = new Logger(CleanupProcessor.name);
 
-  async process(job: Job): Promise<unknown> {
+  constructor(private readonly filesService: FilesService) {
+    super();
+  }
+
+  async process(
+    job: Job
+  ): Promise<{ expired: CleanupSummary; trash: CleanupSummary }> {
     this.logger.log(`Processing cleanup job ${job.id}`);
-    // 实际清理逻辑在 Phase 6 实现
-    return {};
+    const expired = await this.filesService.cleanupExpired();
+    const trash = await this.filesService.cleanupTrashed();
+
+    this.logger.log(
+      `Cleanup job ${job.id} completed: expired=${expired.deleted}/${expired.scanned}, trash=${trash.deleted}/${trash.scanned}`
+    );
+
+    return { expired, trash };
   }
 
   @OnWorkerEvent('failed')

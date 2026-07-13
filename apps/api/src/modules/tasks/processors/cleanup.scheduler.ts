@@ -13,6 +13,7 @@ export class CleanupScheduler implements OnModuleInit {
       'cleanup-expired-files',
       {},
       {
+        jobId: 'hourly-file-retention',
         repeat: { pattern: '0 * * * *' },
       }
     );

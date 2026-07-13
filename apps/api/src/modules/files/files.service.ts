@@ -11,7 +11,7 @@ import {
   and,
   isNull,
   isNotNull,
-  gte,
+  lte,
   like,
   inArray,
   sql,
@@ -38,6 +38,16 @@ const ALLOWED_MIME_TYPES = [
   'text/markdown',
   'text/plain',
 ];
+
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export type CleanupSummary = {
+  scanned: number;
+  deleted: number;
+  failed: number;
+  deletedFileIds: string[];
+  failedFileIds: string[];
+};
 
 function normalizeFileRecord(file: File): File {
   return {
@@ -373,26 +383,57 @@ export class FilesService {
     this.logger.log(`Emptied trash for user ${userId}`);
   }
 
-  async cleanupExpired(): Promise<number> {
-    const now = new Date();
+  async cleanupExpired(now = new Date()): Promise<CleanupSummary> {
     const expiredFiles = await db
       .select()
       .from(files)
-      .where(and(isNull(files.deletedAt), gte(files.expiresAt, now)));
+      .where(
+        and(
+          isNull(files.userId),
+          isNull(files.deletedAt),
+          isNotNull(files.expiresAt),
+          lte(files.expiresAt, now)
+        )
+      );
 
-    for (const file of expiredFiles) {
+    return this.cleanupRecords(expiredFiles);
+  }
+
+  async cleanupTrashed(now = new Date()): Promise<CleanupSummary> {
+    const cutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
+    const trashedFiles = await db
+      .select()
+      .from(files)
+      .where(and(isNotNull(files.deletedAt), lte(files.deletedAt, cutoff)));
+
+    return this.cleanupRecords(trashedFiles);
+  }
+
+  private async cleanupRecords(records: File[]): Promise<CleanupSummary> {
+    const deletedFileIds: string[] = [];
+    const failedFileIds: string[] = [];
+
+    for (const file of records) {
       try {
         await this.minioService.delete(file.storageKey);
-        await db
-          .update(files)
-          .set({ deletedAt: new Date() })
-          .where(eq(files.id, file.id));
+        await db.delete(files).where(eq(files.id, file.id));
+        deletedFileIds.push(file.id);
       } catch (error) {
-        this.logger.error(`Failed to delete expired file ${file.id}`, error);
+        failedFileIds.push(file.id);
+        this.logger.error(
+          `Failed to clean up file ${file.id}`,
+          error instanceof Error ? error.stack : undefined
+        );
       }
     }
 
-    return expiredFiles.length;
+    return {
+      scanned: records.length,
+      deleted: deletedFileIds.length,
+      failed: failedFileIds.length,
+      deletedFileIds,
+      failedFileIds,
+    };
   }
 
   private isAllowedMimeType(mimeType: string): boolean {

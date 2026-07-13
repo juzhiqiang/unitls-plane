@@ -9,16 +9,9 @@ dotenv.config({ path: path.join(repoRoot, '.env') });
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { init as initErrorTracker } from '@error-tracker/sdk/node';
 import { isOriginAllowed } from '@utils-plane/auth';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { buildErrorTrackerOptions } from './config/error-tracker.config';
-
-const errorTrackerOptions = buildErrorTrackerOptions(process.env);
-if (errorTrackerOptions) {
-  initErrorTracker(errorTrackerOptions);
-}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

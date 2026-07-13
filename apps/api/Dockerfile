@@ -14,7 +14,6 @@ COPY packages/auth/package.json packages/auth/
 COPY packages/db/package.json packages/db/
 COPY packages/utils/package.json packages/utils/
 COPY packages/validators/package.json packages/validators/
-COPY --from=error_tracker_sdk . /error-tracker/packages/sdk
 
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     mkdir -p apps/web/public \

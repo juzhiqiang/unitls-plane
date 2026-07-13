@@ -14,7 +14,6 @@ COPY packages/auth/package.json packages/auth/
 COPY packages/db/package.json packages/db/
 COPY packages/utils/package.json packages/utils/
 COPY packages/validators/package.json packages/validators/
-COPY --from=error_tracker_sdk . /error-tracker/packages/sdk
 
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     mkdir -p apps/web/public \
@@ -26,19 +25,22 @@ WORKDIR /app
 ARG NEXT_PUBLIC_API_URL=http://202.104.149.204:5006
 ARG NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009
 ARG NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true
-ARG NEXT_PUBLIC_ERROR_TRACKER_DSN=
-ARG NEXT_PUBLIC_ERROR_TRACKER_TOKEN=
 ARG NEXT_PUBLIC_RELEASE=prod
+ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+ARG NEXT_PUBLIC_SUPPORT_EMAIL=support@utils-plane.local
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_S3_PUBLIC_URL=$NEXT_PUBLIC_S3_PUBLIC_URL
 ENV NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=$NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION
-ENV NEXT_PUBLIC_ERROR_TRACKER_DSN=$NEXT_PUBLIC_ERROR_TRACKER_DSN
-ENV NEXT_PUBLIC_ERROR_TRACKER_TOKEN=$NEXT_PUBLIC_ERROR_TRACKER_TOKEN
 ENV NEXT_PUBLIC_RELEASE=$NEXT_PUBLIC_RELEASE
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_SUPPORT_EMAIL=$NEXT_PUBLIC_SUPPORT_EMAIL
 ENV NODE_ENV=production
 
 COPY . .
+RUN if [ "$NEXT_PUBLIC_RELEASE" = "prod" ]; then \
+      bun -e "const email=process.env.NEXT_PUBLIC_SUPPORT_EMAIL||''; if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||email.endsWith('.local')){console.error('NEXT_PUBLIC_SUPPORT_EMAIL must be a reachable email');process.exit(1)}"; \
+    fi
 RUN bun run build --filter=@utils-plane/api --filter=@utils-plane/web
 RUN bun node_modules/typescript/bin/tsc -p packages/db/tsconfig.json --module commonjs --moduleResolution node --outDir packages/db/dist-cjs --declaration false --declarationMap false --sourceMap false \
     && bun node_modules/typescript/bin/tsc -p packages/auth/tsconfig.json --module commonjs --moduleResolution node --outDir packages/auth/dist-cjs --declaration false --declarationMap false --sourceMap false \

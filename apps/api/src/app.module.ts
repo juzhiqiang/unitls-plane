@@ -6,6 +6,7 @@ import { ExpressAdapter } from '@bull-board/express';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { bullConfig } from './config/bull.config';
 import { throttleConfig } from './config/throttle.config';
+import { AccountModule } from './modules/account/account.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { FilesModule } from './modules/files/files.module';
@@ -23,6 +24,7 @@ import { BasicAuthMiddleware } from './common/middleware/basic-auth.middleware';
     AuthModule,
     FilesModule,
     HealthModule,
+    AccountModule,
     BullBoardModule.forRoot({
       route: '/admin/queues',
       adapter: ExpressAdapter,

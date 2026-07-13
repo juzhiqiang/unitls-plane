@@ -361,6 +361,7 @@
     "totalFiles": "Total Files",
     "activeTasks": "Active Tasks",
     "completed": "Completed",
+    "loading": "Loading account summary",
     "sections": {
       "quickTools": "Quick tools",
       "quickToolsDescription": "Start the most common workflows without passing through a marketing page.",
@@ -382,7 +383,11 @@
     },
     "actions": {
       "viewTasks": "View tasks",
-      "viewFiles": "View files"
+      "viewFiles": "View files",
+      "retry": "Retry"
+    },
+    "errors": {
+      "summaryLoad": "We couldn't load your account summary."
     },
     "statuses": {
       "pending": "pending",

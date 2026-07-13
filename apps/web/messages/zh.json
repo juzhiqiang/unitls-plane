@@ -361,6 +361,7 @@
     "totalFiles": "文件总数",
     "activeTasks": "进行中的任务",
     "completed": "已完成",
+    "loading": "正在加载账号汇总",
     "sections": {
       "quickTools": "快捷工具",
       "quickToolsDescription": "不用经过宣传页，直接开始最高频的处理流程。",
@@ -382,7 +383,11 @@
     },
     "actions": {
       "viewTasks": "查看任务",
-      "viewFiles": "查看文件"
+      "viewFiles": "查看文件",
+      "retry": "重试"
+    },
+    "errors": {
+      "summaryLoad": "无法加载账号汇总，请重试。"
     },
     "statuses": {
       "pending": "等待中",

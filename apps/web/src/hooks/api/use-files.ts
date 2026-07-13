@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
+import { accountQueryKeys } from './query-keys';
 
 export interface FileRecord {
   id: string;
@@ -30,6 +31,15 @@ export interface FileQuery {
 
 function refreshFileQueries(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ['files'] });
+}
+
+function refreshActiveFileQueries(
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  refreshFileQueries(queryClient);
+  queryClient.invalidateQueries({
+    queryKey: accountQueryKeys.summaries(),
+  });
 }
 
 export function useFiles(query?: FileQuery) {
@@ -83,7 +93,7 @@ export function useUploadFile() {
       return data;
     },
     onSuccess: () => {
-      refreshFileQueries(queryClient);
+      refreshActiveFileQueries(queryClient);
     },
   });
 }
@@ -113,7 +123,7 @@ export function useDeleteFile() {
       return data;
     },
     onSuccess: () => {
-      refreshFileQueries(queryClient);
+      refreshActiveFileQueries(queryClient);
     },
   });
 }
@@ -129,7 +139,7 @@ export function useBatchDeleteFiles() {
       return data;
     },
     onSuccess: () => {
-      refreshFileQueries(queryClient);
+      refreshActiveFileQueries(queryClient);
     },
   });
 }
@@ -145,7 +155,7 @@ export function useRestoreFile() {
       return data;
     },
     onSuccess: () => {
-      refreshFileQueries(queryClient);
+      refreshActiveFileQueries(queryClient);
     },
   });
 }
@@ -177,7 +187,7 @@ export function useBatchRestoreFiles() {
       return data;
     },
     onSuccess: () => {
-      refreshFileQueries(queryClient);
+      refreshActiveFileQueries(queryClient);
     },
   });
 }

@@ -7,6 +7,7 @@ import {
   useBatchRestoreFiles,
   useEmptyTrash,
 } from '../use-files';
+import { accountQueryKeys } from '../query-keys';
 
 vi.mock('@/lib/api-client', () => ({
   api: {
@@ -59,6 +60,9 @@ describe('file trash mutations', () => {
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['files'] })
     );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: accountQueryKeys.summaries(),
+    });
   });
 
   it('batch permanently deletes trashed files and refreshes file queries', async () => {

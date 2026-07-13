@@ -1,13 +1,21 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
-import { AlertTriangle, FileText, History, ShieldCheck } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import {
+  AlertTriangle,
+  FileText,
+  History,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { PageSectionHeader } from '@/components/layout/page-section-header';
 import { ToolCatalogGrid } from '@/components/tools/tool-catalog-grid';
+import { Button } from '@/components/ui/button';
 import { recommendedTools, type ToolGroup } from '@/lib/tools/tool-metadata';
-import { useFiles } from '@/hooks/api/use-files';
-import { useTasks, type TaskType } from '@/hooks/api/use-tasks';
+import { useAccountSummary } from '@/hooks/api/use-account';
+import type { TaskTypeValue } from '@/hooks/api/types';
+import { formatBytes } from '@/lib/format';
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString(undefined, {
@@ -22,15 +30,12 @@ function shortId(id: string) {
 
 export default function DashboardPage() {
   const t = useTranslations('Dashboard');
-  const tasksQuery = useTasks({ page: 1, limit: 5 });
-  const filesQuery = useFiles({ page: 1, limit: 5 });
-
-  const tasks = tasksQuery.data?.tasks ?? [];
-  const files = filesQuery.data?.files ?? [];
-  const failedTasks = tasks.filter(task => task.status === 'failed');
-  const activeTasks = tasks.filter(
-    task => task.status === 'pending' || task.status === 'processing'
-  );
+  const tUnits = useTranslations('Common.units');
+  const locale = useLocale();
+  const summaryQuery = useAccountSummary();
+  const summary = summaryQuery.data;
+  const tasks = summary?.recentTasks ?? [];
+  const files = summary?.recentFiles ?? [];
 
   const recommendedGroup = [
     {
@@ -40,6 +45,57 @@ export default function DashboardPage() {
       tools: recommendedTools,
     },
   ] satisfies ToolGroup[];
+
+  if (summaryQuery.isError) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-8">
+        <PageSectionHeader title={t('title')} description={t('welcome')} />
+        <section
+          role="alert"
+          className="flex flex-col gap-4 rounded-md border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+            <p>{t('errors.summaryLoad')}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void summaryQuery.refetch()}
+          >
+            <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
+            {t('actions.retry')}
+          </Button>
+        </section>
+        <ToolCatalogGrid groups={recommendedGroup} />
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-8">
+        <PageSectionHeader title={t('title')} description={t('welcome')} />
+        <div role="status" aria-label={t('loading')} className="space-y-6">
+          <section className="grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-3">
+            {[0, 1, 2].map(item => (
+              <div key={item} className="space-y-3 bg-card p-4">
+                <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                <div className="h-7 w-16 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-40 max-w-full animate-pulse rounded bg-muted" />
+              </div>
+            ))}
+          </section>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="h-40 animate-pulse rounded-md bg-muted" />
+            <div className="h-40 animate-pulse rounded-md bg-muted" />
+          </div>
+        </div>
+        <ToolCatalogGrid groups={recommendedGroup} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -57,7 +113,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <p className="text-2xl font-medium tabular-nums">
-            {activeTasks.length}
+            {summary.activeTaskCount}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {t('empty.activeTasks')}
@@ -74,7 +130,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <p className="text-2xl font-medium tabular-nums">
-            {failedTasks.length}
+            {summary.failedTaskCount}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {t('empty.failedTasks')}
@@ -90,9 +146,11 @@ export default function DashboardPage() {
               {t('sections.storage')}
             </span>
           </div>
-          <p className="text-sm font-medium">{t('empty.storageTitle')}</p>
+          <p className="text-sm font-medium">
+            {formatBytes(summary.activeFileBytes, tUnits, locale)}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t('empty.storage')}
+            {t('totalFiles')}: {summary.activeFileCount}
           </p>
         </div>
       </section>
@@ -128,7 +186,7 @@ export default function DashboardPage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium">
-                        {t(`taskTypes.${task.type as TaskType}`)}
+                        {t(`taskTypes.${task.type as TaskTypeValue}`)}
                       </p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
                         {shortId(task.id)} / {formatDate(task.createdAt)}

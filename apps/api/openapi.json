@@ -720,6 +720,32 @@
           "health"
         ]
       }
+    },
+    "/account/summary": {
+      "get": {
+        "operationId": "AccountController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSummaryDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
     }
   },
   "info": {
@@ -910,6 +936,72 @@
         },
         "required": [
           "ids"
+        ]
+      },
+      "AccountRecentFileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "originalSize": {
+            "type": "number"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "originalSize",
+          "mimeType",
+          "createdAt"
+        ]
+      },
+      "AccountSummaryDto": {
+        "type": "object",
+        "properties": {
+          "activeTaskCount": {
+            "type": "number"
+          },
+          "failedTaskCount": {
+            "type": "number"
+          },
+          "activeFileCount": {
+            "type": "number"
+          },
+          "activeFileBytes": {
+            "type": "number"
+          },
+          "recentTasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskResponseDto"
+            }
+          },
+          "recentFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountRecentFileDto"
+            }
+          }
+        },
+        "required": [
+          "activeTaskCount",
+          "failedTaskCount",
+          "activeFileCount",
+          "activeFileBytes",
+          "recentTasks",
+          "recentFiles"
         ]
       }
     }

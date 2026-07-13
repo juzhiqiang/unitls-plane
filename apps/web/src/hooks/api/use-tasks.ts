@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import type { CreateTaskDto, TaskResponseDto, TaskStatusDto, TaskTypeValue } from './types';
+import { accountQueryKeys } from './query-keys';
 
 export type TaskType = TaskTypeValue;
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -10,6 +11,13 @@ export interface TaskQuery {
   limit?: number;
   status?: TaskStatus;
   type?: TaskType;
+}
+
+function refreshTaskQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  queryClient.invalidateQueries({
+    queryKey: accountQueryKeys.summaries(),
+  });
 }
 
 export function useTasks(query?: TaskQuery) {
@@ -73,7 +81,7 @@ export function useCreateTask() {
       return data as TaskResponseDto;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      refreshTaskQueries(queryClient);
     },
   });
 }
@@ -89,7 +97,7 @@ export function useRetryTask() {
       return data as TaskResponseDto;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      refreshTaskQueries(queryClient);
     },
   });
 }

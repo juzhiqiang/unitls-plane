@@ -1,8 +1,15 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../../../messages/en.json';
+import { InstallProvider } from '@/components/pwa/install-provider';
 import SettingsPage from '../page';
 
 const mocks = vi.hoisted(() => ({
@@ -11,7 +18,21 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   refresh: vi.fn(),
   signOut: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
+
+type InstallOutcome = 'accepted' | 'dismissed';
+
+class MockBeforeInstallPromptEvent extends Event {
+  prompt = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+  userChoice: Promise<{ outcome: InstallOutcome; platform: string }>;
+
+  constructor(outcome: InstallOutcome = 'accepted') {
+    super('beforeinstallprompt', { cancelable: true });
+    this.userChoice = Promise.resolve({ outcome, platform: 'web' });
+  }
+}
 
 vi.mock('@/lib/auth-client', () => ({
   useSession: () => ({
@@ -54,15 +75,23 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 vi.mock('sonner', () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: mocks.toastError, success: mocks.toastSuccess },
 }));
 
 function renderPage() {
   return render(
     <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
-      <SettingsPage />
+      <InstallProvider>
+        <SettingsPage />
+      </InstallProvider>
     </NextIntlClientProvider>
   );
+}
+
+function dispatchInstallEvent(event: MockBeforeInstallPromptEvent) {
+  act(() => {
+    window.dispatchEvent(event);
+  });
 }
 
 function enterConfirmation(value: string) {
@@ -87,6 +116,90 @@ describe('SettingsPage account controls', () => {
 
     expect(screen.getByText('Free beta')).toBeInTheDocument();
     expect(screen.queryByText(/^free$/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show app installation when the browser has no install event', () => {
+    renderPage();
+
+    expect(
+      screen.queryByRole('button', { name: 'Install app' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows app installation after the browser install event', () => {
+    renderPage();
+
+    dispatchInstallEvent(new MockBeforeInstallPromptEvent());
+
+    expect(
+      screen.getByRole('button', { name: 'Install app' })
+    ).toBeInTheDocument();
+  });
+
+  it('reports success only when installation is accepted', async () => {
+    renderPage();
+    const event = new MockBeforeInstallPromptEvent('accepted');
+    dispatchInstallEvent(event);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install app' }));
+
+    await waitFor(() => {
+      expect(event.prompt).toHaveBeenCalledTimes(1);
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('App installed');
+    });
+  });
+
+  it('does not report success when installation is dismissed', async () => {
+    renderPage();
+    const event = new MockBeforeInstallPromptEvent('dismissed');
+    dispatchInstallEvent(event);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install app' }));
+
+    await waitFor(() => expect(event.prompt).toHaveBeenCalledTimes(1));
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('App installed');
+  });
+
+  it('reports installation failure and returns when the browser offers a new event', async () => {
+    renderPage();
+    const failedEvent = new MockBeforeInstallPromptEvent();
+    failedEvent.prompt.mockRejectedValue(new Error('prompt failed'));
+    dispatchInstallEvent(failedEvent);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install app' }));
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'App installation could not start. Try again when the install option is available.'
+      );
+    });
+
+    const retryEvent = new MockBeforeInstallPromptEvent();
+    dispatchInstallEvent(retryEvent);
+    fireEvent.click(screen.getByRole('button', { name: 'Install app' }));
+
+    await waitFor(() => expect(retryEvent.prompt).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not prompt twice after a rapid double click', async () => {
+    let resolvePrompt: (() => void) | undefined;
+    renderPage();
+    const event = new MockBeforeInstallPromptEvent();
+    event.prompt.mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          resolvePrompt = resolve;
+        })
+    );
+    dispatchInstallEvent(event);
+
+    const installButton = screen.getByRole('button', { name: 'Install app' });
+    fireEvent.click(installButton);
+    fireEvent.click(installButton);
+
+    expect(event.prompt).toHaveBeenCalledTimes(1);
+    resolvePrompt?.();
+    await waitFor(() => expect(event.prompt).toHaveBeenCalledTimes(1));
   });
 
   it('shows export progress then restores an enabled button after download starts', async () => {

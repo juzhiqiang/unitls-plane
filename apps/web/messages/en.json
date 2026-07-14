@@ -321,6 +321,14 @@
   "Settings": {
     "title": "Settings",
     "subtitle": "Manage your profile and account",
+    "application": {
+      "title": "Application",
+      "installDescription": "Install Utils Plane for direct access from this device.",
+      "installAction": "Install app",
+      "installing": "Opening installer...",
+      "installed": "App installed",
+      "installFailed": "App installation could not start. Try again when the install option is available."
+    },
     "profile": {
       "title": "Profile",
       "avatarUpload": "Upload avatar",

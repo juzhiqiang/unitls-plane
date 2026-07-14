@@ -10,7 +10,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/providers/query-provider';
-import { InstallPrompt } from '@/components/pwa/install-prompt';
+import { InstallProvider } from '@/components/pwa/install-provider';
 import { Toaster } from 'sonner';
 import { routing } from '@/i18n/routing';
 import type { Locale } from '@/i18n/routing';
@@ -104,11 +104,12 @@ export default async function LocaleLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <QueryProvider>
-              {children}
-              <InstallPrompt />
-              <Toaster position="bottom-right" richColors />
-            </QueryProvider>
+            <InstallProvider>
+              <QueryProvider>
+                {children}
+                <Toaster position="bottom-right" richColors />
+              </QueryProvider>
+            </InstallProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

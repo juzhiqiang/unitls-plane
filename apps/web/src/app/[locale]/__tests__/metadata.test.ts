@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('geist/font/sans', () => ({
@@ -37,8 +39,8 @@ vi.mock('@/components/providers/query-provider', () => ({
   QueryProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock('@/components/pwa/install-prompt', () => ({
-  InstallPrompt: () => null,
+vi.mock('@/components/pwa/install-provider', () => ({
+  InstallProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('sonner', () => ({
@@ -85,6 +87,16 @@ describe('locale layout PWA metadata', () => {
 
   it('exposes the PWA theme color through viewport metadata', () => {
     expect(viewport.themeColor).toBe('#0a0a0c');
+  });
+
+  it('provides install capability without rendering a global prompt', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/app/[locale]/layout.tsx'),
+      'utf8'
+    );
+
+    expect(source).toMatch(/<InstallProvider>\s*<QueryProvider>/);
+    expect(source).not.toContain('InstallPrompt');
   });
 
   it('does not point primary tool journeys at missing documentation routes', () => {

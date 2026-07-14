@@ -321,6 +321,14 @@
   "Settings": {
     "title": "设置",
     "subtitle": "管理你的个人资料和账号",
+    "application": {
+      "title": "应用",
+      "installDescription": "安装 Utils Plane，以便从当前设备直接打开。",
+      "installAction": "安装应用",
+      "installing": "正在打开安装程序...",
+      "installed": "应用已安装",
+      "installFailed": "无法启动应用安装，请在安装选项再次可用时重试。"
+    },
     "profile": {
       "title": "个人资料",
       "avatarUpload": "上传头像",

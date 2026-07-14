@@ -15,6 +15,7 @@ import {
 } from '@/hooks/api/use-account';
 import { useUploadFile, type FileRecord } from '@/hooks/api/use-files';
 import { useRouter } from '@/i18n/navigation';
+import { useInstallApp } from '@/components/pwa/install-provider';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,16 +30,19 @@ const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 export default function SettingsPage() {
   const t = useTranslations('Settings');
   const router = useRouter();
+  const { canInstall, install } = useInstallApp();
   const { data: session, isPending, refetch } = useSession();
   const uploadFile = useUploadFile();
   const deleteAccount = useDeleteAccount();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const deletionInFlightRef = useRef(false);
+  const installInFlightRef = useRef(false);
 
   const [name, setName] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [nameInitialized, setNameInitialized] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [installingApp, setInstallingApp] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -170,6 +174,24 @@ export default function SettingsPage() {
       setExportStatus('success');
     } catch {
       setExportStatus('failed');
+    }
+  };
+
+  const handleInstallApp = async () => {
+    if (installInFlightRef.current) return;
+
+    installInFlightRef.current = true;
+    setInstallingApp(true);
+    try {
+      const outcome = await install();
+      if (outcome === 'accepted') {
+        toast.success(t('application.installed'));
+      }
+    } catch {
+      toast.error(t('application.installFailed'));
+    } finally {
+      installInFlightRef.current = false;
+      setInstallingApp(false);
     }
   };
 
@@ -350,6 +372,31 @@ export default function SettingsPage() {
             </dd>
           </div>
         </dl>
+
+        {canInstall && (
+          <>
+            <Separator className="my-4" />
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">{t('application.title')}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t('application.installDescription')}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleInstallApp}
+                disabled={installingApp}
+              >
+                <Download className="h-4 w-4" />
+                {installingApp
+                  ? t('application.installing')
+                  : t('application.installAction')}
+              </Button>
+            </div>
+          </>
+        )}
 
         <Separator className="my-4" />
         <div className="space-y-3">

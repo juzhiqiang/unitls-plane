@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertProductionSupportEmail,
   getPublicSiteBaseUrl,
@@ -14,13 +14,6 @@ describe('public site support email', () => {
     expect(getSupportEmail('  support@example.com  ')).toBe(
       'support@example.com'
     );
-  });
-
-  it('normalizes the configured public base URL', () => {
-    expect(getPublicSiteBaseUrl(' https://tools.example.com/// ')).toBe(
-      'https://tools.example.com'
-    );
-    expect(getPublicSiteBaseUrl('')).toBe('http://localhost:3000');
   });
 
   it('uses the local development address when the environment is empty', () => {
@@ -59,6 +52,51 @@ describe('public site support email', () => {
   ])('rejects a non-production support address: %s', email => {
     expect(() => assertProductionSupportEmail(email)).toThrow(
       'NEXT_PUBLIC_SUPPORT_EMAIL'
+    );
+  });
+});
+
+describe('public site base URL', () => {
+  const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  beforeEach(() => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+  });
+
+  afterEach(() => {
+    if (originalAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+    }
+  });
+
+  it.each([undefined, '', '   '])(
+    'uses the local address when configuration is %s',
+    configuredUrl => {
+      expect(getPublicSiteBaseUrl(configuredUrl)).toBe('http://localhost:3000');
+    }
+  );
+
+  it('normalizes a valid absolute HTTP(S) URL', () => {
+    expect(getPublicSiteBaseUrl(' https://Tools.Example.COM:443/// ')).toBe(
+      'https://tools.example.com'
+    );
+  });
+
+  it.each([
+    'ftp://example.com',
+    'javascript:alert(1)',
+    '/relative-path',
+    'example.com',
+    'not a URL',
+    'https://[invalid',
+    'https://user:password@example.com',
+    'https://example.com?source=beta',
+    'https://example.com#section',
+  ])('rejects an unsafe or invalid public URL: %s', configuredUrl => {
+    expect(() => getPublicSiteBaseUrl(configuredUrl)).toThrow(
+      'NEXT_PUBLIC_APP_URL'
     );
   });
 });

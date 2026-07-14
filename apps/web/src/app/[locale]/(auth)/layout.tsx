@@ -1,7 +1,15 @@
 import { Link } from '@/i18n/navigation';
+import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { BrandMark } from '@/components/brand/brand-mark';
 import { PointerSpotlight } from '@/components/effects/pointer-spotlight';
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function AuthLayout({
   children,

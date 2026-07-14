@@ -28,5 +28,33 @@ export function getSupportEmail(
 export function getPublicSiteBaseUrl(
   configuredUrl = process.env.NEXT_PUBLIC_APP_URL
 ): string {
-  return (configuredUrl?.trim() || DEFAULT_APP_URL).replace(/\/+$/, '');
+  const normalizedUrl = configuredUrl?.trim();
+
+  if (!normalizedUrl) {
+    return DEFAULT_APP_URL;
+  }
+
+  let publicUrl: URL;
+
+  try {
+    publicUrl = new URL(normalizedUrl);
+  } catch {
+    throw new Error(
+      'NEXT_PUBLIC_APP_URL must be an absolute HTTP(S) URL without credentials, query, or hash.'
+    );
+  }
+
+  if (
+    !['http:', 'https:'].includes(publicUrl.protocol) ||
+    publicUrl.username ||
+    publicUrl.password ||
+    publicUrl.search ||
+    publicUrl.hash
+  ) {
+    throw new Error(
+      'NEXT_PUBLIC_APP_URL must be an absolute HTTP(S) URL without credentials, query, or hash.'
+    );
+  }
+
+  return publicUrl.toString().replace(/\/+$/, '');
 }

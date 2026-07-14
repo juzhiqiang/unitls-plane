@@ -1,40 +1,48 @@
-import { MetadataRoute } from 'next';
+import type { MetadataRoute } from 'next';
 import { routing } from '@/i18n/routing';
+import { getPublicSiteBaseUrl } from '@/lib/public-site';
+import { allTools } from '@/lib/tools/tool-metadata';
 
-const ROUTES: Array<{
-  path: string;
-  changeFrequency: 'weekly' | 'monthly';
-  priority: number;
-}> = [
-  { path: '', changeFrequency: 'weekly', priority: 1 },
-  { path: '/image', changeFrequency: 'monthly', priority: 0.8 },
-  { path: '/pdf', changeFrequency: 'monthly', priority: 0.8 },
-  { path: '/font', changeFrequency: 'monthly', priority: 0.8 },
-  { path: '/login', changeFrequency: 'monthly', priority: 0.5 },
-  { path: '/register', changeFrequency: 'monthly', priority: 0.5 },
-];
+const PUBLIC_PATHS = Array.from(
+  new Set([
+    '',
+    '/image',
+    '/pdf',
+    '/font',
+    '/privacy',
+    '/terms',
+    '/beta',
+    ...allTools.map(tool => tool.href),
+  ])
+);
+
+const CATEGORY_PATHS = new Set(['/image', '/pdf', '/font']);
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = getPublicSiteBaseUrl();
   const now = new Date();
 
-  return ROUTES.flatMap((route) =>
-    routing.locales.map((locale) => {
+  return PUBLIC_PATHS.flatMap(path =>
+    routing.locales.map(locale => {
       const languages = Object.fromEntries(
-        routing.locales.map((l) => [l, `${baseUrl}/${l}${route.path}`]),
+        routing.locales.map(language => [
+          language,
+          `${baseUrl}/${language}${path}`,
+        ])
       );
+
       return {
-        url: `${baseUrl}/${locale}${route.path}`,
+        url: `${baseUrl}/${locale}${path}`,
         lastModified: now,
-        changeFrequency: route.changeFrequency,
-        priority: route.priority,
+        changeFrequency: path === '' ? 'weekly' : 'monthly',
+        priority: path === '' ? 1 : CATEGORY_PATHS.has(path) ? 0.8 : 0.7,
         alternates: {
           languages: {
             ...languages,
-            'x-default': `${baseUrl}/${routing.defaultLocale}${route.path}`,
+            'x-default': `${baseUrl}/${routing.defaultLocale}${path}`,
           },
         },
       };
-    }),
+    })
   );
 }

@@ -2,6 +2,7 @@ import { Link } from '@/i18n/navigation';
 import { getTranslations } from 'next-intl/server';
 import { BrandMark } from '@/components/brand/brand-mark';
 import { MarketingNav } from '@/components/layout/marketing-nav';
+import { getSupportEmail } from '@/lib/public-site';
 
 export default async function MarketingLayout({
   children,
@@ -9,6 +10,7 @@ export default async function MarketingLayout({
   children: React.ReactNode;
 }) {
   const t = await getTranslations('Marketing');
+  const supportEmail = getSupportEmail();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -48,32 +50,35 @@ export default async function MarketingLayout({
               </span>
             </div>
 
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a
-                href="/docs"
-                className="hover:text-foreground transition-colors"
-              >
-                {t('footer.docs')}
-              </a>
-              <a
-                href="/github"
-                className="hover:text-foreground transition-colors"
-              >
-                {t('footer.github')}
-              </a>
-              <a
-                href="/terms"
-                className="hover:text-foreground transition-colors"
-              >
-                {t('footer.terms')}
-              </a>
-              <a
+            <nav
+              aria-label={t('footer.navigation')}
+              className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-muted-foreground"
+            >
+              <Link
                 href="/privacy"
                 className="hover:text-foreground transition-colors"
               >
                 {t('footer.privacy')}
+              </Link>
+              <Link
+                href="/terms"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.terms')}
+              </Link>
+              <Link
+                href="/beta"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.beta')}
+              </Link>
+              <a
+                href={`mailto:${supportEmail}`}
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.support')}
               </a>
-            </div>
+            </nav>
           </div>
         </div>
       </footer>

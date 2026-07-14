@@ -42,4 +42,15 @@ describe('middleware auth routes', () => {
       expect(response.headers.get('location')).toBeNull();
     }
   });
+
+  it('allows unauthenticated users to read public trust pages', () => {
+    for (const locale of ['zh', 'en']) {
+      for (const page of ['privacy', 'terms', 'beta']) {
+        const response = middleware(request(`/${locale}/${page}`));
+
+        expect(response.status).not.toBe(307);
+        expect(response.headers.get('location')).toBeNull();
+      }
+    }
+  });
 });

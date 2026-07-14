@@ -15,6 +15,9 @@ const PUBLIC_PATHS = [
   '/image',
   '/pdf',
   '/font',
+  '/privacy',
+  '/terms',
+  '/beta',
   '/api/auth',
 ];
 

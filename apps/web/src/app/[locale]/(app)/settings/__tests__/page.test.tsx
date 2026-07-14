@@ -82,6 +82,13 @@ describe('SettingsPage account controls', () => {
     mocks.signOut.mockResolvedValue(undefined);
   });
 
+  it('shows the localized free beta label instead of the plan id', () => {
+    renderPage();
+
+    expect(screen.getByText('Free beta')).toBeInTheDocument();
+    expect(screen.queryByText(/^free$/i)).not.toBeInTheDocument();
+  });
+
   it('shows export progress then restores an enabled button after download starts', async () => {
     let finishDownload: (() => void) | undefined;
     mocks.downloadAccountExport.mockImplementation(

@@ -35,10 +35,11 @@
       "defaultUser": "User"
     },
     "footer": {
-      "docs": "Docs",
-      "github": "GitHub",
       "terms": "Terms",
-      "privacy": "Privacy"
+      "privacy": "Privacy",
+      "beta": "Beta notice",
+      "support": "Support",
+      "navigation": "Public information"
     },
     "hero": {
       "titleLine1": "Files Evolve",
@@ -80,8 +81,8 @@
         "description": "Processing location, retention rules, and sign-in requirements stay visible in the interface."
       },
       "free": {
-        "title": "Ready for commercial workflows",
-        "description": "Signed-in users can grow into task history, account files, higher limits, and server-side capabilities without changing the flow."
+        "title": "Signed-in enhanced capabilities",
+        "description": "Signed-in users can use task history, account files, higher limits, and server-side capabilities as currently offered during the beta."
       }
     },
     "cta": {
@@ -112,7 +113,7 @@
       },
       "retention": {
         "browser-session": "Browser session only",
-        "server-24h": "Removed after 24 hours",
+        "server-24h": "Expires after 24 hours",
         "account-files": "Saved to account files"
       },
       "login": {
@@ -181,7 +182,7 @@
       },
       "imageAnimation": {
         "title": "GIF / APNG maker",
-        "description": "Create GIFs from image sequences, with APNG and advanced compression for signed-in commercial users."
+        "description": "Create GIFs from image sequences, with APNG and advanced compression available after sign-in."
       },
       "imageBatch": {
         "title": "Batch image output",
@@ -345,6 +346,10 @@
       "title": "Account",
       "createdAt": "Member since",
       "plan": "Current plan",
+      "planValues": {
+        "free": "Free beta",
+        "enhanced": "Signed-in enhanced capabilities"
+      },
       "emailVerified": "Email status",
       "verified": "Verified",
       "unverified": "Unverified",
@@ -484,8 +489,8 @@
   },
   "ImageStitch": {
     "title": "Long image stitch",
-    "description": "Build product-page and social long images locally. Sign in to unlock commercial presets for batch widths and brand footers.",
-    "dropzoneHint": "JPG / PNG / WebP / AVIF, free tier up to 10 MB per file",
+    "description": "Build product-page and social long images locally. Sign in to use enhanced batch widths and brand footer options.",
+    "dropzoneHint": "JPG / PNG / WebP / AVIF, beta limit up to 10 MB per file",
     "processingLabel": "Local stitch",
     "outputWidth": "Output width",
     "customWidth": "Custom width",
@@ -509,16 +514,16 @@
     "processing": "Stitching...",
     "resultTitle": "Long image ready",
     "batchResultTitle": "{count} long images ready",
-    "loginTitle": "Commercial mode",
-    "loginDescription": "Sign in to prepare batch widths, brand footers, higher limits, and future paid-plan features.",
-    "loginAction": "Sign in for commercial mode",
-    "commercialTitle": "Commercial options",
-    "commercialDescription": "Available to signed-in users now, ready to map to paid plans later.",
+    "loginTitle": "Signed-in enhanced options",
+    "loginDescription": "Sign in to use batch widths, brand footers, and higher processing limits.",
+    "loginAction": "Sign in for enhanced options",
+    "commercialTitle": "Enhanced options",
+    "commercialDescription": "Available to signed-in users during the beta.",
     "batchWidths": "Batch widths",
     "batchWidthsHint": "Comma-separated widths, for example 750,1080",
     "brandFooter": "Brand footer",
     "brandFooterPlaceholder": "Brand / contact / copyright",
-    "brandFooterHint": "Reserved for commercial templates; first release keeps the canvas clean.",
+    "brandFooterHint": "Brand footers are a signed-in enhancement; the default canvas stays clean.",
     "limits": {
       "maxFiles": "Current plan supports up to {count} images.",
       "maxFileSize": "Some images exceed the current plan file size limit.",
@@ -559,11 +564,11 @@
     "filenamePlaceholder": "animated-image",
     "targetWidth": "Target width",
     "targetFps": "Target FPS",
-    "commercialTitle": "Commercial animation tools",
-    "commercialDescription": "Signed-in users get APNG, more frames, larger output, and advanced compression controls. Future paid plans reuse this entitlement layer.",
-    "loginTitle": "Sign in for commercial animation tools",
-    "loginDescription": "Free users can create GIFs. Signed-in users unlock APNG, advanced compression, and higher limits.",
-    "loginAction": "Sign in for commercial",
+    "commercialTitle": "Enhanced animation options",
+    "commercialDescription": "Signed-in users get APNG, more frames, larger output, and advanced compression controls.",
+    "loginTitle": "Sign in for enhanced animation options",
+    "loginDescription": "Signed-out users can create GIFs. Signed-in users unlock APNG, advanced compression, and higher limits.",
+    "loginAction": "Sign in for enhancements",
     "convertTitle": "Conversion will reuse the animation pipeline",
     "convertDescription": "The first version prioritizes creation and compression. GIF/APNG/WebP animation conversion can expand here later.",
     "start": "Generate animation",
@@ -578,7 +583,7 @@
     "limits": {
       "needAtLeastTwo": "At least two images are required to create an animation.",
       "gifOnly": "The first compression version supports GIF files only.",
-      "apngLogin": "APNG is available to signed-in commercial users.",
+      "apngLogin": "APNG is available after sign-in.",
       "invalidSize": "Enter a valid canvas size.",
       "processingFailed": "Animation processing failed. Try fewer frames or a smaller size."
     }
@@ -1044,6 +1049,212 @@
       "recommended": "Recommended",
       "serverRequiresLogin": "Sign in to use server processing, task history, and account file storage.",
       "loginToUseServer": "Sign in to use server processing"
+    }
+  },
+  "PublicSite": {
+    "privacy": {
+      "metadata": {
+        "title": "Privacy Policy | Utils Plane",
+        "description": "Learn how Utils Plane handles local processing, server processing, retention, account rights, and network risks during the public beta."
+      },
+      "title": "Privacy Policy",
+      "effectiveDate": "Effective date: July 14, 2026",
+      "intro": "This policy explains how Utils Plane handles files, accounts, and technical data during the public beta. Tools may run locally in your browser or on the server; review the processing location and retention notice before you begin.",
+      "operatorLabel": "Operator",
+      "operator": "Utils Plane 项目团队",
+      "supportLabel": "Support email",
+      "sections": [
+        {
+          "id": "local-processing",
+          "title": "1. Local browser processing",
+          "paragraphs": [
+            "Tools marked as local read and generate files in the current browser. The file contents are not intentionally uploaded to the Utils Plane server for that processing. Your browser may still use memory, temporary cache, or the downloads folder to complete the operation.",
+            "Closing the page, clearing site data, or running short of browser resources can remove results that you have not downloaded. Save outputs you need promptly."
+          ]
+        },
+        {
+          "id": "server-processing",
+          "title": "2. Server processing",
+          "paragraphs": [
+            "When you explicitly select server processing, or a task can only run on the server, input files, processing settings, and output files are transferred to the server. The interface identifies sign-in requirements, task status, and retention behavior.",
+            "Signed-in users can save files and task history to an account. Anonymous processing does not automatically become an account file."
+          ]
+        },
+        {
+          "id": "account-cookies",
+          "title": "3. Accounts and authentication cookies",
+          "paragraphs": [
+            "Sign-in uses Better Auth to manage sessions. Essential authentication cookies keep you signed in, reduce session misuse, and complete account requests. Disabling these cookies prevents sign-in features from working correctly.",
+            "We also process the registration email, display name, email verification status, and records needed to complete account actions."
+          ]
+        },
+        {
+          "id": "retention",
+          "title": "4. File retention and deletion",
+          "items": [
+            "Inputs and outputs for anonymous server tasks expire after 24 hours and stop being accessible; a scheduled cleanup job then deletes expired objects.",
+            "Account files remain until the user deletes them, closes the account, or the service ends processing.",
+            "Account files moved to trash remain for 30 days and are then permanently deleted; users can permanently delete them earlier.",
+            "Files produced by local browser processing are retained by the user's device and browser."
+          ]
+        },
+        {
+          "id": "account-rights",
+          "title": "5. Export, deletion, and account closure",
+          "paragraphs": [
+            "Signed-in users can download a ZIP data export from Settings. It includes the profile, tasks, and active or trashed files.",
+            "Permanent account closure deletes the profile, sessions, tasks, and all active or trashed files and cannot be undone. When deletion takes time, the interface shows its state or a retry action."
+          ]
+        },
+        {
+          "id": "telemetry-ai",
+          "title": "6. Observability data and optional AI",
+          "paragraphs": [
+            "The current beta does not integrate product analytics, error tracking, or session replay services. Basic server logs may still contain request time, path, status code, and source IP for operation and troubleshooting, with retention limited according to operational needs.",
+            "AI features are optional. Relevant inputs are sent to the configured AI service only when the user actively selects that mode. Review that service's handling terms and do not submit material that is unsuitable for third-party processing."
+          ]
+        },
+        {
+          "id": "network-warning",
+          "title": "7. IP address and HTTP access warning",
+          "paragraphs": [
+            "Some beta deployments may be reached through an IP address over plain HTTP. HTTP does not protect content from observation or modification on the same network and must not be treated as a secure channel for production or sensitive material.",
+            "When accessing the service through IP + HTTP, do not upload identity, financial, medical, confidential business, or other sensitive content. Use only test material whose exposure risk you can accept, on a network you trust."
+          ]
+        },
+        {
+          "id": "operator-support",
+          "title": "8. Operator and contact",
+          "paragraphs": [
+            "Utils Plane is operated by the project team listed below. Contact the support address below with questions about data exports, deletion, accounts, or this policy, and do not attach sensitive files to the request."
+          ]
+        }
+      ]
+    },
+    "terms": {
+      "metadata": {
+        "title": "Terms of Service | Utils Plane",
+        "description": "Review the public beta terms for acceptable use, content responsibility, result verification, availability, and termination."
+      },
+      "title": "Terms of Service",
+      "effectiveDate": "Effective date: July 14, 2026",
+      "intro": "By using Utils Plane, you agree to follow these public beta terms. If you do not agree, stop using the service and delete any data you have saved.",
+      "operatorLabel": "Operator",
+      "operator": "Utils Plane 项目团队",
+      "supportLabel": "Support email",
+      "sections": [
+        {
+          "id": "beta-service",
+          "title": "1. Beta service",
+          "paragraphs": [
+            "Utils Plane is currently offered as a free public beta. Tools, limits, signed-in enhancements, and processing methods may change as testing continues and do not constitute a production-service commitment.",
+            "Processing location, retention, and sign-in notices describe current behavior. We will update the relevant interface or terms when important behavior changes."
+          ]
+        },
+        {
+          "id": "content-responsibility",
+          "title": "2. Content and permission responsibility",
+          "paragraphs": [
+            "You must have the rights and permissions needed to upload, edit, convert, export, or share each file. You are responsible for the content, processing instructions, and use of outputs.",
+            "Do not treat the service as your only backup. Keep original files and any independent copies you need before processing."
+          ]
+        },
+        {
+          "id": "prohibited-use",
+          "title": "3. Prohibited use",
+          "items": [
+            "Processing or distributing unlawful, infringing, fraudulent, harassing, or privacy-invasive content.",
+            "Uploading malicious code, bypassing access controls, probing vulnerabilities, disrupting the service, or consuming abnormal resources.",
+            "Impersonating others, fabricating authorization, or using output for misleading identity, qualification, or record claims.",
+            "Any other activity that violates applicable law, regulatory requirements, or third-party terms."
+          ]
+        },
+        {
+          "id": "result-review",
+          "title": "4. Review of results",
+          "paragraphs": [
+            "Compression, format conversion, text extraction, document generation, AI assistance, and other automated processing can produce missing, misplaced, distorted, or inaccurate output.",
+            "You must review results before publishing, submitting, printing, signing, or using them for important decisions, and use professional tools or human review where appropriate."
+          ]
+        },
+        {
+          "id": "availability",
+          "title": "5. Availability and changes",
+          "paragraphs": [
+            "The beta is provided as currently available and may be interrupted by maintenance, capacity, dependent services, browser compatibility, or security response. We do not promise continuous availability, error-free operation, or fitness for a specific purpose.",
+            "To the extent permitted by law, manage risk by keeping originals, downloading results promptly, and avoiding irreplaceable content."
+          ]
+        },
+        {
+          "id": "termination",
+          "title": "6. Suspension and termination",
+          "paragraphs": [
+            "We may limit, suspend, or terminate access for violations of these terms, harm to the service or others, abnormal load, or actions required by law.",
+            "You may stop using the service and export data or close your account in Settings. Deletion after termination follows the Privacy Policy and interface notices."
+          ]
+        },
+        {
+          "id": "operator-support",
+          "title": "7. Operator and support",
+          "paragraphs": [
+            "The service is operated by the project team listed below. Contact the support address below with questions about these terms, account restrictions, or the beta."
+          ]
+        }
+      ]
+    },
+    "beta": {
+      "metadata": {
+        "title": "Public Beta Notice | Utils Plane",
+        "description": "Review Utils Plane's free local tools, signed-in enhancements, retention rules, and IP + HTTP risk notice."
+      },
+      "title": "Public Beta Notice",
+      "effectiveDate": "Updated: July 14, 2026",
+      "intro": "Utils Plane is publicly testing real file-processing workflows. This page summarizes the current free capabilities, signed-in enhancements, and boundaries to consider while using the beta.",
+      "operatorLabel": "Operator",
+      "operator": "Utils Plane 项目团队",
+      "supportLabel": "Support email",
+      "sections": [
+        {
+          "id": "local-tools",
+          "title": "1. Free local tools",
+          "paragraphs": [
+            "Image, PDF, and document tools marked as local can be tested in the browser for free without signing in. File contents are not intentionally uploaded to the Utils Plane server for local processing.",
+            "Local processing is limited by device performance, browser memory, and compatibility. Download results before leaving the page."
+          ]
+        },
+        {
+          "id": "signed-in-enhancements",
+          "title": "2. Signed-in enhancements",
+          "paragraphs": [
+            "After signing in, users can access task history, account files, server processing, higher limits, and selected advanced formats or batch options. These capabilities are available as currently shown during the beta and may change.",
+            "Signed-in enhancements describe beta access and do not promise a future service model or long-term availability."
+          ]
+        },
+        {
+          "id": "retention",
+          "title": "3. Retention and deletion",
+          "items": [
+            "Inputs and outputs for anonymous server tasks expire after 24 hours and stop being accessible; a scheduled cleanup job then deletes the expired files.",
+            "Account files remain until deletion or account closure; trashed files are permanently deleted after 30 days.",
+            "Settings provides a ZIP data export and permanent account closure controls."
+          ]
+        },
+        {
+          "id": "network-warning",
+          "title": "4. Sensitive content and network warning",
+          "paragraphs": [
+            "If the current deployment uses an IP address over HTTP, transmission is not protected by HTTPS and is unsuitable for production or sensitive material. Do not upload identity, financial, medical, confidential business, or other content whose exposure you cannot accept.",
+            "Use test material on a trusted network and confirm whether a file leaves the browser by checking each tool's processing-location notice."
+          ]
+        },
+        {
+          "id": "support",
+          "title": "5. Feedback and support",
+          "paragraphs": [
+            "Contact the support address below about processing failures, accounts, data deletion, or unclear boundaries. Feedback may include reproduction steps and non-sensitive examples, but must not include real sensitive files."
+          ]
+        }
+      ]
     }
   },
   "Format": {},

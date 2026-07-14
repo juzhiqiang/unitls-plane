@@ -76,6 +76,10 @@ export default function SettingsPage() {
 
   const user = session.user;
   const userPlan = (user as { plan?: string }).plan ?? 'free';
+  const planLabel =
+    userPlan === 'free'
+      ? t('account.planValues.free')
+      : t('account.planValues.enhanced');
   const initial = (user.name || user.email || 'U').charAt(0).toUpperCase();
 
   const handleAvatarPick = () => fileInputRef.current?.click();
@@ -325,7 +329,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center justify-between">
             <dt className="text-muted-foreground">{t('account.plan')}</dt>
-            <dd className="capitalize">{userPlan}</dd>
+            <dd>{planLabel}</dd>
           </div>
           <div className="flex items-center justify-between">
             <dt className="text-muted-foreground">

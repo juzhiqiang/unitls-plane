@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import en from '../../../../../messages/en.json';
 import zh from '../../../../../messages/zh.json';
 
+function collectMessageValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectMessageValues);
+  if (value && typeof value === 'object') {
+    return Object.values(value).flatMap(collectMessageValues);
+  }
+  return [];
+}
+
 describe('marketing homepage copy', () => {
   it('positions the homepage around the processing engine narrative', () => {
     expect(zh.Marketing.hero.titleLine1).toBe('文件开始进化');
@@ -13,28 +22,28 @@ describe('marketing homepage copy', () => {
     expect(en.Common.meta.title).toContain('File Evolution Core');
   });
 
-  it('keeps commercial-ready wording instead of promising every feature is free', () => {
-    expect(zh.Marketing.highlights.free.title).toBe('为商业工作流预留');
-    expect(zh.Marketing.highlights.free.description).not.toContain(
-      '所有功能完全免费'
+  it('describes signed-in capabilities as free beta enhancements', () => {
+    expect(zh.Marketing.highlights.free.title).toBe('登录增强能力');
+    expect(en.Marketing.highlights.free.title).toBe(
+      'Signed-in enhanced capabilities'
     );
 
-    expect(en.Marketing.highlights.free.title).toBe(
-      'Ready for commercial workflows'
-    );
-    expect(en.Marketing.highlights.free.description).not.toContain(
-      'every feature is free'
-    );
+    expect(zh.Settings.account.planValues.free).toBe('免费公测');
+    expect(en.Settings.account.planValues.free).toBe('Free beta');
+  });
+
+  it('does not promise a commercial or future payment model in user copy', () => {
+    for (const messages of [zh, en]) {
+      expect(collectMessageValues(messages).join('\n')).not.toMatch(
+        /商业版|付费|commercial|paid/i
+      );
+    }
   });
 
   it('uses product-page wording for the lower homepage sections', () => {
     expect(zh.Marketing.tools.heading).toBe('像产品一样组织处理能力');
-    expect(zh.Marketing.highlights.heading).toBe(
-      '少一点杂乱，多一点确定性'
-    );
-    expect(zh.Marketing.cta.heading).toBe(
-      '准备好让文件进入下一段工作流'
-    );
+    expect(zh.Marketing.highlights.heading).toBe('少一点杂乱，多一点确定性');
+    expect(zh.Marketing.cta.heading).toBe('准备好让文件进入下一段工作流');
 
     expect(en.Marketing.tools.heading).toBe(
       'Processing, arranged like products'
@@ -42,8 +51,6 @@ describe('marketing homepage copy', () => {
     expect(en.Marketing.highlights.heading).toBe(
       'Less clutter. More certainty.'
     );
-    expect(en.Marketing.cta.heading).toBe(
-      'Ready for the next file workflow'
-    );
+    expect(en.Marketing.cta.heading).toBe('Ready for the next file workflow');
   });
 });

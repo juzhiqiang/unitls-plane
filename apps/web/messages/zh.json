@@ -35,10 +35,11 @@
       "defaultUser": "用户"
     },
     "footer": {
-      "docs": "文档",
-      "github": "GitHub",
       "terms": "服务条款",
-      "privacy": "隐私政策"
+      "privacy": "隐私政策",
+      "beta": "公测说明",
+      "support": "支持",
+      "navigation": "公开信息"
     },
     "hero": {
       "titleLine1": "文件开始进化",
@@ -80,8 +81,8 @@
         "description": "处理位置、保留规则和登录要求都放在界面里，文件怎么流转一眼可见。"
       },
       "free": {
-        "title": "为商业工作流预留",
-        "description": "登录后接入任务记录、账户文件、更高处理限制和服务端能力，后续付费体系可以平滑承接。"
+        "title": "登录增强能力",
+        "description": "登录后可使用任务记录、账户文件、更高处理限制和服务端能力；公测期间按当前界面说明开放。"
       }
     },
     "cta": {
@@ -112,7 +113,7 @@
       },
       "retention": {
         "browser-session": "仅保留在当前浏览器会话",
-        "server-24h": "24 小时后删除",
+        "server-24h": "24 小时后过期",
         "account-files": "保存到账号文件"
       },
       "login": {
@@ -181,7 +182,7 @@
       },
       "imageAnimation": {
         "title": "GIF/APNG 制作与压缩",
-        "description": "用图片序列制作 GIF，并为登录商业版预留 APNG 和高级压缩。"
+        "description": "用图片序列制作 GIF，登录后可使用 APNG 和高级压缩选项。"
       },
       "imageBatch": {
         "title": "批量图片输出",
@@ -345,6 +346,10 @@
       "title": "账号信息",
       "createdAt": "注册时间",
       "plan": "当前套餐",
+      "planValues": {
+        "free": "免费公测",
+        "enhanced": "登录增强能力"
+      },
       "emailVerified": "邮箱状态",
       "verified": "已验证",
       "unverified": "未验证",
@@ -484,8 +489,8 @@
   },
   "ImageStitch": {
     "title": "长图拼接",
-    "description": "本地生成电商详情页、社媒长图和教程长图。登录后可使用批量宽度和品牌页尾等商业版能力。",
-    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，免费版单文件最大 10MB",
+    "description": "本地生成电商详情页、社媒长图和教程长图。登录后可使用批量宽度和品牌页尾等增强选项。",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，公测版单文件最大 10MB",
     "processingLabel": "本地拼接",
     "outputWidth": "输出宽度",
     "customWidth": "自定义宽度",
@@ -509,16 +514,16 @@
     "processing": "拼接中...",
     "resultTitle": "长图已生成",
     "batchResultTitle": "{count} 张长图已生成",
-    "loginTitle": "商业版模式",
-    "loginDescription": "登录后可使用批量宽度、品牌页尾、更高限制，并为后续付费套餐预留权益。",
-    "loginAction": "登录使用商业版模式",
-    "commercialTitle": "商业版选项",
-    "commercialDescription": "当前对登录用户开放，后续可映射到付费套餐。",
+    "loginTitle": "登录增强选项",
+    "loginDescription": "登录后可使用批量宽度、品牌页尾和更高处理限制。",
+    "loginAction": "登录使用增强选项",
+    "commercialTitle": "增强选项",
+    "commercialDescription": "公测期间向登录用户开放。",
     "batchWidths": "批量宽度",
     "batchWidthsHint": "用英文逗号分隔，例如 750,1080",
     "brandFooter": "品牌页尾",
     "brandFooterPlaceholder": "品牌 / 联系方式 / 版权信息",
-    "brandFooterHint": "为商业模板预留；首版保持画布干净。",
+    "brandFooterHint": "登录增强选项提供品牌页尾；默认保持画布干净。",
     "limits": {
       "maxFiles": "当前版本最多支持 {count} 张图片。",
       "maxFileSize": "部分图片超过当前版本的单文件大小限制。",
@@ -535,7 +540,7 @@
   },
   "ImageAnimation": {
     "title": "GIF/APNG 制作与压缩",
-    "description": "制作轻量动图、压缩已有 GIF，并为登录商业版开放 APNG 和高级参数。",
+    "description": "制作轻量动图、压缩已有 GIF；登录后可使用 APNG 和高级参数。",
     "dropzoneCreateHint": "上传 PNG、JPG 或 WebP 图片作为动画帧。",
     "dropzoneCompressHint": "上传一个 GIF 文件进行基础压缩。",
     "processingLabel": "正在处理动画图片…",
@@ -559,11 +564,11 @@
     "filenamePlaceholder": "animated-image",
     "targetWidth": "目标宽度",
     "targetFps": "目标帧率",
-    "commercialTitle": "商业版动画能力",
-    "commercialDescription": "登录后开放 APNG、更多帧数、更大尺寸和高级压缩参数。未来接入付费时复用同一套权益判断。",
-    "loginTitle": "登录解锁商业版动画能力",
-    "loginDescription": "免费版可制作 GIF；登录后可使用 APNG、高级压缩和更高处理限制。",
-    "loginAction": "登录使用商业版",
+    "commercialTitle": "动画增强选项",
+    "commercialDescription": "登录后可使用 APNG、更多帧数、更大尺寸和高级压缩参数。",
+    "loginTitle": "登录使用动画增强选项",
+    "loginDescription": "未登录时可制作 GIF；登录后可使用 APNG、高级压缩和更高处理限制。",
+    "loginAction": "登录使用增强选项",
     "convertTitle": "转换能力将复用动画处理链路",
     "convertDescription": "首版优先完成制作和压缩；GIF/APNG/WebP 动图互转会在后续扩展。",
     "start": "生成动画",
@@ -578,7 +583,7 @@
     "limits": {
       "needAtLeastTwo": "至少需要 2 张图片才能制作动画。",
       "gifOnly": "压缩模式首版仅支持 GIF 文件。",
-      "apngLogin": "APNG 是登录商业版能力。",
+      "apngLogin": "APNG 是登录增强选项。",
       "invalidSize": "请输入有效的画布尺寸。",
       "processingFailed": "动画处理失败，请减少帧数或降低尺寸后重试。"
     }
@@ -1044,6 +1049,210 @@
       "recommended": "推荐",
       "serverRequiresLogin": "登录后可使用服务器处理、任务历史和账户文件保存。",
       "loginToUseServer": "登录后使用服务器处理"
+    }
+  },
+  "PublicSite": {
+    "privacy": {
+      "metadata": {
+        "title": "隐私政策 | Utils Plane",
+        "description": "了解 Utils Plane 公测期间的本地处理、服务端处理、数据保留、账号权利和网络风险边界。"
+      },
+      "title": "隐私政策",
+      "effectiveDate": "生效日期：2026 年 7 月 14 日",
+      "intro": "本政策说明 Utils Plane 公测期间如何处理文件、账号和技术数据。不同工具可能在浏览器本地或服务端运行，请在处理前查看界面中的处理位置与保留提示。",
+      "operatorLabel": "运营主体",
+      "operator": "Utils Plane 项目团队",
+      "supportLabel": "支持邮箱",
+      "sections": [
+        {
+          "id": "local-processing",
+          "title": "1. 浏览器本地处理",
+          "paragraphs": [
+            "标记为本地处理的工具在当前浏览器中读取和生成文件，文件内容不会因该处理主动上传到 Utils Plane 服务端。浏览器仍可能使用内存、临时缓存或下载目录完成操作。",
+            "关闭页面、清理站点数据或浏览器资源不足都可能使未下载的结果丢失，请及时保存需要的输出。"
+          ]
+        },
+        {
+          "id": "server-processing",
+          "title": "2. 服务端处理",
+          "paragraphs": [
+            "当你明确选择服务端处理，或某项任务只能在服务端完成时，输入文件、处理参数和输出文件会传输到服务端。界面会标明登录要求、任务状态和保留方式。",
+            "登录用户可将文件和任务记录保存到账号；未登录处理不会自动转成账号文件。"
+          ]
+        },
+        {
+          "id": "account-cookies",
+          "title": "3. 账号与认证 Cookie",
+          "paragraphs": [
+            "登录功能使用 Better Auth 管理会话。必要的认证 Cookie 用于保持登录状态、防止会话被误用并完成账号请求；禁用这些 Cookie 会使登录功能无法正常工作。",
+            "我们还会处理注册邮箱、显示名称、邮箱验证状态以及完成账号操作所需的记录。"
+          ]
+        },
+        {
+          "id": "retention",
+          "title": "4. 文件保留与删除",
+          "items": [
+            "匿名服务端任务的输入与输出在上传 24 小时后过期并停止访问；过期对象随后由定时清理任务删除。",
+            "登录用户的账号文件会保留到用户删除、注销账号或服务终止处理。",
+            "移入回收站的账号文件保留 30 天，期满后永久删除；用户也可提前永久删除。",
+            "浏览器本地处理的输出由用户设备和浏览器负责保留。"
+          ]
+        },
+        {
+          "id": "account-rights",
+          "title": "5. 导出、删除与注销",
+          "paragraphs": [
+            "登录用户可以在设置中下载 ZIP 数据导出，其中包含个人资料、任务以及正常或回收站文件。",
+            "永久注销会删除个人资料、登录会话、任务和全部正常或回收站文件，且无法撤销。删除需要时间时，界面会显示当前状态或重试入口。"
+          ]
+        },
+        {
+          "id": "telemetry-ai",
+          "title": "6. 观测数据与可选 AI",
+          "paragraphs": [
+            "当前公测不接入产品分析、错误追踪或会话回放服务。基础服务器日志仍可能包含请求时间、路径、状态码和来源 IP，用于运行与排障，并按运维需要限制保留。",
+            "AI 能力是可选项。只有在用户主动选择相应模式时，相关输入才会发送到配置的 AI 服务；请先了解该服务的处理规则，不要提交不适合交由第三方处理的材料。"
+          ]
+        },
+        {
+          "id": "network-warning",
+          "title": "7. IP 地址与 HTTP 访问警告",
+          "paragraphs": [
+            "部分公测部署可能通过 IP 地址和明文 HTTP 提供访问。HTTP 不能保护传输内容免受同一网络中的观察或篡改，也不应视为适合正式生产或敏感资料的安全通道。",
+            "通过 IP + HTTP 访问时，请勿上传身份证件、财务、医疗、机密业务文件或其他敏感内容。应仅在可信网络中处理可承受暴露风险的测试材料。"
+          ]
+        },
+        {
+          "id": "operator-support",
+          "title": "8. 运营主体与联系",
+          "paragraphs": [
+            "Utils Plane 由下方所列项目团队运营。有关数据导出、删除、账号或本政策的问题，请通过下方支持邮箱联系；请求中请勿附加敏感文件。"
+          ]
+        }
+      ]
+    },
+    "terms": {
+      "metadata": {
+        "title": "服务条款 | Utils Plane",
+        "description": "了解 Utils Plane 公测服务的使用边界、内容责任、禁止用途、结果复核和终止规则。"
+      },
+      "title": "服务条款",
+      "effectiveDate": "生效日期：2026 年 7 月 14 日",
+      "intro": "使用 Utils Plane 即表示你同意遵守以下公测条款。若你不同意这些条款，请停止使用服务并删除已保存的数据。",
+      "operatorLabel": "运营主体",
+      "operator": "Utils Plane 项目团队",
+      "supportLabel": "支持邮箱",
+      "sections": [
+        {
+          "id": "beta-service",
+          "title": "1. 公测服务",
+          "paragraphs": [
+            "Utils Plane 目前处于免费公测阶段。工具、限制、登录增强选项和处理方式可能随测试结果调整，不构成正式生产服务承诺。",
+            "页面显示的处理位置、保留规则和登录要求是当前行为说明；若功能发生重要变化，我们会同步更新相关界面或条款。"
+          ]
+        },
+        {
+          "id": "content-responsibility",
+          "title": "2. 内容与权限责任",
+          "paragraphs": [
+            "你应确保对上传、编辑、转换、导出或分享的文件拥有必要权利和授权，并对文件内容、处理指令及输出用途负责。",
+            "请勿把服务当作唯一备份；处理前应保留原始文件和必要的独立副本。"
+          ]
+        },
+        {
+          "id": "prohibited-use",
+          "title": "3. 禁止用途",
+          "items": [
+            "处理或传播违法、侵权、欺诈、骚扰或侵犯他人隐私的内容。",
+            "上传恶意代码，绕过访问控制，探测漏洞，干扰服务或消耗异常资源。",
+            "冒充他人、伪造授权，或将输出用于误导性身份、资质或记录。",
+            "违反适用法律、监管要求或第三方服务条款的其他行为。"
+          ]
+        },
+        {
+          "id": "result-review",
+          "title": "4. 结果复核",
+          "paragraphs": [
+            "压缩、格式转换、文本提取、文档生成、AI 辅助和其他自动处理可能产生缺失、错位、失真或不准确结果。",
+            "在发布、提交、打印、签署或用于关键决策前，你必须自行复核输出，并在需要时使用专业工具或人工校验。"
+          ]
+        },
+        {
+          "id": "availability",
+          "title": "5. 可用性与变更",
+          "paragraphs": [
+            "公测服务按当前可用状态提供，可能因维护、容量、依赖服务、浏览器兼容性或安全处置中断。我们不保证持续可用、无错误或适合特定目的。",
+            "在法律允许范围内，你应通过保存原文件、及时下载结果和避免提交不可替代内容来控制风险。"
+          ]
+        },
+        {
+          "id": "termination",
+          "title": "6. 暂停与终止",
+          "paragraphs": [
+            "对于违反条款、危害服务或他人、造成异常负载或依法需要处理的账号与请求，我们可以限制、暂停或终止访问。",
+            "你可以停止使用服务，并通过设置导出数据或注销账号。终止后的删除仍按隐私政策和界面提示执行。"
+          ]
+        },
+        {
+          "id": "operator-support",
+          "title": "7. 运营主体与支持",
+          "paragraphs": ["本服务由下方所列项目团队运营。对条款、账号限制或公测问题有疑问时，请通过下方支持邮箱联系。"]
+        }
+      ]
+    },
+    "beta": {
+      "metadata": {
+        "title": "公测说明 | Utils Plane",
+        "description": "查看 Utils Plane 免费本地工具、登录增强选项、保留规则和 IP + HTTP 风险提示。"
+      },
+      "title": "公测说明",
+      "effectiveDate": "更新日期：2026 年 7 月 14 日",
+      "intro": "Utils Plane 正在公开测试真实文件处理流程。此页面概括当前免费能力、登录后的增强选项和使用时需要注意的边界。",
+      "operatorLabel": "运营主体",
+      "operator": "Utils Plane 项目团队",
+      "supportLabel": "支持邮箱",
+      "sections": [
+        {
+          "id": "local-tools",
+          "title": "1. 免费本地工具",
+          "paragraphs": [
+            "标记为本地处理的图片、PDF 和文档工具可在浏览器中免费公测，无需登录。文件内容不会因本地处理主动上传到 Utils Plane 服务端。",
+            "本地处理受设备性能、浏览器内存和兼容性限制，结果应在离开页面前下载。"
+          ]
+        },
+        {
+          "id": "signed-in-enhancements",
+          "title": "2. 登录增强选项",
+          "paragraphs": [
+            "登录后可使用任务记录、账号文件、服务端处理、更高限制以及部分高级格式或批量选项。公测期间这些能力按当前界面开放，范围可能调整。",
+            "登录增强选项是公测能力说明，不代表未来服务形式或长期可用承诺。"
+          ]
+        },
+        {
+          "id": "retention",
+          "title": "3. 保留与删除",
+          "items": [
+            "匿名服务端任务的输入与输出文件在 24 小时后过期并停止访问，过期文件随后由定时清理任务删除。",
+            "账号文件保留到用户删除或注销；回收站文件在 30 天后永久删除。",
+            "设置页提供 ZIP 数据导出和永久注销入口。"
+          ]
+        },
+        {
+          "id": "network-warning",
+          "title": "4. 敏感内容与网络警告",
+          "paragraphs": [
+            "若当前部署使用 IP 地址和 HTTP，传输没有 HTTPS 保护，不适合正式生产或敏感资料。请勿上传身份、财务、医疗、机密业务或无法承受暴露风险的内容。",
+            "请在可信网络中使用测试材料，并在每个工具的处理位置提示中确认文件是否会离开浏览器。"
+          ]
+        },
+        {
+          "id": "support",
+          "title": "5. 反馈与支持",
+          "paragraphs": [
+            "遇到处理失败、账号、数据删除或边界说明问题时，请通过下方支持邮箱联系。反馈可包含复现步骤和非敏感示例，但不要附加真实敏感文件。"
+          ]
+        }
+      ]
     }
   },
   "Format": {},

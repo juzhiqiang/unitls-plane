@@ -347,7 +347,28 @@
       "plan": "当前套餐",
       "emailVerified": "邮箱状态",
       "verified": "已验证",
-      "unverified": "未验证"
+      "unverified": "未验证",
+      "exportTitle": "账号数据",
+      "exportDescription": "下载包含个人资料、任务以及全部正常或回收站文件的 ZIP 压缩包。",
+      "exportAction": "导出全部数据",
+      "exportPreparing": "正在准备导出...",
+      "exportSuccess": "下载已开始",
+      "exportAgain": "再次导出",
+      "exportFailed": "无法下载导出数据，请重试。",
+      "exportRetry": "重试数据导出"
+    },
+    "danger": {
+      "title": "危险区",
+      "warning": "永久注销账号会删除个人资料、登录会话、任务以及全部正常或回收站文件，且无法撤销。",
+      "confirmationLabel": "输入 {email} 以确认",
+      "confirmationHint": "邮箱必须与当前账号完全匹配。",
+      "action": "永久注销账号",
+      "deletingAction": "正在注销账号...",
+      "deletedAction": "账号已注销",
+      "deleting": "正在删除存储文件与账号数据...",
+      "success": "账号已注销，正在返回首页...",
+      "failed": "账号注销失败，账号仍可正常使用，请重试。",
+      "retry": "重试注销账号"
     },
     "errors": {
       "uploadTooLarge": "头像文件不能超过 2MB",

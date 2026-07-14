@@ -347,7 +347,28 @@
       "plan": "Current plan",
       "emailVerified": "Email status",
       "verified": "Verified",
-      "unverified": "Unverified"
+      "unverified": "Unverified",
+      "exportTitle": "Account data",
+      "exportDescription": "Download a ZIP containing your profile, tasks, and every active or trashed file.",
+      "exportAction": "Export all data",
+      "exportPreparing": "Preparing export...",
+      "exportSuccess": "Download started",
+      "exportAgain": "Export again",
+      "exportFailed": "The export could not be downloaded. Try again.",
+      "exportRetry": "Retry data export"
+    },
+    "danger": {
+      "title": "Danger zone",
+      "warning": "Permanently deleting your account removes your profile, sessions, tasks, and all active or trashed files. This cannot be undone.",
+      "confirmationLabel": "Enter {email} to confirm",
+      "confirmationHint": "The email must match your current account.",
+      "action": "Permanently delete account",
+      "deletingAction": "Deleting account...",
+      "deletedAction": "Account deleted",
+      "deleting": "Deleting stored files and account data...",
+      "success": "Account deleted. Returning to the home page...",
+      "failed": "Account deletion failed. Your account remains available; try again.",
+      "retry": "Retry account deletion"
     },
     "errors": {
       "uploadTooLarge": "Avatar must be smaller than 2MB",

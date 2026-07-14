@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail } from 'class-validator';
 import { TaskResponseDto } from '../../tasks/dto/tasks.dto';
+
+export class DeleteAccountDto {
+  @ApiProperty({ format: 'email' })
+  @IsEmail()
+  confirmationEmail!: string;
+}
 
 export class AccountRecentFileDto {
   @ApiProperty({ type: String, format: 'uuid' })

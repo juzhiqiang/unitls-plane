@@ -7,24 +7,33 @@ import {
   useSession,
   authClient,
   changePassword,
+  signOut,
 } from '@/lib/auth-client';
+import {
+  downloadAccountExport,
+  useDeleteAccount,
+} from '@/hooks/api/use-account';
 import { useUploadFile, type FileRecord } from '@/hooks/api/use-files';
+import { useRouter } from '@/i18n/navigation';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Camera } from 'lucide-react';
+import { Camera, Download, Trash2 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 
 export default function SettingsPage() {
   const t = useTranslations('Settings');
+  const router = useRouter();
   const { data: session, isPending, refetch } = useSession();
   const uploadFile = useUploadFile();
+  const deleteAccount = useDeleteAccount();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deletionInFlightRef = useRef(false);
 
   const [name, setName] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -36,6 +45,14 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+
+  const [exportStatus, setExportStatus] = useState<
+    'idle' | 'preparing' | 'success' | 'failed'
+  >('idle');
+  const [confirmationEmail, setConfirmationEmail] = useState('');
+  const [deletionStatus, setDeletionStatus] = useState<
+    'idle' | 'deleting' | 'success' | 'failed'
+  >('idle');
 
   // Initialize name from session once it loads.
   if (session && !nameInitialized) {
@@ -79,7 +96,9 @@ export default function SettingsPage() {
 
     setUploadingAvatar(true);
     try {
-      const uploaded = (await uploadFile.mutateAsync(file)) as unknown as FileRecord;
+      const uploaded = (await uploadFile.mutateAsync(
+        file
+      )) as unknown as FileRecord;
       const imageUrl = `${API_URL}/files/${uploaded.id}/download`;
       const { error } = await authClient.updateUser({ image: imageUrl });
       if (error) throw error;
@@ -140,6 +159,46 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAccountExport = async () => {
+    setExportStatus('preparing');
+    try {
+      await downloadAccountExport();
+      setExportStatus('success');
+    } catch {
+      setExportStatus('failed');
+    }
+  };
+
+  const normalizedConfirmationEmail = confirmationEmail.trim().toLowerCase();
+  const emailMatches =
+    normalizedConfirmationEmail === user.email.trim().toLowerCase();
+  const deletionPending =
+    deletionStatus === 'deleting' || deleteAccount.isPending;
+
+  const handleAccountDeletion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !emailMatches ||
+      deletionPending ||
+      deletionStatus === 'success' ||
+      deletionInFlightRef.current
+    )
+      return;
+
+    deletionInFlightRef.current = true;
+    setDeletionStatus('deleting');
+    try {
+      await deleteAccount.mutateAsync(normalizedConfirmationEmail);
+      setDeletionStatus('success');
+      await signOut().catch(() => undefined);
+      router.replace('/');
+      router.refresh();
+    } catch {
+      deletionInFlightRef.current = false;
+      setDeletionStatus('failed');
+    }
+  };
+
   const createdAt = user.createdAt
     ? new Date(user.createdAt).toLocaleDateString()
     : '-';
@@ -173,7 +232,9 @@ export default function SettingsPage() {
               disabled={uploadingAvatar}
             >
               <Camera className="mr-2 h-4 w-4" />
-              {uploadingAvatar ? t('profile.avatarUploading') : t('profile.avatarUpload')}
+              {uploadingAvatar
+                ? t('profile.avatarUploading')
+                : t('profile.avatarUpload')}
             </Button>
             <input
               ref={fileInputRef}
@@ -191,7 +252,7 @@ export default function SettingsPage() {
             <Input
               id="name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               required
             />
           </div>
@@ -217,7 +278,7 @@ export default function SettingsPage() {
               id="currentPassword"
               type="password"
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={e => setCurrentPassword(e.target.value)}
               required
             />
           </div>
@@ -227,7 +288,7 @@ export default function SettingsPage() {
               id="newPassword"
               type="password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={e => setNewPassword(e.target.value)}
               minLength={8}
               required
             />
@@ -238,7 +299,7 @@ export default function SettingsPage() {
               id="confirmPassword"
               type="password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={e => setConfirmPassword(e.target.value)}
               minLength={8}
               required
             />
@@ -267,7 +328,9 @@ export default function SettingsPage() {
             <dd className="capitalize">{userPlan}</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt className="text-muted-foreground">{t('account.emailVerified')}</dt>
+            <dt className="text-muted-foreground">
+              {t('account.emailVerified')}
+            </dt>
             <dd>
               <span
                 className={
@@ -276,11 +339,110 @@ export default function SettingsPage() {
                     : 'inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground'
                 }
               >
-                {user.emailVerified ? t('account.verified') : t('account.unverified')}
+                {user.emailVerified
+                  ? t('account.verified')
+                  : t('account.unverified')}
               </span>
             </dd>
           </div>
         </dl>
+
+        <Separator className="my-4" />
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium">{t('account.exportTitle')}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('account.exportDescription')}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleAccountExport}
+            disabled={exportStatus === 'preparing'}
+          >
+            <Download className="h-4 w-4" />
+            {exportStatus === 'preparing'
+              ? t('account.exportPreparing')
+              : exportStatus === 'failed'
+                ? t('account.exportRetry')
+                : exportStatus === 'success'
+                  ? t('account.exportAgain')
+                  : t('account.exportAction')}
+          </Button>
+          {exportStatus === 'success' && (
+            <p
+              role="status"
+              aria-label={t('account.exportSuccess')}
+              className="text-sm text-accent"
+            >
+              {t('account.exportSuccess')}
+            </p>
+          )}
+          {exportStatus === 'failed' && (
+            <p role="alert" className="text-sm text-destructive">
+              {t('account.exportFailed')}
+            </p>
+          )}
+        </div>
+      </Card>
+
+      <Card className="border-destructive/50">
+        <CardTitle className="text-destructive">{t('danger.title')}</CardTitle>
+        <Separator className="my-4" />
+
+        <form onSubmit={handleAccountDeletion} className="space-y-4" noValidate>
+          <p className="text-sm text-muted-foreground">{t('danger.warning')}</p>
+          <div className="space-y-1.5">
+            <Label htmlFor="deleteConfirmationEmail">
+              {t('danger.confirmationLabel', { email: user.email })}
+            </Label>
+            <Input
+              id="deleteConfirmationEmail"
+              type="email"
+              autoComplete="off"
+              value={confirmationEmail}
+              onChange={event => setConfirmationEmail(event.target.value)}
+              disabled={deletionPending || deletionStatus === 'success'}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('danger.confirmationHint')}
+            </p>
+          </div>
+
+          {deletionStatus === 'deleting' && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t('danger.deleting')}
+            </p>
+          )}
+          {deletionStatus === 'success' && (
+            <p role="status" className="text-sm text-accent">
+              {t('danger.success')}
+            </p>
+          )}
+          {deletionStatus === 'failed' && (
+            <p role="alert" className="text-sm text-destructive">
+              {t('danger.failed')}
+            </p>
+          )}
+
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={
+              !emailMatches || deletionPending || deletionStatus === 'success'
+            }
+          >
+            <Trash2 className="h-4 w-4" />
+            {deletionStatus === 'deleting'
+              ? t('danger.deletingAction')
+              : deletionStatus === 'success'
+                ? t('danger.deletedAction')
+                : deletionStatus === 'failed'
+                  ? t('danger.retry')
+                  : t('danger.action')}
+          </Button>
+        </form>
       </Card>
     </div>
   );

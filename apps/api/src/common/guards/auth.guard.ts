@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { auth } from '@utils-plane/auth';
+import { verifySession } from '@utils-plane/auth';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
@@ -28,7 +28,7 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    const session = await auth.api.getSession({ headers });
+    const session = await verifySession(headers);
 
     if (!session) {
       if (isPublic) return true;

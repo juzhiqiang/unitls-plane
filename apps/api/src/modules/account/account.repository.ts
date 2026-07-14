@@ -1,9 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  account,
   db,
   files,
+  session,
   tasks,
   user,
+  verification,
   type File,
   type Task,
   type User,
@@ -57,8 +60,41 @@ export interface AccountExportSnapshot {
   files: AccountExportFile[];
 }
 
+export interface AccountDeletionSnapshot {
+  profile: Pick<User, 'id' | 'email'>;
+  files: Pick<File, 'id' | 'storageKey'>[];
+}
+
 @Injectable()
 export class AccountRepository {
+  async getDeletionSnapshot(userId: string): Promise<AccountDeletionSnapshot> {
+    const [[profile], fileRows] = await Promise.all([
+      db
+        .select({ id: user.id, email: user.email })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1),
+      db
+        .select({ id: files.id, storageKey: files.storageKey })
+        .from(files)
+        .where(eq(files.userId, userId)),
+    ]);
+
+    if (!profile) throw new NotFoundException('Account not found');
+    return { profile, files: fileRows };
+  }
+
+  async deleteAccountRecords(userId: string): Promise<void> {
+    await db.transaction(async tx => {
+      await tx.delete(tasks).where(eq(tasks.userId, userId));
+      await tx.delete(files).where(eq(files.userId, userId));
+      await tx.delete(verification).where(eq(verification.value, userId));
+      await tx.delete(account).where(eq(account.userId, userId));
+      await tx.delete(session).where(eq(session.userId, userId));
+      await tx.delete(user).where(eq(user.id, userId));
+    });
+  }
+
   async getExportSnapshot(userId: string): Promise<AccountExportSnapshot> {
     const [[profile], taskRows, fileRows] = await Promise.all([
       db

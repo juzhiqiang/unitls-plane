@@ -746,6 +746,62 @@
           "account"
         ]
       }
+    },
+    "/account": {
+      "delete": {
+        "operationId": "AccountController_deleteAccount",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/account/export": {
+      "get": {
+        "operationId": "AccountController_exportAccount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Complete account data export",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
     }
   },
   "info": {
@@ -1002,6 +1058,18 @@
           "activeFileBytes",
           "recentTasks",
           "recentFiles"
+        ]
+      },
+      "DeleteAccountDto": {
+        "type": "object",
+        "properties": {
+          "confirmationEmail": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "confirmationEmail"
         ]
       }
     }

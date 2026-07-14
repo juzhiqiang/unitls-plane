@@ -1,8 +1,13 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAccountSummary } from '../use-account';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  downloadAccountExport,
+  getAccountExportUrl,
+  useAccountSummary,
+  useDeleteAccount,
+} from '../use-account';
 import { accountQueryKeys } from '../query-keys';
 
 const sessionState = vi.hoisted(() => ({
@@ -19,12 +24,14 @@ vi.mock('@/lib/auth-client', () => ({
 vi.mock('@/lib/api-client', () => ({
   api: {
     GET: vi.fn(),
+    DELETE: vi.fn(),
   },
 }));
 
 import { api } from '@/lib/api-client';
 
 const mockGet = vi.mocked(api.GET);
+const mockDelete = vi.mocked(api.DELETE);
 
 function createWrapper(
   queryClient = new QueryClient({
@@ -197,5 +204,135 @@ describe('useAccountSummary', () => {
         query?.options.refetchInterval as (currentQuery: typeof query) => number
       )(query)
     ).toBe(30000);
+  });
+});
+
+describe('account export and deletion', () => {
+  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const mockFetch = vi.fn();
+  const createObjectURL = vi.fn(() => 'blob:account-export');
+  const revokeObjectURL = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.NEXT_PUBLIC_API_URL;
+    vi.stubGlobal('fetch', mockFetch);
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+  });
+
+  afterEach(() => {
+    if (originalApiUrl === undefined) delete process.env.NEXT_PUBLIC_API_URL;
+    else process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
+  });
+
+  it('builds the export URL from the configured API URL with a fallback', () => {
+    expect(getAccountExportUrl()).toBe('http://localhost:3001/account/export');
+
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com/';
+    expect(getAccountExportUrl()).toBe(
+      'https://api.example.com/account/export'
+    );
+  });
+
+  it('downloads a successful export with a safe filename and revokes its object URL', async () => {
+    const blob = new Blob(['zip-body'], { type: 'application/zip' });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        'content-disposition': 'attachment; filename="../../account.zip"',
+      }),
+      blob: vi.fn().mockResolvedValue(blob),
+    });
+    const clickedDownloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      clickedDownloads.push(this.download);
+    });
+
+    await downloadAccountExport();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3001/account/export',
+      { credentials: 'include' }
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
+    expect(clickedDownloads).toEqual(['account.zip']);
+    expect(document.querySelector('a[download]')).toBeNull();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:account-export');
+  });
+
+  it.each([401, 500])(
+    'rejects an account export HTTP %s response without creating a download',
+    async status => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status,
+        headers: new Headers(),
+      });
+
+      await expect(downloadAccountExport()).rejects.toThrow(
+        'Account export request failed'
+      );
+      expect(createObjectURL).not.toHaveBeenCalled();
+    }
+  );
+
+  it('sends the confirmation email when deleting an account', async () => {
+    mockDelete.mockResolvedValue({
+      data: undefined,
+      error: undefined,
+    } as never);
+    const { result } = renderHook(() => useDeleteAccount(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync('owner@example.com');
+    });
+
+    expect(mockDelete).toHaveBeenCalledWith('/account', {
+      body: { confirmationEmail: 'owner@example.com' },
+    });
+  });
+
+  it('clears the query cache after account deletion succeeds', async () => {
+    const queryClient = new QueryClient();
+    const clear = vi.spyOn(queryClient, 'clear');
+    mockDelete.mockResolvedValue({
+      data: undefined,
+      error: undefined,
+    } as never);
+    const { result } = renderHook(() => useDeleteAccount(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync('owner@example.com');
+    });
+
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the query cache when account deletion fails', async () => {
+    const queryClient = new QueryClient();
+    const clear = vi.spyOn(queryClient, 'clear');
+    const error = { message: 'Account deletion is incomplete' };
+    mockDelete.mockResolvedValue({ data: undefined, error } as never);
+    const { result } = renderHook(() => useDeleteAccount(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await expect(
+      act(async () => result.current.mutateAsync('owner@example.com'))
+    ).rejects.toBe(error);
+    expect(clear).not.toHaveBeenCalled();
   });
 });

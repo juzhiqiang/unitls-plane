@@ -1,12 +1,18 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { ArgumentsHost, HttpException } from '@nestjs/common';
 import { AllExceptionsFilter } from './http-exception.filter';
 
-function createHttpHost() {
+function createHttpHost(options?: {
+  headersSent?: boolean;
+  destroyed?: boolean;
+}) {
   const jsonCalls: unknown[] = [];
   let statusCode: number | undefined;
+  const destroy = vi.fn();
 
   const response = {
+    headersSent: options?.headersSent ?? false,
+    destroyed: options?.destroyed ?? false,
     status(code: number) {
       statusCode = code;
       return this;
@@ -15,6 +21,7 @@ function createHttpHost() {
       jsonCalls.push(body);
       return this;
     },
+    destroy,
   };
 
   const host = {
@@ -26,7 +33,7 @@ function createHttpHost() {
     },
   } as unknown as ArgumentsHost;
 
-  return { host, jsonCalls, getStatusCode: () => statusCode };
+  return { host, jsonCalls, destroy, getStatusCode: () => statusCode };
 }
 
 describe('AllExceptionsFilter', () => {
@@ -43,5 +50,31 @@ describe('AllExceptionsFilter', () => {
       message: 'Internal server error',
       path: '/test',
     });
+  });
+
+  it('does not write another response after the stream was destroyed', () => {
+    const filter = new AllExceptionsFilter();
+    const { host, jsonCalls, destroy, getStatusCode } = createHttpHost({
+      destroyed: true,
+    });
+
+    filter.catch(new Error('stream failed'), host);
+
+    expect(getStatusCode()).toBeUndefined();
+    expect(jsonCalls).toHaveLength(0);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('destroys a headers-sent stream instead of writing error JSON', () => {
+    const filter = new AllExceptionsFilter();
+    const { host, jsonCalls, destroy, getStatusCode } = createHttpHost({
+      headersSent: true,
+    });
+
+    filter.catch(new Error('source stream failed'), host);
+
+    expect(getStatusCode()).toBeUndefined();
+    expect(jsonCalls).toHaveLength(0);
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });

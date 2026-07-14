@@ -1,16 +1,23 @@
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'bun:test';
+import { Readable } from 'node:stream';
 import { MinioService } from './minio.service';
+
+function withClient(send: ReturnType<typeof vi.fn>) {
+  const service = new MinioService();
+  (service as unknown as { client: { send: typeof send } }).client = { send };
+  return service;
+}
 
 describe('MinioService delete logging', () => {
   it('does not log the storage key or filename after a successful delete', async () => {
     const storageKey = 'anonymous/file-1/private-report.pdf';
     const send = vi.fn(async () => ({}));
-    const service = new MinioService();
+    const service = withClient(send);
     const testableService = service as unknown as {
       client: { send: typeof send };
       logger: { debug: (...args: unknown[]) => void };
     };
-    testableService.client = { send };
     const debug = vi
       .spyOn(testableService.logger, 'debug')
       .mockImplementation(() => undefined);
@@ -21,5 +28,47 @@ describe('MinioService delete logging', () => {
     const debugOutput = debug.mock.calls.flat().map(String).join(' ');
     expect(debugOutput).not.toContain(storageKey);
     expect(debugOutput).not.toContain('private-report.pdf');
+  });
+});
+
+describe('MinioService object streaming', () => {
+  it('heads an object without downloading its body', async () => {
+    const send = vi.fn(async () => ({}));
+    const service = withClient(send);
+
+    await service.head('user-1/file-1/report.pdf');
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
+  });
+
+  it('returns the object body as a readable stream', async () => {
+    const body = Readable.from(Buffer.from('contents'));
+    const send = vi.fn(async () => ({ Body: body }));
+    const service = withClient(send);
+
+    await expect(
+      service.downloadStream('user-1/file-1/report.pdf')
+    ).resolves.toBe(body);
+  });
+
+  it('rejects a stream download with an empty object body', async () => {
+    const send = vi.fn(async () => ({ Body: undefined }));
+    const service = withClient(send);
+
+    await expect(
+      service.downloadStream('user-1/file-1/report.pdf')
+    ).rejects.toThrow('Object body is empty');
+  });
+
+  it('checks existence with a head request', async () => {
+    const send = vi.fn(async () => ({}));
+    const service = withClient(send);
+
+    await expect(service.exists('user-1/file-1/report.pdf')).resolves.toBe(
+      true
+    );
+
+    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
   });
 });

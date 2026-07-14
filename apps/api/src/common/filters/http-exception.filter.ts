@@ -43,6 +43,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    if (response.destroyed) return;
+    if (response.headersSent) {
+      response.destroy();
+      return;
+    }
+
     response.status(status).json(body);
   }
 }

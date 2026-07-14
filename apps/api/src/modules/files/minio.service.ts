@@ -4,11 +4,13 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Readable } from 'node:stream';
 
 @Injectable()
 export class MinioService implements OnModuleInit {
@@ -74,6 +76,26 @@ export class MinioService implements OnModuleInit {
     return Buffer.concat(chunks);
   }
 
+  async head(key: string): Promise<void> {
+    await this.client.send(
+      new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      })
+    );
+  }
+
+  async downloadStream(key: string): Promise<Readable> {
+    const response = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      })
+    );
+    if (!response.Body) throw new Error('Object body is empty');
+    return response.Body as Readable;
+  }
+
   async getSignedDownloadUrl(key: string, expiresIn = 3600): Promise<string> {
     return getSignedUrl(
       this.client,
@@ -101,12 +123,7 @@ export class MinioService implements OnModuleInit {
 
   async exists(key: string): Promise<boolean> {
     try {
-      await this.client.send(
-        new GetObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-        })
-      );
+      await this.head(key);
       return true;
     } catch {
       return false;

@@ -4,8 +4,13 @@ import type { File } from '@utils-plane/db';
 let insertedFile: Record<string, unknown> | null = null;
 let selectedFile: Record<string, unknown> | null = null;
 let selectedRows: Record<string, unknown>[] = [];
+let lockedRows: Record<string, unknown>[] = [];
+let restoredRows: { id: string }[] = [];
+let transactionUpdatedRows: Record<string, unknown>[] = [];
+let transactionDeletedRows: { id: string }[] = [];
 const uploadEvents: string[] = [];
 const insertSources: string[] = [];
+const deletionEvents: string[] = [];
 
 const transactionInsert = vi.fn(() => ({
   values: vi.fn((file: Record<string, unknown>) => {
@@ -15,7 +20,37 @@ const transactionInsert = vi.fn(() => ({
     return { returning };
   }),
 }));
-const transaction = { insert: transactionInsert };
+const transactionLock = vi.fn(async () => lockedRows);
+const transactionSelectLimit = vi.fn(() => ({ for: transactionLock }));
+const transactionSelectWhere = vi.fn(() => ({
+  for: transactionLock,
+  limit: transactionSelectLimit,
+}));
+const transactionSelectFrom = vi.fn(() => ({ where: transactionSelectWhere }));
+const transactionSelect = vi.fn(() => ({ from: transactionSelectFrom }));
+const transactionUpdateReturning = vi.fn(async () => {
+  deletionEvents.push('marker-set');
+  return transactionUpdatedRows;
+});
+const transactionUpdateWhere = vi.fn(() => ({
+  returning: transactionUpdateReturning,
+}));
+const transactionUpdateSet = vi.fn(() => ({ where: transactionUpdateWhere }));
+const transactionUpdate = vi.fn(() => ({ set: transactionUpdateSet }));
+const transactionDeleteReturning = vi.fn(async () => {
+  deletionEvents.push('row-delete');
+  return transactionDeletedRows;
+});
+const transactionDeleteWhere = vi.fn(() => ({
+  returning: transactionDeleteReturning,
+}));
+const transactionDelete = vi.fn(() => ({ where: transactionDeleteWhere }));
+const transaction = {
+  insert: transactionInsert,
+  select: transactionSelect,
+  update: transactionUpdate,
+  delete: transactionDelete,
+};
 const withActiveUserTransaction = vi.fn(
   async (
     _userId: string,
@@ -32,7 +67,10 @@ const withProducerTransaction = vi.fn(
   }
 );
 
-const minioService = { delete: vi.fn() };
+const minioService = {
+  delete: vi.fn(),
+  probeObjectExists: vi.fn(),
+};
 const cleanupQueue = {
   add: vi.fn(async () => ({ id: 'orphan-job' })),
 };
@@ -46,6 +84,13 @@ const cleanupObligationService = {
   release: vi.fn(async () => {
     uploadEvents.push('obligation-release');
   }),
+  releaseObject: vi.fn(async () => {
+    uploadEvents.push('obligation-release');
+  }),
+  lockObjectProducer: vi.fn(async () => true),
+  clearObjectInTransaction: vi.fn(async () => {
+    uploadEvents.push('obligation-clear');
+  }),
 };
 const lte = vi.fn((_column: unknown, value: unknown) => value);
 const eq = vi.fn((_column: unknown, value: unknown) => value);
@@ -54,6 +99,14 @@ const selectFrom = vi.fn(() => ({ where: selectWhere }));
 const select = vi.fn(() => ({ from: selectFrom }));
 const deleteWhere = vi.fn(async () => undefined);
 const deleteFrom = vi.fn(() => ({ where: deleteWhere }));
+const updateReturning = vi.fn(async () => restoredRows);
+const updateWhere = vi.fn(() => ({ returning: updateReturning }));
+const updateSet = vi.fn((values: Record<string, unknown>) => {
+  if (values.purgeStartedAt === null) deletionEvents.push('marker-clear');
+  return { where: updateWhere };
+});
+const update = vi.fn(() => ({ set: updateSet }));
+const inArray = vi.fn((_column: unknown, values: unknown) => values);
 
 const returning = vi.fn(async () => [
   {
@@ -84,11 +137,12 @@ mock.module('drizzle-orm', () => ({
   desc: vi.fn(),
   eq,
   gte: vi.fn(),
-  inArray: vi.fn(),
+  inArray,
   isNotNull: (column: unknown) => column,
   isNull: (column: unknown) => column,
   like: vi.fn(),
   lte,
+  or: (...conditions: unknown[]) => conditions,
   sql: vi.fn(),
 }));
 
@@ -101,6 +155,7 @@ mock.module('@utils-plane/db', () => ({
     insert,
     select,
     delete: deleteFrom,
+    update,
     query: { files: { findFirst } },
   },
   files: {
@@ -108,8 +163,13 @@ mock.module('@utils-plane/db', () => ({
     userId: 'userId',
     expiresAt: 'expiresAt',
     deletedAt: 'deletedAt',
+    purgeStartedAt: 'purgeStartedAt',
   },
   tasks: {},
+  user: {
+    id: 'userId',
+    deletionStartedAt: 'deletionStartedAt',
+  },
 }));
 
 mock.module('../../common/database/active-user-transaction', () => ({
@@ -130,6 +190,7 @@ const baseFile: File = {
   metadata: null,
   expiresAt: new Date('2026-07-13T00:00:00.000Z'),
   deletedAt: null,
+  purgeStartedAt: null,
   createdAt: new Date('2026-07-12T00:00:00.000Z'),
   updatedAt: new Date('2026-07-12T00:00:00.000Z'),
 };
@@ -147,6 +208,24 @@ function userFile(overrides: Partial<File> = {}): File {
     deletedAt: new Date('2026-07-01T00:00:00.000Z'),
     ...overrides,
   };
+}
+
+const PURGE_CLAIMED_AT = new Date('2026-07-31T00:00:00.000Z');
+
+function purgeClaim(file: File = userFile()) {
+  return {
+    id: file.id,
+    storageKey: file.storageKey,
+    purgeStartedAt: PURGE_CLAIMED_AT,
+  };
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(resolvePromise => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 describe('FilesService upload entitlement limits', () => {
@@ -233,22 +312,21 @@ describe('FilesService upload entitlement limits', () => {
 
     const storageKey = String(minioService.upload.mock.calls[0]?.[0]);
     const fileId = storageKey.split('/')[1];
-    expect(cleanupObligationService.release).toHaveBeenCalledWith(
-      'object',
-      fileId
-    );
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(fileId);
     expect(cleanupObligationService.clear).not.toHaveBeenCalled();
   });
 
-  it('clears object cleanup intent only after the file row is committed', async () => {
+  it('deletes object intent in the file transaction after inserting the row', async () => {
     const minioService = {
       upload: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn(),
     };
-    cleanupObligationService.clear.mockImplementationOnce(async () => {
-      expect(uploadEvents).toContain('transaction-insert');
-      uploadEvents.push('obligation-clear');
-    });
+    cleanupObligationService.clearObjectInTransaction.mockImplementationOnce(
+      async () => {
+        expect(uploadEvents).toContain('transaction-insert');
+        uploadEvents.push('obligation-clear');
+      }
+    );
     const service = new FilesService(
       minioService as any,
       cleanupQueue as any,
@@ -262,10 +340,9 @@ describe('FilesService upload entitlement limits', () => {
     );
 
     expect(insertedFile?.id).toBe(file.id);
-    expect(cleanupObligationService.clear).toHaveBeenCalledWith(
-      'object',
-      file.id
-    );
+    expect(
+      cleanupObligationService.clearObjectInTransaction
+    ).toHaveBeenCalledWith(transaction, file.id);
   });
 
   it('uses the signed-in user plan and role for upload limits and ownership', async () => {
@@ -367,8 +444,7 @@ describe('FilesService upload entitlement limits', () => {
     expect(cleanupQueue.add).not.toHaveBeenCalled();
     expect(cleanupObligationService.clear).not.toHaveBeenCalled();
     const storageKey = String(minioService.upload.mock.calls[0]?.[0]);
-    expect(cleanupObligationService.release).toHaveBeenCalledWith(
-      'object',
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(
       storageKey.split('/')[1]
     );
   });
@@ -406,9 +482,37 @@ describe('FilesService upload entitlement limits', () => {
     expect(minioService.delete).not.toHaveBeenCalled();
     expect(cleanupQueue.add).not.toHaveBeenCalled();
     expect(cleanupObligationService.clear).not.toHaveBeenCalled();
-    expect(cleanupObligationService.release).toHaveBeenCalledWith(
-      'object',
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(
       insertedFile?.id
+    );
+  });
+
+  it('does not insert a file after cleanup claimed an expired producer', async () => {
+    cleanupObligationService.lockObjectProducer.mockResolvedValueOnce(false);
+    const minioService = {
+      upload: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn(),
+    };
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.upload(
+        Buffer.from('small-buffer'),
+        { filename: 'late.png', mimeType: 'image/png', size: 128 },
+        null
+      )
+    ).rejects.toThrow('Object production was claimed for cleanup');
+
+    expect(transactionInsert).not.toHaveBeenCalled();
+    expect(
+      cleanupObligationService.clearObjectInTransaction
+    ).not.toHaveBeenCalled();
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(
+      expect.any(String)
     );
   });
 
@@ -439,8 +543,7 @@ describe('FilesService upload entitlement limits', () => {
     expect(minioService.delete).not.toHaveBeenCalled();
     expect(cleanupQueue.add).not.toHaveBeenCalled();
     expect(cleanupObligationService.clear).not.toHaveBeenCalled();
-    expect(cleanupObligationService.release).toHaveBeenCalledWith(
-      'object',
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(
       insertedFile?.id
     );
   });
@@ -472,8 +575,7 @@ describe('FilesService upload entitlement limits', () => {
     expect(minioService.delete).not.toHaveBeenCalled();
     expect(cleanupQueue.add).not.toHaveBeenCalled();
     expect(cleanupObligationService.clear).not.toHaveBeenCalled();
-    expect(cleanupObligationService.release).toHaveBeenCalledWith(
-      'object',
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(
       insertedFile?.id
     );
   });
@@ -507,16 +609,13 @@ describe('FilesService upload entitlement limits', () => {
     expect(minioService.delete).not.toHaveBeenCalled();
     expect(cleanupQueue.add).not.toHaveBeenCalled();
     expect(cleanupObligationService.clear).not.toHaveBeenCalled();
-    expect(cleanupObligationService.release).toHaveBeenCalledWith(
-      'object',
-      fileId
-    );
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(fileId);
   });
 
   it('keeps the original error when releasing the object obligation fails', async () => {
     const databaseError = new Error('database unavailable');
     returning.mockRejectedValueOnce(databaseError);
-    cleanupObligationService.release.mockRejectedValueOnce(
+    cleanupObligationService.releaseObject.mockRejectedValueOnce(
       new Error('database unavailable')
     );
     const minioService = {
@@ -558,9 +657,10 @@ describe('FilesService upload entitlement limits', () => {
     expect(cleanupQueue.add).not.toHaveBeenCalled();
   });
 
-  it('returns the committed file when clearing its durable intent fails', async () => {
-    cleanupObligationService.clear.mockRejectedValueOnce(
-      new Error('database unavailable')
+  it('rolls back file creation when deleting its transactional intent fails', async () => {
+    const databaseError = new Error('database unavailable');
+    cleanupObligationService.clearObjectInTransaction.mockRejectedValueOnce(
+      databaseError
     );
     const minioService = {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -571,21 +671,18 @@ describe('FilesService upload entitlement limits', () => {
       cleanupQueue as any,
       cleanupObligationService as any
     );
-    const logError = vi
-      .spyOn((service as any).logger, 'error')
-      .mockImplementation(() => undefined);
+    await expect(
+      service.upload(
+        Buffer.from('small-buffer'),
+        { filename: 'private-name.png', mimeType: 'image/png', size: 128 },
+        { id: 'user-1', plan: 'free', role: 'user' }
+      )
+    ).rejects.toBe(databaseError);
 
-    const file = await service.upload(
-      Buffer.from('small-buffer'),
-      { filename: 'private-name.png', mimeType: 'image/png', size: 128 },
-      { id: 'user-1', plan: 'free', role: 'user' }
+    expect(transactionInsert).toHaveBeenCalledTimes(1);
+    expect(cleanupObligationService.releaseObject).toHaveBeenCalledWith(
+      insertedFile?.id
     );
-
-    expect(file.id).toBe(insertedFile?.id);
-    expect(logError).toHaveBeenCalledWith(
-      `Failed to clear object cleanup obligation for file ${file.id}`
-    );
-    expect(JSON.stringify(logError.mock.calls)).not.toContain(file.storageKey);
   });
 
   it('does not compensate an object after the file transaction committed', async () => {
@@ -682,16 +779,440 @@ describe('FilesService file access checks', () => {
   });
 });
 
+describe('FilesService restore and permanent deletion races', () => {
+  beforeEach(() => {
+    selectedFile = null;
+    selectedRows = [];
+    lockedRows = [];
+    restoredRows = [];
+    transactionUpdatedRows = [];
+    transactionDeletedRows = [];
+    deletionEvents.length = 0;
+    vi.clearAllMocks();
+    transactionLock.mockImplementation(async () => lockedRows);
+    transactionDeleteReturning.mockImplementation(async () => {
+      deletionEvents.push('row-delete');
+      return transactionDeletedRows;
+    });
+    updateReturning.mockImplementation(async () => restoredRows);
+    withProducerTransaction.mockImplementation(async operation => {
+      deletionEvents.push('transaction-start');
+      const result = await operation(transaction);
+      deletionEvents.push('transaction-commit');
+      return result;
+    });
+    minioService.delete.mockImplementation(async () => {
+      deletionEvents.push('object-delete');
+    });
+    minioService.probeObjectExists.mockResolvedValue(true);
+  });
+
+  it('restores a file only when the owned trashed row is still present', async () => {
+    selectedFile = userFile();
+    restoredRows = [{ id: 'file-1' }];
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await service.restore('file-1', 'user-1');
+
+    expect(updateWhere).toHaveBeenCalledWith([
+      'file-1',
+      'user-1',
+      'deletedAt',
+      'purgeStartedAt',
+    ]);
+    expect(updateReturning).toHaveBeenCalledWith({ id: 'id' });
+  });
+
+  it('reports a missing file when cleanup commits before restore', async () => {
+    selectedFile = userFile();
+    restoredRows = [];
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(service.restore('file-1', 'user-1')).rejects.toThrow(
+      'File not found'
+    );
+  });
+
+  it('reports only rows actually restored by a batch update', async () => {
+    selectedRows = [userFile(), userFile({ id: 'file-2' })];
+    restoredRows = [{ id: 'file-1' }];
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+    const log = vi
+      .spyOn((service as any).logger, 'log')
+      .mockImplementation(() => undefined);
+
+    await service.batchRestore(['file-1', 'file-2'], 'user-1');
+
+    expect(updateWhere).toHaveBeenCalledWith([
+      ['file-1', 'file-2'],
+      'user-1',
+      'deletedAt',
+      'purgeStartedAt',
+    ]);
+    expect(log).toHaveBeenCalledWith('Batch restored 1 files');
+  });
+
+  it('locks and rechecks eligibility before a user permanent delete', async () => {
+    selectedFile = userFile();
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    transactionDeletedRows = [{ id: 'file-1' }];
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await service.permanentDelete('file-1', 'user-1');
+
+    expect(transactionSelectWhere).toHaveBeenCalledWith([
+      'file-1',
+      'user-1',
+      'deletedAt',
+    ]);
+    expect(transactionLock).toHaveBeenCalledWith('update');
+    expect(transactionDeleteWhere).toHaveBeenCalledWith([
+      'file-1',
+      PURGE_CLAIMED_AT,
+    ]);
+    expect(eq).toHaveBeenCalledWith('purgeStartedAt', PURGE_CLAIMED_AT);
+    expect(deletionEvents).toEqual([
+      'transaction-start',
+      'marker-set',
+      'transaction-commit',
+      'object-delete',
+      'transaction-start',
+      'row-delete',
+      'transaction-commit',
+    ]);
+  });
+
+  it('blocks restore with the committed marker while object deletion is in flight', async () => {
+    const deleteStarted = deferred();
+    const finishDelete = deferred();
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    transactionDeletedRows = [{ id: 'file-1' }];
+    minioService.delete.mockImplementationOnce(async () => {
+      deletionEvents.push('object-delete');
+      deleteStarted.resolve();
+      await finishDelete.promise;
+    });
+    updateReturning.mockImplementationOnce(async () => []);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    const deletion = service.permanentDelete('file-1', 'user-1');
+    await deleteStarted.promise;
+
+    expect(deletionEvents).toEqual([
+      'transaction-start',
+      'marker-set',
+      'transaction-commit',
+      'object-delete',
+    ]);
+    await expect(service.restore('file-1', 'user-1')).rejects.toThrow(
+      'File not found'
+    );
+    expect(transactionDelete).not.toHaveBeenCalled();
+
+    finishDelete.resolve();
+    await expect(deletion).resolves.toBeUndefined();
+  });
+
+  it('does not duplicate object I/O while another purge lease is fresh', async () => {
+    lockedRows = [userFile({ purgeStartedAt: PURGE_CLAIMED_AT })];
+    transactionUpdatedRows = [];
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(service.permanentDelete('file-1', 'user-1')).rejects.toThrow(
+      'File deletion is in progress'
+    );
+
+    expect(minioService.delete).not.toHaveBeenCalled();
+    expect(transactionDelete).not.toHaveBeenCalled();
+    expect(withProducerTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a concurrent delete until the known failure clears its marker', async () => {
+    const deleteStarted = deferred();
+    const failDelete = deferred();
+    const storageError = new Error('storage unavailable');
+    lockedRows = [userFile()];
+    transactionUpdateReturning
+      .mockResolvedValueOnce([purgeClaim()])
+      .mockResolvedValueOnce([]);
+    minioService.delete.mockImplementationOnce(async () => {
+      deleteStarted.resolve();
+      await failDelete.promise;
+      throw storageError;
+    });
+    minioService.probeObjectExists.mockResolvedValueOnce(true);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    const firstDelete = service.permanentDelete('file-1', 'user-1');
+    await deleteStarted.promise;
+
+    const concurrentResult = await service
+      .permanentDelete('file-1', 'user-1')
+      .then(
+        () => null,
+        (error: unknown) => error
+      );
+    failDelete.resolve();
+    await expect(firstDelete).rejects.toBe(storageError);
+
+    expect(String(concurrentResult)).toContain('File deletion is in progress');
+    expect(updateSet).toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(minioService.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the purge marker and remains restorable when storage still has the object', async () => {
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    minioService.delete.mockRejectedValueOnce(new Error('storage unavailable'));
+    minioService.probeObjectExists.mockResolvedValueOnce(true);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(service.permanentDelete('file-1', 'user-1')).rejects.toThrow(
+      'storage unavailable'
+    );
+
+    expect(transactionDelete).not.toHaveBeenCalled();
+    expect(transactionDeleteReturning).not.toHaveBeenCalled();
+    expect(updateSet).toHaveBeenCalledWith({ purgeStartedAt: null });
+
+    restoredRows = [{ id: 'file-1' }];
+    await expect(service.restore('file-1', 'user-1')).resolves.toBeUndefined();
+  });
+
+  it('finishes the row purge when DeleteObject failed but the object is absent', async () => {
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    transactionDeletedRows = [{ id: 'file-1' }];
+    minioService.delete.mockRejectedValueOnce(new Error('response lost'));
+    minioService.probeObjectExists.mockResolvedValueOnce(false);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.permanentDelete('file-1', 'user-1')
+    ).resolves.toBeUndefined();
+
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(transactionDeleteReturning).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the purge marker when both delete and probe outcomes are unknown', async () => {
+    const deleteError = new Error('delete response lost');
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    minioService.delete.mockRejectedValueOnce(deleteError);
+    minioService.probeObjectExists.mockRejectedValueOnce(
+      new Error('probe unavailable')
+    );
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(service.permanentDelete('file-1', 'user-1')).rejects.toBe(
+      deleteError
+    );
+
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(transactionDelete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the marker after final database failure and converges on retry', async () => {
+    const databaseError = new Error('database commit failed');
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    transactionDeleteReturning.mockRejectedValueOnce(databaseError);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(service.permanentDelete('file-1', 'user-1')).rejects.toBe(
+      databaseError
+    );
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
+
+    lockedRows = [userFile({ purgeStartedAt: PURGE_CLAIMED_AT })];
+    transactionUpdatedRows = [purgeClaim()];
+    transactionDeletedRows = [{ id: 'file-1' }];
+    await expect(
+      service.permanentDelete('file-1', 'user-1')
+    ).resolves.toBeUndefined();
+    expect(minioService.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechecks every row for batch delete and empty trash', async () => {
+    selectedRows = [userFile(), userFile({ id: 'file-2' })];
+    transactionLock
+      .mockResolvedValueOnce([userFile()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([userFile({ id: 'file-3' })]);
+    transactionUpdateReturning
+      .mockResolvedValueOnce([purgeClaim()])
+      .mockResolvedValueOnce([purgeClaim(userFile({ id: 'file-3' }))]);
+    transactionDeleteReturning
+      .mockResolvedValueOnce([{ id: 'file-1' }])
+      .mockResolvedValueOnce([{ id: 'file-3' }]);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await service.batchPermanentDelete(['file-1', 'file-2'], 'user-1');
+    selectedRows = [userFile({ id: 'file-3' })];
+    await service.emptyTrash('user-1');
+
+    expect(withProducerTransaction).toHaveBeenCalledTimes(5);
+    expect(transactionLock).toHaveBeenCalledTimes(3);
+    expect(minioService.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('finishes safe batch items before reporting an incomplete deletion', async () => {
+    const inProgress = userFile();
+    const deletable = userFile({
+      id: 'file-2',
+      storageKey: 'user-1/file-2/report.pdf',
+    });
+    selectedRows = [inProgress, deletable];
+    transactionLock
+      .mockResolvedValueOnce([inProgress])
+      .mockResolvedValueOnce([deletable]);
+    transactionUpdateReturning
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([purgeClaim(deletable)]);
+    transactionDeleteReturning.mockResolvedValueOnce([{ id: 'file-2' }]);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.batchPermanentDelete(['file-1', 'file-2'], 'user-1')
+    ).rejects.toThrow('File deletion is incomplete');
+
+    expect(minioService.delete).toHaveBeenCalledWith(
+      'user-1/file-2/report.pdf'
+    );
+    expect(transactionDeleteReturning).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes safe trash items before reporting an incomplete empty', async () => {
+    const inProgress = userFile();
+    const deletable = userFile({
+      id: 'file-2',
+      storageKey: 'user-1/file-2/report.pdf',
+    });
+    selectedRows = [inProgress, deletable];
+    transactionLock
+      .mockResolvedValueOnce([inProgress])
+      .mockResolvedValueOnce([deletable]);
+    transactionUpdateReturning
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([purgeClaim(deletable)]);
+    transactionDeleteReturning.mockResolvedValueOnce([{ id: 'file-2' }]);
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(service.emptyTrash('user-1')).rejects.toThrow(
+      'File deletion is incomplete'
+    );
+
+    expect(minioService.delete).toHaveBeenCalledWith(
+      'user-1/file-2/report.pdf'
+    );
+    expect(transactionDeleteReturning).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips cleanup when restore committed before the row-lock recheck', async () => {
+    const cutoff = new Date('2026-07-01T00:00:00.000Z');
+    selectedRows = [userFile({ deletedAt: cutoff })];
+    restoredRows = [{ id: 'file-1' }];
+    lockedRows = [];
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await service.restore('file-1', 'user-1');
+    const result = await service.cleanupTrashed(
+      new Date('2026-07-31T00:00:00.000Z')
+    );
+
+    expect(updateReturning).toHaveBeenCalledWith({ id: 'id' });
+    expect(transactionLock).toHaveBeenCalledWith('update');
+    expect(minioService.delete).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      scanned: 1,
+      deleted: 0,
+      failed: 0,
+      deletedFileIds: [],
+      failedFileIds: [],
+    });
+  });
+});
+
 describe('FilesService retention cleanup', () => {
   beforeEach(() => {
     selectedRows = [];
+    lockedRows = [];
+    transactionUpdatedRows = [];
+    transactionDeletedRows = [];
     vi.clearAllMocks();
     minioService.delete.mockResolvedValue(undefined);
+    minioService.probeObjectExists.mockResolvedValue(true);
   });
 
   it('deletes anonymous files that expire exactly at the cleanup boundary', async () => {
     const now = new Date('2026-07-13T00:00:00.000Z');
     selectedRows = [anonymousFile({ expiresAt: now })];
+    lockedRows = [anonymousFile({ expiresAt: now })];
+    transactionUpdatedRows = [purgeClaim(anonymousFile({ expiresAt: now }))];
+    transactionDeletedRows = [{ id: 'file-1' }];
     const service = new FilesService(minioService as any, cleanupQueue as any);
 
     const result = await service.cleanupExpired(now);
@@ -706,7 +1227,11 @@ describe('FilesService retention cleanup', () => {
     expect(minioService.delete).toHaveBeenCalledWith(
       'anonymous/file-1/report.pdf'
     );
-    expect(deleteWhere).toHaveBeenCalledWith('file-1');
+    expect(transactionLock).toHaveBeenCalledWith('update');
+    expect(transactionDeleteWhere).toHaveBeenCalledWith([
+      'file-1',
+      PURGE_CLAIMED_AT,
+    ]);
     expect(result).toEqual({
       scanned: 1,
       deleted: 1,
@@ -720,12 +1245,23 @@ describe('FilesService retention cleanup', () => {
     const now = new Date('2026-07-31T00:00:00.000Z');
     const cutoff = new Date('2026-07-01T00:00:00.000Z');
     selectedRows = [userFile({ deletedAt: cutoff })];
+    lockedRows = [userFile({ deletedAt: cutoff })];
+    transactionUpdatedRows = [purgeClaim(userFile({ deletedAt: cutoff }))];
+    transactionDeletedRows = [{ id: 'file-1' }];
     const service = new FilesService(minioService as any, cleanupQueue as any);
 
     const result = await service.cleanupTrashed(now);
 
     expect(lte).toHaveBeenCalledWith('deletedAt', cutoff);
-    expect(selectWhere).toHaveBeenCalledWith(['deletedAt', cutoff]);
+    expect(selectWhere).toHaveBeenCalledWith([
+      'deletedAt',
+      [cutoff, 'purgeStartedAt'],
+    ]);
+    expect(transactionLock).toHaveBeenCalledWith('update');
+    expect(transactionDeleteWhere).toHaveBeenCalledWith([
+      'file-1',
+      PURGE_CLAIMED_AT,
+    ]);
     expect(result).toEqual({
       scanned: 1,
       deleted: 1,
@@ -735,9 +1271,34 @@ describe('FilesService retention cleanup', () => {
     });
   });
 
+  it('retries a marked trash purge before the retention boundary', async () => {
+    const now = new Date('2026-07-31T00:00:00.000Z');
+    const cutoff = new Date('2026-07-01T00:00:00.000Z');
+    const recentTrash = userFile({
+      deletedAt: new Date('2026-07-30T00:00:00.000Z'),
+      purgeStartedAt: new Date('2026-07-01T00:00:00.000Z'),
+    });
+    selectedRows = [recentTrash];
+    lockedRows = [recentTrash];
+    transactionUpdatedRows = [purgeClaim(recentTrash)];
+    transactionDeletedRows = [{ id: 'file-1' }];
+    const service = new FilesService(minioService as any, cleanupQueue as any);
+
+    const result = await service.cleanupTrashed(now);
+
+    expect(selectWhere).toHaveBeenCalledWith([
+      'deletedAt',
+      [cutoff, 'purgeStartedAt'],
+    ]);
+    expect(result.deletedFileIds).toEqual(['file-1']);
+  });
+
   it('keeps the database row when object deletion fails', async () => {
     selectedRows = [anonymousFile()];
+    lockedRows = [anonymousFile()];
+    transactionUpdatedRows = [purgeClaim(anonymousFile())];
     minioService.delete.mockRejectedValueOnce(new Error('storage unavailable'));
+    minioService.probeObjectExists.mockResolvedValueOnce(true);
     const service = new FilesService(minioService as any, cleanupQueue as any);
     vi.spyOn((service as any).logger, 'error').mockImplementation(() => {});
 
@@ -745,7 +1306,8 @@ describe('FilesService retention cleanup', () => {
       new Date('2026-07-13T00:00:00.000Z')
     );
 
-    expect(deleteWhere).not.toHaveBeenCalled();
+    expect(transactionDelete).not.toHaveBeenCalled();
+    expect(updateSet).toHaveBeenCalledWith({ purgeStartedAt: null });
     expect(result).toEqual({
       scanned: 1,
       deleted: 0,
@@ -757,6 +1319,9 @@ describe('FilesService retention cleanup', () => {
 
   it('deletes the database row when DeleteObject succeeds idempotently', async () => {
     selectedRows = [anonymousFile()];
+    lockedRows = [anonymousFile()];
+    transactionUpdatedRows = [purgeClaim(anonymousFile())];
+    transactionDeletedRows = [{ id: 'file-1' }];
     const service = new FilesService(minioService as any, cleanupQueue as any);
 
     const result = await service.cleanupExpired(
@@ -764,7 +1329,10 @@ describe('FilesService retention cleanup', () => {
     );
 
     expect(minioService.delete).toHaveBeenCalledTimes(1);
-    expect(deleteWhere).toHaveBeenCalledWith('file-1');
+    expect(transactionDeleteWhere).toHaveBeenCalledWith([
+      'file-1',
+      PURGE_CLAIMED_AT,
+    ]);
     expect(result.deletedFileIds).toEqual(['file-1']);
     expect(result.failedFileIds).toEqual([]);
   });

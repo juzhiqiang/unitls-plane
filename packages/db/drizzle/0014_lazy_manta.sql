@@ -1,0 +1,1 @@
+ALTER TABLE "files" ADD COLUMN "purge_started_at" timestamp;

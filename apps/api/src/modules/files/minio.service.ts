@@ -12,6 +12,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Readable } from 'node:stream';
 
 export const MINIO_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+export const MINIO_DELETE_TIMEOUT_MS = 30 * 1000;
 
 @Injectable()
 export class MinioService implements OnModuleInit {
@@ -122,12 +123,41 @@ export class MinioService implements OnModuleInit {
   }
 
   async delete(key: string): Promise<void> {
+    const abortSignal = globalThis.AbortSignal.timeout(MINIO_DELETE_TIMEOUT_MS);
     await this.client.send(
       new DeleteObjectCommand({
         Bucket: this.bucket,
         Key: key,
-      })
+      }),
+      { abortSignal }
     );
+  }
+
+  async probeObjectExists(key: string): Promise<boolean> {
+    const abortSignal = globalThis.AbortSignal.timeout(MINIO_DELETE_TIMEOUT_MS);
+    try {
+      await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+        { abortSignal }
+      );
+      return true;
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        '$metadata' in error &&
+        typeof error.$metadata === 'object' &&
+        error.$metadata !== null &&
+        'httpStatusCode' in error.$metadata &&
+        error.$metadata.httpStatusCode === 404
+      ) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async exists(key: string): Promise<boolean> {

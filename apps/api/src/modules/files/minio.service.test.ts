@@ -1,7 +1,11 @@
 import { HeadBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'bun:test';
 import { Readable } from 'node:stream';
-import { MINIO_UPLOAD_TIMEOUT_MS, MinioService } from './minio.service';
+import {
+  MINIO_DELETE_TIMEOUT_MS,
+  MINIO_UPLOAD_TIMEOUT_MS,
+  MinioService,
+} from './minio.service';
 
 function withClient(send: ReturnType<typeof vi.fn>) {
   const service = new MinioService();
@@ -28,6 +32,21 @@ describe('MinioService delete logging', () => {
     const debugOutput = debug.mock.calls.flat().map(String).join(' ');
     expect(debugOutput).not.toContain(storageKey);
     expect(debugOutput).not.toContain('private-report.pdf');
+  });
+
+  it('aborts DeleteObject before an open file transaction can idle out', async () => {
+    const send = vi.fn(async () => ({}));
+    const service = withClient(send);
+    const abortSignal = new globalThis.AbortController().signal;
+    const timeout = vi
+      .spyOn(globalThis.AbortSignal, 'timeout')
+      .mockReturnValue(abortSignal);
+
+    await service.delete('anonymous/file-1/private-report.pdf');
+
+    expect(MINIO_DELETE_TIMEOUT_MS).toBe(30 * 1000);
+    expect(timeout).toHaveBeenCalledWith(MINIO_DELETE_TIMEOUT_MS);
+    expect(send.mock.calls[0]?.[1]).toEqual({ abortSignal });
   });
 });
 
@@ -92,6 +111,36 @@ describe('MinioService object streaming', () => {
     );
 
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
+  });
+
+  it('reports only an explicit object-storage 404 as missing', async () => {
+    const missing = Object.assign(new Error('not found'), {
+      $metadata: { httpStatusCode: 404 },
+    });
+    const send = vi.fn().mockRejectedValue(missing);
+    const service = withClient(send);
+    const abortSignal = new globalThis.AbortController().signal;
+    const timeout = vi
+      .spyOn(globalThis.AbortSignal, 'timeout')
+      .mockReturnValue(abortSignal);
+
+    await expect(
+      service.probeObjectExists('user-1/file-1/report.pdf')
+    ).resolves.toBe(false);
+
+    expect(timeout).toHaveBeenCalledWith(MINIO_DELETE_TIMEOUT_MS);
+    expect(send.mock.calls[0]?.[1]).toEqual({ abortSignal });
+  });
+
+  it('keeps non-404 probe failures indeterminate', async () => {
+    const unavailable = Object.assign(new Error('storage unavailable'), {
+      $metadata: { httpStatusCode: 503 },
+    });
+    const service = withClient(vi.fn().mockRejectedValue(unavailable));
+
+    await expect(
+      service.probeObjectExists('user-1/file-1/report.pdf')
+    ).rejects.toBe(unavailable);
   });
 });
 

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -16,7 +17,9 @@ import {
   lte,
   like,
   inArray,
+  or,
   sql,
+  type SQL,
 } from 'drizzle-orm';
 import { db, files, type File, type NewFile, type User } from '@utils-plane/db';
 import { getLimit, type EntitlementUser } from '@utils-plane/utils';
@@ -48,6 +51,14 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const FILE_PURGE_LEASE_MS = 2 * 60 * 1000;
+type FileEligibility = SQL<unknown>;
+type FilePurgeResult = 'deleted' | 'in-progress' | 'missing';
+type FilePurgeClaim = {
+  id: string;
+  storageKey: string;
+  purgeStartedAt: Date;
+};
 
 export type CleanupSummary = {
   scanned: number;
@@ -62,6 +73,13 @@ function normalizeFileRecord(file: File): File {
     ...file,
     filename: normalizeUploadedFilename(file.filename),
   };
+}
+
+function requireFileEligibility(
+  eligibility: SQL<unknown> | undefined
+): FileEligibility {
+  if (!eligibility) throw new Error('File purge eligibility is required');
+  return eligibility;
 }
 
 export interface UploadMeta {
@@ -205,11 +223,11 @@ export class FilesService {
           await transaction
             .select()
             .from(files)
-            .where(eq(files.id, id))
+            .where(and(eq(files.id, id), isNull(files.purgeStartedAt)))
             .limit(1)
         )[0]
       : await db.query.files.findFirst({
-          where: eq(files.id, id),
+          where: and(eq(files.id, id), isNull(files.purgeStartedAt)),
         });
 
     if (!file) {
@@ -260,7 +278,11 @@ export class FilesService {
     const limit = options.limit ?? 20;
     const offset = (page - 1) * limit;
 
-    const conditions = [eq(files.userId, userId), isNull(files.deletedAt)];
+    const conditions = [
+      eq(files.userId, userId),
+      isNull(files.deletedAt),
+      isNull(files.purgeStartedAt),
+    ];
     if (options.mimeType) {
       conditions.push(like(files.mimeType, `${options.mimeType}%`));
     }
@@ -296,7 +318,13 @@ export class FilesService {
     await db
       .update(files)
       .set({ deletedAt: new Date() })
-      .where(eq(files.id, id));
+      .where(
+        and(
+          eq(files.id, id),
+          eq(files.userId, userId),
+          isNull(files.purgeStartedAt)
+        )
+      );
 
     this.logger.log(`Soft deleted file ${id}`);
   }
@@ -305,28 +333,11 @@ export class FilesService {
     const userFiles = await db
       .select()
       .from(files)
-      .where(and(inArray(files.id, ids), eq(files.userId, userId)));
-
-    if (userFiles.length === 0) return;
-
-    const validIds = userFiles.map(f => f.id);
-    await db
-      .update(files)
-      .set({ deletedAt: new Date() })
-      .where(inArray(files.id, validIds));
-
-    this.logger.log(`Batch soft deleted ${validIds.length} files`);
-  }
-
-  async batchRestore(ids: string[], userId: string): Promise<void> {
-    const userFiles = await db
-      .select()
-      .from(files)
       .where(
         and(
           inArray(files.id, ids),
           eq(files.userId, userId),
-          isNotNull(files.deletedAt)
+          isNull(files.purgeStartedAt)
         )
       );
 
@@ -335,32 +346,50 @@ export class FilesService {
     const validIds = userFiles.map(f => f.id);
     await db
       .update(files)
-      .set({ deletedAt: null })
-      .where(inArray(files.id, validIds));
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          inArray(files.id, validIds),
+          eq(files.userId, userId),
+          isNull(files.purgeStartedAt)
+        )
+      );
 
-    this.logger.log(`Batch restored ${validIds.length} files`);
+    this.logger.log(`Batch soft deleted ${validIds.length} files`);
+  }
+
+  async batchRestore(ids: string[], userId: string): Promise<void> {
+    if (ids.length === 0) return;
+
+    const restored = await db
+      .update(files)
+      .set({ deletedAt: null })
+      .where(
+        and(
+          inArray(files.id, ids),
+          eq(files.userId, userId),
+          isNotNull(files.deletedAt),
+          isNull(files.purgeStartedAt)
+        )
+      )
+      .returning({ id: files.id });
+
+    this.logger.log(`Batch restored ${restored.length} files`);
   }
 
   async restore(id: string, userId: string): Promise<void> {
-    const file = await db.query.files.findFirst({
-      where: eq(files.id, id),
-    });
+    const restored = await db
+      .update(files)
+      .set({ deletedAt: null })
+      .where(this.userRestorableFileEligibility(id, userId))
+      .returning({ id: files.id });
 
-    if (!file) {
+    if (restored.length === 0) {
       throw new NotFoundException({
         code: ErrorCodes.TASK_NOT_FOUND,
         message: 'File not found',
       });
     }
-
-    if (file.userId !== userId) {
-      throw new ForbiddenException({
-        code: ErrorCodes.UNAUTHORIZED,
-        message: 'Access denied',
-      });
-    }
-
-    await db.update(files).set({ deletedAt: null }).where(eq(files.id, id));
 
     this.logger.log(`Restored file ${id}`);
   }
@@ -373,7 +402,11 @@ export class FilesService {
     const limit = options.limit ?? 20;
     const offset = (page - 1) * limit;
 
-    const where = and(eq(files.userId, userId), isNotNull(files.deletedAt));
+    const where = and(
+      eq(files.userId, userId),
+      isNotNull(files.deletedAt),
+      isNull(files.purgeStartedAt)
+    );
 
     const [fileList, countResult] = await Promise.all([
       db
@@ -396,15 +429,21 @@ export class FilesService {
   }
 
   async permanentDelete(id: string, userId: string): Promise<void> {
-    const file = await this.getDeletedFileById(id, userId);
-
-    // 删除 MinIO 对象
-    await this.minioService.delete(file.storageKey);
-
-    // 删除数据库记录
-    await db.delete(files).where(eq(files.id, id));
-
-    this.logger.log(`Permanently deleted file ${id}`);
+    const result = await this.permanentlyDeleteEligibleFile(
+      this.userTrashedFileEligibility(id, userId)
+    );
+    if (result === 'missing') {
+      throw new NotFoundException({
+        code: ErrorCodes.TASK_NOT_FOUND,
+        message: 'File not found in trash',
+      });
+    }
+    if (result === 'in-progress') {
+      throw new ServiceUnavailableException('File deletion is in progress');
+    }
+    if (result === 'deleted') {
+      this.logger.log(`Permanently deleted file ${id}`);
+    }
   }
 
   async batchPermanentDelete(ids: string[], userId: string): Promise<void> {
@@ -419,20 +458,25 @@ export class FilesService {
         )
       );
 
-    for (const file of userFiles) {
-      await this.minioService.delete(file.storageKey);
-    }
-
     if (userFiles.length === 0) return;
 
-    await db.delete(files).where(
-      inArray(
-        files.id,
-        userFiles.map(f => f.id)
-      )
-    );
+    let deleted = 0;
+    let incomplete = false;
+    for (const file of userFiles) {
+      const result = await this.permanentlyDeleteEligibleFile(
+        this.userTrashedFileEligibility(file.id, userId)
+      );
+      if (result === 'deleted') {
+        deleted += 1;
+      } else if (result === 'in-progress') {
+        incomplete = true;
+      }
+    }
 
-    this.logger.log(`Batch permanently deleted ${userFiles.length} files`);
+    this.logger.log(`Batch permanently deleted ${deleted} files`);
+    if (incomplete) {
+      throw new ServiceUnavailableException('File deletion is incomplete');
+    }
   }
 
   async emptyTrash(userId: string): Promise<void> {
@@ -441,17 +485,25 @@ export class FilesService {
       .from(files)
       .where(and(eq(files.userId, userId), isNotNull(files.deletedAt)));
 
-    for (const file of userFiles) {
-      await this.minioService.delete(file.storageKey);
-    }
-
     if (userFiles.length === 0) return;
 
-    await db
-      .delete(files)
-      .where(and(eq(files.userId, userId), isNotNull(files.deletedAt)));
+    let deleted = 0;
+    let incomplete = false;
+    for (const file of userFiles) {
+      const result = await this.permanentlyDeleteEligibleFile(
+        this.userTrashedFileEligibility(file.id, userId)
+      );
+      if (result === 'deleted') {
+        deleted += 1;
+      } else if (result === 'in-progress') {
+        incomplete = true;
+      }
+    }
 
-    this.logger.log(`Emptied trash for user ${userId}`);
+    this.logger.log(`Emptied trash for user ${userId}: ${deleted} files`);
+    if (incomplete) {
+      throw new ServiceUnavailableException('File deletion is incomplete');
+    }
   }
 
   async cleanupExpired(now = new Date()): Promise<CleanupSummary> {
@@ -467,7 +519,17 @@ export class FilesService {
         )
       );
 
-    return this.cleanupRecords(expiredFiles);
+    return this.cleanupRecords(expiredFiles, file =>
+      requireFileEligibility(
+        and(
+          eq(files.id, file.id),
+          isNull(files.userId),
+          isNull(files.deletedAt),
+          isNotNull(files.expiresAt),
+          lte(files.expiresAt, now)
+        )
+      )
+    );
   }
 
   async cleanupTrashed(now = new Date()): Promise<CleanupSummary> {
@@ -475,20 +537,39 @@ export class FilesService {
     const trashedFiles = await db
       .select()
       .from(files)
-      .where(and(isNotNull(files.deletedAt), lte(files.deletedAt, cutoff)));
+      .where(
+        and(
+          isNotNull(files.deletedAt),
+          or(lte(files.deletedAt, cutoff), isNotNull(files.purgeStartedAt))
+        )
+      );
 
-    return this.cleanupRecords(trashedFiles);
+    return this.cleanupRecords(trashedFiles, file =>
+      requireFileEligibility(
+        and(
+          eq(files.id, file.id),
+          isNotNull(files.deletedAt),
+          or(lte(files.deletedAt, cutoff), isNotNull(files.purgeStartedAt))
+        )
+      )
+    );
   }
 
-  private async cleanupRecords(records: File[]): Promise<CleanupSummary> {
+  private async cleanupRecords(
+    records: File[],
+    eligibilityFor: (file: File) => FileEligibility
+  ): Promise<CleanupSummary> {
     const deletedFileIds: string[] = [];
     const failedFileIds: string[] = [];
 
     for (const file of records) {
       try {
-        await this.minioService.delete(file.storageKey);
-        await db.delete(files).where(eq(files.id, file.id));
-        deletedFileIds.push(file.id);
+        const result = await this.permanentlyDeleteEligibleFile(
+          eligibilityFor(file)
+        );
+        if (result === 'deleted') {
+          deletedFileIds.push(file.id);
+        }
       } catch (error) {
         failedFileIds.push(file.id);
         this.logger.error(
@@ -507,6 +588,114 @@ export class FilesService {
     };
   }
 
+  private userTrashedFileEligibility(
+    id: string,
+    userId: string
+  ): FileEligibility {
+    return requireFileEligibility(
+      and(
+        eq(files.id, id),
+        eq(files.userId, userId),
+        isNotNull(files.deletedAt)
+      )
+    );
+  }
+
+  private userRestorableFileEligibility(
+    id: string,
+    userId: string
+  ): FileEligibility {
+    return requireFileEligibility(
+      and(
+        eq(files.id, id),
+        eq(files.userId, userId),
+        isNotNull(files.deletedAt),
+        isNull(files.purgeStartedAt)
+      )
+    );
+  }
+
+  private async permanentlyDeleteEligibleFile(
+    eligibility: FileEligibility
+  ): Promise<FilePurgeResult> {
+    const claim = await withProducerTransaction(async tx => {
+      const [current] = await tx
+        .select()
+        .from(files)
+        .where(eligibility)
+        .limit(1)
+        .for('update');
+
+      if (!current) return null;
+
+      const [claimed] = await tx
+        .update(files)
+        .set({
+          purgeStartedAt: sql`date_trunc('milliseconds', clock_timestamp())`,
+        })
+        .where(
+          and(
+            eq(files.id, current.id),
+            or(
+              isNull(files.purgeStartedAt),
+              lte(
+                files.purgeStartedAt,
+                sql`now() - (${FILE_PURGE_LEASE_MS} * interval '1 millisecond')`
+              )
+            )
+          )
+        )
+        .returning({
+          id: files.id,
+          storageKey: files.storageKey,
+          purgeStartedAt: files.purgeStartedAt,
+        });
+
+      return claimed?.purgeStartedAt ? (claimed as FilePurgeClaim) : undefined;
+    });
+
+    if (claim === null) return 'missing';
+    if (!claim) return 'in-progress';
+
+    try {
+      await this.minioService.delete(claim.storageKey);
+    } catch (error) {
+      let objectExists: boolean;
+      try {
+        objectExists = await this.minioService.probeObjectExists(
+          claim.storageKey
+        );
+      } catch {
+        throw error;
+      }
+
+      if (objectExists) {
+        await db
+          .update(files)
+          .set({ purgeStartedAt: null })
+          .where(this.filePurgeClaimEligibility(claim));
+        throw error;
+      }
+    }
+
+    const deleted = await withProducerTransaction(tx =>
+      tx
+        .delete(files)
+        .where(this.filePurgeClaimEligibility(claim))
+        .returning({ id: files.id })
+    );
+    return deleted.length === 1 ? 'deleted' : 'in-progress';
+  }
+
+  private filePurgeClaimEligibility(claim: FilePurgeClaim): FileEligibility {
+    return requireFileEligibility(
+      and(
+        eq(files.id, claim.id),
+        eq(files.purgeStartedAt, claim.purgeStartedAt)
+      )
+    );
+  }
+
   private isAllowedMimeType(mimeType: string): boolean {
     // 检查精确匹配或 image/* 等通配符
     if (ALLOWED_MIME_TYPES.includes(mimeType)) {
@@ -516,27 +705,5 @@ export class FilesService {
     const prefix = mimeType.split('/')[0];
     const wildcardTypes = ALLOWED_MIME_TYPES.filter(t => t.endsWith('/*'));
     return wildcardTypes.some(t => t.startsWith(`${prefix}/`));
-  }
-
-  private async getDeletedFileById(id: string, userId: string): Promise<File> {
-    const file = await db.query.files.findFirst({
-      where: and(eq(files.id, id), isNotNull(files.deletedAt)),
-    });
-
-    if (!file) {
-      throw new NotFoundException({
-        code: ErrorCodes.TASK_NOT_FOUND,
-        message: 'File not found in trash',
-      });
-    }
-
-    if (file.userId !== userId) {
-      throw new ForbiddenException({
-        code: ErrorCodes.UNAUTHORIZED,
-        message: 'Access denied',
-      });
-    }
-
-    return normalizeFileRecord(file);
   }
 }

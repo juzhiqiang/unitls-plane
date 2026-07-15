@@ -23,6 +23,7 @@ export const files = pgTable(
     metadata: jsonb('metadata'),
     expiresAt: timestamp('expires_at'),
     deletedAt: timestamp('deleted_at'),
+    purgeStartedAt: timestamp('purge_started_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

@@ -1,21 +1,33 @@
 import {
   Injectable,
-  Optional,
   ServiceUnavailableException,
+  type OnApplicationShutdown,
+  type OnModuleInit,
 } from '@nestjs/common';
 import * as archiver from 'archiver';
+import { Database } from 'bun:sqlite';
+import { createReadStream } from 'node:fs';
+import {
+  chmod,
+  mkdtemp,
+  open,
+  readdir,
+  rm,
+  type FileHandle,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { Readable, type Writable } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { MinioService } from '../files/minio.service';
 import {
   type AccountExportFile,
   type AccountExportProfile,
-  type AccountExportTask,
-  ACCOUNT_EXPORT_MAX_FILE_ROWS,
-  ACCOUNT_EXPORT_MAX_TASK_ROWS,
   AccountRepository,
 } from './account.repository';
 import {
+  type ArchivePathRegistry,
   buildExportFilename,
   createArchivePath,
   createExportTask,
@@ -23,20 +35,129 @@ import {
 } from './account-export.util';
 
 export interface PreparedAccountExport {
+  userId: string;
+  snapshotAt: Date;
   filename: string;
   profile: AccountExportProfile;
-  tasks: AccountExportTask[];
-  files: Array<{ source: AccountExportFile; exportPath: string }>;
+  spool: AccountExportSpool;
 }
-
-export const ACCOUNT_EXPORT_MAX_METADATA_BYTES = 32 * 1024 * 1024;
-const METADATA_TOO_LARGE_MESSAGE = 'Account export metadata is too large';
 
 const ZipArchive = (
   archiver as unknown as {
     ZipArchive: new (options: { zlib: { level: number } }) => archiver.Archiver;
   }
 ).ZipArchive;
+
+const ACCOUNT_EXPORT_TEMP_PREFIX = 'utils-plane-account-export-';
+const SQLITE_CLOSE_ATTEMPTS = 3;
+
+type AccountExportManifestEntry = ReturnType<typeof createManifestEntry>;
+
+interface AccountExportSpoolEntry {
+  manifest: AccountExportManifestEntry;
+  exportPath: string;
+  storageKey: string;
+}
+
+interface AccountExportSpool {
+  directory: string;
+  tasksPath: string;
+  filesPath: string;
+}
+
+type AccountExportTaskEntry = ReturnType<typeof createExportTask>;
+
+class SqliteArchivePathRegistry implements ArchivePathRegistry {
+  private readonly database: Database;
+  private closed = false;
+
+  constructor(path: string) {
+    this.database = new Database(path, { create: true, strict: true });
+    try {
+      this.database.exec(`
+        PRAGMA journal_mode = OFF;
+        PRAGMA synchronous = OFF;
+        PRAGMA temp_store = FILE;
+        PRAGMA cache_size = -512;
+        CREATE TABLE used_paths (path TEXT PRIMARY KEY) WITHOUT ROWID;
+        BEGIN IMMEDIATE;
+      `);
+    } catch (error) {
+      let closeFailure: { error: unknown } | undefined;
+      try {
+        closeSqliteDatabase(this.database);
+      } catch (closeError) {
+        closeFailure = { error: closeError };
+      }
+      if (closeFailure) {
+        throw new AggregateError(
+          [
+            toError(error, 'SQLite initialization failed'),
+            toError(closeFailure.error, 'SQLite close failed'),
+          ],
+          'Failed to initialize the account export path index',
+          { cause: error }
+        );
+      }
+      throw error;
+    }
+  }
+
+  has(path: string): boolean {
+    return (
+      this.database
+        .query<
+          { present: number },
+          [string]
+        >('SELECT 1 AS present FROM used_paths WHERE path = ?')
+        .get(path) !== null
+    );
+  }
+
+  add(path: string): void {
+    this.database
+      .query<unknown, [string]>('INSERT INTO used_paths (path) VALUES (?)')
+      .run(path);
+  }
+
+  complete(): void {
+    if (this.closed) return;
+    this.database.exec('COMMIT');
+    closeSqliteDatabase(this.database);
+    this.closed = true;
+  }
+
+  dispose(): void {
+    if (this.closed) return;
+    try {
+      this.database.exec('ROLLBACK');
+    } catch {
+      // The transaction may already be closed after a failed commit.
+    } finally {
+      closeSqliteDatabase(this.database);
+      this.closed = true;
+    }
+  }
+}
+
+function closeSqliteDatabase(database: Database): void {
+  const errors: Error[] = [];
+  for (let attempt = 0; attempt < SQLITE_CLOSE_ATTEMPTS; attempt++) {
+    try {
+      database.close(false);
+      return;
+    } catch (error) {
+      errors.push(toError(error, 'SQLite close failed'));
+    }
+  }
+  throw new AggregateError(
+    errors,
+    'Failed to close account export path index',
+    {
+      cause: errors[0],
+    }
+  );
+}
 
 function appendArchiveStream(
   archive: archiver.Archiver,
@@ -122,19 +243,145 @@ function serializeJson(value: unknown): string {
   return serialized;
 }
 
-function* manifestEntries(
-  files: PreparedAccountExport['files']
-): Generator<ReturnType<typeof createManifestEntry>> {
-  for (const { source, exportPath } of files)
-    yield createManifestEntry(source, exportPath);
+async function createAccountExportSpool(
+  tasks: AsyncIterable<Parameters<typeof createExportTask>[0]>,
+  files: AsyncIterable<AccountExportFile>,
+  headObject: (storageKey: string) => Promise<void>
+): Promise<AccountExportSpool> {
+  const directory = await mkdtemp(
+    join(tmpdir(), `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-`)
+  );
+  const tasksPath = join(directory, 'tasks.jsonl');
+  const filesPath = join(directory, 'files.jsonl');
+  const pathIndexPath = join(directory, 'paths.sqlite');
+  let tasksHandle: FileHandle | undefined;
+  let filesHandle: FileHandle | undefined;
+  let pathRegistry: SqliteArchivePathRegistry | undefined;
+
+  try {
+    await chmod(directory, 0o700);
+    tasksHandle = await open(tasksPath, 'wx', 0o600);
+    for await (const task of tasks) {
+      await tasksHandle.writeFile(
+        `${serializeJson(createExportTask(task))}\n`,
+        'utf8'
+      );
+    }
+    await tasksHandle.close();
+    tasksHandle = undefined;
+    await chmod(tasksPath, 0o600);
+
+    filesHandle = await open(filesPath, 'wx', 0o600);
+    pathRegistry = new SqliteArchivePathRegistry(pathIndexPath);
+    await chmod(pathIndexPath, 0o600);
+
+    for await (const file of files) {
+      await headObject(file.storageKey);
+      const exportPath = createArchivePath(
+        file.filename,
+        file.id,
+        pathRegistry
+      );
+      const entry: AccountExportSpoolEntry = {
+        manifest: createManifestEntry(file, exportPath),
+        exportPath,
+        storageKey: file.storageKey,
+      };
+      await filesHandle.writeFile(`${serializeJson(entry)}\n`, 'utf8');
+    }
+
+    await filesHandle.close();
+    filesHandle = undefined;
+    await chmod(filesPath, 0o600);
+    pathRegistry.complete();
+    pathRegistry = undefined;
+    await rm(pathIndexPath, { force: true });
+    return { directory, tasksPath, filesPath };
+  } catch (error) {
+    const cleanupErrors: Error[] = [];
+    await tasksHandle?.close().catch(closeError => {
+      cleanupErrors.push(toError(closeError, 'Failed to close tasks spool'));
+    });
+    await filesHandle?.close().catch(closeError => {
+      cleanupErrors.push(toError(closeError, 'Failed to close files spool'));
+    });
+    try {
+      pathRegistry?.dispose();
+    } catch (closeError) {
+      cleanupErrors.push(
+        toError(closeError, 'Failed to close account export path index')
+      );
+    }
+    try {
+      await rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 50,
+      });
+    } catch (removeError) {
+      cleanupErrors.push(
+        toError(removeError, 'Failed to remove account export spool')
+      );
+    }
+    if (cleanupErrors.length > 0)
+      throw new AggregateError(
+        [toError(error, 'Account export preparation failed'), ...cleanupErrors],
+        'Failed to clean up an incomplete account export',
+        { cause: error }
+      );
+    throw error;
+  }
 }
 
-function createJsonArrayStream(items: Iterable<unknown>): Readable {
+async function* readAccountExportSpool<T>(path: string): AsyncGenerator<T> {
+  const input = createReadStream(path, { encoding: 'utf8' });
+  const lines = createInterface({ input, crlfDelay: Infinity });
+
+  try {
+    for await (const line of lines) {
+      if (line.length === 0) continue;
+      yield JSON.parse(line) as T;
+    }
+  } finally {
+    lines.close();
+    input.destroy();
+    await finished(input, { cleanup: true }).catch(() => undefined);
+  }
+}
+
+async function* spoolManifestEntries(spool: AccountExportSpool) {
+  for await (const entry of readAccountExportSpool<AccountExportSpoolEntry>(
+    spool.filesPath
+  )) {
+    yield entry.manifest;
+  }
+}
+
+function getSpoolOwnerPid(name: string): number | undefined {
+  if (!name.startsWith(ACCOUNT_EXPORT_TEMP_PREFIX)) return undefined;
+  const value = name.slice(ACCOUNT_EXPORT_TEMP_PREFIX.length).split('-', 1)[0];
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  return Number(value);
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code === 'EPERM';
+  }
+}
+
+function createJsonArrayStream(
+  items: Iterable<unknown> | AsyncIterable<unknown>
+): Readable {
   return Readable.from(
-    (function* () {
+    (async function* () {
       yield '[';
       let first = true;
-      for (const item of items) {
+      for await (const item of items) {
         if (!first) yield ',';
         first = false;
         yield serializeJson(item);
@@ -144,76 +391,65 @@ function createJsonArrayStream(items: Iterable<unknown>): Readable {
   );
 }
 
-function assertMetadataWithinLimit(
-  profile: AccountExportProfile,
-  tasks: AccountExportTask[],
-  files: PreparedAccountExport['files'],
-  maxBytes: number
-): void {
-  let totalBytes = 0;
-  const addBytes = (value: string) => {
-    totalBytes += Buffer.byteLength(value, 'utf8');
-    if (totalBytes > maxBytes)
-      throw new ServiceUnavailableException(METADATA_TOO_LARGE_MESSAGE);
-  };
-  const addArray = (items: Iterable<unknown>) => {
-    addBytes('[');
-    let first = true;
-    for (const item of items) {
-      if (!first) addBytes(',');
-      first = false;
-      addBytes(serializeJson(item));
-    }
-    addBytes(']');
-  };
-
-  addBytes(serializeJson(profile));
-  addArray(tasks);
-  addArray(manifestEntries(files));
-}
-
 @Injectable()
-export class AccountExportService {
+export class AccountExportService
+  implements OnModuleInit, OnApplicationShutdown
+{
+  private readonly preparedDirectories = new Set<string>();
+
   constructor(
     private readonly repository: AccountRepository,
-    private readonly minio: MinioService,
-    @Optional()
-    private readonly metadataByteLimit = ACCOUNT_EXPORT_MAX_METADATA_BYTES
+    private readonly minio: MinioService
   ) {}
 
-  async prepareExport(userId: string): Promise<PreparedAccountExport> {
-    const snapshot = await this.repository.getExportSnapshot(userId);
-    if (
-      snapshot.tasks.length > ACCOUNT_EXPORT_MAX_TASK_ROWS ||
-      snapshot.files.length > ACCOUNT_EXPORT_MAX_FILE_ROWS
-    )
-      throw new ServiceUnavailableException(METADATA_TOO_LARGE_MESSAGE);
+  async onModuleInit(): Promise<void> {
+    const entries = await readdir(tmpdir(), { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const ownerPid = getSpoolOwnerPid(entry.name);
+      if (ownerPid === undefined) continue;
+      if (ownerPid !== process.pid && isProcessAlive(ownerPid)) continue;
+      await this.removeSpoolDirectory(join(tmpdir(), entry.name));
+    }
+  }
 
-    const usedPaths = new Set<string>();
-    const tasks = snapshot.tasks.map(createExportTask);
-    const preparedFiles = snapshot.files.map(source => ({
-      source,
-      exportPath: createArchivePath(source.filename, source.id, usedPaths),
-    }));
-    assertMetadataWithinLimit(
-      snapshot.profile,
-      tasks,
-      preparedFiles,
-      this.metadataByteLimit
+  async onApplicationShutdown(): Promise<void> {
+    await Promise.all(
+      [...this.preparedDirectories].map(directory =>
+        this.removeSpoolDirectory(directory)
+      )
     );
+  }
+
+  async prepareExport(userId: string): Promise<PreparedAccountExport> {
+    const snapshotAt = new Date();
+    const profile = await this.repository.getExportProfile(userId);
+    let spool: AccountExportSpool;
 
     try {
-      for (const file of snapshot.files) await this.minio.head(file.storageKey);
-    } catch {
-      throw new ServiceUnavailableException('Account export is incomplete');
+      spool = await createAccountExportSpool(
+        this.repository.iterateExportTasks(userId, snapshotAt),
+        this.repository.iterateExportFiles(userId, snapshotAt),
+        storageKey => this.minio.head(storageKey)
+      );
+    } catch (error) {
+      throw new ServiceUnavailableException('Account export is incomplete', {
+        cause: error,
+      });
     }
+    this.preparedDirectories.add(spool.directory);
 
     return {
-      filename: buildExportFilename(new Date()),
-      profile: snapshot.profile,
-      tasks,
-      files: preparedFiles,
+      userId,
+      snapshotAt,
+      filename: buildExportFilename(snapshotAt),
+      profile,
+      spool,
     };
+  }
+
+  async disposePreparedExport(prepared: PreparedAccountExport): Promise<void> {
+    await this.removeSpoolDirectory(prepared.spool.directory);
   }
 
   async writeExport(
@@ -221,7 +457,10 @@ export class AccountExportService {
     output: Writable
   ): Promise<void> {
     const abortError = new Error('Account export aborted');
-    if (output.destroyed || output.closed) throw abortError;
+    if (output.destroyed || output.closed) {
+      await this.disposePreparedExport(prepared);
+      throw abortError;
+    }
 
     const archive = new ZipArchive({ zlib: { level: 6 } });
     const abortController = new globalThis.AbortController();
@@ -253,17 +492,32 @@ export class AccountExportService {
       archive.append(Readable.from([serializeJson(prepared.profile)]), {
         name: 'profile.json',
       });
-      archive.append(createJsonArrayStream(prepared.tasks), {
-        name: 'tasks.json',
-      });
-      archive.append(createJsonArrayStream(manifestEntries(prepared.files)), {
-        name: 'files.json',
-      });
+      activeInput = createJsonArrayStream(
+        readAccountExportSpool<AccountExportTaskEntry>(prepared.spool.tasksPath)
+      );
+      await appendArchiveStream(
+        archive,
+        activeInput,
+        'tasks.json',
+        abortController.signal
+      );
+      activeInput = undefined;
 
-      for (const file of prepared.files) {
+      activeInput = createJsonArrayStream(spoolManifestEntries(prepared.spool));
+      await appendArchiveStream(
+        archive,
+        activeInput,
+        'files.json',
+        abortController.signal
+      );
+      activeInput = undefined;
+
+      for await (const file of readAccountExportSpool<AccountExportSpoolEntry>(
+        prepared.spool.filesPath
+      )) {
         if (abortController.signal.aborted)
           throw getAbortReason(abortController.signal);
-        const inputPromise = this.minio.downloadStream(file.source.storageKey);
+        const inputPromise = this.minio.downloadStream(file.storageKey);
         inputPromise.then(
           input => {
             if (abortController.signal.aborted) input.destroy();
@@ -297,6 +551,17 @@ export class AccountExportService {
       archive.off('error', onArchiveError);
       output.off('error', onOutputError);
       output.off('close', onOutputClose);
+      await this.disposePreparedExport(prepared);
     }
+  }
+
+  private async removeSpoolDirectory(directory: string): Promise<void> {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 50,
+    });
+    this.preparedDirectories.delete(directory);
   }
 }

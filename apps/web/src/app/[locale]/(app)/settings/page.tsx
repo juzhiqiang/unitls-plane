@@ -51,7 +51,7 @@ export default function SettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false);
 
   const [exportStatus, setExportStatus] = useState<
-    'idle' | 'preparing' | 'success' | 'failed'
+    'idle' | 'preparing' | 'started' | 'failed'
   >('idle');
   const [confirmationEmail, setConfirmationEmail] = useState('');
   const [deletionStatus, setDeletionStatus] = useState<
@@ -171,7 +171,7 @@ export default function SettingsPage() {
     setExportStatus('preparing');
     try {
       await downloadAccountExport();
-      setExportStatus('success');
+      setExportStatus('started');
     } catch {
       setExportStatus('failed');
     }
@@ -417,11 +417,11 @@ export default function SettingsPage() {
               ? t('account.exportPreparing')
               : exportStatus === 'failed'
                 ? t('account.exportRetry')
-                : exportStatus === 'success'
+                : exportStatus === 'started'
                   ? t('account.exportAgain')
                   : t('account.exportAction')}
           </Button>
-          {exportStatus === 'success' && (
+          {exportStatus === 'started' && (
             <p
               role="status"
               aria-label={t('account.exportSuccess')}

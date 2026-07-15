@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { once } from 'node:events';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { PassThrough, Readable } from 'node:stream';
 import * as archiver from 'archiver';
 import { AccountController } from './account.controller';
-import type { AccountExportSnapshot } from './account.repository';
+import type {
+  AccountExportFile,
+  AccountExportProfile,
+  AccountExportTask,
+} from './account.repository';
 import {
   buildExportFilename,
   createArchivePath,
@@ -12,7 +20,14 @@ import {
 import { AccountExportService } from './account-export.service';
 
 const createdAt = new Date('2026-07-13T08:00:00Z');
-const exportSnapshot: AccountExportSnapshot = {
+const ACCOUNT_EXPORT_TEMP_PREFIX = 'utils-plane-account-export-';
+type TestExportSnapshot = {
+  profile: AccountExportProfile;
+  tasks: AccountExportTask[];
+  files: AccountExportFile[];
+};
+
+const exportSnapshot: TestExportSnapshot = {
   profile: {
     id: 'user-1',
     name: 'Export User',
@@ -54,23 +69,32 @@ const exportSnapshot: AccountExportSnapshot = {
   ],
 };
 
-const repository = { getExportSnapshot: vi.fn() };
+const repository = {
+  getExportSnapshot: vi.fn<() => Promise<TestExportSnapshot>>(),
+  getExportProfile: vi.fn(async () => {
+    const snapshot = await repository.getExportSnapshot();
+    return snapshot.profile;
+  }),
+  iterateExportTasks: vi.fn(async function* () {
+    const snapshot = await repository.getExportSnapshot();
+    for (const task of snapshot.tasks) yield task;
+  }),
+  iterateExportFiles: vi.fn(async function* () {
+    const snapshot = await repository.getExportSnapshot();
+    for (const file of snapshot.files) yield file;
+  }),
+};
 const minio = {
   head: vi.fn(),
   downloadStream: vi.fn(),
 };
 
-function createService(metadataByteLimit?: number) {
+function createService() {
   const TestableAccountExportService = AccountExportService as unknown as new (
     repository: never,
-    minio: never,
-    metadataByteLimit?: number
+    minio: never
   ) => AccountExportService;
-  return new TestableAccountExportService(
-    repository as never,
-    minio as never,
-    metadataByteLimit
-  );
+  return new TestableAccountExportService(repository as never, minio as never);
 }
 
 function collect(output: PassThrough) {
@@ -114,6 +138,43 @@ function observeSettlement(promise: Promise<unknown>, timeoutMs = 100) {
   ]);
 }
 
+async function accountExportTempDirs() {
+  return new Set(
+    (await readdir(tmpdir(), { withFileTypes: true }))
+      .filter(
+        entry =>
+          entry.isDirectory() &&
+          entry.name.startsWith(ACCOUNT_EXPORT_TEMP_PREFIX)
+      )
+      .map(entry => join(tmpdir(), entry.name))
+  );
+}
+
+async function waitForNewAccountExportTempDir(baseline: Set<string>) {
+  for (let attempts = 0; attempts < 50; attempts++) {
+    const current = await accountExportTempDirs();
+    const created = [...current].find(path => !baseline.has(path));
+    if (created) return created;
+    await new Promise(resolve => setTimeout(resolve, 2));
+  }
+  return undefined;
+}
+
+async function expectAccountExportTempDirRemoved(
+  baseline: Set<string>,
+  observed: string | undefined
+) {
+  expect(observed).toBeDefined();
+  expect(await accountExportTempDirs()).toEqual(baseline);
+}
+
+async function removeNewAccountExportTempDirs(baseline: Set<string>) {
+  for (const directory of await accountExportTempDirs()) {
+    if (!baseline.has(directory))
+      await rm(directory, { recursive: true, force: true, maxRetries: 3 });
+  }
+}
+
 const OUTPUT_COMPLETION_EVENTS = ['finish', 'end', 'error', 'close'] as const;
 
 function outputListenerCounts(output: PassThrough) {
@@ -133,6 +194,9 @@ function expectOutputListenerCounts(
 beforeEach(() => {
   vi.clearAllMocks();
   repository.getExportSnapshot.mockReset();
+  repository.getExportProfile.mockClear();
+  repository.iterateExportTasks.mockClear();
+  repository.iterateExportFiles.mockClear();
   minio.head.mockReset();
   minio.downloadStream.mockReset();
   repository.getExportSnapshot.mockResolvedValue(exportSnapshot);
@@ -180,54 +244,418 @@ describe('account export utilities', () => {
 });
 
 describe('AccountExportService', () => {
-  it('rejects oversized metadata before checking object storage', async () => {
-    repository.getExportSnapshot.mockResolvedValue({
-      ...exportSnapshot,
-      tasks: [
-        {
-          ...exportSnapshot.tasks[0]!,
-          inputConfig: { notes: 'x'.repeat(256) },
-        },
-      ],
-    });
+  it('closes SQLite and removes the spool when path registry initialization fails', async () => {
+    const baselineTempDirs = await accountExportTempDirs();
+    const openedDatabases = new Set<Database>();
+    const exec = vi
+      .spyOn(Database.prototype, 'exec')
+      .mockImplementationOnce(function (this: Database) {
+        openedDatabases.add(this);
+        throw new Error('SQLite initialization failed');
+      });
+    const close = vi.spyOn(Database.prototype, 'close');
 
-    await expect(createService(128).prepareExport('user-1')).rejects.toThrow(
-      'Account export metadata is too large'
-    );
-    expect(minio.head).not.toHaveBeenCalled();
+    try {
+      const failure = await createService()
+        .prepareExport('user-1')
+        .catch(error => error as Error & { cause?: unknown });
+
+      expect(failure.message).toContain('Account export is incomplete');
+      expect(failure.cause).toBeInstanceOf(Error);
+      expect((failure.cause as Error).message).toBe(
+        'SQLite initialization failed'
+      );
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(await accountExportTempDirs()).toEqual(baselineTempDirs);
+    } finally {
+      exec.mockRestore();
+      close.mockRestore();
+      for (const database of openedDatabases) database.close(false);
+      await removeNewAccountExportTempDirs(baselineTempDirs);
+    }
   });
 
-  it('rejects too many task rows before checking object storage', async () => {
-    repository.getExportSnapshot.mockResolvedValue({
-      ...exportSnapshot,
-      tasks: Array.from({ length: 1_001 }, (_, index) => ({
-        ...exportSnapshot.tasks[0]!,
-        id: `task-${index}`,
-      })),
-    });
+  it('retries SQLite close failures and still removes the spool directory', async () => {
+    const baselineTempDirs = await accountExportTempDirs();
+    const originalClose = Database.prototype.close;
+    const openedDatabases = new Set<Database>();
+    const close = vi
+      .spyOn(Database.prototype, 'close')
+      .mockImplementation(function (this: Database, throwOnError?: boolean) {
+        openedDatabases.add(this);
+        if (close.mock.calls.length < 3) throw new Error('SQLite close failed');
+        return originalClose.call(this, throwOnError);
+      });
+    minio.head.mockRejectedValueOnce(new Error('missing object'));
 
-    await expect(createService().prepareExport('user-1')).rejects.toThrow(
-      'Account export metadata is too large'
-    );
-    expect(minio.head).not.toHaveBeenCalled();
+    try {
+      await expect(createService().prepareExport('user-1')).rejects.toThrow(
+        'Account export is incomplete'
+      );
+
+      expect(close).toHaveBeenCalledTimes(3);
+      expect(await accountExportTempDirs()).toEqual(baselineTempDirs);
+    } finally {
+      close.mockRestore();
+      for (const database of openedDatabases) database.close(false);
+      await removeNewAccountExportTempDirs(baselineTempDirs);
+    }
   });
 
-  it('rejects too many file rows before checking object storage', async () => {
+  it('streams 1001 tasks and 10001 files without retaining bounded snapshot rows', async () => {
+    const tasks = Array.from({ length: 1_001 }, (_, index) => ({
+      ...exportSnapshot.tasks[0]!,
+      id: `task-${String(index).padStart(5, '0')}`,
+      inputConfig: { sequence: index },
+    }));
+    const files = Array.from({ length: 10_001 }, (_, index) => ({
+      ...exportSnapshot.files[0]!,
+      id: `file-${String(index).padStart(8, '0')}`,
+      filename: 'report.pdf',
+      storageKey: `user-1/file-${index}/report.pdf`,
+    }));
+    const iterationSnapshots: Date[] = [];
+    const streamingRepository = {
+      getExportProfile: vi.fn().mockResolvedValue(exportSnapshot.profile),
+      iterateExportTasks: vi.fn(async function* (
+        _userId: string,
+        snapshotAt: Date
+      ) {
+        iterationSnapshots.push(snapshotAt);
+        for (const task of tasks) yield task;
+      }),
+      iterateExportFiles: vi.fn(async function* (
+        _userId: string,
+        snapshotAt: Date
+      ) {
+        iterationSnapshots.push(snapshotAt);
+        for (const file of files) yield file;
+      }),
+    };
+    const largeMinio = {
+      head: vi.fn().mockResolvedValue(undefined),
+      downloadStream: vi
+        .fn()
+        .mockImplementation(async () => Readable.from(Buffer.from([1]))),
+    };
+    const service = new AccountExportService(
+      streamingRepository as never,
+      largeMinio as never
+    );
+
+    const prepared = await service.prepareExport('user-1');
+    expect(Object.keys(prepared).sort()).toEqual([
+      'filename',
+      'profile',
+      'snapshotAt',
+      'spool',
+      'userId',
+    ]);
+    expect(largeMinio.head).toHaveBeenCalledTimes(10_001);
+
+    const archivePrototype = (
+      archiver as unknown as {
+        ZipArchive: { prototype: archiver.Archiver };
+      }
+    ).ZipArchive.prototype;
+    const originalAppend = archivePrototype.append;
+    const metadataChunks = new Map<string, Buffer[]>([
+      ['tasks.json', []],
+      ['files.json', []],
+    ]);
+    const objectPaths: string[] = [];
+    const append = vi
+      .spyOn(archivePrototype, 'append')
+      .mockImplementation(function (this: archiver.Archiver, source, data) {
+        const chunks = metadataChunks.get(data.name);
+        if (chunks && source instanceof Readable)
+          source.on('data', chunk => chunks.push(Buffer.from(chunk)));
+        if (data.name.startsWith('files/') && data.name !== 'files.json')
+          objectPaths.push(data.name);
+        return originalAppend.call(this, source, data);
+      });
+    const output = new PassThrough();
+    output.resume();
+
+    try {
+      await service.writeExport(prepared, output);
+    } finally {
+      append.mockRestore();
+    }
+
+    const exportedTasks = JSON.parse(
+      Buffer.concat(metadataChunks.get('tasks.json')!).toString('utf8')
+    ) as Array<{ id: string }>;
+    const exportedFiles = JSON.parse(
+      Buffer.concat(metadataChunks.get('files.json')!).toString('utf8')
+    ) as Array<{ id: string; exportPath: string }>;
+    expect(exportedTasks.map(task => task.id)).toEqual(
+      tasks.map(task => task.id)
+    );
+    expect(exportedFiles.map(file => file.id)).toEqual(
+      files.map(file => file.id)
+    );
+    expect(objectPaths).toEqual(exportedFiles.map(file => file.exportPath));
+    expect(new Set(objectPaths).size).toBe(10_001);
+    expect(largeMinio.downloadStream).toHaveBeenCalledTimes(10_001);
+    expect(streamingRepository.iterateExportTasks).toHaveBeenCalledTimes(1);
+    expect(streamingRepository.iterateExportFiles).toHaveBeenCalledTimes(1);
+    expect(
+      iterationSnapshots.every(value => value === prepared.snapshotAt)
+    ).toBe(true);
+  }, 60_000);
+
+  it('spools one stable file sequence for matching manifest and object paths', async () => {
+    const firstFile = exportSnapshot.files[0]!;
+    const secondFile = {
+      ...firstFile,
+      id: 'file-87654321',
+      storageKey: 'user-1/file-87654321/report.pdf',
+    };
+    const fileSequences = [[firstFile, secondFile], [secondFile]];
+    let fileIteration = 0;
+    const changingRepository = {
+      getExportProfile: vi.fn().mockResolvedValue(exportSnapshot.profile),
+      iterateExportTasks: vi.fn(async function* () {
+        yield* [];
+      }),
+      iterateExportFiles: vi.fn(async function* () {
+        for (const file of fileSequences[fileIteration++] ?? []) yield file;
+      }),
+    };
+    let resolveFirstDownload: ((source: Readable) => void) | undefined;
+    const firstDownload = new Promise<Readable>(resolve => {
+      resolveFirstDownload = resolve;
+    });
+    const changingMinio = {
+      head: vi.fn().mockResolvedValue(undefined),
+      downloadStream: vi
+        .fn()
+        .mockReturnValueOnce(firstDownload)
+        .mockImplementation(async () => Readable.from(Buffer.from('%PDF'))),
+    };
+    const service = new AccountExportService(
+      changingRepository as never,
+      changingMinio as never
+    );
+    const archivePrototype = (
+      archiver as unknown as {
+        ZipArchive: { prototype: archiver.Archiver };
+      }
+    ).ZipArchive.prototype;
+    const originalAppend = archivePrototype.append;
+    const manifestChunks: Buffer[] = [];
+    const objectPaths: string[] = [];
+    const append = vi
+      .spyOn(archivePrototype, 'append')
+      .mockImplementation(function (this: archiver.Archiver, source, data) {
+        if (data.name === 'files.json' && source instanceof Readable)
+          source.on('data', chunk => manifestChunks.push(Buffer.from(chunk)));
+        if (data.name.startsWith('files/') && data.name !== 'files.json')
+          objectPaths.push(data.name);
+        return originalAppend.call(this, source, data);
+      });
+    const output = new PassThrough();
+    output.resume();
+    const baselineTempDirs = await accountExportTempDirs();
+
+    try {
+      const prepared = await service.prepareExport('user-1');
+      const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
+      const writing = service.writeExport(prepared, output);
+      await waitForCall(changingMinio.downloadStream);
+      resolveFirstDownload?.(Readable.from(Buffer.from('%PDF')));
+      await writing;
+
+      const manifest = JSON.parse(
+        Buffer.concat(manifestChunks).toString('utf8')
+      ) as Array<{ exportPath: string }>;
+      expect(changingRepository.iterateExportFiles).toHaveBeenCalledTimes(1);
+      expect(changingMinio.head.mock.calls.map(([key]) => key)).toEqual([
+        firstFile.storageKey,
+        secondFile.storageKey,
+      ]);
+      expect(
+        changingMinio.downloadStream.mock.calls.map(([key]) => key)
+      ).toEqual([firstFile.storageKey, secondFile.storageKey]);
+      expect(objectPaths).toEqual(manifest.map(file => file.exportPath));
+      await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
+    } finally {
+      resolveFirstDownload?.(Readable.from(Buffer.from('%PDF')));
+      append.mockRestore();
+    }
+  });
+
+  it('keeps archive path collision tracking off the JavaScript heap', async () => {
+    const files = Array.from({ length: 64 }, (_, index) => ({
+      ...exportSnapshot.files[0]!,
+      id: `file-${String(index).padStart(8, '0')}`,
+      filename: 'duplicate.pdf',
+      storageKey: `user-1/file-${index}/duplicate.pdf`,
+    }));
     repository.getExportSnapshot.mockResolvedValue({
       ...exportSnapshot,
-      files: Array.from({ length: 10_001 }, (_, index) => ({
-        ...exportSnapshot.files[0]!,
-        id: `file-${index}`,
-        filename: `report-${index}.pdf`,
-        storageKey: `user-1/file-${index}/report.pdf`,
-      })),
+      files,
     });
-    minio.head.mockRejectedValueOnce(new Error('head must not run'));
+    const originalAdd = Set.prototype.add as (
+      this: Set<unknown>,
+      value: unknown
+    ) => Set<unknown>;
+    const add = vi.spyOn(Set.prototype, 'add').mockImplementation(function (
+      this: Set<unknown>,
+      value: unknown
+    ) {
+      if (
+        typeof value === 'string' &&
+        value.startsWith('files/') &&
+        this.size >= 8
+      )
+        throw new Error('archive paths retained in memory');
+      return originalAdd.call(this, value);
+    });
+    const service = createService();
+    let prepared: Awaited<ReturnType<typeof service.prepareExport>> | undefined;
 
-    await expect(createService().prepareExport('user-1')).rejects.toThrow(
-      'Account export metadata is too large'
+    try {
+      prepared = await service.prepareExport('user-1');
+      expect(minio.head).toHaveBeenCalledTimes(files.length);
+    } finally {
+      add.mockRestore();
+      if (prepared) await service.disposePreparedExport(prepared);
+    }
+  });
+
+  it('spools tasks during preparation so later repository changes cannot alter the export', async () => {
+    const firstTask = exportSnapshot.tasks[0]!;
+    const secondTask = {
+      ...firstTask,
+      id: 'task-2',
+      inputConfig: { sequence: 2 },
+    };
+    const taskSequences = [[firstTask, secondTask], [secondTask]];
+    let taskIteration = 0;
+    const changingRepository = {
+      getExportProfile: vi.fn().mockResolvedValue(exportSnapshot.profile),
+      iterateExportTasks: vi.fn(async function* () {
+        for (const task of taskSequences[taskIteration++] ?? []) yield task;
+      }),
+      iterateExportFiles: vi.fn(async function* () {
+        yield* [];
+      }),
+    };
+    const service = new AccountExportService(
+      changingRepository as never,
+      { head: vi.fn(), downloadStream: vi.fn() } as never
     );
-    expect(minio.head).not.toHaveBeenCalled();
+    const archivePrototype = (
+      archiver as unknown as {
+        ZipArchive: { prototype: archiver.Archiver };
+      }
+    ).ZipArchive.prototype;
+    const originalAppend = archivePrototype.append;
+    const taskChunks: Buffer[] = [];
+    const append = vi
+      .spyOn(archivePrototype, 'append')
+      .mockImplementation(function (this: archiver.Archiver, source, data) {
+        if (data.name === 'tasks.json' && source instanceof Readable)
+          source.on('data', chunk => taskChunks.push(Buffer.from(chunk)));
+        return originalAppend.call(this, source, data);
+      });
+    const output = new PassThrough();
+    output.resume();
+
+    try {
+      const prepared = await service.prepareExport('user-1');
+      expect(changingRepository.iterateExportTasks).toHaveBeenCalledTimes(1);
+      await service.writeExport(prepared, output);
+
+      const exportedTasks = JSON.parse(
+        Buffer.concat(taskChunks).toString('utf8')
+      ) as Array<{ id: string }>;
+      expect(exportedTasks.map(task => task.id)).toEqual([
+        firstTask.id,
+        secondTask.id,
+      ]);
+      expect(changingRepository.iterateExportTasks).toHaveBeenCalledTimes(1);
+    } finally {
+      append.mockRestore();
+    }
+  });
+
+  it('keeps prepared spool files private and disposes an export that never starts writing', async () => {
+    const baselineTempDirs = await accountExportTempDirs();
+    const service = createService();
+    const prepared = await service.prepareExport('user-1');
+    const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
+
+    expect(tempDir).toBeDefined();
+    if (process.platform !== 'win32') {
+      expect((await stat(tempDir!)).mode & 0o777).toBe(0o700);
+      for (const name of ['tasks.jsonl', 'files.jsonl'])
+        expect((await stat(join(tempDir!, name))).mode & 0o777).toBe(0o600);
+    }
+
+    await service.disposePreparedExport(prepared);
+
+    await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
+  });
+
+  it('disposes every prepared spool when the service shuts down', async () => {
+    const baselineTempDirs = await accountExportTempDirs();
+    const service = createService();
+    await service.prepareExport('user-1');
+    const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
+
+    await service.onApplicationShutdown();
+
+    await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
+  });
+
+  it('removes spool directories left by a stopped process during module startup', async () => {
+    const staleDir = join(
+      tmpdir(),
+      `${ACCOUNT_EXPORT_TEMP_PREFIX}2147483647-stale-test`
+    );
+    await mkdir(staleDir, { recursive: true });
+    await writeFile(join(staleDir, 'files.jsonl'), '{}\n');
+
+    await createService().onModuleInit();
+
+    expect((await accountExportTempDirs()).has(staleDir)).toBe(false);
+  });
+
+  it('removes a startup spool directory even when the operating system reused its pid', async () => {
+    const reusedPidDir = join(
+      tmpdir(),
+      `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-reused-test`
+    );
+    await mkdir(reusedPidDir, { recursive: true });
+
+    await createService().onModuleInit();
+
+    expect((await accountExportTempDirs()).has(reusedPidDir)).toBe(false);
+  });
+
+  it('keeps spool directories owned by another process that is still alive', async () => {
+    const livePid = 2_147_483_646;
+    const liveDir = join(
+      tmpdir(),
+      `${ACCOUNT_EXPORT_TEMP_PREFIX}${livePid}-live-test`
+    );
+    await mkdir(liveDir, { recursive: true });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(pid => {
+      if (pid === livePid) return true;
+      throw new Error(`Unexpected pid: ${String(pid)}`);
+    });
+
+    try {
+      await createService().onModuleInit();
+
+      expect((await accountExportTempDirs()).has(liveDir)).toBe(true);
+    } finally {
+      kill.mockRestore();
+      await rm(liveDir, { recursive: true, force: true });
+    }
   });
 
   it('heads objects sequentially and rejects an incomplete snapshot before downloading', async () => {
@@ -253,6 +681,7 @@ describe('AccountExportService', () => {
       )
       .mockRejectedValueOnce(new Error('missing object'));
 
+    const baselineTempDirs = await accountExportTempDirs();
     const preparing = createService().prepareExport('user-1');
     await waitForCall(minio.head);
     expect(minio.head).toHaveBeenCalledTimes(1);
@@ -265,6 +694,7 @@ describe('AccountExportService', () => {
       'user-1/file-87654321/second.pdf',
     ]);
     expect(minio.downloadStream).not.toHaveBeenCalled();
+    expect(await accountExportTempDirs()).toEqual(baselineTempDirs);
   });
 
   it('streams a complete ZIP with metadata and file contents', async () => {
@@ -408,9 +838,11 @@ describe('AccountExportService', () => {
     const activeSource = new PassThrough();
     minio.downloadStream.mockResolvedValueOnce(activeSource);
     const service = createService();
-    const prepared = await service.prepareExport('user-1');
     const output = new PassThrough();
     output.resume();
+    const baselineTempDirs = await accountExportTempDirs();
+    const prepared = await service.prepareExport('user-1');
+    const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
 
     const writing = service.writeExport(prepared, output);
     await waitForCall(minio.downloadStream);
@@ -433,6 +865,7 @@ describe('AccountExportService', () => {
     expect(outcome).toBe('rejected');
     expect(sourceDestroyedByService).toBe(true);
     expect(minio.downloadStream).toHaveBeenCalledTimes(1);
+    await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
   });
 
   it('rejects when a source closes without ending or emitting an error', async () => {
@@ -562,6 +995,10 @@ describe('AccountExportService', () => {
   it('rejects an asynchronous archive error during finalize', async () => {
     const finalizeError = new Error('archive finalize failed');
     const finalizedArchives: archiver.Archiver[] = [];
+    let markFinalizeStarted: (() => void) | undefined;
+    const finalizeStarted = new Promise<void>(resolve => {
+      markFinalizeStarted = resolve;
+    });
     const archivePrototype = (
       archiver as unknown as {
         ZipArchive: { prototype: archiver.Archiver };
@@ -571,22 +1008,27 @@ describe('AccountExportService', () => {
       .spyOn(archivePrototype, 'finalize')
       .mockImplementation(function (this: archiver.Archiver) {
         finalizedArchives.push(this);
-        globalThis.queueMicrotask(() => this.emit('error', finalizeError));
+        markFinalizeStarted?.();
         return new Promise<void>(() => undefined);
       });
     const service = createService();
-    const prepared = await service.prepareExport('user-1');
     const output = new PassThrough();
     output.resume();
     const baseline = outputListenerCounts(output);
+    const baselineTempDirs = await accountExportTempDirs();
+    const prepared = await service.prepareExport('user-1');
+    const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
 
     try {
-      await expect(service.writeExport(prepared, output)).rejects.toThrow(
-        'archive finalize failed'
-      );
+      const writing = service.writeExport(prepared, output);
+      await finalizeStarted;
+      finalizedArchives[0]!.emit('error', finalizeError);
+
+      await expect(writing).rejects.toThrow('archive finalize failed');
       expect(output.destroyed).toBe(true);
       expectOutputListenerCounts(output, baseline);
       expect(finalizedArchives[0]?.listenerCount('error')).toBe(0);
+      await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
     } finally {
       finalize.mockRestore();
     }
@@ -639,11 +1081,13 @@ describe('AccountExportService', () => {
     const source = new PassThrough();
     minio.downloadStream.mockResolvedValueOnce(source);
     const service = createService();
-    const prepared = await service.prepareExport('user-1');
     const output = new PassThrough();
     output.resume();
     output.on('error', () => undefined);
     const baseline = outputListenerCounts(output);
+    const baselineTempDirs = await accountExportTempDirs();
+    const prepared = await service.prepareExport('user-1');
+    const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
 
     const writing = service.writeExport(prepared, output);
     await waitForCall(minio.downloadStream);
@@ -654,6 +1098,7 @@ describe('AccountExportService', () => {
     expect(output.destroyed).toBe(true);
     expect(minio.downloadStream).toHaveBeenCalledTimes(1);
     expectOutputListenerCounts(output, baseline);
+    await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
   });
 });
 
@@ -662,6 +1107,7 @@ describe('AccountController export', () => {
   const exportService = {
     prepareExport: vi.fn(),
     writeExport: vi.fn(),
+    disposePreparedExport: vi.fn(),
   };
 
   function createController() {
@@ -680,10 +1126,15 @@ describe('AccountController export', () => {
 
   it('sets download headers only after preflight succeeds and streams the ZIP', async () => {
     const prepared = {
+      userId: 'user-1',
+      snapshotAt: createdAt,
       filename: 'utils-plane-export-20260713-080910.zip',
       profile: exportSnapshot.profile,
-      tasks: exportSnapshot.tasks,
-      files: [],
+      spool: {
+        directory: 'unused',
+        tasksPath: 'unused',
+        filesPath: 'unused',
+      },
     };
     const response = {
       type: vi.fn(() => response),
@@ -704,5 +1155,35 @@ describe('AccountController export', () => {
     expect(response.type).toHaveBeenCalledWith('application/zip');
     expect(response.attachment).toHaveBeenCalledWith(prepared.filename);
     expect(exportService.writeExport).toHaveBeenCalledWith(prepared, response);
+    expect(exportService.disposePreparedExport).not.toHaveBeenCalled();
+  });
+
+  it('disposes the prepared export when setting response headers fails', async () => {
+    const prepared = {
+      filename: 'utils-plane-export.zip',
+      spool: {
+        directory: 'unused',
+        tasksPath: 'unused',
+        filesPath: 'unused',
+      },
+    };
+    const headerError = new Error('headers failed');
+    const response = {
+      type: vi.fn(() => {
+        throw headerError;
+      }),
+      attachment: vi.fn(),
+    };
+    exportService.prepareExport.mockResolvedValue(prepared);
+
+    await expect(
+      createController().exportAccount(
+        exportSnapshot.profile as never,
+        response as never
+      )
+    ).rejects.toThrow('headers failed');
+
+    expect(exportService.writeExport).not.toHaveBeenCalled();
+    expect(exportService.disposePreparedExport).toHaveBeenCalledWith(prepared);
   });
 });

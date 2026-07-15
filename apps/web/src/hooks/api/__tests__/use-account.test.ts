@@ -241,49 +241,45 @@ describe('account export and deletion', () => {
     );
   });
 
-  it('downloads a successful export with a safe filename and revokes its object URL', async () => {
-    const blob = new Blob(['zip-body'], { type: 'application/zip' });
-    mockFetch.mockResolvedValue({
-      ok: true,
-      headers: new Headers({
-        'content-disposition': 'attachment; filename="../../account.zip"',
-      }),
-      blob: vi.fn().mockResolvedValue(blob),
-    });
-    const clickedDownloads: string[] = [];
+  it('starts a browser-streamed export with a temporary hidden anchor', async () => {
+    const clicks: Array<{
+      href: string;
+      hidden: boolean;
+      connected: boolean;
+      hasDownload: boolean;
+      target: string;
+      rel: string;
+    }> = [];
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
       this: HTMLAnchorElement
     ) {
-      clickedDownloads.push(this.download);
+      clicks.push({
+        href: this.href,
+        hidden: this.hidden,
+        connected: this.isConnected,
+        hasDownload: this.hasAttribute('download'),
+        target: this.target,
+        rel: this.rel,
+      });
     });
 
     await downloadAccountExport();
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3001/account/export',
-      { credentials: 'include' }
-    );
-    expect(createObjectURL).toHaveBeenCalledWith(blob);
-    expect(clickedDownloads).toEqual(['account.zip']);
-    expect(document.querySelector('a[download]')).toBeNull();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:account-export');
+    expect(clicks).toEqual([
+      {
+        href: 'http://localhost:3001/account/export',
+        hidden: true,
+        connected: true,
+        hasDownload: false,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+      },
+    ]);
+    expect(document.querySelector('a')).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
   });
-
-  it.each([401, 500])(
-    'rejects an account export HTTP %s response without creating a download',
-    async status => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status,
-        headers: new Headers(),
-      });
-
-      await expect(downloadAccountExport()).rejects.toThrow(
-        'Account export request failed'
-      );
-      expect(createObjectURL).not.toHaveBeenCalled();
-    }
-  );
 
   it('sends the confirmation email when deleting an account', async () => {
     mockDelete.mockResolvedValue({

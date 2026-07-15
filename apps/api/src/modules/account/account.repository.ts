@@ -19,14 +19,16 @@ import {
   count,
   desc,
   eq,
+  gt,
   inArray,
   isNull,
+  lte,
+  or,
   sql,
   sum,
 } from 'drizzle-orm';
 
-export const ACCOUNT_EXPORT_MAX_TASK_ROWS = 1_000;
-export const ACCOUNT_EXPORT_MAX_FILE_ROWS = 10_000;
+const ACCOUNT_EXPORT_PAGE_SIZE = 250;
 
 export type AccountExportProfile = Pick<
   User,
@@ -66,12 +68,6 @@ export type AccountExportTask = Pick<
   | 'createdAt'
   | 'completedAt'
 >;
-export interface AccountExportSnapshot {
-  profile: AccountExportProfile;
-  tasks: AccountExportTask[];
-  files: AccountExportFile[];
-}
-
 export interface AccountDeletionSnapshot {
   files: Pick<File, 'id' | 'storageKey'>[];
   tasks: Pick<Task, 'id' | 'type'>[];
@@ -194,24 +190,46 @@ export class AccountRepository {
     });
   }
 
-  async getExportSnapshot(userId: string): Promise<AccountExportSnapshot> {
-    const [[profile], taskRows, fileRows] = await Promise.all([
-      db
-        .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          image: user.image,
-          plan: user.plan,
-          role: user.role,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-        })
-        .from(user)
-        .where(eq(user.id, userId))
-        .limit(1),
-      db
+  async getExportProfile(userId: string): Promise<AccountExportProfile> {
+    const [profile] = await db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        image: user.image,
+        plan: user.plan,
+        role: user.role,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    if (!profile) throw new NotFoundException('Account not found');
+    return profile;
+  }
+
+  async *iterateExportTasks(
+    userId: string,
+    snapshotAt: Date
+  ): AsyncGenerator<AccountExportTask> {
+    let cursor: Pick<AccountExportTask, 'createdAt' | 'id'> | undefined;
+
+    for (;;) {
+      const conditions = [
+        eq(tasks.userId, userId),
+        lte(tasks.createdAt, snapshotAt),
+      ];
+      if (cursor) {
+        conditions.push(
+          or(
+            gt(tasks.createdAt, cursor.createdAt),
+            and(eq(tasks.createdAt, cursor.createdAt), gt(tasks.id, cursor.id))
+          )!
+        );
+      }
+      const page = await db
         .select({
           id: tasks.id,
           userId: tasks.userId,
@@ -228,10 +246,36 @@ export class AccountRepository {
           completedAt: tasks.completedAt,
         })
         .from(tasks)
-        .where(eq(tasks.userId, userId))
+        .where(and(...conditions))
         .orderBy(asc(tasks.createdAt), asc(tasks.id))
-        .limit(ACCOUNT_EXPORT_MAX_TASK_ROWS + 1),
-      db
+        .limit(ACCOUNT_EXPORT_PAGE_SIZE);
+
+      for (const row of page) yield row;
+      if (page.length < ACCOUNT_EXPORT_PAGE_SIZE) return;
+      cursor = page.at(-1)!;
+    }
+  }
+
+  async *iterateExportFiles(
+    userId: string,
+    snapshotAt: Date
+  ): AsyncGenerator<AccountExportFile> {
+    let cursor: Pick<AccountExportFile, 'createdAt' | 'id'> | undefined;
+
+    for (;;) {
+      const conditions = [
+        eq(files.userId, userId),
+        lte(files.createdAt, snapshotAt),
+      ];
+      if (cursor) {
+        conditions.push(
+          or(
+            gt(files.createdAt, cursor.createdAt),
+            and(eq(files.createdAt, cursor.createdAt), gt(files.id, cursor.id))
+          )!
+        );
+      }
+      const page = await db
         .select({
           id: files.id,
           filename: files.filename,
@@ -242,13 +286,14 @@ export class AccountRepository {
           deletedAt: files.deletedAt,
         })
         .from(files)
-        .where(eq(files.userId, userId))
+        .where(and(...conditions))
         .orderBy(asc(files.createdAt), asc(files.id))
-        .limit(ACCOUNT_EXPORT_MAX_FILE_ROWS + 1),
-    ]);
+        .limit(ACCOUNT_EXPORT_PAGE_SIZE);
 
-    if (!profile) throw new NotFoundException('Account not found');
-    return { profile, tasks: taskRows, files: fileRows };
+      for (const row of page) yield row;
+      if (page.length < ACCOUNT_EXPORT_PAGE_SIZE) return;
+      cursor = page.at(-1)!;
+    }
   }
 
   async getSummary(userId: string) {

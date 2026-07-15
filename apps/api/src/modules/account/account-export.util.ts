@@ -13,6 +13,11 @@ const SENSITIVE_CONFIG_KEYS = [
   'apikey',
 ];
 
+export interface ArchivePathRegistry {
+  has(path: string): boolean;
+  add(path: string): unknown;
+}
+
 export function buildExportFilename(date: Date): string {
   const iso = date.toISOString();
   const day = iso.slice(0, 10).replaceAll('-', '');
@@ -23,7 +28,7 @@ export function buildExportFilename(date: Date): string {
 export function createArchivePath(
   filename: string,
   fileId: string,
-  usedPaths: Set<string>
+  usedPaths: ArchivePathRegistry
 ): string {
   const idPrefix = fileId.startsWith('file-')
     ? fileId.slice(0, 9)

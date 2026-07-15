@@ -80,8 +80,13 @@ export class AccountController {
     const prepared = await this.accountExportService.prepareExport(
       currentUser.id
     );
-    response.type('application/zip');
-    response.attachment(prepared.filename);
+    try {
+      response.type('application/zip');
+      response.attachment(prepared.filename);
+    } catch (error) {
+      await this.accountExportService.disposePreparedExport(prepared);
+      throw error;
+    }
     await this.accountExportService.writeExport(prepared, response);
   }
 }

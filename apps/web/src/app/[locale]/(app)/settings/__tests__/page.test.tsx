@@ -225,7 +225,7 @@ describe('SettingsPage account controls', () => {
     expect(screen.getByRole('button', { name: 'Export again' })).toBeEnabled();
   });
 
-  it('shows export failure and retries the HTTP request', async () => {
+  it('shows export start failure and retries browser navigation', async () => {
     mocks.downloadAccountExport
       .mockRejectedValueOnce(new Error('Account export request failed'))
       .mockResolvedValueOnce(undefined);

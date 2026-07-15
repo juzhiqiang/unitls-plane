@@ -10,50 +10,17 @@ export function getAccountExportUrl() {
   return `${apiUrl}/account/export`;
 }
 
-const ACCOUNT_EXPORT_FALLBACK_FILENAME = 'utils-plane-export.zip';
-
-function getAccountExportFilename(contentDisposition: string | null): string {
-  if (!contentDisposition) return ACCOUNT_EXPORT_FALLBACK_FILENAME;
-
-  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-  const plain = contentDisposition.match(/filename="([^"]+)"/i)?.[1];
-  let filename = encoded ?? plain;
-  if (!filename) return ACCOUNT_EXPORT_FALLBACK_FILENAME;
-
-  try {
-    filename = decodeURIComponent(filename);
-  } catch {
-    return ACCOUNT_EXPORT_FALLBACK_FILENAME;
-  }
-
-  filename = filename.replace(/\\/g, '/').split('/').pop()?.trim() ?? '';
-  filename = filename
-    .replace(/[\u0000-\u001f\u007f-\u009f<>:"/\\|?*]/g, '-')
-    .replace(/^\.+/, '')
-    .slice(0, 180);
-  return filename || ACCOUNT_EXPORT_FALLBACK_FILENAME;
-}
-
 export async function downloadAccountExport(): Promise<void> {
-  const response = await fetch(getAccountExportUrl(), {
-    credentials: 'include',
-  });
-  if (!response.ok) throw new Error('Account export request failed');
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
-  anchor.href = objectUrl;
-  anchor.download = getAccountExportFilename(
-    response.headers.get('content-disposition')
-  );
+  anchor.href = getAccountExportUrl();
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
   anchor.hidden = true;
   document.body.appendChild(anchor);
   try {
     anchor.click();
   } finally {
     anchor.remove();
-    URL.revokeObjectURL(objectUrl);
   }
 }
 

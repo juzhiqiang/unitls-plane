@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import type { CreateTaskDto, TaskResponseDto, TaskStatusDto, TaskTypeValue } from './types';
+import type {
+  CreateTaskDto,
+  TaskResponseDto,
+  TaskStatusDto,
+  TaskTypeValue,
+} from './types';
 import { accountQueryKeys } from './query-keys';
 
 export type TaskType = TaskTypeValue;
@@ -25,14 +30,25 @@ export function useTasks(query?: TaskQuery) {
     queryKey: ['tasks', query],
     queryFn: async () => {
       const { data, error } = await api.GET('/tasks', {
-        params: { query: { page: query?.page, limit: query?.limit, status: query?.status, type: query?.type } as any },
+        params: {
+          query: {
+            page: query?.page,
+            limit: query?.limit,
+            status: query?.status,
+            type: query?.type,
+          } as any,
+        },
       });
       if (error) throw error;
       return data as unknown as { tasks: TaskResponseDto[]; total: number };
     },
-    refetchInterval: (q) => {
-      const tasks = (q.state.data as any)?.tasks as TaskResponseDto[] | undefined;
-      if (tasks?.some((t) => t.status === 'pending' || t.status === 'processing')) {
+    refetchInterval: q => {
+      const tasks = (q.state.data as any)?.tasks as
+        | TaskResponseDto[]
+        | undefined;
+      if (
+        tasks?.some(t => t.status === 'pending' || t.status === 'processing')
+      ) {
         return 5000;
       }
       return false;
@@ -65,7 +81,7 @@ export function useTaskStatus(taskId: string) {
       return data as TaskStatusDto;
     },
     enabled: !!taskId,
-    refetchInterval: (query) => {
+    refetchInterval: query => {
       const status = query.state.data?.status;
       return status === 'pending' || status === 'processing' ? 3000 : false;
     },

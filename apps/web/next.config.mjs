@@ -59,7 +59,7 @@ function stripPwaBrowserEntryFromServer(config) {
       const entry = entries[key];
 
       if (Array.isArray(entry)) {
-        entries[key] = entry.filter((item) => !isPwaBrowserEntry(item));
+        entries[key] = entry.filter(item => !isPwaBrowserEntry(item));
       } else if (isPwaBrowserEntry(entry)) {
         delete entries[key];
       }

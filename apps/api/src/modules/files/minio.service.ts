@@ -7,7 +7,6 @@ import {
   HeadObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
-  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Readable } from 'node:stream';
@@ -83,6 +82,12 @@ export class MinioService implements OnModuleInit {
         Key: key,
       })
     );
+  }
+
+  async checkBucket(signal?: globalThis.AbortSignal): Promise<void> {
+    await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }), {
+      abortSignal: signal,
+    });
   }
 
   async downloadStream(key: string): Promise<Readable> {

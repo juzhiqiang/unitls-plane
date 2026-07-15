@@ -6,13 +6,22 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { verifySession } from '@utils-plane/auth';
-import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import {
+  IS_PUBLIC_KEY,
+  SKIP_SESSION_KEY,
+} from '../decorators/public.decorator';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const skipSession = this.reflector.getAllAndOverride<boolean>(
+      SKIP_SESSION_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+    if (skipSession) return true;
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),

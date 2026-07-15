@@ -1,4 +1,4 @@
-import { HeadObjectCommand } from '@aws-sdk/client-s3';
+import { HeadBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'bun:test';
 import { Readable } from 'node:stream';
 import { MinioService } from './minio.service';
@@ -70,5 +70,34 @@ describe('MinioService object streaming', () => {
     );
 
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
+  });
+});
+
+describe('MinioService bucket health', () => {
+  it('checks the configured bucket with a HeadBucketCommand', async () => {
+    const previousBucket = process.env.S3_BUCKET;
+    process.env.S3_BUCKET = 'health-check-bucket';
+
+    try {
+      const send = vi.fn(async () => ({}));
+      const service = withClient(send);
+      const signal = new globalThis.AbortController().signal;
+
+      await service.checkBucket(signal);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      const command = send.mock.calls[0]?.[0];
+      expect(command).toBeInstanceOf(HeadBucketCommand);
+      expect((command as HeadBucketCommand).input).toEqual({
+        Bucket: 'health-check-bucket',
+      });
+      expect(send.mock.calls[0]?.[1]).toEqual({ abortSignal: signal });
+    } finally {
+      if (previousBucket === undefined) {
+        delete process.env.S3_BUCKET;
+      } else {
+        process.env.S3_BUCKET = previousBucket;
+      }
+    }
   });
 });

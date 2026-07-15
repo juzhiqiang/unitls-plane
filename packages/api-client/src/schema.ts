@@ -301,8 +301,42 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health check */
+        /** Service liveness summary */
         get: operations["HealthController_check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Service liveness check */
+        get: operations["HealthController_live"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dependency readiness check */
+        get: operations["HealthController_ready"];
         put?: never;
         post?: never;
         delete?: never;
@@ -401,6 +435,39 @@ export interface components {
         };
         FileIdsDto: {
             ids: string[];
+        };
+        LiveHealthDto: {
+            /** @enum {string} */
+            status: "ok";
+            /** Format: date-time */
+            timestamp: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** @example dev */
+            release: string;
+            /** @example dev */
+            buildCommit: string;
+            /** Format: date-time */
+            buildTime: string | null;
+        };
+        HealthComponentDto: {
+            /** @enum {string} */
+            status: "ok" | "degraded" | "error";
+            durationMs: number;
+        };
+        HealthComponentsDto: {
+            database: components["schemas"]["HealthComponentDto"];
+            redis: components["schemas"]["HealthComponentDto"];
+            minio: components["schemas"]["HealthComponentDto"];
+            queues: components["schemas"]["HealthComponentDto"];
+            libreOffice: components["schemas"]["HealthComponentDto"];
+        };
+        ReadyHealthDto: {
+            /** @enum {string} */
+            status: "ok" | "degraded" | "error";
+            /** Format: date-time */
+            timestamp: string;
+            components: components["schemas"]["HealthComponentsDto"];
         };
         AccountRecentFileDto: {
             /** Format: uuid */
@@ -959,7 +1026,55 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LiveHealthDto"];
+                };
+            };
+        };
+    };
+    HealthController_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveHealthDto"];
+                };
+            };
+        };
+    };
+    HealthController_ready: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadyHealthDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadyHealthDto"];
+                };
             };
         };
     };

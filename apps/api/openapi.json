@@ -712,10 +712,71 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveHealthDto"
+                }
+              }
+            }
           }
         },
-        "summary": "Health check",
+        "summary": "Service liveness summary",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveHealthDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Service liveness check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyHealthDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyHealthDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Dependency readiness check",
         "tags": [
           "health"
         ]
@@ -992,6 +1053,119 @@
         },
         "required": [
           "ids"
+        ]
+      },
+      "LiveHealthDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "release": {
+            "type": "string",
+            "example": "dev"
+          },
+          "buildCommit": {
+            "type": "string",
+            "example": "dev"
+          },
+          "buildTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "status",
+          "timestamp",
+          "startedAt",
+          "release",
+          "buildCommit",
+          "buildTime"
+        ]
+      },
+      "HealthComponentDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ]
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "status",
+          "durationMs"
+        ]
+      },
+      "HealthComponentsDto": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/HealthComponentDto"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/HealthComponentDto"
+          },
+          "minio": {
+            "$ref": "#/components/schemas/HealthComponentDto"
+          },
+          "queues": {
+            "$ref": "#/components/schemas/HealthComponentDto"
+          },
+          "libreOffice": {
+            "$ref": "#/components/schemas/HealthComponentDto"
+          }
+        },
+        "required": [
+          "database",
+          "redis",
+          "minio",
+          "queues",
+          "libreOffice"
+        ]
+      },
+      "ReadyHealthDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "components": {
+            "$ref": "#/components/schemas/HealthComponentsDto"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp",
+          "components"
         ]
       },
       "AccountRecentFileDto": {

@@ -1,7 +1,7 @@
 import { HeadBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'bun:test';
 import { Readable } from 'node:stream';
-import { MinioService } from './minio.service';
+import { MINIO_UPLOAD_TIMEOUT_MS, MinioService } from './minio.service';
 
 function withClient(send: ReturnType<typeof vi.fn>) {
   const service = new MinioService();
@@ -28,6 +28,28 @@ describe('MinioService delete logging', () => {
     const debugOutput = debug.mock.calls.flat().map(String).join(' ');
     expect(debugOutput).not.toContain(storageKey);
     expect(debugOutput).not.toContain('private-report.pdf');
+  });
+});
+
+describe('MinioService upload timeout', () => {
+  it('aborts PutObject before the object cleanup lease can expire', async () => {
+    const send = vi.fn(async () => ({}));
+    const service = withClient(send);
+    const abortSignal = new globalThis.AbortController().signal;
+    const timeout = vi
+      .spyOn(globalThis.AbortSignal, 'timeout')
+      .mockReturnValue(abortSignal);
+
+    await service.upload(
+      'user-1/file-1/report.pdf',
+      Buffer.from('contents'),
+      'application/pdf'
+    );
+
+    expect(MINIO_UPLOAD_TIMEOUT_MS).toBe(30 * 60 * 1000);
+    expect(MINIO_UPLOAD_TIMEOUT_MS).toBeLessThan(60 * 60 * 1000);
+    expect(timeout).toHaveBeenCalledWith(MINIO_UPLOAD_TIMEOUT_MS);
+    expect(send.mock.calls[0]?.[1]).toEqual({ abortSignal });
   });
 });
 

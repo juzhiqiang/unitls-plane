@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Job, Queue } from 'bullmq';
 import { db, tasks, type User } from '@utils-plane/db';
 import { canUseFeature, type EntitlementUser } from '@utils-plane/utils';
 import { eq, desc, and, sql } from 'drizzle-orm';
@@ -16,7 +16,18 @@ import type {
   TaskStatus,
 } from '@utils-plane/validators';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import {
+  withActiveUserTransaction,
+  withProducerTransaction,
+  type ActiveUserTransaction,
+} from '../../common/database/active-user-transaction';
 import { FilesService } from '../files/files.service';
+import { CleanupObligationService } from '../files/cleanup-obligation.service';
+import { getTaskQueueName } from './task-queue';
+import {
+  TaskJobReconciler,
+  type TaskJobIdentity,
+} from './task-job-reconciler.service';
 
 @Injectable()
 export class TasksService {
@@ -26,7 +37,9 @@ export class TasksService {
     @InjectQueue('image-queue') private imageQueue: Queue,
     @InjectQueue('pdf-queue') private pdfQueue: Queue,
     @InjectQueue('font-queue') private fontQueue: Queue,
-    private readonly filesService: FilesService
+    private readonly filesService: FilesService,
+    private readonly cleanupObligationService: CleanupObligationService,
+    private readonly taskJobReconciler: TaskJobReconciler
   ) {}
 
   async create(
@@ -34,11 +47,42 @@ export class TasksService {
     user?: Pick<User, 'id' | 'plan' | 'role'> | null
   ): Promise<Task> {
     this.assertCanCreateTask(input.type, user);
-    await this.assertCanAccessInputFiles(input, user);
 
-    const [task] = await db
+    const queue = this.getQueue(input.type);
+    const taskId = globalThis.crypto.randomUUID();
+    const identity: TaskJobIdentity = {
+      resourceId: taskId,
+      queueName: queue.name,
+      jobId: taskId,
+    };
+    const operation = (tx: ActiveUserTransaction) =>
+      this.createTask(input, user ?? null, tx, identity);
+    const task = user
+      ? await withActiveUserTransaction(user.id, operation)
+      : await withProducerTransaction(operation);
+
+    let job: Job | null = null;
+    try {
+      job = await this.taskJobReconciler.reconcile(identity);
+    } catch {
+      this.logger.error(`Task job dispatch deferred for task ${task.id}`);
+    }
+    if (job) this.logCreatedTask(task, job, queue);
+    return task;
+  }
+
+  private async createTask(
+    input: CreateTaskInput,
+    user: Pick<User, 'id'> | null,
+    database: ActiveUserTransaction,
+    identity: TaskJobIdentity
+  ): Promise<Task> {
+    await this.assertCanAccessInputFiles(input, user, database);
+
+    const [task] = await database
       .insert(tasks)
       .values({
+        id: identity.resourceId,
         userId: user?.id ?? null,
         type: input.type,
         status: 'pending',
@@ -51,13 +95,19 @@ export class TasksService {
       throw new Error('Failed to create task');
     }
 
-    const queue = this.getQueue(input.type);
-    const job = await queue.add(input.type, { taskId: task.id });
-    this.logger.log(
-      `Job added: jobId=${job?.id}, taskId=${task.id}, queue=${queue.name}, waiting=${await queue.getWaitingCount()}, active=${await queue.getActiveCount()}`
+    await this.cleanupObligationService.recordTaskJob(
+      identity.resourceId,
+      identity.queueName,
+      identity.jobId,
+      database
     );
-
     return task;
+  }
+
+  private logCreatedTask(task: Task, job: Job, queue: Queue): void {
+    this.logger.log(
+      `Job added: jobId=${job.id}, taskId=${task.id}, queue=${queue.name}`
+    );
   }
 
   async getById(id: string, userId?: string): Promise<Task> {
@@ -169,7 +219,8 @@ export class TasksService {
 
   private async assertCanAccessInputFiles(
     input: CreateTaskInput,
-    user?: Pick<User, 'id'> | null
+    user: Pick<User, 'id'> | null,
+    transaction?: ActiveUserTransaction
   ): Promise<void> {
     const fileIds = new Set<string>(input.inputFileIds);
     const order = (input.inputConfig as { order?: unknown }).order;
@@ -183,7 +234,11 @@ export class TasksService {
     }
 
     for (const fileId of fileIds) {
-      await this.filesService.getById(fileId, user?.id ?? null);
+      if (transaction) {
+        await this.filesService.getById(fileId, user?.id ?? null, transaction);
+      } else {
+        await this.filesService.getById(fileId, user?.id ?? null);
+      }
     }
   }
 
@@ -234,26 +289,12 @@ export class TasksService {
   }
 
   private getQueue(type: TaskType): Queue {
-    switch (type) {
-      case 'compress':
-      case 'convert':
-      case 'image_watermark':
-      case 'image_id_photo':
+    switch (getTaskQueueName(type)) {
+      case 'image-queue':
         return this.imageQueue;
-      case 'pdf_merge':
-      case 'pdf_split':
-      case 'pdf_to_image':
-      case 'pdf_to_text':
-      case 'image_to_pdf':
-      case 'pdf_rotate':
-      case 'pdf_watermark':
-      case 'pdf_encrypt':
-      case 'pdf_compress':
-      case 'pdf_metadata':
-      case 'pdf_rearrange':
-      case 'pdf_from_document':
+      case 'pdf-queue':
         return this.pdfQueue;
-      case 'font_convert':
+      case 'font-queue':
         return this.fontQueue;
     }
   }

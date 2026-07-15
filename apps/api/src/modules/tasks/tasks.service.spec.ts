@@ -16,7 +16,9 @@ describe('TasksService queue routing', () => {
       queue('image-queue') as any,
       queue('pdf-queue') as any,
       queue('font-queue') as any,
-      { getById: vi.fn() } as any
+      { getById: vi.fn() } as any,
+      { recordTaskJob: vi.fn(), clear: vi.fn(), release: vi.fn() } as any,
+      { reconcile: vi.fn() } as any
     );
 
     expect((service as any).getQueue('image_id_photo').name).toBe(

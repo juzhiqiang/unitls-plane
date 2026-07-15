@@ -9,13 +9,23 @@ export class CleanupScheduler implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.cleanupQueue.add(
-      'cleanup-expired-files',
-      {},
-      {
-        jobId: 'hourly-file-retention',
-        repeat: { pattern: '0 * * * *' },
-      }
-    );
+    await Promise.all([
+      this.cleanupQueue.add(
+        'cleanup-expired-files',
+        {},
+        {
+          jobId: 'hourly-file-retention',
+          repeat: { pattern: '0 * * * *' },
+        }
+      ),
+      this.cleanupQueue.add(
+        'reconcile-cleanup-obligations',
+        {},
+        {
+          jobId: 'minute-cleanup-obligations',
+          repeat: { pattern: '* * * * *' },
+        }
+      ),
+    ]);
   }
 }

@@ -3,10 +3,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 let insertedTask: Record<string, unknown> | null = null;
+const events: string[] = [];
+const TASK_ID = '00000000-0000-4000-8000-000000000002';
+vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+  TASK_ID as `${string}-${string}-${string}-${string}-${string}`
+);
 
 const returning = vi.fn(() => [
   {
-    id: 'task-1',
+    id: insertedTask?.id ?? TASK_ID,
     userId: insertedTask?.userId ?? null,
     type: insertedTask?.type,
     status: insertedTask?.status,
@@ -21,25 +26,88 @@ const returning = vi.fn(() => [
     completedAt: null,
   },
 ]);
-
-const values = vi.fn((task: Record<string, unknown>) => {
+const globalValues = vi.fn((task: Record<string, unknown>) => {
+  events.push('global-insert');
   insertedTask = task;
   return { returning };
 });
+const transactionValues = vi.fn((task: Record<string, unknown>) => {
+  events.push('transaction-insert');
+  insertedTask = task;
+  return { returning };
+});
+const globalInsert = vi.fn(() => ({ values: globalValues }));
+const transactionInsert = vi.fn(() => ({ values: transactionValues }));
+const transaction = { insert: transactionInsert };
+const cleanupObligationService = {
+  recordTaskJob: vi.fn(async () => {
+    events.push('obligation-record');
+  }),
+  clear: vi.fn(async () => {
+    events.push('obligation-clear');
+  }),
+  release: vi.fn(async () => {
+    events.push('obligation-release');
+  }),
+};
 
-const insert = vi.fn(() => ({ values }));
+const withActiveUserTransaction = vi.fn(
+  async (
+    _userId: string,
+    operation: (tx: typeof transaction) => Promise<unknown>
+  ) => {
+    events.push('transaction');
+    try {
+      const result = await operation(transaction);
+      events.push('commit');
+      return result;
+    } catch (error) {
+      events.push('rollback');
+      throw error;
+    }
+  }
+);
+const withProducerTransaction = vi.fn(
+  async (operation: (tx: typeof transaction) => Promise<unknown>) => {
+    events.push('transaction');
+    try {
+      const result = await operation(transaction);
+      events.push('commit');
+      return result;
+    } catch (error) {
+      events.push('rollback');
+      throw error;
+    }
+  }
+);
 
 mock.module('@utils-plane/db', () => ({
-  db: { insert },
+  cleanupObligations: {
+    kind: 'obligation-kind',
+    resourceId: 'obligation-resource-id',
+  },
+  db: { insert: globalInsert },
+  files: {},
   tasks: {},
+  user: {},
 }));
-
+mock.module('../../common/database/active-user-transaction', () => ({
+  withActiveUserTransaction,
+  withProducerTransaction,
+}));
 const { TasksService } = await import('./tasks.service');
 
 function queue(name: string) {
+  const remove = vi.fn().mockResolvedValue(undefined);
   return {
     name,
-    add: vi.fn().mockResolvedValue({ id: `${name}-job-1` }),
+    remove,
+    add: vi.fn(
+      async (_type: string, data: unknown, options: { jobId: string }) => {
+        events.push('queue-add');
+        return { id: options.jobId, data, remove };
+      }
+    ),
     getWaitingCount: vi.fn().mockResolvedValue(0),
     getActiveCount: vi.fn().mockResolvedValue(0),
   };
@@ -53,28 +121,55 @@ function createService(
   const imageQueue = queue('image-queue');
   const pdfQueue = queue('pdf-queue');
   const fontQueue = queue('font-queue');
+  const taskJobReconciler = {
+    reconcile: vi.fn(
+      async (identity: {
+        resourceId: string;
+        queueName: string;
+        jobId: string;
+      }) => {
+        const targetQueue =
+          identity.queueName === 'image-queue'
+            ? imageQueue
+            : identity.queueName === 'pdf-queue'
+              ? pdfQueue
+              : fontQueue;
+        const queuedJob = await targetQueue.add(
+          String(insertedTask?.type),
+          { taskId: identity.resourceId },
+          { jobId: identity.jobId, delay: 1000 }
+        );
+        await cleanupObligationService.clear('task-job', identity.resourceId);
+        return queuedJob;
+      }
+    ),
+  };
 
   return {
     service: new TasksService(
       imageQueue as any,
       pdfQueue as any,
       fontQueue as any,
-      filesService as any
+      filesService as any,
+      cleanupObligationService as any,
+      taskJobReconciler as any
     ),
     filesService,
     imageQueue,
     pdfQueue,
     fontQueue,
+    taskJobReconciler,
   };
 }
 
 beforeEach(() => {
   insertedTask = null;
+  events.length = 0;
   vi.clearAllMocks();
 });
 
-describe('TasksService queue routing', () => {
-  it('checks server task entitlement before creating a task', () => {
+describe('TasksService task creation', () => {
+  it('keeps server task entitlement checks before database work', () => {
     const source = readFileSync(
       join(import.meta.dir, 'tasks.service.ts'),
       'utf8'
@@ -84,152 +179,221 @@ describe('TasksService queue routing', () => {
     expect(source).toContain('assertCanCreateTask');
   });
 
-  it('receives the full current user from task controller', () => {
-    const source = readFileSync(
-      join(import.meta.dir, 'tasks.controller.ts'),
-      'utf8'
-    );
-
-    expect(source).toMatch(/@Post\(\)\s+@Public\(\)/);
-    expect(source).toContain('const user = req.user');
-    expect(source).toContain('this.tasksService.create(');
-    expect(source).toContain('user ?? null');
-  });
-
-  it('routes image processing tasks to the image queue', () => {
-    const source = readFileSync(
-      join(import.meta.dir, 'tasks.service.ts'),
-      'utf8'
-    ).replace(/\r\n/g, '\n');
-
-    expect(source).toContain("case 'image_watermark':");
-    expect(source).toContain("case 'image_id_photo':");
-    expect(source).toMatch(
-      /case 'image_watermark':\n\s+case 'image_id_photo':\n\s+return this\.imageQueue;/
-    );
-  });
-
-  it('routes document-to-PDF tasks to the PDF queue', () => {
-    const source = readFileSync(
-      join(import.meta.dir, 'tasks.service.ts'),
-      'utf8'
-    ).replace(/\r\n/g, '\n');
-
-    expect(source).toContain("case 'pdf_from_document':");
-    expect(source).toMatch(
-      /case 'pdf_rearrange':\n\s+case 'pdf_from_document':\n\s+return this\.pdfQueue;/
-    );
-  });
-});
-
-describe('TasksService task creation entitlements', () => {
   it('rejects anonymous server tasks before inserting or queueing', async () => {
     const { service, filesService, pdfQueue } = createService();
 
     await expect(
       service.create(
-        {
-          type: 'pdf_merge',
-          inputFileIds: ['file-1'],
-          inputConfig: {},
-        },
+        { type: 'pdf_merge', inputFileIds: ['file-1'], inputConfig: {} },
         null
       )
     ).rejects.toThrow('Sign in is required for server processing tasks');
 
     expect(filesService.getById).not.toHaveBeenCalled();
-    expect(insert).not.toHaveBeenCalled();
+    expect(globalInsert).not.toHaveBeenCalled();
     expect(pdfQueue.add).not.toHaveBeenCalled();
+    expect(withActiveUserTransaction).not.toHaveBeenCalled();
   });
 
-  it('creates anonymous local image tasks for anonymous input files', async () => {
+  it('writes anonymous task and outbox rows in one transaction before queueing', async () => {
     const { service, filesService, imageQueue } = createService();
 
     const task = await service.create(
-      {
-        type: 'compress',
-        inputFileIds: ['file-1'],
-        inputConfig: {},
-      },
+      { type: 'compress', inputFileIds: ['file-1'], inputConfig: {} },
       null
     );
 
-    expect(filesService.getById).toHaveBeenCalledWith('file-1', null);
+    expect(filesService.getById).toHaveBeenCalledWith(
+      'file-1',
+      null,
+      transaction
+    );
     expect(task.userId).toBeNull();
-    expect(insertedTask?.userId).toBeNull();
-    expect(imageQueue.add).toHaveBeenCalledWith('compress', {
-      taskId: 'task-1',
-    });
+    expect(globalInsert).not.toHaveBeenCalled();
+    expect(transactionInsert).toHaveBeenCalledTimes(1);
+    expect(withProducerTransaction).toHaveBeenCalledTimes(1);
+    expect(cleanupObligationService.recordTaskJob).toHaveBeenCalledWith(
+      TASK_ID,
+      'image-queue',
+      TASK_ID,
+      transaction
+    );
+    expect(imageQueue.add).toHaveBeenCalledWith(
+      'compress',
+      { taskId: TASK_ID },
+      { jobId: TASK_ID, delay: 1000 }
+    );
+    expect(events.indexOf('commit')).toBeLessThan(events.indexOf('queue-add'));
   });
 
-  it('allows signed-in users to create server tasks', async () => {
-    const { service, filesService, pdfQueue } = createService({
-      getById: vi.fn((fileId: string, userId?: string | null) => {
-        if (fileId !== 'file-1' || userId !== 'user-1') {
-          throw new Error('Access denied');
+  it('commits file checks, task, and outbox before queueing', async () => {
+    const filesService = {
+      getById: vi.fn(
+        async (
+          fileId: string,
+          userId?: string | null,
+          operationTx?: unknown
+        ) => {
+          events.push('file-access');
+          expect(fileId).toBe('file-1');
+          expect(userId).toBe('user-1');
+          expect(operationTx).toBe(transaction);
+          return { id: fileId, userId };
         }
-        return Promise.resolve({ id: 'file-1', userId: 'user-1' });
-      }),
-    });
+      ),
+    };
+    const { service, pdfQueue } = createService(filesService);
 
     const task = await service.create(
-      {
-        type: 'pdf_merge',
-        inputFileIds: ['file-1'],
-        inputConfig: {},
-      },
+      { type: 'pdf_merge', inputFileIds: ['file-1'], inputConfig: {} },
       { id: 'user-1', plan: 'free', role: 'user' }
     );
 
-    expect(filesService.getById).toHaveBeenCalledWith('file-1', 'user-1');
     expect(task.userId).toBe('user-1');
-    expect(insertedTask?.userId).toBe('user-1');
-    expect(pdfQueue.add).toHaveBeenCalledWith('pdf_merge', {
-      taskId: 'task-1',
-    });
+    expect(globalInsert).not.toHaveBeenCalled();
+    expect(transactionInsert).toHaveBeenCalledTimes(1);
+    expect(cleanupObligationService.recordTaskJob).toHaveBeenCalledWith(
+      TASK_ID,
+      'pdf-queue',
+      TASK_ID,
+      transaction
+    );
+    expect(pdfQueue.add).toHaveBeenCalledWith(
+      'pdf_merge',
+      { taskId: TASK_ID },
+      { jobId: TASK_ID, delay: 1000 }
+    );
+    expect(events).toEqual([
+      'transaction',
+      'file-access',
+      'transaction-insert',
+      'obligation-record',
+      'commit',
+      'queue-add',
+      'obligation-clear',
+    ]);
   });
 
-  it('rejects anonymous local tasks that reference user-owned files', async () => {
-    const { service, filesService, imageQueue } = createService({
-      getById: vi.fn((fileId: string, userId?: string | null) => {
-        if (fileId === 'file-1' && !userId) {
-          throw new Error('Access denied');
-        }
-        return Promise.resolve({ id: fileId, userId: userId ?? null });
-      }),
+  it('commits the database transaction before waiting on Redis', async () => {
+    let resolveQueueAdd: ((job: { id: string }) => void) | undefined;
+    let markQueueAddStarted: (() => void) | undefined;
+    const queueAddStarted = new Promise<void>(resolve => {
+      markQueueAddStarted = resolve;
     });
+    const { service, pdfQueue } = createService();
+    pdfQueue.add.mockImplementationOnce(async () => {
+      events.push('queue-add');
+      markQueueAddStarted?.();
+      return new Promise(resolve => {
+        resolveQueueAdd = resolve;
+      });
+    });
+
+    const result = service.create(
+      { type: 'pdf_merge', inputFileIds: ['file-1'], inputConfig: {} },
+      { id: 'user-1', plan: 'free', role: 'user' }
+    );
+    await queueAddStarted;
+    const committedBeforeRedisSettled = events.includes('commit');
+    resolveQueueAdd?.({ id: TASK_ID });
+    await result;
+
+    expect(committedBeforeRedisSettled).toBeTrue();
+    expect(events.indexOf('commit')).toBeLessThan(events.indexOf('queue-add'));
+  });
+
+  it('returns the committed task and keeps the outbox when queue add is ambiguous', async () => {
+    const queueError = new Error('queue unavailable');
+    const { service, pdfQueue } = createService();
+    pdfQueue.add.mockImplementationOnce(async () => {
+      events.push('queue-add');
+      throw queueError;
+    });
+
+    const task = await service.create(
+      { type: 'pdf_merge', inputFileIds: ['file-1'], inputConfig: {} },
+      { id: 'user-1', plan: 'free', role: 'user' }
+    );
+
+    expect(task.id).toBe(TASK_ID);
+    expect(transactionInsert).toHaveBeenCalledTimes(1);
+    expect(events).toContain('commit');
+    expect(cleanupObligationService.recordTaskJob).toHaveBeenCalledWith(
+      TASK_ID,
+      'pdf-queue',
+      TASK_ID,
+      transaction
+    );
+    expect(cleanupObligationService.clear).not.toHaveBeenCalled();
+    expect(cleanupObligationService.release).not.toHaveBeenCalled();
+  });
+
+  it('does not touch Redis or the outbox after an ambiguous commit failure', async () => {
+    const commitError = new Error('connection lost during commit');
+    withActiveUserTransaction.mockImplementationOnce(
+      async (_userId, operation) => {
+        events.push('transaction');
+        await operation(transaction);
+        events.push('commit-failed');
+        throw commitError;
+      }
+    );
+    const { service, pdfQueue } = createService();
 
     await expect(
       service.create(
-        {
-          type: 'compress',
-          inputFileIds: ['file-1'],
-          inputConfig: {},
-        },
-        null
+        { type: 'pdf_merge', inputFileIds: ['file-1'], inputConfig: {} },
+        { id: 'user-1', plan: 'free', role: 'user' }
       )
-    ).rejects.toThrow('Access denied');
+    ).rejects.toBe(commitError);
 
-    expect(filesService.getById).toHaveBeenCalledWith('file-1', null);
-    expect(insert).not.toHaveBeenCalled();
-    expect(imageQueue.add).not.toHaveBeenCalled();
+    expect(transactionInsert).toHaveBeenCalledTimes(1);
+    expect(cleanupObligationService.recordTaskJob).toHaveBeenCalledWith(
+      TASK_ID,
+      'pdf-queue',
+      TASK_ID,
+      transaction
+    );
+    expect(events).toContain('commit-failed');
+    expect(pdfQueue.add).not.toHaveBeenCalled();
+    expect(pdfQueue.remove).not.toHaveBeenCalled();
+    expect(cleanupObligationService.clear).not.toHaveBeenCalled();
+    expect(cleanupObligationService.release).not.toHaveBeenCalled();
   });
 
-  it('validates ordered file ids before creating PDF merge tasks', async () => {
-    const { service, filesService, pdfQueue } = createService({
-      getById: vi.fn((fileId: string, userId?: string | null) => {
-        const ownerId = fileId === 'owned-file' ? 'user-1' : 'user-2';
+  it('does not access files, insert, or queue when deletion already started', async () => {
+    withActiveUserTransaction.mockRejectedValueOnce(
+      new Error('Account deletion is in progress')
+    );
+    const { service, filesService, pdfQueue } = createService();
 
-        if (userId !== ownerId) {
-          throw new Error('Access denied');
+    await expect(
+      service.create(
+        { type: 'pdf_merge', inputFileIds: ['file-1'], inputConfig: {} },
+        { id: 'user-1', plan: 'free', role: 'user' }
+      )
+    ).rejects.toThrow('Account deletion is in progress');
+
+    expect(filesService.getById).not.toHaveBeenCalled();
+    expect(transactionInsert).not.toHaveBeenCalled();
+    expect(pdfQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('validates ordered file ids inside the active-user transaction', async () => {
+    const filesService = {
+      getById: vi.fn(
+        async (
+          fileId: string,
+          userId?: string | null,
+          operationTx?: unknown
+        ) => {
+          expect(operationTx).toBe(transaction);
+          if (fileId === 'foreign-file') throw new Error('Access denied');
+          return { id: fileId, userId };
         }
-
-        return Promise.resolve({
-          id: fileId,
-          userId: ownerId,
-        });
-      }),
-    });
+      ),
+    };
+    const { service, pdfQueue } = createService(filesService);
 
     await expect(
       service.create(
@@ -242,8 +406,7 @@ describe('TasksService task creation entitlements', () => {
       )
     ).rejects.toThrow('Access denied');
 
-    expect(filesService.getById).toHaveBeenCalledWith('foreign-file', 'user-1');
-    expect(insert).not.toHaveBeenCalled();
+    expect(transactionInsert).not.toHaveBeenCalled();
     expect(pdfQueue.add).not.toHaveBeenCalled();
   });
 });

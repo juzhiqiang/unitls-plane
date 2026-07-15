@@ -14,6 +14,8 @@ import { PdfService } from './services/pdf.service';
 import { FontService } from './services/font.service';
 import { PortraitSegmentationService } from './services/portrait-segmentation.service';
 import { FilesModule } from '../files/files.module';
+import { TaskJobReconciler } from './task-job-reconciler.service';
+import { TaskJobStateRepository } from './task-job-state.repository';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { FilesModule } from '../files/files.module';
   controllers: [TasksController, FontsController],
   providers: [
     TasksService,
+    TaskJobReconciler,
+    TaskJobStateRepository,
     ImageService,
     IdPhotoService,
     PortraitSegmentationService,

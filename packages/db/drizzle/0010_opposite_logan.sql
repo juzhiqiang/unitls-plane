@@ -1,0 +1,2 @@
+ALTER TABLE "cleanup_obligations" ADD COLUMN "reconcile_after" timestamp DEFAULT now() + interval '1 hour' NOT NULL;--> statement-breakpoint
+CREATE INDEX "cleanup_obligations_reconcile_after_idx" ON "cleanup_obligations" USING btree ("reconcile_after");

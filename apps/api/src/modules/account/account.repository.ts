@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   account,
+  accountDeletionQueueScans,
   db,
   files,
   session,
@@ -10,8 +11,19 @@ import {
   type File,
   type Task,
   type User,
+  type AccountDeletionQueueScan,
 } from '@utils-plane/db';
-import { and, asc, count, desc, eq, inArray, isNull, sum } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  sql,
+  sum,
+} from 'drizzle-orm';
 
 export const ACCOUNT_EXPORT_MAX_TASK_ROWS = 1_000;
 export const ACCOUNT_EXPORT_MAX_FILE_ROWS = 10_000;
@@ -61,31 +73,118 @@ export interface AccountExportSnapshot {
 }
 
 export interface AccountDeletionSnapshot {
-  profile: Pick<User, 'id' | 'email'>;
   files: Pick<File, 'id' | 'storageKey'>[];
+  tasks: Pick<Task, 'id' | 'type'>[];
 }
+
+export type AccountDeletionProfile = Pick<
+  User,
+  'id' | 'email' | 'deletionStartedAt'
+>;
 
 @Injectable()
 export class AccountRepository {
+  async getDeletionProfile(userId: string): Promise<AccountDeletionProfile> {
+    const [profile] = await db
+      .select({
+        id: user.id,
+        email: user.email,
+        deletionStartedAt: user.deletionStartedAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!profile) throw new NotFoundException('Account not found');
+    return profile;
+  }
+
+  async markDeletionStarted(userId: string): Promise<AccountDeletionProfile> {
+    const [profile] = await db
+      .update(user)
+      .set({
+        deletionStartedAt: sql`coalesce(${user.deletionStartedAt}, now())`,
+      })
+      .where(eq(user.id, userId))
+      .returning({
+        id: user.id,
+        email: user.email,
+        deletionStartedAt: user.deletionStartedAt,
+      });
+
+    if (!profile) throw new NotFoundException('Account not found');
+    return profile;
+  }
+
   async getDeletionSnapshot(userId: string): Promise<AccountDeletionSnapshot> {
-    const [[profile], fileRows] = await Promise.all([
-      db
-        .select({ id: user.id, email: user.email })
-        .from(user)
-        .where(eq(user.id, userId))
-        .limit(1),
+    const [fileRows, taskRows] = await Promise.all([
       db
         .select({ id: files.id, storageKey: files.storageKey })
         .from(files)
         .where(eq(files.userId, userId)),
+      db
+        .select({ id: tasks.id, type: tasks.type })
+        .from(tasks)
+        .where(eq(tasks.userId, userId)),
     ]);
 
-    if (!profile) throw new NotFoundException('Account not found');
-    return { profile, files: fileRows };
+    return { files: fileRows, tasks: taskRows };
+  }
+
+  async getOrCreateDeletionQueueScan(
+    userId: string,
+    queueName: string
+  ): Promise<AccountDeletionQueueScan> {
+    await db
+      .insert(accountDeletionQueueScans)
+      .values({ userId, queueName })
+      .onConflictDoNothing();
+    const [state] = await db
+      .select()
+      .from(accountDeletionQueueScans)
+      .where(
+        and(
+          eq(accountDeletionQueueScans.userId, userId),
+          eq(accountDeletionQueueScans.queueName, queueName)
+        )
+      )
+      .limit(1);
+    if (!state) throw new Error('Failed to persist account queue scan state');
+    return state;
+  }
+
+  async saveDeletionQueueScan(
+    userId: string,
+    queueName: string,
+    expectedVersion: number,
+    state: Pick<
+      AccountDeletionQueueScan,
+      'cursor' | 'completed' | 'pendingKeys' | 'jobIds'
+    >
+  ): Promise<AccountDeletionQueueScan | null> {
+    const [saved] = await db
+      .update(accountDeletionQueueScans)
+      .set({
+        ...state,
+        version: sql`${accountDeletionQueueScans.version} + 1`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(accountDeletionQueueScans.userId, userId),
+          eq(accountDeletionQueueScans.queueName, queueName),
+          eq(accountDeletionQueueScans.version, expectedVersion)
+        )
+      )
+      .returning();
+    return saved ?? null;
   }
 
   async deleteAccountRecords(userId: string): Promise<void> {
     await db.transaction(async tx => {
+      await tx
+        .delete(accountDeletionQueueScans)
+        .where(eq(accountDeletionQueueScans.userId, userId));
       await tx.delete(tasks).where(eq(tasks.userId, userId));
       await tx.delete(files).where(eq(files.userId, userId));
       await tx.delete(verification).where(eq(verification.value, userId));

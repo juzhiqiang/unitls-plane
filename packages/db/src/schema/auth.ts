@@ -19,6 +19,7 @@ export const user = pgTable(
     image: varchar('image', { length: 500 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    deletionStartedAt: timestamp('deletion_started_at'),
     // Better-Auth 额外字段
     plan: varchar('plan', { length: 50 }).default('free'),
     role: varchar('role', { length: 50 }).default('user'),

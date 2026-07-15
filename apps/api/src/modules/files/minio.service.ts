@@ -11,6 +11,8 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Readable } from 'node:stream';
 
+export const MINIO_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+
 @Injectable()
 export class MinioService implements OnModuleInit {
   private readonly logger = new Logger(MinioService.name);
@@ -48,13 +50,15 @@ export class MinioService implements OnModuleInit {
   }
 
   async upload(key: string, body: Buffer, mimeType: string): Promise<void> {
+    const abortSignal = globalThis.AbortSignal.timeout(MINIO_UPLOAD_TIMEOUT_MS);
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         Body: body,
         ContentType: mimeType,
-      })
+      }),
+      { abortSignal }
     );
     this.logger.debug(`Uploaded ${key} to ${this.bucket}`);
   }

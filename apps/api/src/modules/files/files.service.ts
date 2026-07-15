@@ -5,6 +5,8 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {
   eq,
   desc,
@@ -16,11 +18,17 @@ import {
   inArray,
   sql,
 } from 'drizzle-orm';
-import { db, files, type File, type User } from '@utils-plane/db';
+import { db, files, type File, type NewFile, type User } from '@utils-plane/db';
 import { getLimit, type EntitlementUser } from '@utils-plane/utils';
 import { MinioService } from './minio.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import {
+  withActiveUserTransaction,
+  withProducerTransaction,
+  type ActiveUserTransaction,
+} from '../../common/database/active-user-transaction';
 import { normalizeUploadedFilename } from './filename.util';
+import { CleanupObligationService } from './cleanup-obligation.service';
 
 const ALLOWED_MIME_TYPES = [
   'image/png',
@@ -66,7 +74,11 @@ export interface UploadMeta {
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
 
-  constructor(private readonly minioService: MinioService) {}
+  constructor(
+    private readonly minioService: MinioService,
+    @InjectQueue('cleanup-queue') private readonly cleanupQueue: Queue,
+    private readonly cleanupObligationService: CleanupObligationService
+  ) {}
 
   async upload(
     file: Buffer,
@@ -105,8 +117,15 @@ export class FilesService {
     const prefix = entitlementUser?.id ?? 'anonymous';
     const storageKey = `${prefix}/${fileId}/${meta.filename}`;
 
+    await this.cleanupObligationService.recordObject(fileId, storageKey);
+
     // 上传到 MinIO
-    await this.minioService.upload(storageKey, file, meta.mimeType);
+    try {
+      await this.minioService.upload(storageKey, file, meta.mimeType);
+    } catch (error) {
+      await this.releaseObjectProduction(fileId);
+      throw error;
+    }
 
     // 计算过期时间（匿名用户 24 小时）
     const expiresAt = entitlementUser?.id
@@ -114,20 +133,28 @@ export class FilesService {
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     // 写入数据库
-    const [newFile] = await db
-      .insert(files)
-      .values({
-        userId: entitlementUser?.id ?? null,
-        filename: meta.filename,
-        originalSize: meta.size,
-        storageKey,
-        mimeType: meta.mimeType,
-        expiresAt,
-      })
-      .returning();
+    const newFileValues: NewFile = {
+      id: fileId,
+      userId: entitlementUser?.id ?? null,
+      filename: meta.filename,
+      originalSize: meta.size,
+      storageKey,
+      mimeType: meta.mimeType,
+      expiresAt,
+    };
 
-    if (!newFile) {
-      throw new Error('Failed to create file record');
+    let newFile: File;
+    try {
+      newFile = entitlementUser
+        ? await withActiveUserTransaction(entitlementUser.id, tx =>
+            this.insertUploadedFile(tx, newFileValues)
+          )
+        : await withProducerTransaction(tx =>
+            this.insertUploadedFile(tx, newFileValues)
+          );
+    } catch (error) {
+      await this.releaseObjectProduction(fileId);
+      throw error;
     }
 
     this.logger.log(
@@ -136,10 +163,54 @@ export class FilesService {
     return normalizeFileRecord(newFile);
   }
 
-  async getById(id: string, userId?: string | null): Promise<File> {
-    const file = await db.query.files.findFirst({
-      where: eq(files.id, id),
-    });
+  private async insertUploadedFile(
+    database: ActiveUserTransaction,
+    values: NewFile
+  ): Promise<File> {
+    const ownsProduction =
+      await this.cleanupObligationService.lockObjectProducer(
+        database,
+        values.id!
+      );
+    if (!ownsProduction) {
+      throw new Error('Object production was claimed for cleanup');
+    }
+
+    const [newFile] = await database.insert(files).values(values).returning();
+    if (!newFile) throw new Error('Failed to create file record');
+    await this.cleanupObligationService.clearObjectInTransaction(
+      database,
+      values.id!
+    );
+    return newFile;
+  }
+
+  private async releaseObjectProduction(fileId: string): Promise<void> {
+    try {
+      await this.cleanupObligationService.releaseObject(fileId);
+    } catch {
+      this.logger.error(
+        `Failed to release object cleanup obligation for file ${fileId}`
+      );
+    }
+  }
+
+  async getById(
+    id: string,
+    userId?: string | null,
+    transaction?: Pick<ActiveUserTransaction, 'select'>
+  ): Promise<File> {
+    const file = transaction
+      ? (
+          await transaction
+            .select()
+            .from(files)
+            .where(eq(files.id, id))
+            .limit(1)
+        )[0]
+      : await db.query.files.findFirst({
+          where: eq(files.id, id),
+        });
 
     if (!file) {
       throw new NotFoundException({

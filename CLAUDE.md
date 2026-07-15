@@ -1,6 +1,7 @@
 # Utils-Plane 项目 AI 开发指南
 
-> 本文件供 Claude Code / AI 助手阅读。完整项目事实见 [PROJECT_SPECS.md](./PROJECT_SPECS.md)，团队规范见 [AGENTS.md](./AGENTS.md)。
+> 本文件供 Claude Code / AI 助手阅读。完整项目事实见
+> [PROJECT_SPECS.md](./PROJECT_SPECS.md)，团队规范见 [AGENTS.md](./AGENTS.md)。
 
 ## 项目基本信息
 
@@ -13,6 +14,25 @@
 - 队列/缓存：Redis 7 + BullMQ
 - 对象存储：MinIO (S3 兼容)
 - 认证：Better-Auth，base path 为 `/api/auth`
+
+## 公开公测边界
+
+- 当前产品定位为免费受限公测；登录增强能力包括账号文件管理、任务历史、账号数据导出和注销，不代表付费权益已经上线。
+- 服务不提供分析、错误追踪或会话回放，当前不启用遥测。
+- 匿名文件保留 24 小时后永久删除；回收站文件保留 30 天后永久删除。
+- 账号数据可导出为 ZIP；注销账号会立即永久删除账号及其文件和任务记录，不能恢复。
+- `/health/live` 仅检查进程状态和版本信息。`/health/ready`
+  检查 PostgreSQL、Redis、MinIO、四个任务队列和 LibreOffice；核心依赖失败返回
+  `503`，仅 LibreOffice 缺失时返回 `degraded` 和 `200`。
+- 支持邮箱必须是可从公网联系的有效地址，且不能使用 `.local` 域名。组合镜像构建必须传入两个 Docker
+  build 参数：`NEXT_PUBLIC_APP_URL` 和
+  `NEXT_PUBLIC_SUPPORT_EMAIL`；其中邮箱值来自当前 Shell 环境变量。
+- 发布前先停止占用 `3000` 端口的 Web dev server，设置 `NEXT_PUBLIC_SUPPORT_EMAIL`，再运行
+  `bun run release:verify`。该命令执行 10 步，覆盖增量格式检查、lint、packages/API/Web 三类测试、OpenAPI 与 client 漂移检查、构建和 7 项 Playwright 测试。
+- 当前部署仍存在
+  `IP + HTTP`、默认凭据、匿名桶和公开任务状态风险。本次不为匿名文件或任务新增访问令牌，也不改变
+  `/tasks/:id/status`。
+- HTTPS、支付、Team、存储/每日任务/并发配额和云 CI 不在本次范围内；上述风险未改变前，不得称为安全的公网正式生产版。
 
 ## 快速开始
 
@@ -70,10 +90,10 @@ GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 
 NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_S3_PUBLIC_URL=http://localhost:9000
+NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com
 NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=false
-NEXT_PUBLIC_ERROR_TRACKER_DSN=
-NEXT_PUBLIC_ERROR_TRACKER_TOKEN=
 NEXT_PUBLIC_RELEASE=dev
 
 ID_PHOTO_AI_SEGMENTATION_BASE_URL=
@@ -88,12 +108,9 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 PORT=3001
 CORS_ORIGIN=http://localhost:3000
 NODE_ENV=development
-ERROR_TRACKER_DSN=
 RELEASE=dev
-
-ERROR_TRACKER_API=http://localhost:3002
-ERROR_TRACKER_PROJECT_ID=
-ERROR_TRACKER_TOKEN=
+BUILD_COMMIT=dev
+BUILD_TIME=
 ```
 
 访问队列后台 `/admin/queues` 时，还需要在本地环境中配置：
@@ -161,25 +178,33 @@ API 模块：
 当前工具处理边界：
 
 - 图片压缩、格式转换、长图拼接、GIF/APNG 制作优先走浏览器本地处理。
-- GIF 制作免费可用；APNG、高级压缩和更高限制按“登录商业版”权益判断，未来收费复用同一层。
+- GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
-- Markdown / Word 转 PDF 页面免费进入。Markdown 支持在线编辑、实时预览和本地导出；登录后可选择服务端导出。DOCX 走服务端任务。
-- 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；Docker 组合镜像已安装 `libreoffice-writer` 和 CJK 字体，本地宿主机运行 API 时可安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。
-- 当前任务类型包含 `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`。
+- Markdown /
+  Word 转 PDF 页面免费进入。Markdown 支持在线编辑、实时预览和本地导出；登录后可选择服务端导出。DOCX 走服务端任务。
+- 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；Docker 组合镜像已安装 `libreoffice-writer`
+  和 CJK 字体，本地宿主机运行 API 时可安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。
+- 当前任务类型包含
+  `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`。
 
 ## 开发约定
 
 - 项目文档默认使用中文；除非第三方协议、API 名称、代码标识或用户明确要求，新增或更新文档时不要改用英文。
 - Git 提交信息必须使用中文描述变更内容；允许保留 `feat`、`fix`、`docs` 等约定式提交前缀和 scope。
 - 不要提交 `.env.local`。
-- 本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行 `cd apps/api && bun run dev`，不要放进 Docker 容器运行。
-- 修改 API 后运行 `cd apps/api && bun run openapi:export`，必要时再运行 `cd packages/api-client && bun run generate`。
+- 本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行
+  `cd apps/api && bun run dev`，不要放进 Docker 容器运行。
+- 修改 API 后运行 `cd apps/api && bun run openapi:export`，必要时再运行
+  `cd packages/api-client && bun run generate`。
 - 修改数据库 schema 后运行 `bunx drizzle-kit generate` 和 `bunx drizzle-kit migrate`。
 - 前端新增文案必须同时更新中文和英文 message。
-- Windows PowerShell 访问 `apps/web/src/app/[locale]/(app)` 等路径时使用 `-LiteralPath` 或 Git literal pathspec。
+- Windows PowerShell 访问 `apps/web/src/app/[locale]/(app)` 等路径时使用 `-LiteralPath` 或 Git
+  literal pathspec。
 - 仓库存在历史格式化差异，避免无关全仓格式化；优先只格式化本次触碰的文件。
-- 修改工具清单时同步检查 `apps/web/src/lib/tools/tool-metadata.ts`、`apps/web/messages/zh.json`、`apps/web/messages/en.json`、任务类型和 README/PROJECT_SPECS。
-- Docker 组合镜像构建依赖 `../error-tracker/packages/sdk` 额外 build context，并内置 LibreOffice；如果 apt 源临时失败，先确认本地镜像和 tar 产物时间，再决定是否仅重新 `docker save`。
+- 修改工具清单时同步检查
+  `apps/web/src/lib/tools/tool-metadata.ts`、`apps/web/messages/zh.json`、`apps/web/messages/en.json`、任务类型和 README/PROJECT_SPECS。
+- Docker 组合镜像内置 LibreOffice；如果 apt 源临时失败，先确认本地镜像和 tar 产物时间，再决定是否仅重新
+  `docker save`。
 
 ## 参考文档
 
@@ -193,7 +218,8 @@ API 模块：
 
 ### 核对截图规范
 
-- 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/` 下；不要直接保存到项目根目录。
+- 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/`
+  下；不要直接保存到项目根目录。
 - 调用截图工具时显式使用 `artifacts/screenshots/<name>.png` 作为输出路径。
 - `artifacts/screenshots/` 只作为本地验证产物目录，不提交到 Git。
 - Playwright MCP 自动生成的 `.playwright-mcp/` 目录也属于本地验证产物，不提交到 Git。

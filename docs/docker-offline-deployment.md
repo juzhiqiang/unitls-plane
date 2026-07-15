@@ -1,16 +1,50 @@
 # Docker 离线部署与保留数据更新指南
 
-本文档用于服务器已经采用 `utils-plane-offline-all.tar` 和 `docker-compose.prod.yml` 部署 Utils-Plane 后，后续更新镜像、配置字段和数据库结构时使用。
+本文档用于服务器已经采用 `utils-plane-offline-all.tar` 和 `docker-compose.prod.yml`
+部署 Utils-Plane 后，后续更新镜像、配置字段和数据库结构时使用。
 
-核心原则：**更新镜像和配置，不删除 volume，不重建数据库卷**。PostgreSQL、Redis、MinIO 的历史数据都在 Docker volume 中，正常 `docker load`、`docker compose up -d`、`--force-recreate api web` 不会清空历史数据。
+核心原则：**更新镜像和配置，不删除 volume，不重建数据库卷**。PostgreSQL、Redis、MinIO 的历史数据都在 Docker
+volume 中，正常 `docker load`、`docker compose up -d`、`--force-recreate api web` 不会清空历史数据。
+
+## HTTP 受限公测边界
+
+- 当前产品定位为免费受限公测；登录增强能力包括账号文件管理、任务历史、账号数据导出和注销，不代表付费权益已经上线。
+- 服务不提供分析、错误追踪或会话回放，当前不启用遥测。
+- 匿名文件保留 24 小时后永久删除；回收站文件保留 30 天后永久删除。
+- 账号数据可导出为 ZIP；注销账号会立即永久删除账号及其文件和任务记录，不能恢复。
+- `/health/live` 仅检查进程状态和版本信息。`/health/ready`
+  检查 PostgreSQL、Redis、MinIO、四个任务队列和 LibreOffice；核心依赖失败返回
+  `503`，仅 LibreOffice 缺失时返回 `degraded` 和 `200`。
+- 支持邮箱必须是可从公网联系的有效地址，且不能使用 `.local` 域名。组合镜像构建必须传入两个 Docker
+  build 参数：`NEXT_PUBLIC_APP_URL` 和
+  `NEXT_PUBLIC_SUPPORT_EMAIL`；其中邮箱值来自当前 Shell 环境变量。
+- 发布前先停止占用 `3000` 端口的 Web dev server，设置 `NEXT_PUBLIC_SUPPORT_EMAIL`，再运行
+  `bun run release:verify`。该命令执行 10 步，覆盖增量格式检查、lint、packages/API/Web 三类测试、OpenAPI 与 client 漂移检查、构建和 7 项 Playwright 测试。
+- 当前部署仍存在
+  `IP + HTTP`、默认凭据、匿名桶和公开任务状态风险。本次不为匿名文件或任务新增访问令牌，也不改变
+  `/tasks/:id/status`。
+- HTTPS、支付、Team、存储/每日任务/并发配额和云 CI 不在本次范围内；上述风险未改变前，不得称为安全的公网正式生产版。
 
 ## 相关文件
 
 本地生成并上传：
 
-- `utils-plane-offline-all.tar`：离线镜像总包，包含 `utils-plane:all`、PostgreSQL、Redis、MinIO、MinIO mc。
+- `utils-plane-offline-all.tar`：离线镜像总包，包含
+  `utils-plane:all`、PostgreSQL、Redis、MinIO、MinIO mc。
 - `docker-compose.prod.yml`：服务器 compose 配置。
 - `.env.prod`：生产环境变量，包含域名、认证、SMTP、S3 等敏感配置，不提交 Git。
+
+生产 `.env.prod` 还需要提供版本元数据：
+
+```env
+RELEASE=prod
+BUILD_COMMIT=<git commit SHA>
+BUILD_TIME=<UTC ISO 8601 timestamp>
+```
+
+`docker run --env-file .env.prod` 必须在 `.env.prod` 中显式提供 `RELEASE`、`BUILD_COMMIT` 和
+`BUILD_TIME`，否则 `/health/live` 会回退到开发态版本值。只有 Compose 部署会使用 `prod`、`unknown`
+和空字符串默认值。
 
 服务器建议目录：
 
@@ -46,7 +80,8 @@ bun run docker:package:offline
 utils-plane-offline-all.tar
 ```
 
-如果 Docker 构建过程中 Debian apt 源临时失败，但本机已有确认最新的 `utils-plane:all` 镜像，可以只重新导出离线包：
+如果 Docker 构建过程中 Debian apt 源临时失败，但本机已有确认最新的 `utils-plane:all`
+镜像，可以只重新导出离线包：
 
 ```bash
 docker save utils-plane:all postgres:16-alpine redis:7-alpine minio/minio:latest minio/mc:latest -o utils-plane-offline-all.tar
@@ -69,7 +104,8 @@ scp .env.prod user@server:/opt/utils-plane/
 
 如果本次只更新应用镜像，不更新 compose 或环境变量，可以只上传 `utils-plane-offline-all.tar`。
 
-如果本次只更新 `.env.prod` 或 `docker-compose.prod.yml`，可以不重新上传镜像包，但仍需要重建读取这些配置的容器。
+如果本次只更新 `.env.prod` 或
+`docker-compose.prod.yml`，可以不重新上传镜像包，但仍需要重建读取这些配置的容器。
 
 ## 首次部署
 
@@ -113,7 +149,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
 
 说明：
 
-- `utils-plane:all` 使用固定 tag，`docker load` 后需要 `--force-recreate api web`，否则旧容器可能继续运行旧镜像。
+- `utils-plane:all` 使用固定 tag，`docker load` 后需要
+  `--force-recreate api web`，否则旧容器可能继续运行旧镜像。
 - 只重建 `api` 和 `web`，不会删除 PostgreSQL、Redis、MinIO 的 volume。
 - API 容器启动时会执行 `node apps/api/dist/scripts/migrate.js`，用于增量数据库迁移。
 
@@ -143,7 +180,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
 说明：
 
 - 环境变量是在容器创建时注入的，修改 `.env.prod` 后必须重建相关容器才会生效。
-- Web 里以 `NEXT_PUBLIC_` 开头的变量有一部分在构建时写入前端包；如果这类值在 Dockerfile 构建参数中已经固化，仅改服务器 `.env.prod` 可能不够，需要本地重新打包镜像后再上传。
+- Web 里以 `NEXT_PUBLIC_`
+  开头的变量有一部分在构建时写入前端包；如果这类值在 Dockerfile 构建参数中已经固化，仅改服务器
+  `.env.prod` 可能不够，需要本地重新打包镜像后再上传。
 
 ## 更新 docker-compose.prod.yml 字段
 
@@ -276,7 +315,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec api sh
 
 1. 保留当前 volume，不执行 `down -v`。
 2. 重新 `docker load` 上一个可用的 `utils-plane-offline-all.tar`。
-3. 执行 `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web`。
+3. 执行
+   `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web`。
 4. 查看 `api web` 日志确认服务恢复。
 
 数据库 migration 如果已经执行，回滚需要结合备份和 migration 内容判断。上线前备份数据库是最稳妥的保护。

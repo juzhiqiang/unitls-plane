@@ -1,6 +1,26 @@
 # Utils-Plane 工具平台
 
-Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片、PDF、字体、文件管理和异步任务处理。项目包含 Next.js 前端、NestJS API、PostgreSQL、Redis、MinIO 和 BullMQ 队列。
+Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片、PDF、字体、文件管理和异步任务处理。项目包含 Next.js 前端、NestJS
+API、PostgreSQL、Redis、MinIO 和 BullMQ 队列。
+
+## 公开公测边界
+
+- 当前产品定位为免费受限公测；登录增强能力包括账号文件管理、任务历史、账号数据导出和注销，不代表付费权益已经上线。
+- 服务不提供分析、错误追踪或会话回放，当前不启用遥测。
+- 匿名文件保留 24 小时后永久删除；回收站文件保留 30 天后永久删除。
+- 账号数据可导出为 ZIP；注销账号会立即永久删除账号及其文件和任务记录，不能恢复。
+- `/health/live` 仅检查进程状态和版本信息。`/health/ready`
+  检查 PostgreSQL、Redis、MinIO、四个任务队列和 LibreOffice；核心依赖失败返回
+  `503`，仅 LibreOffice 缺失时返回 `degraded` 和 `200`。
+- 支持邮箱必须是可从公网联系的有效地址，且不能使用 `.local` 域名。组合镜像构建必须传入两个 Docker
+  build 参数：`NEXT_PUBLIC_APP_URL` 和
+  `NEXT_PUBLIC_SUPPORT_EMAIL`；其中邮箱值来自当前 Shell 环境变量。
+- 发布前先停止占用 `3000` 端口的 Web dev server，设置 `NEXT_PUBLIC_SUPPORT_EMAIL`，再运行
+  `bun run release:verify`。该命令执行 10 步，覆盖增量格式检查、lint、packages/API/Web 三类测试、OpenAPI 与 client 漂移检查、构建和 7 项 Playwright 测试。
+- 当前部署仍存在
+  `IP + HTTP`、默认凭据、匿名桶和公开任务状态风险。本次不为匿名文件或任务新增访问令牌，也不改变
+  `/tasks/:id/status`。
+- HTTPS、支付、Team、存储/每日任务/并发配额和云 CI 不在本次范围内；上述风险未改变前，不得称为安全的公网正式生产版。
 
 ## 技术栈
 
@@ -47,7 +67,7 @@ Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片�
 
 - 文件上传、签名下载、列表、搜索、回收站、批量操作
 - 异步任务历史、进度、失败原因和恢复建议
-- 匿名文件 24 小时过期，登录用户文件归入账号
+- 匿名文件保留 24 小时后永久删除，登录用户文件归入账号
 
 ## 项目结构
 
@@ -101,7 +121,9 @@ bun run services:up
 docker compose ps
 ```
 
-本地 Docker Compose 只启动 PostgreSQL、Redis、MinIO 和 MinIO bucket 初始化。开发态 API 在宿主机本地启动，执行 `cd apps/api && bun run dev`，不要把 API dev 服务放进 Docker 容器。
+本地 Docker Compose 只启动 PostgreSQL、Redis、MinIO 和 MinIO
+bucket 初始化。开发态 API 在宿主机本地启动，执行 `cd apps/api && bun run dev`，不要把 API
+dev 服务放进 Docker 容器。
 
 ### 配置环境变量
 
@@ -133,8 +155,10 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 
 `ID_PHOTO_AI_SEGMENTATION_PROVIDER` 支持两种模式：
 
-- `chat_mask`：调用 `/v1/chat/completions`，要求视觉模型返回 `{"mask":"data:image/png;base64,..."}`。
-- `image_result`：调用 `/v1/images/edits`，按 OpenAI `images.createEdit` 兼容格式上传参考图并返回最终证件照结果图。
+- `chat_mask`：调用 `/v1/chat/completions`，要求视觉模型返回
+  `{"mask":"data:image/png;base64,..."}`。
+- `image_result`：调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
+  兼容格式上传参考图并返回最终证件照结果图。
 
 ### 启动前端开发服务
 
@@ -144,7 +168,10 @@ cd apps/web && bun run dev
 
 前端访问本地 API：`http://localhost:3001`。
 
-Markdown / Word 转 PDF 的服务端导出会优先调用 LibreOffice。Docker 组合镜像已安装 `libreoffice-writer` 和 CJK 字体；宿主机本地运行 API 时，如果需要更高保真服务端转换，可安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。Markdown 本地导出不依赖服务端。
+Markdown / Word 转 PDF 的服务端导出会优先调用 LibreOffice。Docker 组合镜像已安装
+`libreoffice-writer`
+和 CJK 字体；宿主机本地运行 API 时，如果需要更高保真服务端转换，可安装 LibreOffice 或设置
+`LIBREOFFICE_BIN`。Markdown 本地导出不依赖服务端。
 
 ## 本地服务地址
 
@@ -163,12 +190,17 @@ Markdown / Word 转 PDF 的服务端导出会优先调用 LibreOffice。Docker �
 
 项目使用 Better-Auth，并在 API 层对邮箱注册做了额外拦截：
 
-- 开发环境默认 `REQUIRE_EMAIL_VERIFICATION=false`，注册后可直接登录；需要在本地模拟正式流程时，把它改成 `true` 并配置 SMTP。
+- 开发环境默认
+  `REQUIRE_EMAIL_VERIFICATION=false`，注册后可直接登录；需要在本地模拟正式流程时，把它改成 `true`
+  并配置 SMTP。
 - 生产环境默认 `REQUIRE_EMAIL_VERIFICATION=true`，必须通过邮箱验证后才能登录。
-- 新邮箱注册时，系统会发送验证邮件；用户点击邮件中的 `/api/auth/verify-email` 链接后，默认跳回 `/zh/login?verified=1`。
-- 登录页提供“忘记密码”入口，用户提交邮箱后会通过同一套 SMTP 发送密码重置邮件；邮件链接先经过 `/api/auth/reset-password/:token` 校验，再跳回 `/zh/reset-password?token=...` 设置新密码。
+- 新邮箱注册时，系统会发送验证邮件；用户点击邮件中的 `/api/auth/verify-email` 链接后，默认跳回
+  `/zh/login?verified=1`。
+- 登录页提供“忘记密码”入口，用户提交邮箱后会通过同一套 SMTP 发送密码重置邮件；邮件链接先经过
+  `/api/auth/reset-password/:token` 校验，再跳回 `/zh/reset-password?token=...` 设置新密码。
 - 已验证的邮箱再次注册会返回 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`，前端会显示对应的国际化提示。
-- 已存在但未验证的邮箱再次注册不会创建新用户，而是重新发送验证邮件，并返回 `EMAIL_VERIFICATION_RESENT`。
+- 已存在但未验证的邮箱再次注册不会创建新用户，而是重新发送验证邮件，并返回
+  `EMAIL_VERIFICATION_RESENT`。
 
 本地或生产启用邮箱验证、找回密码邮件时，需要配置：
 
@@ -193,16 +225,16 @@ EMAIL_VERIFICATION_CALLBACK_URL=http://localhost:3000/zh/login?verified=1
 
 ## Docker 镜像上传服务器部署
 
-项目支持在本地构建 Docker 镜像，导出为 `.tar` 镜像包后上传到自有服务器，再在服务器上直接加载运行，不需要在服务器上重新构建源码。
+项目支持在本地构建 Docker 镜像，导出为 `.tar`
+镜像包后上传到自有服务器，再在服务器上直接加载运行，不需要在服务器上重新构建源码。
 
-离线部署、更新镜像、更新 `.env.prod` / `docker-compose.prod.yml` 并保留历史数据的详细流程见 [Docker 离线部署与保留数据更新指南](./docs/docker-offline-deployment.md)。
+离线部署、更新镜像、更新 `.env.prod` / `docker-compose.prod.yml` 并保留历史数据的详细流程见
+[Docker 离线部署与保留数据更新指南](./docs/docker-offline-deployment.md)。
 
 当前提供两种镜像：
 
 - `utils-plane:all`：Web + API 在同一个容器中运行，暴露 `3000` 和 `3001`。
 - `utils-plane-api:latest`：只包含 API，暴露 `3001`。
-
-构建镜像时会通过 Docker BuildKit 的额外 build context 引入本地 Error Tracker SDK，因此本地构建时需要保留 `../error-tracker/packages/sdk` 目录。
 
 ### 本地打包镜像
 
@@ -220,7 +252,9 @@ bun run docker:package:all
 bun run docker:package:api
 ```
 
-另外，内网服务器可以导出一个离线部署总包。它不是第三种应用镜像，而是把 `utils-plane:all` 和 `docker-compose.prod.yml` 依赖的 PostgreSQL、Redis、MinIO 镜像一起打进同一个 `.tar`，方便服务器离线 `docker load`：
+另外，内网服务器可以导出一个离线部署总包。它不是第三种应用镜像，而是把 `utils-plane:all` 和
+`docker-compose.prod.yml` 依赖的 PostgreSQL、Redis、MinIO 镜像一起打进同一个 `.tar`，方便服务器离线
+`docker load`：
 
 ```bash
 bun run docker:package:offline
@@ -245,7 +279,9 @@ bun run docker:package:offline
 
 可以使用 `scp`、SFTP 或服务器面板上传 `.tar` 镜像包和生产环境变量文件。
 
-本地已经使用 `.env.prod` 作为生产环境变量文件。上传前请按服务器域名、数据库、Redis、MinIO 和密钥实际情况检查并修改 `.env.prod`。该文件包含敏感信息，已加入 `.gitignore`，不要提交到 GitHub。
+本地已经使用 `.env.prod`
+作为生产环境变量文件。上传前请按服务器域名、数据库、Redis、MinIO 和密钥实际情况检查并修改
+`.env.prod`。该文件包含敏感信息，已加入 `.gitignore`，不要提交到 GitHub。
 
 生产 `.env.prod` 至少需要检查：
 
@@ -264,7 +300,14 @@ SMTP_SECURE=true
 SMTP_USER=your-smtp-user
 SMTP_PASSWORD=your-smtp-password
 SMTP_FROM=Utils Plane <no-reply@example.com>
+RELEASE=prod
+BUILD_COMMIT=<git commit SHA>
+BUILD_TIME=<UTC ISO 8601 timestamp>
 ```
+
+`docker run --env-file .env.prod` 必须在 `.env.prod` 中显式提供 `RELEASE`、`BUILD_COMMIT` 和
+`BUILD_TIME`，否则 `/health/live` 会回退到开发态版本值。只有 Compose 部署会使用 `prod`、`unknown`
+和空字符串默认值。
 
 Web + API 组合镜像示例：
 
@@ -305,7 +348,8 @@ docker load -i utils-plane-offline-all.tar
 
 ### 使用 docker-compose.prod.yml 部署
 
-如果服务器上需要同时启动 PostgreSQL、Redis、MinIO、Web 和 API，可以上传项目里的 `docker-compose.prod.yml` 和 `.env.prod`，然后在服务器执行：
+如果服务器上需要同时启动 PostgreSQL、Redis、MinIO、Web 和 API，可以上传项目里的
+`docker-compose.prod.yml` 和 `.env.prod`，然后在服务器执行：
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
@@ -360,7 +404,10 @@ docker stop utils-plane-all
 docker stop utils-plane-api
 ```
 
-API 仍然需要能访问 PostgreSQL、Redis 和 MinIO。请在 `.env.prod` 中配置 `DATABASE_URL`、`REDIS_URL`、`S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL` 和 `CORS_ORIGIN` 等变量。组合镜像内置 LibreOffice 和 CJK 字体，用于 Markdown / Word 转 PDF 的服务端导出。
+API 仍然需要能访问 PostgreSQL、Redis 和 MinIO。请在 `.env.prod` 中配置
+`DATABASE_URL`、`REDIS_URL`、`S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`
+和 `CORS_ORIGIN` 等变量。组合镜像内置 LibreOffice 和 CJK 字体，用于 Markdown /
+Word 转 PDF 的服务端导出。
 
 ## 常用脚本
 
@@ -423,7 +470,7 @@ PostgreSQL + Redis + MinIO
 - PDF 和字体的重型处理主要走服务端任务队列。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 匿名上传单文件上限 10MB，登录用户单文件上限 50MB。
-- 匿名文件默认 24 小时过期。
+- 匿名文件保留 24 小时后永久删除，登录用户文件归入账号；回收站文件保留 30 天后永久删除。
 
 ## 开发指南
 
@@ -439,7 +486,8 @@ PostgreSQL + Redis + MinIO
 
 1. 在 `apps/web/src/lib/tools/tool-metadata.ts` 添加工具元数据。
 2. 在 `apps/web/src/app/[locale]/(app)/` 下添加页面。
-3. 复用 `ToolPageShell`、`ToolTrustStrip`、`ToolStepRail`、`ResultPanel`、`FailureRecoveryPanel` 等共享组件。
+3. 复用 `ToolPageShell`、`ToolTrustStrip`、`ToolStepRail`、`ResultPanel`、`FailureRecoveryPanel`
+   等共享组件。
 4. 同步维护 `apps/web/messages/zh.json` 和 `apps/web/messages/en.json`。
 5. 为关键共享行为补测试。
 
@@ -460,4 +508,6 @@ bunx drizzle-kit migrate
 
 ## 当前进度
 
-项目已完成基础 monorepo、认证、数据库、文件模块、任务队列、Web 工具页、文件/任务管理、图片长图拼接、GIF/APNG 动图工具、Markdown / Word 转 PDF 和关键设计原则页面优化。后续开发应以当前代码和 `PROJECT_SPECS.md` 为准，避免引用早期 phase 文档中的过时状态。
+项目已完成基础 monorepo、认证、数据库、文件模块、任务队列、Web 工具页、文件/任务管理、图片长图拼接、GIF/APNG 动图工具、Markdown
+/ Word 转 PDF 和关键设计原则页面优化。后续开发应以当前代码和 `PROJECT_SPECS.md`
+为准，避免引用早期 phase 文档中的过时状态。

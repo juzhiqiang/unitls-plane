@@ -1,5 +1,5 @@
 # 生产环境 Docker Compose
-# 使用方式: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+# 使用方式: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 services:
   postgres:
@@ -106,6 +106,9 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://202.104.149.204:5005}
       NODE_ENV: production
       PORT: 3001
+      RELEASE: ${RELEASE:-prod}
+      BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-}
     restart: unless-stopped
 
   web:

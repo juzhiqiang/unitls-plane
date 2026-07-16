@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 import en from '../../../../messages/en.json';
-import { imageTools } from '@/lib/tools/tool-metadata';
+import { imageTools, recommendedTools } from '@/lib/tools/tool-metadata';
 import { FailureRecoveryPanel } from '../failure-recovery-panel';
 import { ModeToggle } from '../mode-toggle';
 import { ResultPanel } from '../result-panel';
@@ -12,7 +12,7 @@ import { ToolStepRail } from '../tool-step-rail';
 import { ToolTrustStrip } from '../tool-trust-strip';
 
 function renderWithIntl(ui: React.ReactElement) {
-  render(
+  return render(
     <NextIntlClientProvider locale="en" messages={en}>
       {ui}
     </NextIntlClientProvider>
@@ -66,6 +66,57 @@ describe('tool experience components', () => {
       screen.getByRole('link', { name: /Image compression/ })
     ).toHaveAttribute('href', expect.stringContaining('/image/compress'));
     expect(screen.getByText('Recommended')).toBeInTheDocument();
+  });
+
+  it('fills incomplete responsive grid rows without adding links', () => {
+    const { container } = renderWithIntl(
+      <ToolCatalogGrid
+        groups={[
+          {
+            key: 'single-tool',
+            titleKey: 'ToolCatalog.categories.imageOptimize',
+            descriptionKey: 'ToolCatalog.categories.imageOptimizeDescription',
+            tools: imageTools.slice(0, 1),
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(
+      container.querySelectorAll('[data-tool-grid-filler="two-column"]')
+    ).toHaveLength(1);
+    expect(
+      container.querySelectorAll('[data-tool-grid-filler="three-column"]')
+    ).toHaveLength(2);
+    for (const filler of container.querySelectorAll(
+      '[data-tool-grid-filler]'
+    )) {
+      expect(filler).toHaveAttribute('aria-hidden', 'true');
+      expect(filler).toHaveClass('bg-card');
+    }
+  });
+
+  it('adds only three-column fillers for the ten dashboard tools', () => {
+    const { container } = renderWithIntl(
+      <ToolCatalogGrid
+        groups={[
+          {
+            key: 'dashboard-tools',
+            titleKey: 'ToolCatalog.categories.imageOptimize',
+            descriptionKey: 'ToolCatalog.categories.imageOptimizeDescription',
+            tools: recommendedTools,
+          },
+        ]}
+      />
+    );
+
+    expect(
+      container.querySelectorAll('[data-tool-grid-filler="two-column"]')
+    ).toHaveLength(0);
+    expect(
+      container.querySelectorAll('[data-tool-grid-filler="three-column"]')
+    ).toHaveLength(2);
   });
 
   it('gives failure recovery explicit next actions', () => {

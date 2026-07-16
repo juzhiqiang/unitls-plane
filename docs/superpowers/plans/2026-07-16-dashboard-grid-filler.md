@@ -24,7 +24,7 @@
 - 验证：`artifacts/screenshots/public-beta-dashboard-desktop.png`
 - 验证：`artifacts/screenshots/public-beta-dashboard-mobile.png`
 
-- [ ] **步骤 1：编写失败测试**
+- [x] **步骤 1：编写失败测试**
 
 在 `tool-experience.test.tsx` 的 `ToolCatalogGrid` 测试后增加：
 
@@ -77,7 +77,7 @@ it('adds only three-column fillers for the ten dashboard tools', () => {
 import { imageTools, recommendedTools } from '@/lib/tools/tool-metadata';
 ```
 
-- [ ] **步骤 2：运行测试并确认正确失败**
+- [x] **步骤 2：运行测试并确认正确失败**
 
 运行：
 
@@ -87,7 +87,7 @@ bun --cwd apps/web test src/components/tools/__tests__/tool-experience.test.tsx
 
 预期：两个新测试失败，收到的填充单元数量为 0；既有测试保持通过。
 
-- [ ] **步骤 3：实现最小响应式填充**
+- [x] **步骤 3：实现最小响应式填充**
 
 在 `tool-catalog-grid.tsx` 中增加：
 
@@ -125,7 +125,7 @@ function ToolGridFillers({ toolCount }: { toolCount: number }) {
 <ToolGridFillers toolCount={group.tools.length} />
 ```
 
-- [ ] **步骤 4：运行测试和格式检查并确认通过**
+- [x] **步骤 4：运行测试和格式检查并确认通过**
 
 运行：
 
@@ -149,7 +149,7 @@ bunx playwright test --config=log/public-beta-screenshots.config.ts
 预期：1 项视觉验证通过；Dashboard 桌面截图最后一行未占用单元使用
 `bg-card`，移动端没有新增可见空白单元、横向溢出或 console 错误。
 
-- [ ] **步骤 6：提交修复**
+- [x] **步骤 6：提交修复**
 
 ```bash
 git add apps/web/src/components/tools/tool-catalog-grid.tsx apps/web/src/components/tools/__tests__/tool-experience.test.tsx docs/superpowers/plans/2026-07-16-dashboard-grid-filler.md

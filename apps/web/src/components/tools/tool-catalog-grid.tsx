@@ -2,6 +2,32 @@ import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import type { ToolGroup } from '@/lib/tools/tool-metadata';
 
+function ToolGridFillers({ toolCount }: { toolCount: number }) {
+  const twoColumnCount = toolCount % 2;
+  const threeColumnCount = (3 - (toolCount % 3)) % 3;
+
+  return (
+    <>
+      {Array.from({ length: twoColumnCount }, (_, index) => (
+        <div
+          key={`two-column-${index}`}
+          aria-hidden="true"
+          data-tool-grid-filler="two-column"
+          className="hidden min-h-[132px] bg-card sm:block xl:hidden"
+        />
+      ))}
+      {Array.from({ length: threeColumnCount }, (_, index) => (
+        <div
+          key={`three-column-${index}`}
+          aria-hidden="true"
+          data-tool-grid-filler="three-column"
+          className="hidden min-h-[132px] bg-card xl:block"
+        />
+      ))}
+    </>
+  );
+}
+
 export function ToolCatalogGrid({ groups }: { groups: ToolGroup[] }) {
   const t = useTranslations();
 
@@ -41,6 +67,7 @@ export function ToolCatalogGrid({ groups }: { groups: ToolGroup[] }) {
                 </div>
               </Link>
             ))}
+            <ToolGridFillers toolCount={group.tools.length} />
           </div>
         </section>
       ))}

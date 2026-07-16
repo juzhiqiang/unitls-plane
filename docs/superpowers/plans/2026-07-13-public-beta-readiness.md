@@ -2395,16 +2395,16 @@ git commit -m "docs: 同步公开公测保留规则和发布说明"
 
 ## 最终验证清单
 
-- [ ] 运行 `git status --short`，确认只存在预期实施改动。
-- [ ] 将 `NEXT_PUBLIC_SUPPORT_EMAIL` 设为可联系的非本地邮箱，运行 `bun run release:verify`。
-- [ ] 启动 API，确认 `/health/live` 返回 200。
-- [ ] 在受控本地测试中暂时停止 PostgreSQL，确认 `/health/ready` 返回 503；重启 PostgreSQL 后确认
+- [x] 运行 `git status --short`，确认只存在预期实施改动。
+- [x] 将 `NEXT_PUBLIC_SUPPORT_EMAIL` 设为可联系的非本地邮箱，运行 `bun run release:verify`。
+- [x] 启动 API，确认 `/health/live` 返回 200。
+- [x] 在受控本地测试中暂时停止 PostgreSQL，确认 `/health/ready` 返回 503；重启 PostgreSQL 后确认
       readiness 返回 200，或只因 LibreOffice 返回 degraded。
-- [ ] 上传一份到达过期边界的匿名测试文件并运行一次清理任务，确认对象和数据库行都被删除。
-- [ ] 将一份账号文件移入回收站，把 `deletedAt` 设为 30 天前并运行清理，确认永久删除。
-- [ ] 导出测试账号，检查 `profile.json`、`tasks.json`、`files.json` 和文件内容。
-- [ ] 注销测试账号，确认对象、任务、文件、Session、Account 和 User 行全部消失。
-- [ ] 把 `/zh`、`/zh/privacy`、`/zh/terms`、`/zh/beta`、`/zh/settings` 和 `/zh/dashboard` 的桌面与
+- [x] 上传一份到达过期边界的匿名测试文件并运行一次清理任务，确认对象和数据库行都被删除。
+- [x] 将一份账号文件移入回收站，把 `deletedAt` 设为 30 天前并运行清理，确认永久删除。
+- [x] 导出测试账号，检查 `profile.json`、`tasks.json`、`files.json` 和文件内容。
+- [x] 注销测试账号，确认对象、任务、文件、Session、Account 和 User 行全部消失。
+- [x] 把 `/zh`、`/zh/privacy`、`/zh/terms`、`/zh/beta`、`/zh/settings` 和 `/zh/dashboard` 的桌面与
       移动端截图保存到 `artifacts/screenshots/`。
-- [ ] 确认最终文档仍明确：访问令牌加固、HTTPS、生产凭据、匿名桶策略、配额、支付和云端 CI 不在本次
+- [x] 确认最终文档仍明确：访问令牌加固、HTTPS、生产凭据、匿名桶策略、配额、支付和云端 CI 不在本次
       发布范围内。

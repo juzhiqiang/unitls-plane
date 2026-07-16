@@ -127,7 +127,12 @@ mock.module('drizzle-orm', () => ({
   isNull: vi.fn(),
   lte: (column: unknown, value: unknown) => ({ lte: [column, value] }),
   or: (...conditions: unknown[]) => ({ or: conditions }),
-  sql: (strings: TemplateStringsArray) => strings.join(''),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) =>
+    strings.reduce(
+      (result, part, index) =>
+        `${result}${part}${index < values.length ? String(values[index]) : ''}`,
+      ''
+    ),
   sum: vi.fn(),
 }));
 mock.module('@utils-plane/db', () => ({
@@ -154,7 +159,6 @@ beforeEach(() => {
 
 describe('AccountRepository export pagination', () => {
   const snapshotAt = new Date('2026-07-16T00:00:00.000Z');
-  const sharedCreatedAt = new Date('2026-07-15T12:00:00.000Z');
 
   it('loads only the export profile and removes the bounded snapshot API', async () => {
     profiles = [{ id: 'user-1', email: 'owner@example.com' }];
@@ -177,7 +181,12 @@ describe('AccountRepository export pagination', () => {
   it('continues after an exact 250-task page with a createdAt/id cursor', async () => {
     const firstPage = Array.from({ length: 250 }, (_, index) => ({
       id: `task-${String(index).padStart(4, '0')}`,
-      createdAt: sharedCreatedAt,
+      createdAt: new Date('2026-07-15T12:00:00.123Z'),
+      cursorCreatedAt: `2026-07-15 12:00:00.123${String(index).padStart(3, '0')}`,
+    }));
+    const publicFirstPage = firstPage.map(row => ({
+      id: row.id,
+      createdAt: row.createdAt,
     }));
     taskExportPages = [firstPage, []];
     const repository = new AccountRepository();
@@ -186,7 +195,7 @@ describe('AccountRepository export pagination', () => {
     for await (const row of repository.iterateExportTasks('user-1', snapshotAt))
       rows.push(row);
 
-    expect(rows).toEqual(firstPage);
+    expect(rows).toEqual(publicFirstPage);
     expect(exportPageLimits).toEqual([
       { table: 'tasks', limit: 250 },
       { table: 'tasks', limit: 250 },
@@ -198,17 +207,31 @@ describe('AccountRepository export pagination', () => {
     expect(JSON.stringify(exportWhere[0]?.condition)).toContain(
       snapshotAt.toISOString()
     );
+    expect(JSON.stringify(exportWhere[1]?.condition)).toContain(
+      '2026-07-15 12:00:00.123249'
+    );
     expect(JSON.stringify(exportWhere[1]?.condition)).toContain('task-0249');
+    expect(rows.at(-1)).not.toHaveProperty('cursorCreatedAt');
   });
 
   it('streams file pages without exceeding 250 rows or duplicating a cursor row', async () => {
     const firstPage = Array.from({ length: 250 }, (_, index) => ({
       id: `file-${String(index).padStart(4, '0')}`,
-      createdAt: sharedCreatedAt,
+      createdAt: new Date('2026-07-15T12:00:00.654Z'),
+      cursorCreatedAt: `2026-07-15 12:00:00.654${String(index).padStart(3, '0')}`,
     }));
     const finalRow = {
       id: 'file-0250',
       createdAt: new Date('2026-07-15T12:00:01.000Z'),
+      cursorCreatedAt: '2026-07-15 12:00:01.000001',
+    };
+    const publicFirstPage = firstPage.map(row => ({
+      id: row.id,
+      createdAt: row.createdAt,
+    }));
+    const publicFinalRow = {
+      id: finalRow.id,
+      createdAt: finalRow.createdAt,
     };
     fileExportPages = [firstPage, [finalRow]];
     const repository = new AccountRepository();
@@ -217,13 +240,40 @@ describe('AccountRepository export pagination', () => {
     for await (const row of repository.iterateExportFiles('user-1', snapshotAt))
       rows.push(row);
 
-    expect(rows).toEqual([...firstPage, finalRow]);
+    expect(rows).toEqual([...publicFirstPage, publicFinalRow]);
     expect(new Set(rows.map(row => row.id)).size).toBe(251);
     expect(exportPageLimits).toEqual([
       { table: 'files', limit: 250 },
       { table: 'files', limit: 250 },
     ]);
+    expect(JSON.stringify(exportWhere[1]?.condition)).toContain(
+      '2026-07-15 12:00:00.654249'
+    );
     expect(JSON.stringify(exportWhere[1]?.condition)).toContain('file-0249');
+    expect(rows.at(-1)).not.toHaveProperty('cursorCreatedAt');
+  });
+
+  it('stops before querying another task page when export preparation aborts', async () => {
+    const firstPage = Array.from({ length: 250 }, (_, index) => ({
+      id: `task-${String(index).padStart(4, '0')}`,
+      createdAt: new Date('2026-07-15T12:00:00.123Z'),
+      cursorCreatedAt: `2026-07-15 12:00:00.123${String(index).padStart(3, '0')}`,
+    }));
+    taskExportPages = [firstPage, []];
+    const abortController = new globalThis.AbortController();
+    const iterator = new AccountRepository().iterateExportTasks(
+      'user-1',
+      snapshotAt,
+      abortController.signal
+    );
+
+    for (let index = 0; index < firstPage.length; index++)
+      expect((await iterator.next()).done).toBe(false);
+    const abortError = new Error('client disconnected');
+    abortController.abort(abortError);
+
+    await expect(iterator.next()).rejects.toBe(abortError);
+    expect(exportPageLimits).toEqual([{ table: 'tasks', limit: 250 }]);
   });
 });
 

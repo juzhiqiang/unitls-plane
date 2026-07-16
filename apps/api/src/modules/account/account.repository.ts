@@ -30,6 +30,19 @@ import {
 
 const ACCOUNT_EXPORT_PAGE_SIZE = 250;
 
+interface AccountExportCursor {
+  createdAt: string;
+  id: string;
+}
+
+function withoutExportCursor<T extends { cursorCreatedAt: string }>(
+  row: T
+): Omit<T, 'cursorCreatedAt'> {
+  const { cursorCreatedAt, ...value } = row;
+  void cursorCreatedAt;
+  return value;
+}
+
 export type AccountExportProfile = Pick<
   User,
   | 'id'
@@ -212,20 +225,23 @@ export class AccountRepository {
 
   async *iterateExportTasks(
     userId: string,
-    snapshotAt: Date
+    snapshotAt: Date,
+    signal?: globalThis.AbortSignal
   ): AsyncGenerator<AccountExportTask> {
-    let cursor: Pick<AccountExportTask, 'createdAt' | 'id'> | undefined;
+    let cursor: AccountExportCursor | undefined;
 
     for (;;) {
+      signal?.throwIfAborted();
       const conditions = [
         eq(tasks.userId, userId),
         lte(tasks.createdAt, snapshotAt),
       ];
       if (cursor) {
+        const cursorTimestamp = sql`${cursor.createdAt}::timestamp`;
         conditions.push(
           or(
-            gt(tasks.createdAt, cursor.createdAt),
-            and(eq(tasks.createdAt, cursor.createdAt), gt(tasks.id, cursor.id))
+            gt(tasks.createdAt, cursorTimestamp),
+            and(eq(tasks.createdAt, cursorTimestamp), gt(tasks.id, cursor.id))
           )!
         );
       }
@@ -244,34 +260,40 @@ export class AccountRepository {
           retryCount: tasks.retryCount,
           createdAt: tasks.createdAt,
           completedAt: tasks.completedAt,
+          cursorCreatedAt: sql<string>`${tasks.createdAt}::text`,
         })
         .from(tasks)
         .where(and(...conditions))
         .orderBy(asc(tasks.createdAt), asc(tasks.id))
         .limit(ACCOUNT_EXPORT_PAGE_SIZE);
 
-      for (const row of page) yield row;
+      signal?.throwIfAborted();
+      for (const row of page) yield withoutExportCursor(row);
       if (page.length < ACCOUNT_EXPORT_PAGE_SIZE) return;
-      cursor = page.at(-1)!;
+      const last = page.at(-1)!;
+      cursor = { createdAt: last.cursorCreatedAt, id: last.id };
     }
   }
 
   async *iterateExportFiles(
     userId: string,
-    snapshotAt: Date
+    snapshotAt: Date,
+    signal?: globalThis.AbortSignal
   ): AsyncGenerator<AccountExportFile> {
-    let cursor: Pick<AccountExportFile, 'createdAt' | 'id'> | undefined;
+    let cursor: AccountExportCursor | undefined;
 
     for (;;) {
+      signal?.throwIfAborted();
       const conditions = [
         eq(files.userId, userId),
         lte(files.createdAt, snapshotAt),
       ];
       if (cursor) {
+        const cursorTimestamp = sql`${cursor.createdAt}::timestamp`;
         conditions.push(
           or(
-            gt(files.createdAt, cursor.createdAt),
-            and(eq(files.createdAt, cursor.createdAt), gt(files.id, cursor.id))
+            gt(files.createdAt, cursorTimestamp),
+            and(eq(files.createdAt, cursorTimestamp), gt(files.id, cursor.id))
           )!
         );
       }
@@ -284,15 +306,18 @@ export class AccountRepository {
           mimeType: files.mimeType,
           createdAt: files.createdAt,
           deletedAt: files.deletedAt,
+          cursorCreatedAt: sql<string>`${files.createdAt}::text`,
         })
         .from(files)
         .where(and(...conditions))
         .orderBy(asc(files.createdAt), asc(files.id))
         .limit(ACCOUNT_EXPORT_PAGE_SIZE);
 
-      for (const row of page) yield row;
+      signal?.throwIfAborted();
+      for (const row of page) yield withoutExportCursor(row);
       if (page.length < ACCOUNT_EXPORT_PAGE_SIZE) return;
-      cursor = page.at(-1)!;
+      const last = page.at(-1)!;
+      cursor = { createdAt: last.cursorCreatedAt, id: last.id };
     }
   }
 

@@ -1,5 +1,7 @@
 import {
+  Inject,
   Injectable,
+  Optional,
   ServiceUnavailableException,
   type OnApplicationShutdown,
   type OnModuleInit,
@@ -50,6 +52,7 @@ const ZipArchive = (
 
 const ACCOUNT_EXPORT_TEMP_PREFIX = 'utils-plane-account-export-';
 const SQLITE_CLOSE_ATTEMPTS = 3;
+export const ACCOUNT_EXPORT_TEMP_ROOT = Symbol('ACCOUNT_EXPORT_TEMP_ROOT');
 
 type AccountExportManifestEntry = ReturnType<typeof createManifestEntry>;
 
@@ -246,10 +249,13 @@ function serializeJson(value: unknown): string {
 async function createAccountExportSpool(
   tasks: AsyncIterable<Parameters<typeof createExportTask>[0]>,
   files: AsyncIterable<AccountExportFile>,
-  headObject: (storageKey: string) => Promise<void>
+  headObject: (storageKey: string) => Promise<void>,
+  tempRoot: string,
+  signal?: globalThis.AbortSignal
 ): Promise<AccountExportSpool> {
+  signal?.throwIfAborted();
   const directory = await mkdtemp(
-    join(tmpdir(), `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-`)
+    join(tempRoot, `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-`)
   );
   const tasksPath = join(directory, 'tasks.jsonl');
   const filesPath = join(directory, 'files.jsonl');
@@ -259,13 +265,16 @@ async function createAccountExportSpool(
   let pathRegistry: SqliteArchivePathRegistry | undefined;
 
   try {
+    signal?.throwIfAborted();
     await chmod(directory, 0o700);
     tasksHandle = await open(tasksPath, 'wx', 0o600);
     for await (const task of tasks) {
+      signal?.throwIfAborted();
       await tasksHandle.writeFile(
         `${serializeJson(createExportTask(task))}\n`,
         'utf8'
       );
+      signal?.throwIfAborted();
     }
     await tasksHandle.close();
     tasksHandle = undefined;
@@ -276,7 +285,9 @@ async function createAccountExportSpool(
     await chmod(pathIndexPath, 0o600);
 
     for await (const file of files) {
+      signal?.throwIfAborted();
       await headObject(file.storageKey);
+      signal?.throwIfAborted();
       const exportPath = createArchivePath(
         file.filename,
         file.id,
@@ -288,6 +299,7 @@ async function createAccountExportSpool(
         storageKey: file.storageKey,
       };
       await filesHandle.writeFile(`${serializeJson(entry)}\n`, 'utf8');
+      signal?.throwIfAborted();
     }
 
     await filesHandle.close();
@@ -396,20 +408,26 @@ export class AccountExportService
   implements OnModuleInit, OnApplicationShutdown
 {
   private readonly preparedDirectories = new Set<string>();
+  private readonly tempRoot: string;
 
   constructor(
     private readonly repository: AccountRepository,
-    private readonly minio: MinioService
-  ) {}
+    private readonly minio: MinioService,
+    @Optional()
+    @Inject(ACCOUNT_EXPORT_TEMP_ROOT)
+    tempRoot?: string
+  ) {
+    this.tempRoot = tempRoot ?? tmpdir();
+  }
 
   async onModuleInit(): Promise<void> {
-    const entries = await readdir(tmpdir(), { withFileTypes: true });
+    const entries = await readdir(this.tempRoot, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const ownerPid = getSpoolOwnerPid(entry.name);
       if (ownerPid === undefined) continue;
       if (ownerPid !== process.pid && isProcessAlive(ownerPid)) continue;
-      await this.removeSpoolDirectory(join(tmpdir(), entry.name));
+      await this.removeSpoolDirectory(join(this.tempRoot, entry.name));
     }
   }
 
@@ -421,16 +439,23 @@ export class AccountExportService
     );
   }
 
-  async prepareExport(userId: string): Promise<PreparedAccountExport> {
+  async prepareExport(
+    userId: string,
+    signal?: globalThis.AbortSignal
+  ): Promise<PreparedAccountExport> {
+    signal?.throwIfAborted();
     const snapshotAt = new Date();
     const profile = await this.repository.getExportProfile(userId);
+    signal?.throwIfAborted();
     let spool: AccountExportSpool;
 
     try {
       spool = await createAccountExportSpool(
-        this.repository.iterateExportTasks(userId, snapshotAt),
-        this.repository.iterateExportFiles(userId, snapshotAt),
-        storageKey => this.minio.head(storageKey)
+        this.repository.iterateExportTasks(userId, snapshotAt, signal),
+        this.repository.iterateExportFiles(userId, snapshotAt, signal),
+        storageKey => this.minio.head(storageKey, signal),
+        this.tempRoot,
+        signal
       );
     } catch (error) {
       throw new ServiceUnavailableException('Account export is incomplete', {
@@ -456,11 +481,38 @@ export class AccountExportService
     prepared: PreparedAccountExport,
     output: Writable
   ): Promise<void> {
-    const abortError = new Error('Account export aborted');
-    if (output.destroyed || output.closed) {
-      await this.disposePreparedExport(prepared);
-      throw abortError;
+    let writeFailure: { error: unknown } | undefined;
+    try {
+      await this.streamPreparedExport(prepared, output);
+    } catch (error) {
+      writeFailure = { error };
     }
+    let cleanupFailure: { error: unknown } | undefined;
+    try {
+      await this.disposePreparedExport(prepared);
+    } catch (error) {
+      cleanupFailure = { error };
+    }
+
+    if (writeFailure && cleanupFailure)
+      throw new AggregateError(
+        [
+          toError(writeFailure.error, 'Account export failed'),
+          toError(cleanupFailure.error, 'Account export cleanup failed'),
+        ],
+        'Account export failed during cleanup',
+        { cause: writeFailure.error }
+      );
+    if (writeFailure) throw writeFailure.error;
+    if (cleanupFailure) throw cleanupFailure.error;
+  }
+
+  private async streamPreparedExport(
+    prepared: PreparedAccountExport,
+    output: Writable
+  ): Promise<void> {
+    const abortError = new Error('Account export aborted');
+    if (output.destroyed || output.closed) throw abortError;
 
     const archive = new ZipArchive({ zlib: { level: 6 } });
     const abortController = new globalThis.AbortController();
@@ -551,7 +603,6 @@ export class AccountExportService
       archive.off('error', onArchiveError);
       output.off('error', onOutputError);
       output.off('close', onOutputClose);
-      await this.disposePreparedExport(prepared);
     }
   }
 

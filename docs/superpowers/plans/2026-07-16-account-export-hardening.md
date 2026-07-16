@@ -24,7 +24,7 @@ SQLite、Vitest。
 - 修改：`apps/api/src/modules/account/account.repository.test.ts`
 - 修改：`apps/api/src/modules/account/account.repository.ts`
 
-- [ ] **步骤 1：编写微秒游标失败测试**
+- [x] **步骤 1：编写微秒游标失败测试**
 
 让 Repository mock 的第一页最后一行同时包含公开 `createdAt: Date` 和私有
 `cursorCreatedAt: '2026-07-15 12:00:00.123456'`。断言第二页 where 条件使用完整字符串，生成器输出不包含
@@ -54,7 +54,7 @@ expect(JSON.stringify(exportWhere[1]?.condition)).toContain(fileBoundary.cursorC
 expect(rows.at(-1)).not.toHaveProperty('cursorCreatedAt');
 ```
 
-- [ ] **步骤 2：运行测试并确认失败**
+- [x] **步骤 2：运行测试并确认失败**
 
 运行：
 
@@ -65,7 +65,7 @@ bun test src/modules/account/account.repository.test.ts
 
 预期：失败，因为当前游标只使用丢失微秒的 JS `Date`。
 
-- [ ] **步骤 3：实现私有文本游标**
+- [x] **步骤 3：实现私有文本游标**
 
 在两个迭代器中使用以下游标结构：
 
@@ -98,7 +98,7 @@ const cursorTimestamp = cursor ? sql`${cursor.createdAt}::timestamp` : undefined
 它的 selection、下一页条件、yield 解构和 cursor 更新与上述任务迭代器使用相同字段名。两个迭代器都在每次查询前后调用可选
 `signal?.throwIfAborted()`，为任务 2 预留边界。
 
-- [ ] **步骤 4：运行测试并确认通过**
+- [x] **步骤 4：运行测试并确认通过**
 
 运行：
 
@@ -119,7 +119,7 @@ bun test src/modules/account/account.repository.test.ts
 - 修改：`apps/api/src/modules/account/account-export.service.ts`
 - 修改：`apps/api/src/modules/account/account.controller.ts`
 
-- [ ] **步骤 1：编写 S3 HEAD 取消失败测试**
+- [x] **步骤 1：编写 S3 HEAD 取消失败测试**
 
 断言调用：
 
@@ -131,13 +131,13 @@ expect(send).toHaveBeenCalledWith(expect.any(HeadObjectCommand), {
 });
 ```
 
-- [ ] **步骤 2：编写预检断连失败测试**
+- [x] **步骤 2：编写预检断连失败测试**
 
 Service 测试让第一个 `head` 等待 abort，调用 `prepareExport('user-1', signal)`
 后中止，断言 Promise 拒绝、后续 HEAD 未调用且临时目录恢复基线。Controller 测试使用可发出 `close`
 的响应对象，捕获传给 `prepareExport` 的 signal，断言 close 后 signal 已中止、未设置下载头。
 
-- [ ] **步骤 3：运行测试并确认失败**
+- [x] **步骤 3：运行测试并确认失败**
 
 运行：
 
@@ -149,7 +149,7 @@ bun test src/modules/account/account-export.service.test.ts -t "preflight|prepar
 
 预期：失败，因为现有 HEAD 和 prepare 链路不接收 signal。
 
-- [ ] **步骤 4：实现信号传播**
+- [x] **步骤 4：实现信号传播**
 
 `MinioService.head` 改为：
 
@@ -189,7 +189,7 @@ try {
 }
 ```
 
-- [ ] **步骤 5：运行测试并确认通过**
+- [x] **步骤 5：运行测试并确认通过**
 
 运行任务 2 的两个测试命令，预期全部通过。
 
@@ -200,7 +200,7 @@ try {
 - 修改：`apps/api/src/modules/account/account-export.service.test.ts`
 - 修改：`apps/api/src/modules/account/account-export.util.ts`
 
-- [ ] **步骤 1：编写失败测试**
+- [x] **步骤 1：编写失败测试**
 
 覆盖以下准确行为：
 
@@ -218,7 +218,7 @@ expect(
 
 最后一个上限包含 `files/` 六个字符，文件名上限为 200 个 Unicode code point。
 
-- [ ] **步骤 2：运行测试并确认失败**
+- [x] **步骤 2：运行测试并确认失败**
 
 运行：
 
@@ -227,7 +227,7 @@ cd apps/api
 bun test src/modules/account/account-export.service.test.ts -t "archive path|Windows"
 ```
 
-- [ ] **步骤 3：实现规范化和碰撞键**
+- [x] **步骤 3：实现规范化和碰撞键**
 
 在 util 中增加：
 
@@ -244,7 +244,7 @@ basename 先做 NFC 规范化，移除控制字符，将非法字符替换为 `_
 `_`，再按 code point 截断并保留最长 20 个 code point 的扩展名。所有 `has/add` 使用
 `collisionKey(exportPath)`；冲突后缀通过独立 helper 为 `-${idPrefix}` 和数字 suffix 预留长度。
 
-- [ ] **步骤 4：运行测试并确认通过**
+- [x] **步骤 4：运行测试并确认通过**
 
 运行任务 3 测试命令，预期全部通过。
 
@@ -255,7 +255,7 @@ basename 先做 NFC 规范化，移除控制字符，将非法字符替换为 `_
 - 修改：`apps/api/src/modules/account/account-export.service.test.ts`
 - 修改：`apps/api/src/modules/account/account-export.service.ts`
 
-- [ ] **步骤 1：编写初始化失败清理测试**
+- [x] **步骤 1：编写初始化失败清理测试**
 
 准备导出后，把只有 `destroyed: false` 与 `closed: false`、但没有事件 API 的对象作为 `Writable` 传给
 `writeExport`。它会在监听器初始化阶段同步失败；断言 Promise 拒绝并恢复独立临时目录基线：
@@ -266,12 +266,12 @@ await expect(service.writeExport(prepared, invalidOutput)).rejects.toThrow();
 expect(await accountExportTempDirs()).toEqual(baselineTempDirs);
 ```
 
-- [ ] **步骤 2：编写临时根目录隔离测试**
+- [x] **步骤 2：编写临时根目录隔离测试**
 
 测试创建唯一根目录并传给 Service。根目录外创建同前缀目录，运行 `onModuleInit`
 后断言外部目录未被扫描或删除，根目录内 stale spool 已删除。
 
-- [ ] **步骤 3：运行测试并确认失败**
+- [x] **步骤 3：运行测试并确认失败**
 
 运行：
 
@@ -280,7 +280,7 @@ cd apps/api
 bun test src/modules/account/account-export.service.test.ts -t "initialization|temporary root|startup spool"
 ```
 
-- [ ] **步骤 4：实现最外层所有权和临时根目录注入**
+- [x] **步骤 4：实现最外层所有权和临时根目录注入**
 
 定义可选注入 token：
 
@@ -317,7 +317,7 @@ async writeExport(prepared: PreparedAccountExport, output: Writable) {
 }
 ```
 
-- [ ] **步骤 5：运行测试并确认通过**
+- [x] **步骤 5：运行测试并确认通过**
 
 完整运行 `account-export.service.test.ts`，预期全部通过且测试结束后独立根目录可删除。
 
@@ -327,7 +327,7 @@ async writeExport(prepared: PreparedAccountExport, output: Writable) {
 
 - 修改：`docs/superpowers/plans/2026-07-16-account-export-hardening.md`（更新复选框）
 
-- [ ] **步骤 1：格式化和静态检查**
+- [x] **步骤 1：格式化和静态检查**
 
 运行：
 
@@ -338,7 +338,7 @@ bun run format:check:changed
 git diff --check
 ```
 
-- [ ] **步骤 2：全量测试和构建**
+- [x] **步骤 2：全量测试和构建**
 
 运行：
 
@@ -350,7 +350,7 @@ cd apps/api && bun run build
 cd apps/web && NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com bun run build
 ```
 
-- [ ] **步骤 3：验证生成文件无漂移**
+- [x] **步骤 3：验证生成文件无漂移**
 
 运行 OpenAPI export 和 client generate，随后执行：
 

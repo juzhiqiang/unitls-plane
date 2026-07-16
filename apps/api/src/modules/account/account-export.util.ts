@@ -12,6 +12,10 @@ const SENSITIVE_CONFIG_KEYS = [
   'authorization',
   'apikey',
 ];
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+const WINDOWS_INVALID_CHARACTERS = /[<>:"/\\|?*]/g;
+const MAX_ARCHIVE_FILENAME_LENGTH = 200;
+const MAX_ARCHIVE_EXTENSION_LENGTH = 20;
 
 export interface ArchivePathRegistry {
   has(path: string): boolean;
@@ -25,6 +29,41 @@ export function buildExportFilename(date: Date): string {
   return `utils-plane-export-${day}-${time}.zip`;
 }
 
+function takeCodePoints(value: string, count: number): string {
+  return Array.from(value).slice(0, count).join('');
+}
+
+function splitLimitedExtension(filename: string) {
+  const rawExtension = posix.extname(filename);
+  const extension = takeCodePoints(rawExtension, MAX_ARCHIVE_EXTENSION_LENGTH);
+  return {
+    stem: filename.slice(0, filename.length - rawExtension.length),
+    extension,
+  };
+}
+
+function limitArchiveFilename(filename: string): string {
+  const { stem, extension } = splitLimitedExtension(filename);
+  const availableStemLength =
+    MAX_ARCHIVE_FILENAME_LENGTH - Array.from(extension).length;
+  return `${takeCodePoints(stem, availableStemLength)}${extension}`;
+}
+
+function appendArchiveFilenameSuffix(filename: string, suffix: string): string {
+  const { stem, extension } = splitLimitedExtension(filename);
+  const availableStemLength = Math.max(
+    1,
+    MAX_ARCHIVE_FILENAME_LENGTH -
+      Array.from(suffix).length -
+      Array.from(extension).length
+  );
+  return `${takeCodePoints(stem, availableStemLength)}${suffix}${extension}`;
+}
+
+function createArchivePathCollisionKey(path: string): string {
+  return path.normalize('NFKC').toLowerCase();
+}
+
 export function createArchivePath(
   filename: string,
   fileId: string,
@@ -36,29 +75,41 @@ export function createArchivePath(
   const normalized = filename.replaceAll('\\', '/');
   const cleanName = posix
     .basename(normalized)
+    .normalize('NFC')
     .split('')
     .filter(character => {
       const codePoint = character.charCodeAt(0);
       return codePoint > 31 && (codePoint < 127 || codePoint > 159);
     })
     .join('')
-    .trim();
-  const safeName =
+    .replaceAll(WINDOWS_INVALID_CHARACTERS, '_')
+    .trim()
+    .replace(/[. ]+$/g, '');
+  const fallbackName = `file-${idPrefix}`;
+  const usableName =
     cleanName && cleanName !== '.' && cleanName !== '..'
       ? cleanName
-      : `file-${idPrefix}`;
+      : fallbackName;
+  const safeName = limitArchiveFilename(
+    WINDOWS_RESERVED_NAME.test(usableName) ? `_${usableName}` : usableName
+  );
   let exportPath = `files/${safeName}`;
+  let collisionKey = createArchivePathCollisionKey(exportPath);
 
-  if (usedPaths.has(exportPath)) {
-    const extension = posix.extname(safeName);
-    const stem = safeName.slice(0, safeName.length - extension.length);
-    const disambiguated = `${stem}-${idPrefix}${extension}`;
+  if (usedPaths.has(collisionKey)) {
+    const disambiguated = appendArchiveFilenameSuffix(safeName, `-${idPrefix}`);
     exportPath = `files/${disambiguated}`;
-    for (let suffix = 2; usedPaths.has(exportPath); suffix++)
-      exportPath = `files/${stem}-${idPrefix}-${suffix}${extension}`;
+    collisionKey = createArchivePathCollisionKey(exportPath);
+    for (let suffix = 2; usedPaths.has(collisionKey); suffix++) {
+      exportPath = `files/${appendArchiveFilenameSuffix(
+        safeName,
+        `-${idPrefix}-${suffix}`
+      )}`;
+      collisionKey = createArchivePathCollisionKey(exportPath);
+    }
   }
 
-  usedPaths.add(exportPath);
+  usedPaths.add(collisionKey);
   return exportPath;
 }
 

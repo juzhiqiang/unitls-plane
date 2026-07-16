@@ -80,12 +80,13 @@ export class MinioService implements OnModuleInit {
     return Buffer.concat(chunks);
   }
 
-  async head(key: string): Promise<void> {
+  async head(key: string, signal?: globalThis.AbortSignal): Promise<void> {
     await this.client.send(
       new HeadObjectCommand({
         Bucket: this.bucket,
         Key: key,
-      })
+      }),
+      { abortSignal: signal }
     );
   }
 

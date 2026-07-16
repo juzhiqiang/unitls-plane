@@ -76,11 +76,13 @@ describe('MinioService object streaming', () => {
   it('heads an object without downloading its body', async () => {
     const send = vi.fn(async () => ({}));
     const service = withClient(send);
+    const signal = new globalThis.AbortController().signal;
 
-    await service.head('user-1/file-1/report.pdf');
+    await service.head('user-1/file-1/report.pdf', signal);
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
+    expect(send.mock.calls[0]?.[1]).toEqual({ abortSignal: signal });
   });
 
   it('returns the object body as a readable stream', async () => {

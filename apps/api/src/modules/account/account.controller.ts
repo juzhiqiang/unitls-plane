@@ -23,7 +23,10 @@ import type {
   Response as ExpressResponse,
 } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { AccountExportService } from './account-export.service';
+import {
+  AccountExportService,
+  type PreparedAccountExport,
+} from './account-export.service';
 import { AccountSummaryDto, DeleteAccountDto } from './dto/account.dto';
 import { AccountService } from './account.service';
 
@@ -77,16 +80,29 @@ export class AccountController {
     @Res() response: ExpressResponse
   ): Promise<void> {
     if (!currentUser) throw new UnauthorizedException();
-    const prepared = await this.accountExportService.prepareExport(
-      currentUser.id
-    );
+    const abortController = new globalThis.AbortController();
+    let prepared: PreparedAccountExport | undefined;
+    let writeStarted = false;
+    const onClose = () => {
+      if (!response.writableFinished)
+        abortController.abort(new Error('Account export aborted'));
+    };
+    response.once('close', onClose);
+
     try {
+      prepared = await this.accountExportService.prepareExport(
+        currentUser.id,
+        abortController.signal
+      );
+      abortController.signal.throwIfAborted();
       response.type('application/zip');
       response.attachment(prepared.filename);
-    } catch (error) {
-      await this.accountExportService.disposePreparedExport(prepared);
-      throw error;
+      writeStarted = true;
+      await this.accountExportService.writeExport(prepared, response);
+    } finally {
+      response.off('close', onClose);
+      if (prepared && !writeStarted)
+        await this.accountExportService.disposePreparedExport(prepared);
     }
-    await this.accountExportService.writeExport(prepared, response);
   }
 }

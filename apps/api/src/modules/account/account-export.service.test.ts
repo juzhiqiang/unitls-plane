@@ -1,7 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { once } from 'node:events';
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PassThrough, Readable } from 'node:stream';
@@ -21,6 +29,7 @@ import { AccountExportService } from './account-export.service';
 
 const createdAt = new Date('2026-07-13T08:00:00Z');
 const ACCOUNT_EXPORT_TEMP_PREFIX = 'utils-plane-account-export-';
+let testTempRoot: string;
 type TestExportSnapshot = {
   profile: AccountExportProfile;
   tasks: AccountExportTask[];
@@ -89,12 +98,17 @@ const minio = {
   downloadStream: vi.fn(),
 };
 
-function createService() {
+function createService(tempRoot = testTempRoot) {
   const TestableAccountExportService = AccountExportService as unknown as new (
     repository: never,
-    minio: never
+    minio: never,
+    tempRoot?: string
   ) => AccountExportService;
-  return new TestableAccountExportService(repository as never, minio as never);
+  return new TestableAccountExportService(
+    repository as never,
+    minio as never,
+    tempRoot
+  );
 }
 
 function collect(output: PassThrough) {
@@ -138,15 +152,15 @@ function observeSettlement(promise: Promise<unknown>, timeoutMs = 100) {
   ]);
 }
 
-async function accountExportTempDirs() {
+async function accountExportTempDirs(root = testTempRoot) {
   return new Set(
-    (await readdir(tmpdir(), { withFileTypes: true }))
+    (await readdir(root, { withFileTypes: true }))
       .filter(
         entry =>
           entry.isDirectory() &&
           entry.name.startsWith(ACCOUNT_EXPORT_TEMP_PREFIX)
       )
-      .map(entry => join(tmpdir(), entry.name))
+      .map(entry => join(root, entry.name))
   );
 }
 
@@ -191,6 +205,14 @@ function expectOutputListenerCounts(
     expect(output.listenerCount(event)).toBe(baseline.get(event));
 }
 
+beforeAll(async () => {
+  testTempRoot = await mkdtemp(join(tmpdir(), 'utils-plane-export-tests-'));
+});
+
+afterAll(async () => {
+  await rm(testTempRoot, { recursive: true, force: true, maxRetries: 3 });
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   repository.getExportSnapshot.mockReset();
@@ -226,6 +248,42 @@ describe('account export utilities', () => {
     expect(
       createArchivePath('safe\u0085-report.pdf', 'file-12345678', new Set())
     ).toBe('files/safe-report.pdf');
+  });
+
+  it('creates Windows-compatible archive names', () => {
+    const usedPaths = new Set<string>();
+
+    expect(createArchivePath('CON.txt', 'file-11111111', usedPaths)).toBe(
+      'files/_CON.txt'
+    );
+    expect(
+      createArchivePath('bad:name?.pdf ', 'file-22222222', usedPaths)
+    ).toBe('files/bad_name_.pdf');
+    expect(createArchivePath('trailing. ', 'file-33333333', usedPaths)).toBe(
+      'files/trailing'
+    );
+  });
+
+  it('deduplicates archive paths case-insensitively', () => {
+    const usedPaths = new Set<string>();
+
+    expect(createArchivePath('Report.pdf', 'file-33333333', usedPaths)).toBe(
+      'files/Report.pdf'
+    );
+    expect(createArchivePath('report.pdf', 'file-44444444', usedPaths)).toBe(
+      'files/report-file-4444.pdf'
+    );
+  });
+
+  it('limits archive filename length while retaining its extension', () => {
+    const exportPath = createArchivePath(
+      `${'x'.repeat(300)}.pdf`,
+      'file-55555555',
+      new Set()
+    );
+
+    expect(Array.from(exportPath).length).toBeLessThanOrEqual(206);
+    expect(exportPath).toEndWith('.pdf');
   });
 
   it('creates a trashed manifest entry without its storage key', () => {
@@ -310,7 +368,7 @@ describe('AccountExportService', () => {
     }));
     const files = Array.from({ length: 10_001 }, (_, index) => ({
       ...exportSnapshot.files[0]!,
-      id: `file-${String(index).padStart(8, '0')}`,
+      id: `${String(index).padStart(8, '0')}-0000-4000-8000-000000000000`,
       filename: 'report.pdf',
       storageKey: `user-1/file-${index}/report.pdf`,
     }));
@@ -340,7 +398,8 @@ describe('AccountExportService', () => {
     };
     const service = new AccountExportService(
       streamingRepository as never,
-      largeMinio as never
+      largeMinio as never,
+      testTempRoot
     );
 
     const prepared = await service.prepareExport('user-1');
@@ -436,7 +495,8 @@ describe('AccountExportService', () => {
     };
     const service = new AccountExportService(
       changingRepository as never,
-      changingMinio as never
+      changingMinio as never,
+      testTempRoot
     );
     const archivePrototype = (
       archiver as unknown as {
@@ -545,7 +605,8 @@ describe('AccountExportService', () => {
     };
     const service = new AccountExportService(
       changingRepository as never,
-      { head: vi.fn(), downloadStream: vi.fn() } as never
+      { head: vi.fn(), downloadStream: vi.fn() } as never,
+      testTempRoot
     );
     const archivePrototype = (
       archiver as unknown as {
@@ -611,9 +672,58 @@ describe('AccountExportService', () => {
     await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
   });
 
+  it('removes a prepared spool when write initialization fails synchronously', async () => {
+    const baselineTempDirs = await accountExportTempDirs();
+    const service = createService();
+    const prepared = await service.prepareExport('user-1');
+    const tempDir = await waitForNewAccountExportTempDir(baselineTempDirs);
+
+    try {
+      await expect(
+        service.writeExport(prepared, {
+          destroyed: false,
+          closed: false,
+        } as never)
+      ).rejects.toThrow();
+
+      await expectAccountExportTempDirRemoved(baselineTempDirs, tempDir);
+    } finally {
+      await service.disposePreparedExport(prepared).catch(() => undefined);
+      await removeNewAccountExportTempDirs(baselineTempDirs);
+    }
+  });
+
+  it('limits startup cleanup to the configured temporary root', async () => {
+    const isolatedRoot = await mkdtemp(join(testTempRoot, 'isolated-root-'));
+    const insideDir = await mkdtemp(
+      join(
+        isolatedRoot,
+        `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-inside-test-`
+      )
+    );
+    const outsideDir = await mkdtemp(
+      join(
+        testTempRoot,
+        `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-outside-test-`
+      )
+    );
+
+    try {
+      await createService(isolatedRoot).onModuleInit();
+
+      expect((await accountExportTempDirs(isolatedRoot)).has(insideDir)).toBe(
+        false
+      );
+      expect((await accountExportTempDirs()).has(outsideDir)).toBe(true);
+    } finally {
+      await rm(isolatedRoot, { recursive: true, force: true });
+      await rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it('removes spool directories left by a stopped process during module startup', async () => {
     const staleDir = join(
-      tmpdir(),
+      testTempRoot,
       `${ACCOUNT_EXPORT_TEMP_PREFIX}2147483647-stale-test`
     );
     await mkdir(staleDir, { recursive: true });
@@ -626,7 +736,7 @@ describe('AccountExportService', () => {
 
   it('removes a startup spool directory even when the operating system reused its pid', async () => {
     const reusedPidDir = join(
-      tmpdir(),
+      testTempRoot,
       `${ACCOUNT_EXPORT_TEMP_PREFIX}${process.pid}-reused-test`
     );
     await mkdir(reusedPidDir, { recursive: true });
@@ -639,7 +749,7 @@ describe('AccountExportService', () => {
   it('keeps spool directories owned by another process that is still alive', async () => {
     const livePid = 2_147_483_646;
     const liveDir = join(
-      tmpdir(),
+      testTempRoot,
       `${ACCOUNT_EXPORT_TEMP_PREFIX}${livePid}-live-test`
     );
     await mkdir(liveDir, { recursive: true });
@@ -695,6 +805,61 @@ describe('AccountExportService', () => {
     ]);
     expect(minio.downloadStream).not.toHaveBeenCalled();
     expect(await accountExportTempDirs()).toEqual(baselineTempDirs);
+  });
+
+  it('cancels object preflight and removes the spool when preparation aborts', async () => {
+    repository.getExportSnapshot.mockResolvedValue({
+      ...exportSnapshot,
+      files: [
+        exportSnapshot.files[0]!,
+        {
+          ...exportSnapshot.files[0]!,
+          id: 'file-87654321',
+          filename: 'second.pdf',
+          storageKey: 'user-1/file-87654321/second.pdf',
+        },
+      ],
+    });
+    let receivedSignal: globalThis.AbortSignal | undefined;
+    let releaseFirstHead: (() => void) | undefined;
+    minio.head.mockImplementationOnce(
+      (_storageKey: string, signal?: globalThis.AbortSignal) => {
+        receivedSignal = signal;
+        return new Promise<void>((resolve, reject) => {
+          releaseFirstHead = resolve;
+          signal?.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      }
+    );
+    const abortController = new globalThis.AbortController();
+    const baselineTempDirs = await accountExportTempDirs();
+    const service = createService();
+    const preparing = service.prepareExport('user-1', abortController.signal);
+    await waitForCall(minio.head);
+
+    try {
+      expect(receivedSignal).toBe(abortController.signal);
+      expect(repository.iterateExportTasks.mock.calls[0]?.[2]).toBe(
+        abortController.signal
+      );
+      expect(repository.iterateExportFiles.mock.calls[0]?.[2]).toBe(
+        abortController.signal
+      );
+
+      abortController.abort(new Error('client disconnected'));
+
+      await expect(preparing).rejects.toThrow('Account export is incomplete');
+      expect(minio.head).toHaveBeenCalledTimes(1);
+      expect(await accountExportTempDirs()).toEqual(baselineTempDirs);
+    } finally {
+      abortController.abort(new Error('test cleanup'));
+      releaseFirstHead?.();
+      const prepared = await preparing.catch(() => undefined);
+      if (prepared) await service.disposePreparedExport(prepared);
+      await removeNewAccountExportTempDirs(baselineTempDirs);
+    }
   });
 
   it('streams a complete ZIP with metadata and file contents', async () => {
@@ -1139,6 +1304,9 @@ describe('AccountController export', () => {
     const response = {
       type: vi.fn(() => response),
       attachment: vi.fn(() => response),
+      once: vi.fn(() => response),
+      off: vi.fn(() => response),
+      writableFinished: false,
     };
     exportService.prepareExport.mockImplementation(async () => {
       expect(response.type).not.toHaveBeenCalled();
@@ -1156,6 +1324,8 @@ describe('AccountController export', () => {
     expect(response.attachment).toHaveBeenCalledWith(prepared.filename);
     expect(exportService.writeExport).toHaveBeenCalledWith(prepared, response);
     expect(exportService.disposePreparedExport).not.toHaveBeenCalled();
+    expect(response.once).toHaveBeenCalledWith('close', expect.any(Function));
+    expect(response.off).toHaveBeenCalledWith('close', expect.any(Function));
   });
 
   it('disposes the prepared export when setting response headers fails', async () => {
@@ -1173,6 +1343,9 @@ describe('AccountController export', () => {
         throw headerError;
       }),
       attachment: vi.fn(),
+      once: vi.fn(() => response),
+      off: vi.fn(() => response),
+      writableFinished: false,
     };
     exportService.prepareExport.mockResolvedValue(prepared);
 
@@ -1185,5 +1358,61 @@ describe('AccountController export', () => {
 
     expect(exportService.writeExport).not.toHaveBeenCalled();
     expect(exportService.disposePreparedExport).toHaveBeenCalledWith(prepared);
+  });
+
+  it('aborts preflight without setting headers when the response closes', async () => {
+    const prepared = {
+      userId: 'user-1',
+      snapshotAt: createdAt,
+      filename: 'utils-plane-export.zip',
+      profile: exportSnapshot.profile,
+      spool: {
+        directory: 'unused',
+        tasksPath: 'unused',
+        filesPath: 'unused',
+      },
+    };
+    let receivedSignal: globalThis.AbortSignal | undefined;
+    let finishPrepare: ((value: typeof prepared) => void) | undefined;
+    exportService.prepareExport.mockImplementation(
+      (_userId: string, signal?: globalThis.AbortSignal) => {
+        receivedSignal = signal;
+        return new Promise((resolve, reject) => {
+          finishPrepare = resolve;
+          signal?.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      }
+    );
+    const response = new PassThrough() as PassThrough & {
+      type: ReturnType<typeof vi.fn>;
+      attachment: ReturnType<typeof vi.fn>;
+    };
+    response.type = vi.fn(() => response);
+    response.attachment = vi.fn(() => response);
+    const exporting = createController().exportAccount(
+      exportSnapshot.profile as never,
+      response as never
+    );
+    await waitForCall(exportService.prepareExport);
+
+    try {
+      expect(receivedSignal).toBeInstanceOf(globalThis.AbortSignal);
+      const closed = once(response, 'close');
+      response.destroy();
+      await closed;
+
+      await expect(exporting).rejects.toThrow('Account export aborted');
+      expect(receivedSignal?.aborted).toBe(true);
+      expect(response.type).not.toHaveBeenCalled();
+      expect(response.attachment).not.toHaveBeenCalled();
+      expect(exportService.writeExport).not.toHaveBeenCalled();
+      expect(exportService.disposePreparedExport).not.toHaveBeenCalled();
+    } finally {
+      if (!response.destroyed) response.destroy();
+      finishPrepare?.(prepared);
+      await exporting.catch(() => undefined);
+    }
   });
 });

@@ -358,7 +358,7 @@ cd apps/web && NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com bun run build
 git diff --exit-code -- apps/api/openapi.json packages/api-client/src/schema.ts
 ```
 
-- [ ] **步骤 4：提交实现**
+- [x] **步骤 4：提交实现**
 
 只暂存本计划涉及的文件，不暂存 `packages/db/drizzle/meta/0012_snapshot.json`：
 
@@ -366,6 +366,8 @@ git diff --exit-code -- apps/api/openapi.json packages/api-client/src/schema.ts
 git commit -m "fix: 加固大账号导出分页和资源清理"
 ```
 
-- [ ] **步骤 5：fresh 复审**
+- [x] **步骤 5：fresh 复审**
 
 以任务 5 前一提交为 base、新实现为 head，分别执行规格审查和质量审查。Critical/Important 必须清零；并发配额建议因用户明确排除而作为已知范围边界记录，不得擅自实现。
+
+复审结果：规格符合；质量审查 Critical/Important 均为 0，可进入后续整分支验证。并发配额未实现，符合用户明确排除范围。

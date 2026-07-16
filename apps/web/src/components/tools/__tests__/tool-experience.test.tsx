@@ -68,56 +68,53 @@ describe('tool experience components', () => {
     expect(screen.getByText('Recommended')).toBeInTheDocument();
   });
 
-  it('fills incomplete responsive grid rows without adding links', () => {
-    const { container } = renderWithIntl(
-      <ToolCatalogGrid
-        groups={[
-          {
-            key: 'single-tool',
-            titleKey: 'ToolCatalog.categories.imageOptimize',
-            descriptionKey: 'ToolCatalog.categories.imageOptimizeDescription',
-            tools: imageTools.slice(0, 1),
-          },
-        ]}
-      />
-    );
+  it.each([
+    { count: 0, twoColumnCount: 0, threeColumnCount: 0 },
+    { count: 1, twoColumnCount: 1, threeColumnCount: 2 },
+    { count: 2, twoColumnCount: 0, threeColumnCount: 1 },
+    { count: 3, twoColumnCount: 1, threeColumnCount: 0 },
+    { count: 10, twoColumnCount: 0, threeColumnCount: 2 },
+  ])(
+    'fills responsive grid rows for $count tools without adding links',
+    ({ count, twoColumnCount, threeColumnCount }) => {
+      const tools =
+        count === 10 ? recommendedTools : imageTools.slice(0, count);
+      const { container } = renderWithIntl(
+        <ToolCatalogGrid
+          groups={[
+            {
+              key: `tools-${count}`,
+              titleKey: 'ToolCatalog.categories.imageOptimize',
+              descriptionKey: 'ToolCatalog.categories.imageOptimizeDescription',
+              tools,
+            },
+          ]}
+        />
+      );
 
-    expect(screen.getAllByRole('link')).toHaveLength(1);
-    expect(
-      container.querySelectorAll('[data-tool-grid-filler="two-column"]')
-    ).toHaveLength(1);
-    expect(
-      container.querySelectorAll('[data-tool-grid-filler="three-column"]')
-    ).toHaveLength(2);
-    for (const filler of container.querySelectorAll(
-      '[data-tool-grid-filler]'
-    )) {
-      expect(filler).toHaveAttribute('aria-hidden', 'true');
-      expect(filler).toHaveClass('bg-card');
+      expect(screen.queryAllByRole('link')).toHaveLength(count);
+
+      const twoColumnFillers = container.querySelectorAll(
+        '[data-tool-grid-filler="two-column"]'
+      );
+      expect(twoColumnFillers).toHaveLength(twoColumnCount);
+      for (const filler of twoColumnFillers) {
+        expect(filler).toHaveAttribute('aria-hidden', 'true');
+        expect(filler).toHaveClass(
+          'hidden min-h-[132px] bg-card sm:block xl:hidden'
+        );
+      }
+
+      const threeColumnFillers = container.querySelectorAll(
+        '[data-tool-grid-filler="three-column"]'
+      );
+      expect(threeColumnFillers).toHaveLength(threeColumnCount);
+      for (const filler of threeColumnFillers) {
+        expect(filler).toHaveAttribute('aria-hidden', 'true');
+        expect(filler).toHaveClass('hidden min-h-[132px] bg-card xl:block');
+      }
     }
-  });
-
-  it('adds only three-column fillers for the ten dashboard tools', () => {
-    const { container } = renderWithIntl(
-      <ToolCatalogGrid
-        groups={[
-          {
-            key: 'dashboard-tools',
-            titleKey: 'ToolCatalog.categories.imageOptimize',
-            descriptionKey: 'ToolCatalog.categories.imageOptimizeDescription',
-            tools: recommendedTools,
-          },
-        ]}
-      />
-    );
-
-    expect(
-      container.querySelectorAll('[data-tool-grid-filler="two-column"]')
-    ).toHaveLength(0);
-    expect(
-      container.querySelectorAll('[data-tool-grid-filler="three-column"]')
-    ).toHaveLength(2);
-  });
+  );
 
   it('gives failure recovery explicit next actions', () => {
     const retry = vi.fn();

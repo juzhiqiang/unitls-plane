@@ -87,23 +87,39 @@ async function createTextPdf(pages: string[]): Promise<Buffer> {
 }
 
 async function createVisualThenTextPdf(
-  visual: 'image' | 'vector'
+  visual:
+    | 'image'
+    | 'vector'
+    | 'transparent-image'
+    | 'white-image'
+    | 'outside-image'
 ): Promise<Buffer> {
   const doc = await PDFDocument.create();
   const visualPage = doc.addPage([595.28, 841.89]);
-  if (visual === 'image') {
+  if (visual !== 'vector') {
+    const transparent = visual === 'transparent-image';
+    const white = visual === 'white-image';
     const png = await sharp({
       create: {
         width: 8,
         height: 8,
-        channels: 3,
-        background: { r: 220, g: 38, b: 38 },
+        channels: transparent ? 4 : 3,
+        background: transparent
+          ? { r: 220, g: 38, b: 38, alpha: 0 }
+          : white
+            ? { r: 255, g: 255, b: 255 }
+            : { r: 220, g: 38, b: 38 },
       },
     })
       .png()
       .toBuffer();
     const image = await doc.embedPng(png);
-    visualPage.drawImage(image, { x: 56, y: 720, width: 80, height: 80 });
+    visualPage.drawImage(image, {
+      x: visual === 'outside-image' ? 700 : 56,
+      y: visual === 'outside-image' ? 900 : 720,
+      width: 80,
+      height: 80,
+    });
   } else {
     visualPage.drawRectangle({
       x: 56,
@@ -441,6 +457,20 @@ describe('PdfService.documentToPdf', () => {
     expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2);
   });
 
+  for (const visual of [
+    'transparent-image',
+    'white-image',
+    'outside-image',
+  ] as const) {
+    it(`removes a leading ${visual} page from a Markdown PDF`, async () => {
+      const pdf = await convertMarkdownWithMockPdf(
+        await createVisualThenTextPdf(visual)
+      );
+
+      expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
+    });
+  }
+
   it('keeps a leading vector-only page in a Markdown PDF', async () => {
     const pdf = await convertMarkdownWithMockPdf(
       await createVisualThenTextPdf('vector')
@@ -451,7 +481,7 @@ describe('PdfService.documentToPdf', () => {
 
   it('destroys MuPDF handles after Markdown PDF inspection succeeds', async () => {
     const mupdf = await import('mupdf');
-    const destroyed = { document: 0, page: 0, structuredText: 0, image: 0 };
+    const destroyed = { document: 0, page: 0, structuredText: 0, pixmap: 0 };
     const restore = [
       trackDestroy(mupdf.Document.prototype, () => destroyed.document++),
       trackDestroy(mupdf.Page.prototype, () => destroyed.page++),
@@ -459,7 +489,7 @@ describe('PdfService.documentToPdf', () => {
         mupdf.StructuredText.prototype,
         () => destroyed.structuredText++
       ),
-      trackDestroy(mupdf.Image.prototype, () => destroyed.image++),
+      trackDestroy(mupdf.Pixmap.prototype, () => destroyed.pixmap++),
     ];
 
     try {
@@ -472,15 +502,15 @@ describe('PdfService.documentToPdf', () => {
       expect(destroyed.document).toBe(1);
       expect(destroyed.page).toBe(2);
       expect(destroyed.structuredText).toBe(2);
-      expect(destroyed.image).toBeGreaterThanOrEqual(1);
+      expect(destroyed.pixmap).toBeGreaterThanOrEqual(1);
     } finally {
       restore.reverse().forEach(restoreDestroy => restoreDestroy());
     }
   });
 
-  it('destroys MuPDF handles when Markdown PDF inspection throws', async () => {
+  it('destroys MuPDF handles when raster page inspection throws', async () => {
     const mupdf = await import('mupdf');
-    const destroyed = { document: 0, page: 0, structuredText: 0 };
+    const destroyed = { document: 0, page: 0, structuredText: 0, pixmap: 0 };
     const restore = [
       trackDestroy(mupdf.Document.prototype, () => destroyed.document++),
       trackDestroy(mupdf.Page.prototype, () => destroyed.page++),
@@ -488,26 +518,28 @@ describe('PdfService.documentToPdf', () => {
         mupdf.StructuredText.prototype,
         () => destroyed.structuredText++
       ),
+      trackDestroy(mupdf.Pixmap.prototype, () => destroyed.pixmap++),
     ];
-    const originalAsText = mupdf.StructuredText.prototype.asText;
-    mupdf.StructuredText.prototype.asText = () => {
-      throw new Error('structured text failed');
+    const originalGetPixels = mupdf.Pixmap.prototype.getPixels;
+    mupdf.Pixmap.prototype.getPixels = () => {
+      throw new Error('pixmap inspection failed');
     };
 
     try {
       const service = new PdfService();
       await expect(
         (service as any).normalizeMarkdownPdfOutput(
-          await createTextPdf(['Visible body']),
+          await createTextPdf(['', 'Visible body']),
           '# Visible body'
         )
-      ).rejects.toThrow('structured text failed');
+      ).rejects.toThrow('pixmap inspection failed');
 
       expect(destroyed.document).toBe(1);
       expect(destroyed.page).toBe(1);
       expect(destroyed.structuredText).toBe(1);
+      expect(destroyed.pixmap).toBe(1);
     } finally {
-      mupdf.StructuredText.prototype.asText = originalAsText;
+      mupdf.Pixmap.prototype.getPixels = originalGetPixels;
       restore.reverse().forEach(restoreDestroy => restoreDestroy());
     }
   });

@@ -910,27 +910,15 @@ export class PdfService {
       for (let index = 0; index < document.countPages(); index++) {
         const page = document.loadPage(index);
         try {
-          const structuredText = page.toStructuredText('preserve-images');
+          const structuredText = page.toStructuredText();
           try {
             const text = normalizeDocumentText(structuredText.asText());
-            let hasImage = false;
-            structuredText.walk({
-              onImageBlock: (_bbox, _transform, image) => {
-                try {
-                  hasImage = true;
-                } finally {
-                  image.destroy();
-                }
-              },
-            });
             pageTexts.push(text);
 
-            const hasVisibleContent =
-              text.length > 0 ||
-              hasImage ||
-              (firstVisiblePage === -1 &&
-                this.hasRenderedPageContent(mupdf, page));
-            if (firstVisiblePage === -1 && hasVisibleContent) {
+            if (
+              firstVisiblePage === -1 &&
+              this.hasRenderedPageContent(mupdf, page)
+            ) {
               firstVisiblePage = index;
             }
           } finally {

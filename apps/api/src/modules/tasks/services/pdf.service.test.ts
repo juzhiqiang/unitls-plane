@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
+  buildLibreOfficeArgs,
   buildMarkdownDocumentHtml,
   extractDocxPlainText,
   PdfService,
@@ -88,11 +90,29 @@ describe('buildMarkdownDocumentHtml', () => {
     const html = buildMarkdownDocumentHtml('# Report\n\n- Ready\n- **PDF**');
 
     expect(html).toContain('<!doctype html>');
+    expect(html).toContain('<html lang="zh-CN">');
+    expect(html).toContain('<main class="markdown-document">');
     expect(html).toContain('<h1>Report</h1>');
     expect(html).toContain('<li>Ready</li>');
     expect(html).toContain('<strong>PDF</strong>');
     expect(html).toContain('@page');
     expect(html).toContain('font-family');
+  });
+
+  it('builds isolated LibreOffice arguments with a file URL profile', () => {
+    const profileDir = join('tmp', 'libreoffice-profile');
+    const args = buildLibreOfficeArgs(
+      join('tmp', 'source.html'),
+      join('tmp', 'output'),
+      profileDir,
+      'pdf:writer_pdf_Export'
+    );
+
+    expect(args[0]).toBe(
+      `-env:UserInstallation=${pathToFileURL(profileDir).href}`
+    );
+    expect(args).toContain('--nodefault');
+    expect(args).toContain('pdf:writer_pdf_Export');
   });
 
   it('does not keep executable script tags from markdown input', () => {
@@ -237,6 +257,49 @@ describe('PdfService.documentToPdf', () => {
       expect(text).toContain('Content that must survive');
     } finally {
       (service as any).convertWithLibreOffice = originalConverter;
+    }
+  });
+
+  it('keeps literal code punctuation when validating Markdown PDF content', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    const originalFallback = (service as any).renderMarkdownFallbackPdf;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(
+        outputPath,
+        await createTextPdf(['const result = left * right;'])
+      );
+      return outputPath;
+    };
+    (service as any).renderMarkdownFallbackPdf = async () => {
+      throw new Error('unexpected fallback');
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from(
+            '```ts\nconst result = left * right;\n```',
+            'utf8'
+          ),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(text).toContain('const result = left * right;');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
+      (service as any).renderMarkdownFallbackPdf = originalFallback;
     }
   });
 

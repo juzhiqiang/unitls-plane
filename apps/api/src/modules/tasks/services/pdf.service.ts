@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, extname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { inflateRawSync } from 'node:zlib';
 import { Injectable, BadRequestException } from '@nestjs/common';
@@ -142,23 +143,92 @@ function stripUnsafeHtml(html: string): string {
     .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, '');
 }
 
-export function buildMarkdownDocumentHtml(markdown: string): string {
+function parseMarkdown(markdown: string): string {
   marked.setOptions({
     async: false,
     breaks: false,
     gfm: true,
   });
 
-  const body = stripUnsafeHtml(marked.parse(markdown) as string);
+  return marked.parse(markdown) as string;
+}
+
+export function normalizeDocumentText(value: string): string {
+  const decoded = value.replace(
+    /&(?:amp|lt|gt|quot|apos|nbsp|#(\d+)|#x([\da-f]+));/gi,
+    (entity, decimal, hexadecimal) => {
+      switch (entity.toLowerCase()) {
+        case '&amp;':
+          return '&';
+        case '&lt;':
+          return '<';
+        case '&gt;':
+          return '>';
+        case '&quot;':
+          return '"';
+        case '&apos;':
+          return "'";
+        case '&nbsp;':
+          return ' ';
+        default: {
+          const codePoint = decimal
+            ? Number.parseInt(decimal, 10)
+            : Number.parseInt(hexadecimal, 16);
+          return Number.isFinite(codePoint)
+            ? String.fromCodePoint(codePoint)
+            : entity;
+        }
+      }
+    }
+  );
+
+  return decoded.replace(/\s+/g, ' ').trim();
+}
+
+function extractMarkdownTextFragments(markdown: string): string[] {
+  const html = stripUnsafeHtml(parseMarkdown(markdown));
+  return html
+    .replace(/<[^>]*>/g, '\n')
+    .split(/\n+/)
+    .map(normalizeDocumentText)
+    .filter(Boolean);
+}
+
+export function buildLibreOfficeArgs(
+  sourcePath: string,
+  outputDir: string,
+  profileDir: string,
+  filter: 'pdf:writer_pdf_Export' | 'pdf'
+): string[] {
+  return [
+    `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
+    '--headless',
+    '--invisible',
+    '--nodefault',
+    '--nolockcheck',
+    '--nologo',
+    '--nofirststartwizard',
+    '--convert-to',
+    filter,
+    '--outdir',
+    outputDir,
+    sourcePath,
+  ];
+}
+
+export function buildMarkdownDocumentHtml(markdown: string): string {
+  const body = stripUnsafeHtml(parseMarkdown(markdown));
 
   return `<!doctype html>
-<html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <style>${MARKDOWN_HTML_STYLE}</style>
 </head>
 <body>
+<main class="markdown-document">
 ${body}
+</main>
 </body>
 </html>`;
 }
@@ -406,25 +476,33 @@ export class PdfService {
         await writeFile(sourcePath, input.buffer);
       }
 
+      if (opts.sourceFormat === 'markdown') {
+        const markdown = input.buffer.toString('utf8');
+        for (const filter of ['pdf:writer_pdf_Export', 'pdf'] as const) {
+          try {
+            const outputPath = await this.convertWithLibreOffice(
+              sourcePath,
+              tempDir,
+              filter
+            );
+            const output = await readFile(outputPath);
+            return await this.normalizeMarkdownPdfOutput(output, markdown);
+          } catch {
+            // Try the next LibreOffice filter before using the local fallback.
+          }
+        }
+
+        return await this.renderMarkdownFallbackPdf(markdown);
+      }
+
       try {
         const outputPath = await this.convertWithLibreOffice(
           sourcePath,
-          tempDir
+          tempDir,
+          'pdf:writer_pdf_Export'
         );
-        const output = await readFile(outputPath);
-        if (opts.sourceFormat === 'markdown') {
-          await this.ensureMarkdownPdfHasContent(
-            output,
-            input.buffer.toString('utf8')
-          );
-        }
-        return output;
-      } catch (err) {
-        if (opts.sourceFormat === 'markdown') {
-          return await this.renderMarkdownFallbackPdf(
-            input.buffer.toString('utf8')
-          );
-        }
+        return await readFile(outputPath);
+      } catch {
         return await this.renderPlainTextFallbackPdf(
           extractDocxPlainText(input.buffer)
         );
@@ -434,20 +512,46 @@ export class PdfService {
     }
   }
 
-  private async ensureMarkdownPdfHasContent(
+  private async normalizeMarkdownPdfOutput(
     pdf: Buffer,
     markdown: string
-  ): Promise<void> {
-    if (markdown.trim().length === 0) return;
+  ): Promise<Buffer> {
+    const mupdf = await getMupdf();
+    const document = mupdf.Document.openDocument(pdf, 'application/pdf');
+    const pageTexts: string[] = [];
 
-    const text = await this.toText(pdf, {
-      format: 'text',
-      pageBreak: '\n',
-    });
+    for (let index = 0; index < document.countPages(); index++) {
+      const page = document.loadPage(index);
+      pageTexts.push(normalizeDocumentText(page.toStructuredText().asText()));
+    }
 
-    if (text.trim().length === 0) {
+    const firstNonEmptyPage = pageTexts.findIndex(Boolean);
+    if (firstNonEmptyPage === -1) {
       throw new Error('LibreOffice produced a blank Markdown PDF');
     }
+
+    const outputText = normalizeDocumentText(
+      pageTexts.slice(firstNonEmptyPage).join(' ')
+    );
+    for (const fragment of extractMarkdownTextFragments(markdown)) {
+      if (!outputText.includes(fragment)) {
+        throw new Error('LibreOffice Markdown PDF is missing source content');
+      }
+    }
+
+    if (firstNonEmptyPage === 0) return pdf;
+
+    const source = await PDFDocument.load(pdf);
+    const normalized = await PDFDocument.create();
+    const copiedPages = await normalized.copyPages(
+      source,
+      Array.from(
+        { length: source.getPageCount() - firstNonEmptyPage },
+        (_, index) => index + firstNonEmptyPage
+      )
+    );
+    copiedPages.forEach(page => normalized.addPage(page));
+    return Buffer.from(await normalized.save());
   }
 
   private async renderMarkdownFallbackPdf(markdown: string): Promise<Buffer> {
@@ -868,45 +972,37 @@ export class PdfService {
 
   private async convertWithLibreOffice(
     sourcePath: string,
-    outputDir: string
+    tempDir: string,
+    filter: 'pdf:writer_pdf_Export' | 'pdf'
   ): Promise<string> {
+    const outputDir = await mkdtemp(join(tempDir, 'libreoffice-output-'));
+    const profileDir = await mkdtemp(join(tempDir, 'libreoffice-profile-'));
+    const outputPath = join(
+      outputDir,
+      `${basename(sourcePath, extname(sourcePath))}.pdf`
+    );
     const commands = process.env.LIBREOFFICE_BIN
       ? [process.env.LIBREOFFICE_BIN]
       : ['soffice', 'libreoffice'];
-    let lastError: unknown;
 
     for (const command of commands) {
       try {
+        await rm(outputPath, { force: true });
         await execFileAsync(
           command,
-          [
-            '--headless',
-            '--nologo',
-            '--nofirststartwizard',
-            '--convert-to',
-            'pdf:writer_pdf_Export',
-            '--outdir',
-            outputDir,
-            sourcePath,
-          ],
+          buildLibreOfficeArgs(sourcePath, outputDir, profileDir, filter),
           { timeout: 120_000, windowsHide: true }
         );
 
-        const outputPath = join(
-          outputDir,
-          `${basename(sourcePath, extname(sourcePath))}.pdf`
-        );
         await readFile(outputPath);
         return outputPath;
-      } catch (err) {
-        lastError = err;
+      } catch {
+        // Continue with the next available LibreOffice executable.
       }
     }
 
-    const detail =
-      lastError instanceof Error ? lastError.message : String(lastError);
     throw new BadRequestException(
-      `LibreOffice is required for Markdown/Word to PDF conversion. Install LibreOffice or set LIBREOFFICE_BIN. ${detail}`
+      'LibreOffice is required for Markdown/Word to PDF conversion'
     );
   }
 }

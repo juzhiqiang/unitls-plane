@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
   buildMarkdownDocumentHtml,
   extractDocxPlainText,
@@ -71,6 +71,16 @@ function createMinimalDocx(text: string): Buffer {
         </w:body>
       </w:document>`,
   });
+}
+
+async function createTextPdf(pages: string[]): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (const text of pages) {
+    const page = doc.addPage([595.28, 841.89]);
+    if (text) page.drawText(text, { x: 56, y: 780, size: 12, font });
+  }
+  return Buffer.from(await doc.save());
 }
 
 describe('buildMarkdownDocumentHtml', () => {
@@ -152,6 +162,79 @@ describe('PdfService.documentToPdf', () => {
       const text = await service.toText(pdf, { format: 'text' });
       expect(text).toContain('Server Export');
       expect(text).toContain('Content survives');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
+    }
+  });
+
+  it('removes a blank leading page from a LibreOffice Markdown PDF', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(
+        outputPath,
+        await createTextPdf(['', 'Expected title and body'])
+      );
+      return outputPath;
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from('# Expected title\n\nand body', 'utf8'),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      const document = await PDFDocument.load(pdf);
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(document.getPageCount()).toBe(1);
+      expect(text).toContain('Expected title and body');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
+    }
+  });
+
+  it('falls back when a LibreOffice Markdown PDF omits source content', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(outputPath, await createTextPdf(['Only one fragment']));
+      return outputPath;
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from(
+            '# Required heading\n\nContent that must survive',
+            'utf8'
+          ),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(text).toContain('Required heading');
+      expect(text).toContain('Content that must survive');
     } finally {
       (service as any).convertWithLibreOffice = originalConverter;
     }

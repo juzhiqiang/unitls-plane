@@ -186,12 +186,97 @@ export function normalizeDocumentText(value: string): string {
 }
 
 function extractMarkdownTextFragments(markdown: string): string[] {
-  const html = stripUnsafeHtml(parseMarkdown(markdown));
-  return html
-    .replace(/<[^>]*>/g, '\n')
+  const html = parseMarkdown(markdown);
+  return extractVisibleHtmlText(html)
     .split(/\n+/)
     .map(normalizeDocumentText)
     .filter(Boolean);
+}
+
+const HIDDEN_HTML_ELEMENTS = new Set([
+  'embed',
+  'head',
+  'iframe',
+  'link',
+  'meta',
+  'noscript',
+  'object',
+  'script',
+  'style',
+  'template',
+  'title',
+]);
+
+const VOID_HTML_ELEMENTS = new Set(['embed', 'link', 'meta']);
+
+function extractVisibleHtmlText(html: string): string {
+  let result = '';
+  const hiddenElements: string[] = [];
+
+  for (let index = 0; index < html.length; ) {
+    if (html[index] !== '<') {
+      if (hiddenElements.length === 0) result += html[index];
+      index++;
+      continue;
+    }
+
+    if (html.startsWith('<!--', index)) {
+      const commentEnd = html.indexOf('-->', index + 4);
+      index = commentEnd === -1 ? html.length : commentEnd + 3;
+      continue;
+    }
+
+    const tagEnd = findHtmlTagEnd(html, index + 1);
+    if (tagEnd === -1) {
+      if (hiddenElements.length === 0) result += '<';
+      index++;
+      continue;
+    }
+
+    const tag = html.slice(index + 1, tagEnd);
+    const tagMatch = tag.match(/^\s*(\/?)\s*([a-z][\w:-]*)/i);
+    if (!tagMatch) {
+      index = tagEnd + 1;
+      continue;
+    }
+
+    const isClosing = tagMatch[1] === '/';
+    const tagName = tagMatch[2]!.toLowerCase();
+    if (isClosing) {
+      const hiddenIndex = hiddenElements.lastIndexOf(tagName);
+      if (hiddenIndex !== -1) hiddenElements.splice(hiddenIndex);
+    } else if (
+      HIDDEN_HTML_ELEMENTS.has(tagName) &&
+      !VOID_HTML_ELEMENTS.has(tagName) &&
+      !/\/\s*$/.test(tag)
+    ) {
+      hiddenElements.push(tagName);
+    }
+
+    if (hiddenElements.length === 0) result += '\n';
+    index = tagEnd + 1;
+  }
+
+  return result;
+}
+
+function findHtmlTagEnd(html: string, start: number): number {
+  let quote: '"' | "'" | undefined;
+
+  for (let index = start; index < html.length; index++) {
+    const character = html[index];
+    if (quote) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '>') {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 export function buildLibreOfficeArgs(

@@ -314,7 +314,7 @@ describe('buildMarkdownDocumentHtml', () => {
     }
   });
 
-  it('sanitizes structured attributes while preserving safe links and images', () => {
+  it('sanitizes structured attributes while preserving safe navigation links', () => {
     const html = buildMarkdownDocumentHtml(
       [
         '<img src=x onerror=alert(1) alt="Unsafe image">',
@@ -325,6 +325,10 @@ describe('buildMarkdownDocumentHtml', () => {
         '<a href="java&#10;script:alert(1)">C0 control URL</a>',
         '<a href="java&#x85;script:alert(1)">C1 control URL</a>',
         '<a href=vbscript:alert(1)>VBScript URL</a>',
+        '<img src="http://127.0.0.1:9000/private.png" alt="Loopback image">',
+        '<video poster="http://169.254.169.254/latest">Metadata poster</video>',
+        '<div background="https://assets.example.com/background.png">Remote background</div>',
+        '<object codebase="https://assets.example.com/">Remote codebase</object>',
         '<img src="http&amp;colon;//evil" alt="Double encoded resource">',
         '<img src=file:///etc/passwd alt="File URL">',
         '<svg><a xlink:href=javascript:alert(1)>SVG URL</a></svg>',
@@ -337,7 +341,9 @@ describe('buildMarkdownDocumentHtml', () => {
         '<div id="safe-block" style="background:url(https://tracker.example/pixel)">Styled text</div>',
         '<a href=./guide>Safe relative link</a>',
         '<a class="safe-link" href=https://example.com/docs title="Safe link">Safe HTTP link</a>',
-        '<img src="https://example.com/image.png?next=javascript:ignored" alt="Safe image" width=64>',
+        '<a href=mailto:support@example.com>Safe email link</a>',
+        '<a href=tel:+86123456789>Safe telephone link</a>',
+        '<img src="https://example.com/image.png?next=javascript:ignored" alt="Remote image" width=64>',
       ].join('\n')
     );
 
@@ -354,9 +360,14 @@ describe('buildMarkdownDocumentHtml', () => {
       'src=""',
       'poster=',
       'background=',
+      'codebase=',
       'action=',
       'style=',
       'tracker.example',
+      '127.0.0.1:9000',
+      '169.254.169.254',
+      'assets.example.com',
+      'https://example.com/image.png',
     ]) {
       expect(html).not.toContain(unsafeText);
     }
@@ -371,11 +382,10 @@ describe('buildMarkdownDocumentHtml', () => {
     expect(html).toContain('class="safe-link"');
     expect(html).toContain('href="./guide"');
     expect(html).toContain('href="https://example.com/docs"');
+    expect(html).toContain('href="mailto:support@example.com"');
+    expect(html).toContain('href="tel:+86123456789"');
     expect(html).toContain('title="Safe link"');
-    expect(html).toContain(
-      'src="https://example.com/image.png?next=javascript:ignored"'
-    );
-    expect(html).toContain('alt="Safe image"');
+    expect(html).toContain('<img alt="Remote image" width="64">');
     expect(html).toContain('width="64"');
   });
 

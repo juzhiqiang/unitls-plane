@@ -300,6 +300,7 @@ function isAllowedDocumentUrl(attributeName: string, value: string): boolean {
   const normalized = stripUrlControlCharacters(value.trim());
   const allowsRelative = !RESOURCE_URL_HTML_ATTRIBUTES.has(attributeName);
   if (normalized === '') return allowsRelative;
+  if (!allowsRelative) return false;
   if (
     allowsRelative &&
     (normalized.startsWith('#') ||
@@ -315,13 +316,9 @@ function isAllowedDocumentUrl(attributeName: string, value: string): boolean {
   const colon = normalized.indexOf(':');
   if (colon !== -1 && (boundary === -1 || colon < boundary)) {
     const scheme = normalized.slice(0, colon).toLowerCase();
-    if (RESOURCE_URL_HTML_ATTRIBUTES.has(attributeName)) {
-      return scheme === 'http' || scheme === 'https';
-    }
     return ALLOWED_DOCUMENT_URL_SCHEMES.has(scheme);
   }
 
-  if (!allowsRelative) return false;
   const prefix = normalized.slice(
     0,
     boundary === -1 ? normalized.length : boundary

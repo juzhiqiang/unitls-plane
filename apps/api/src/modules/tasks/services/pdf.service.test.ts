@@ -2,7 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import sharp from 'sharp';
 import {
   buildLibreOfficeArgs,
   buildMarkdownDocumentHtml,
@@ -85,6 +86,83 @@ async function createTextPdf(pages: string[]): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
+async function createVisualThenTextPdf(
+  visual: 'image' | 'vector'
+): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const visualPage = doc.addPage([595.28, 841.89]);
+  if (visual === 'image') {
+    const png = await sharp({
+      create: {
+        width: 8,
+        height: 8,
+        channels: 3,
+        background: { r: 220, g: 38, b: 38 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const image = await doc.embedPng(png);
+    visualPage.drawImage(image, { x: 56, y: 720, width: 80, height: 80 });
+  } else {
+    visualPage.drawRectangle({
+      x: 56,
+      y: 720,
+      width: 80,
+      height: 80,
+      color: rgb(0.86, 0.15, 0.15),
+    });
+  }
+
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const textPage = doc.addPage([595.28, 841.89]);
+  textPage.drawText('Visible body', { x: 56, y: 780, size: 12, font });
+  return Buffer.from(await doc.save());
+}
+
+async function convertMarkdownWithMockPdf(output: Buffer): Promise<Buffer> {
+  const service = new PdfService();
+  const originalConverter = (service as any).convertWithLibreOffice;
+  (service as any).convertWithLibreOffice = async (
+    sourcePath: string,
+    outputDir: string
+  ) => {
+    const outputPath = join(
+      outputDir,
+      sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+    );
+    await writeFile(outputPath, output);
+    return outputPath;
+  };
+
+  try {
+    return await service.documentToPdf(
+      {
+        buffer: Buffer.from('# Visible body', 'utf8'),
+        filename: 'server-export.md',
+        mimeType: 'text/markdown',
+      },
+      { sourceFormat: 'markdown' }
+    );
+  } finally {
+    (service as any).convertWithLibreOffice = originalConverter;
+  }
+}
+
+function trackDestroy(
+  prototype: { destroy(): void },
+  onDestroy: () => void
+): () => void {
+  const original = prototype.destroy;
+  prototype.destroy = function destroy() {
+    onDestroy();
+    original.call(this);
+  };
+  return () => {
+    prototype.destroy = original;
+  };
+}
+
 describe('buildMarkdownDocumentHtml', () => {
   it('renders markdown into a printable HTML document with document styling', () => {
     const html = buildMarkdownDocumentHtml('# Report\n\n- Ready\n- **PDF**');
@@ -164,6 +242,82 @@ describe('buildMarkdownDocumentHtml', () => {
     ]) {
       expect(html).not.toContain(unsafeText);
     }
+  });
+
+  it('sanitizes structured attributes while preserving safe links and images', () => {
+    const html = buildMarkdownDocumentHtml(
+      [
+        '<img src=x onerror=alert(1) alt="Unsafe image">',
+        '<a href=javascript:alert(1)>Unsafe URL</a>',
+        '<button formaction=javascript:alert(1)>Unsafe action</button>',
+        '<a href=jav&#x61;script:alert(1)>Numeric entity URL</a>',
+        '<a href=javascript&colon;alert(1)>Named entity URL</a>',
+        '<a href=vbscript:alert(1)>VBScript URL</a>',
+        '<img src=file:///etc/passwd alt="File URL">',
+        '<svg><a xlink:href=javascript:alert(1)>SVG URL</a></svg>',
+        '<img src=./local.png alt="Relative image">',
+        '<img src="" alt="Empty image">',
+        '<video poster=../local.mp4>Relative poster</video>',
+        '<div background=/local.png>Relative background</div>',
+        '<form action=https://example.com/submit><button formaction=https://example.com/submit>Submit</button></form>',
+        '<svg><a xlink:href=https://example.com/image.svg>External SVG</a></svg>',
+        '<div id="safe-block" style="background:url(https://tracker.example/pixel)">Styled text</div>',
+        '<a href=./guide>Safe relative link</a>',
+        '<a class="safe-link" href=https://example.com/docs title="Safe link">Safe HTTP link</a>',
+        '<img src="https://example.com/image.png?next=javascript:ignored" alt="Safe image" width=64>',
+      ].join('\n')
+    );
+
+    for (const unsafeText of [
+      'onerror=',
+      'href=javascript:',
+      'formaction=',
+      'jav&#x61;script:',
+      'javascript&colon;',
+      'href="vbscript:',
+      'src="file:',
+      'xlink:href=',
+      'src="./local.png"',
+      'src=""',
+      'poster=',
+      'background=',
+      'action=',
+      'style=',
+      'tracker.example',
+    ]) {
+      expect(html).not.toContain(unsafeText);
+    }
+    expect(html).toContain('Unsafe URL');
+    expect(html).toContain('Unsafe action');
+    expect(html).toContain('Styled text');
+    expect(html).toContain('id="safe-block"');
+    expect(html).toContain('class="safe-link"');
+    expect(html).toContain('href="./guide"');
+    expect(html).toContain('href="https://example.com/docs"');
+    expect(html).toContain('title="Safe link"');
+    expect(html).toContain(
+      'src="https://example.com/image.png?next=javascript:ignored"'
+    );
+    expect(html).toContain('alt="Safe image"');
+    expect(html).toContain('width="64"');
+  });
+
+  it('treats unsafe HTML elements as containers despite a self-closing slash', () => {
+    const html = buildMarkdownDocumentHtml(
+      '<script title="unsafe > marker"/>script payload</script>\n<div>Safe body</div>'
+    );
+
+    expect(html).not.toContain('script payload');
+    expect(html).toContain('<div>Safe body</div>');
+  });
+
+  it('does not emit a malformed tag with an unterminated quoted attribute', () => {
+    const html = buildMarkdownDocumentHtml(
+      '<img src=x onerror="alert(1)>\nVisible body'
+    );
+
+    expect(html).not.toContain('<img src=x onerror=');
+    expect(html).toContain('&lt;img src=x onerror=&quot;alert(1)&gt;');
   });
 
   it('preserves comparison text alongside normal tags and comments', () => {
@@ -276,6 +430,131 @@ describe('PdfService.documentToPdf', () => {
       expect(text).toContain('Expected title and body');
     } finally {
       (service as any).convertWithLibreOffice = originalConverter;
+    }
+  });
+
+  it('keeps a leading image-only page in a Markdown PDF', async () => {
+    const pdf = await convertMarkdownWithMockPdf(
+      await createVisualThenTextPdf('image')
+    );
+
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2);
+  });
+
+  it('keeps a leading vector-only page in a Markdown PDF', async () => {
+    const pdf = await convertMarkdownWithMockPdf(
+      await createVisualThenTextPdf('vector')
+    );
+
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2);
+  });
+
+  it('destroys MuPDF handles after Markdown PDF inspection succeeds', async () => {
+    const mupdf = await import('mupdf');
+    const destroyed = { document: 0, page: 0, structuredText: 0, image: 0 };
+    const restore = [
+      trackDestroy(mupdf.Document.prototype, () => destroyed.document++),
+      trackDestroy(mupdf.Page.prototype, () => destroyed.page++),
+      trackDestroy(
+        mupdf.StructuredText.prototype,
+        () => destroyed.structuredText++
+      ),
+      trackDestroy(mupdf.Image.prototype, () => destroyed.image++),
+    ];
+
+    try {
+      const service = new PdfService();
+      await (service as any).normalizeMarkdownPdfOutput(
+        await createVisualThenTextPdf('image'),
+        '# Visible body'
+      );
+
+      expect(destroyed.document).toBe(1);
+      expect(destroyed.page).toBe(2);
+      expect(destroyed.structuredText).toBe(2);
+      expect(destroyed.image).toBeGreaterThanOrEqual(1);
+    } finally {
+      restore.reverse().forEach(restoreDestroy => restoreDestroy());
+    }
+  });
+
+  it('destroys MuPDF handles when Markdown PDF inspection throws', async () => {
+    const mupdf = await import('mupdf');
+    const destroyed = { document: 0, page: 0, structuredText: 0 };
+    const restore = [
+      trackDestroy(mupdf.Document.prototype, () => destroyed.document++),
+      trackDestroy(mupdf.Page.prototype, () => destroyed.page++),
+      trackDestroy(
+        mupdf.StructuredText.prototype,
+        () => destroyed.structuredText++
+      ),
+    ];
+    const originalAsText = mupdf.StructuredText.prototype.asText;
+    mupdf.StructuredText.prototype.asText = () => {
+      throw new Error('structured text failed');
+    };
+
+    try {
+      const service = new PdfService();
+      await expect(
+        (service as any).normalizeMarkdownPdfOutput(
+          await createTextPdf(['Visible body']),
+          '# Visible body'
+        )
+      ).rejects.toThrow('structured text failed');
+
+      expect(destroyed.document).toBe(1);
+      expect(destroyed.page).toBe(1);
+      expect(destroyed.structuredText).toBe(1);
+    } finally {
+      mupdf.StructuredText.prototype.asText = originalAsText;
+      restore.reverse().forEach(restoreDestroy => restoreDestroy());
+    }
+  });
+
+  it('destroys MuPDF handles after public text extraction', async () => {
+    const mupdf = await import('mupdf');
+    const destroyed = { document: 0, page: 0, structuredText: 0 };
+    const restore = [
+      trackDestroy(mupdf.Document.prototype, () => destroyed.document++),
+      trackDestroy(mupdf.Page.prototype, () => destroyed.page++),
+      trackDestroy(
+        mupdf.StructuredText.prototype,
+        () => destroyed.structuredText++
+      ),
+    ];
+
+    try {
+      await new PdfService().toText(await createTextPdf(['One', 'Two']), {
+        format: 'text',
+      });
+
+      expect(destroyed.document).toBe(1);
+      expect(destroyed.page).toBe(2);
+      expect(destroyed.structuredText).toBe(2);
+    } finally {
+      restore.reverse().forEach(restoreDestroy => restoreDestroy());
+    }
+  });
+
+  it('destroys the pixmap used to inspect a vector-only page', async () => {
+    const mupdf = await import('mupdf');
+    let destroyedPixmaps = 0;
+    const restore = trackDestroy(
+      mupdf.Pixmap.prototype,
+      () => destroyedPixmaps++
+    );
+
+    try {
+      const service = new PdfService();
+      await (service as any).normalizeMarkdownPdfOutput(
+        await createVisualThenTextPdf('vector'),
+        '# Visible body'
+      );
+
+      expect(destroyedPixmaps).toBeGreaterThanOrEqual(1);
+    } finally {
+      restore();
     }
   });
 

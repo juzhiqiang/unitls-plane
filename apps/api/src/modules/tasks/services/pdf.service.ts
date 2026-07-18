@@ -209,13 +209,16 @@ const VOID_HTML_ELEMENTS = new Set(['embed', 'link', 'meta']);
 type HtmlToken =
   | { type: 'text'; value: string }
   | { type: 'markup'; value: string }
-  | {
-      type: 'tag';
-      value: string;
-      tagName: string;
-      isClosing: boolean;
-      isSelfClosing: boolean;
-    };
+  | HtmlTagToken;
+
+interface HtmlTagToken {
+  type: 'tag';
+  value: string;
+  tagName: string;
+  rawTagName: string;
+  isClosing: boolean;
+  isSelfClosing: boolean;
+}
 
 function sanitizeHtml(html: string): string {
   let result = '';
@@ -235,8 +238,7 @@ function sanitizeHtml(html: string): string {
       }
     } else if (
       UNSAFE_HTML_ELEMENTS.has(token.tagName) &&
-      !VOID_HTML_ELEMENTS.has(token.tagName) &&
-      !token.isSelfClosing
+      !VOID_HTML_ELEMENTS.has(token.tagName)
     ) {
       unsafeElements.push(token.tagName);
     }
@@ -245,19 +247,205 @@ function sanitizeHtml(html: string): string {
       continue;
     }
 
-    result += sanitizeHtmlTagAttributes(token.value);
+    result += sanitizeHtmlTagAttributes(token);
   }
 
   return result;
 }
 
-function sanitizeHtmlTagAttributes(tag: string): string {
-  return tag
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
-    .replace(
-      /\s(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi,
-      ''
+const URL_HTML_ATTRIBUTES = new Set([
+  'background',
+  'cite',
+  'codebase',
+  'href',
+  'longdesc',
+  'poster',
+  'src',
+  'usemap',
+]);
+
+const RESOURCE_URL_HTML_ATTRIBUTES = new Set([
+  'background',
+  'codebase',
+  'poster',
+  'src',
+]);
+
+const DROPPED_HTML_ATTRIBUTES = new Set([
+  'ping',
+  'action',
+  'formaction',
+  'srcdoc',
+  'srcset',
+  'style',
+  'xlink:href',
+]);
+
+const ALLOWED_DOCUMENT_URL_SCHEMES = new Set([
+  'http',
+  'https',
+  'mailto',
+  'tel',
+]);
+
+interface HtmlAttribute {
+  name: string;
+  value?: string;
+}
+
+function sanitizeHtmlTagAttributes(token: HtmlTagToken): string {
+  if (token.isClosing) return `</${token.rawTagName}>`;
+
+  const attributes = parseHtmlAttributes(token).filter(attribute => {
+    const name = attribute.name.toLowerCase();
+    if (
+      name.startsWith('on') ||
+      DROPPED_HTML_ATTRIBUTES.has(name) ||
+      !/^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(attribute.name)
+    ) {
+      return false;
+    }
+    if (!URL_HTML_ATTRIBUTES.has(name)) return true;
+    return (
+      attribute.value !== undefined &&
+      isAllowedDocumentUrl(name, attribute.value)
     );
+  });
+
+  const serializedAttributes = attributes
+    .map(attribute => {
+      if (attribute.value === undefined) return ` ${attribute.name}`;
+      return ` ${attribute.name}="${escapeHtmlAttributeValue(attribute.value)}"`;
+    })
+    .join('');
+  return `<${token.rawTagName}${serializedAttributes}${token.isSelfClosing ? ' /' : ''}>`;
+}
+
+function parseHtmlAttributes(token: HtmlTagToken): HtmlAttribute[] {
+  const attributes: HtmlAttribute[] = [];
+  const end = token.isSelfClosing
+    ? token.value.search(/\/\s*>$/)
+    : token.value.length - 1;
+  let index = 1 + token.rawTagName.length;
+
+  while (index < end) {
+    while (index < end && isHtmlWhitespace(token.value[index])) index++;
+    if (index >= end) break;
+
+    const nameStart = index;
+    while (
+      index < end &&
+      !isHtmlWhitespace(token.value[index]) &&
+      token.value[index] !== '='
+    ) {
+      index++;
+    }
+    if (index === nameStart) {
+      index++;
+      continue;
+    }
+
+    const name = token.value.slice(nameStart, index);
+    while (index < end && isHtmlWhitespace(token.value[index])) index++;
+    if (token.value[index] !== '=') {
+      attributes.push({ name });
+      continue;
+    }
+
+    index++;
+    while (index < end && isHtmlWhitespace(token.value[index])) index++;
+    const quote = token.value[index];
+    if (quote === '"' || quote === "'") {
+      const valueStart = ++index;
+      while (index < end && token.value[index] !== quote) index++;
+      attributes.push({ name, value: token.value.slice(valueStart, index) });
+      if (index < end) index++;
+      continue;
+    }
+
+    const valueStart = index;
+    while (index < end && !isHtmlWhitespace(token.value[index])) index++;
+    attributes.push({ name, value: token.value.slice(valueStart, index) });
+  }
+
+  return attributes;
+}
+
+function isAllowedDocumentUrl(attributeName: string, value: string): boolean {
+  const normalized = decodeHtmlAttributeEntities(value)
+    .trim()
+    .replace(/[\u0000-\u0020\u007f-\u009f]/g, '');
+  const allowsRelative = !RESOURCE_URL_HTML_ATTRIBUTES.has(attributeName);
+  if (normalized === '') return allowsRelative;
+  if (
+    allowsRelative &&
+    (normalized.startsWith('#') ||
+      normalized.startsWith('/') ||
+      normalized.startsWith('./') ||
+      normalized.startsWith('../') ||
+      normalized.startsWith('?'))
+  ) {
+    return true;
+  }
+
+  const boundary = normalized.search(/[/?#]/);
+  const colon = normalized.indexOf(':');
+  if (colon !== -1 && (boundary === -1 || colon < boundary)) {
+    const scheme = normalized.slice(0, colon).toLowerCase();
+    if (RESOURCE_URL_HTML_ATTRIBUTES.has(attributeName)) {
+      return scheme === 'http' || scheme === 'https';
+    }
+    return ALLOWED_DOCUMENT_URL_SCHEMES.has(scheme);
+  }
+
+  if (!allowsRelative) return false;
+  const prefix = normalized.slice(
+    0,
+    boundary === -1 ? normalized.length : boundary
+  );
+  return !prefix.includes('&');
+}
+
+function decodeHtmlAttributeEntities(value: string): string {
+  return value
+    .replace(/&#x([\da-f]+);?/gi, (_, codePoint: string) =>
+      decodeHtmlCodePoint(codePoint, 16)
+    )
+    .replace(/&#(\d+);?/g, (_, codePoint: string) =>
+      decodeHtmlCodePoint(codePoint, 10)
+    )
+    .replace(/&(amp|colon|newline|tab);/gi, (_, entity: string) => {
+      switch (entity.toLowerCase()) {
+        case 'amp':
+          return '&';
+        case 'colon':
+          return ':';
+        case 'newline':
+          return '\n';
+        case 'tab':
+          return '\t';
+        default:
+          return '';
+      }
+    });
+}
+
+function decodeHtmlCodePoint(value: string, radix: number): string {
+  const codePoint = Number.parseInt(value, radix);
+  return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+    ? String.fromCodePoint(codePoint)
+    : '';
+}
+
+function escapeHtmlAttributeValue(value: string): string {
+  return value
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function isHtmlWhitespace(value: string | undefined): boolean {
+  return value !== undefined && /[\t\n\f\r ]/.test(value);
 }
 
 function extractVisibleHtmlText(html: string): string {
@@ -278,8 +466,7 @@ function extractVisibleHtmlText(html: string): string {
       if (hiddenIndex !== -1) hiddenElements.splice(hiddenIndex);
     } else if (
       HIDDEN_HTML_ELEMENTS.has(token.tagName) &&
-      !VOID_HTML_ELEMENTS.has(token.tagName) &&
-      !token.isSelfClosing
+      !VOID_HTML_ELEMENTS.has(token.tagName)
     ) {
       hiddenElements.push(token.tagName);
     }
@@ -338,6 +525,7 @@ function* tokenizeHtml(html: string): Generator<HtmlToken> {
         type: 'tag',
         value,
         tagName: tagMatch[2]!.toLowerCase(),
+        rawTagName: tagMatch[2]!,
         isClosing: tagMatch[1] === '/',
         isSelfClosing: /\/\s*>$/.test(value),
       };
@@ -546,30 +734,42 @@ export class PdfService {
   async toText(input: Buffer, opts: ToTextOptions): Promise<string> {
     const mupdf = await getMupdf();
     const doc = mupdf.Document.openDocument(input, 'application/pdf');
-    const totalPages = doc.countPages();
-    const pageIndices =
-      opts.pages ?? Array.from({ length: totalPages }, (_, i) => i);
-    const parts: string[] = [];
+    try {
+      const totalPages = doc.countPages();
+      const pageIndices =
+        opts.pages ?? Array.from({ length: totalPages }, (_, i) => i);
+      const parts: string[] = [];
 
-    for (const idx of pageIndices) {
-      if (idx < 0 || idx >= totalPages) {
-        throw new BadRequestException(
-          `Invalid page index ${idx}, total pages: ${totalPages}`
-        );
+      for (const idx of pageIndices) {
+        if (idx < 0 || idx >= totalPages) {
+          throw new BadRequestException(
+            `Invalid page index ${idx}, total pages: ${totalPages}`
+          );
+        }
+        const page = doc.loadPage(idx);
+        try {
+          const stext = page.toStructuredText();
+          try {
+            if (opts.format === 'markdown') {
+              const html = stext.asHTML(idx);
+              const td = new TurndownService({ headingStyle: 'atx' });
+              parts.push(td.turndown(html));
+            } else {
+              parts.push(stext.asText());
+            }
+          } finally {
+            stext.destroy();
+          }
+        } finally {
+          page.destroy();
+        }
       }
-      const page = doc.loadPage(idx);
-      const stext = page.toStructuredText();
-      if (opts.format === 'markdown') {
-        const html = stext.asHTML(idx);
-        const td = new TurndownService({ headingStyle: 'atx' });
-        parts.push(td.turndown(html));
-      } else {
-        parts.push(stext.asText());
-      }
+
+      const separator = opts.pageBreak ?? '\n\n---\n\n';
+      return parts.join(separator);
+    } finally {
+      doc.destroy();
     }
-
-    const separator = opts.pageBreak ?? '\n\n---\n\n';
-    return parts.join(separator);
   }
 
   // ─── Images → PDF ─────────────────────────────────────────────────
@@ -704,19 +904,52 @@ export class PdfService {
     const mupdf = await getMupdf();
     const document = mupdf.Document.openDocument(pdf, 'application/pdf');
     const pageTexts: string[] = [];
+    let firstVisiblePage = -1;
 
-    for (let index = 0; index < document.countPages(); index++) {
-      const page = document.loadPage(index);
-      pageTexts.push(normalizeDocumentText(page.toStructuredText().asText()));
+    try {
+      for (let index = 0; index < document.countPages(); index++) {
+        const page = document.loadPage(index);
+        try {
+          const structuredText = page.toStructuredText('preserve-images');
+          try {
+            const text = normalizeDocumentText(structuredText.asText());
+            let hasImage = false;
+            structuredText.walk({
+              onImageBlock: (_bbox, _transform, image) => {
+                try {
+                  hasImage = true;
+                } finally {
+                  image.destroy();
+                }
+              },
+            });
+            pageTexts.push(text);
+
+            const hasVisibleContent =
+              text.length > 0 ||
+              hasImage ||
+              (firstVisiblePage === -1 &&
+                this.hasRenderedPageContent(mupdf, page));
+            if (firstVisiblePage === -1 && hasVisibleContent) {
+              firstVisiblePage = index;
+            }
+          } finally {
+            structuredText.destroy();
+          }
+        } finally {
+          page.destroy();
+        }
+      }
+    } finally {
+      document.destroy();
     }
 
-    const firstNonEmptyPage = pageTexts.findIndex(Boolean);
-    if (firstNonEmptyPage === -1) {
+    if (firstVisiblePage === -1) {
       throw new Error('LibreOffice produced a blank Markdown PDF');
     }
 
     const outputText = normalizeDocumentText(
-      pageTexts.slice(firstNonEmptyPage).join(' ')
+      pageTexts.slice(firstVisiblePage).join(' ')
     );
     for (const fragment of extractMarkdownTextFragments(markdown)) {
       if (!outputText.includes(fragment)) {
@@ -724,19 +957,36 @@ export class PdfService {
       }
     }
 
-    if (firstNonEmptyPage === 0) return pdf;
+    if (firstVisiblePage === 0) return pdf;
 
     const source = await PDFDocument.load(pdf);
     const normalized = await PDFDocument.create();
     const copiedPages = await normalized.copyPages(
       source,
       Array.from(
-        { length: source.getPageCount() - firstNonEmptyPage },
-        (_, index) => index + firstNonEmptyPage
+        { length: source.getPageCount() - firstVisiblePage },
+        (_, index) => index + firstVisiblePage
       )
     );
     copiedPages.forEach(page => normalized.addPage(page));
     return Buffer.from(await normalized.save());
+  }
+
+  private hasRenderedPageContent(
+    mupdf: MupdfModule,
+    page: import('mupdf').Page
+  ): boolean {
+    const pixmap = page.toPixmap(
+      [0.2, 0, 0, 0.2, 0, 0],
+      mupdf.ColorSpace.DeviceGray,
+      false,
+      false
+    );
+    try {
+      return pixmap.getPixels().some(value => value !== 255);
+    } finally {
+      pixmap.destroy();
+    }
   }
 
   private async renderMarkdownFallbackPdf(markdown: string): Promise<Buffer> {
@@ -974,20 +1224,27 @@ export class PdfService {
       input,
       'application/pdf'
     ) as import('mupdf').PDFDocument;
+    try {
+      const perms = opts.permissions ?? {};
+      let permBits = 0;
+      if (perms.print !== false) permBits |= 0b000000000100;
+      if (perms.copy !== false) permBits |= 0b000000010000;
+      if (perms.modify !== false) permBits |= 0b000000001000;
+      if (perms.annotate !== false) permBits |= 0b000000100000;
 
-    const perms = opts.permissions ?? {};
-    let permBits = 0;
-    if (perms.print !== false) permBits |= 0b000000000100;
-    if (perms.copy !== false) permBits |= 0b000000010000;
-    if (perms.modify !== false) permBits |= 0b000000001000;
-    if (perms.annotate !== false) permBits |= 0b000000100000;
-
-    const result = (doc as any).saveToBuffer('compress,incremental', {
-      userPassword: opts.userPassword ?? '',
-      ownerPassword: opts.ownerPassword,
-      permissions: permBits,
-    });
-    return Buffer.from(result.asUint8Array());
+      const result = (doc as any).saveToBuffer('compress,incremental', {
+        userPassword: opts.userPassword ?? '',
+        ownerPassword: opts.ownerPassword,
+        permissions: permBits,
+      }) as import('mupdf').Buffer;
+      try {
+        return Buffer.from(result.asUint8Array());
+      } finally {
+        result.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
   }
 
   // ─── Compress ─────────────────────────────────────────────────────
@@ -1000,8 +1257,16 @@ export class PdfService {
         input,
         'application/pdf'
       ) as import('mupdf').PDFDocument;
-      const result = doc.saveToBuffer('compress,garbage=4,linearize');
-      return Buffer.from(result.asUint8Array());
+      try {
+        const result = doc.saveToBuffer('compress,garbage=4,linearize');
+        try {
+          return Buffer.from(result.asUint8Array());
+        } finally {
+          result.destroy();
+        }
+      } finally {
+        doc.destroy();
+      }
     }
 
     const dpi = opts.level === 'medium' ? 150 : 100;
@@ -1010,31 +1275,41 @@ export class PdfService {
 
     const srcDoc = mupdf.Document.openDocument(input, 'application/pdf');
     const newDoc = await PDFDocument.create();
+    try {
+      for (let i = 0; i < srcDoc.countPages(); i++) {
+        const page = srcDoc.loadPage(i);
+        try {
+          const pixmap = page.toPixmap(
+            mupdf.Matrix.scale(scale, scale),
+            mupdf.ColorSpace.DeviceRGB
+          );
+          try {
+            const jpegData = pixmap.asJPEG(quality);
+            const jpgImage = await newDoc.embedJpg(Buffer.from(jpegData));
 
-    for (let i = 0; i < srcDoc.countPages(); i++) {
-      const page = srcDoc.loadPage(i);
-      const pixmap = page.toPixmap(
-        mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB
-      );
+            const bounds = page.getBounds();
+            const pageWidth = bounds[2] - bounds[0];
+            const pageHeight = bounds[3] - bounds[1];
 
-      const jpegData = pixmap.asJPEG(quality);
-      const jpgImage = await newDoc.embedJpg(Buffer.from(jpegData));
+            const newPage = newDoc.addPage([pageWidth, pageHeight]);
+            newPage.drawImage(jpgImage, {
+              x: 0,
+              y: 0,
+              width: pageWidth,
+              height: pageHeight,
+            });
+          } finally {
+            pixmap.destroy();
+          }
+        } finally {
+          page.destroy();
+        }
+      }
 
-      const bounds = page.getBounds();
-      const pageWidth = bounds[2] - bounds[0];
-      const pageHeight = bounds[3] - bounds[1];
-
-      const newPage = newDoc.addPage([pageWidth, pageHeight]);
-      newPage.drawImage(jpgImage, {
-        x: 0,
-        y: 0,
-        width: pageWidth,
-        height: pageHeight,
-      });
+      return Buffer.from(await newDoc.save());
+    } finally {
+      srcDoc.destroy();
     }
-
-    return Buffer.from(await newDoc.save());
   }
 
   // ─── Metadata ─────────────────────────────────────────────────────

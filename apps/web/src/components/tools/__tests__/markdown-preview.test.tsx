@@ -218,12 +218,6 @@ describe('PdfResultPreview', () => {
     const { rerender, unmount } = renderPdfPreview(oldFile);
     await waitFor(() => {
       expect(pdfClientMocks.renderPdfPage).toHaveBeenCalledWith(oldPdf, 1, 0.7);
-    });
-    await act(async () => {
-      resolveOldMain?.(createCanvas(1, undefined, 'old-page'));
-      await oldMainRender;
-    });
-    await waitFor(() => {
       expect(pdfClientMocks.renderPdfPage).toHaveBeenCalledWith(oldPdf, 2, 0.2);
     });
 
@@ -245,18 +239,24 @@ describe('PdfResultPreview', () => {
         'src',
         'data:image/png;base64,new-page-1'
       );
+      expect(
+        within(screen.getByRole('button', { name: '第 2 页缩略图' })).getByRole(
+          'img'
+        )
+      ).toHaveAttribute('src', 'data:image/png;base64,new-page-2');
     });
 
     await act(async () => {
+      resolveOldMain?.(createCanvas(1, undefined, 'old-page'));
       resolveOldThumbnail?.(createCanvas(2, undefined, 'old-page'));
-      await oldThumbnailRender;
+      await Promise.all([oldMainRender, oldThumbnailRender]);
     });
 
-    expect(screen.getByRole('img', { name: '第 1 / 2 页' })).toHaveAttribute(
-      'src',
-      'data:image/png;base64,new-page-1'
-    );
     await waitFor(() => {
+      expect(screen.getByRole('img', { name: '第 1 / 2 页' })).toHaveAttribute(
+        'src',
+        'data:image/png;base64,new-page-1'
+      );
       expect(
         within(screen.getByRole('button', { name: '第 2 页缩略图' })).getByRole(
           'img'

@@ -1,7 +1,9 @@
 # Utils-Plane 项目 AI 开发指南
 
-> 本文件供 Claude Code / AI 助手阅读。完整项目事实见
-> [PROJECT_SPECS.md](./PROJECT_SPECS.md)，团队规范见 [AGENTS.md](./AGENTS.md)。
+@AGENTS.md
+
+> 本文件是 Claude Code 的项目入口。公共协作规则以 `AGENTS.md` 为准，项目事实以
+> [PROJECT_SPECS.md](./PROJECT_SPECS.md) 为准；本文件只补充 Claude 使用时的快速开始和代码导航。
 
 ## 项目基本信息
 
@@ -187,39 +189,9 @@ API 模块：
 - 当前任务类型包含
   `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`。
 
-## 开发约定
-
-- 项目文档默认使用中文；除非第三方协议、API 名称、代码标识或用户明确要求，新增或更新文档时不要改用英文。
-- Git 提交信息必须使用中文描述变更内容；允许保留 `feat`、`fix`、`docs` 等约定式提交前缀和 scope。
-- 不要提交 `.env.local`。
-- 本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行
-  `cd apps/api && bun run dev`，不要放进 Docker 容器运行。
-- 修改 API 后运行 `cd apps/api && bun run openapi:export`，必要时再运行
-  `cd packages/api-client && bun run generate`。
-- 修改数据库 schema 后运行 `bunx drizzle-kit generate` 和 `bunx drizzle-kit migrate`。
-- 前端新增文案必须同时更新中文和英文 message。
-- Windows PowerShell 访问 `apps/web/src/app/[locale]/(app)` 等路径时使用 `-LiteralPath` 或 Git
-  literal pathspec。
-- 仓库存在历史格式化差异，避免无关全仓格式化；优先只格式化本次触碰的文件。
-- 修改工具清单时同步检查
-  `apps/web/src/lib/tools/tool-metadata.ts`、`apps/web/messages/zh.json`、`apps/web/messages/en.json`、任务类型和 README/PROJECT_SPECS。
-- Docker 组合镜像内置 LibreOffice；如果 apt 源临时失败，先确认本地镜像和 tar 产物时间，再决定是否仅重新
-  `docker save`。
-
 ## 参考文档
 
-- [PROJECT_SPECS.md](./PROJECT_SPECS.md)
-- [AGENTS.md](./AGENTS.md)
-- [task/](./task/)
-
-### 日志文件规范
-
-- 本地运行产生的 `.log` 和 `.err` 文件统一放在项目根目录 `log/` 下；`log/` 不提交到 Git。
-
-### 核对截图规范
-
-- 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/`
-  下；不要直接保存到项目根目录。
-- 调用截图工具时显式使用 `artifacts/screenshots/<name>.png` 作为输出路径。
-- `artifacts/screenshots/` 只作为本地验证产物目录，不提交到 Git。
-- Playwright MCP 自动生成的 `.playwright-mcp/` 目录也属于本地验证产物，不提交到 Git。
+- [AGENTS.md](./AGENTS.md) - Codex 与 Claude 共用的公共协作规则
+- [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
+- [README.md](./README.md) - 项目介绍、启动方式和完整文档导航
+- [task/](./task/) - phase1-phase8 任务文档

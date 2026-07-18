@@ -3,6 +3,19 @@
 Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片、PDF、字体、文件管理和异步任务处理。项目包含 Next.js 前端、NestJS
 API、PostgreSQL、Redis、MinIO 和 BullMQ 队列。
 
+## 文档关系与维护入口
+
+| 文档               | 负责内容                                             | 何时修改                               |
+| ------------------ | ---------------------------------------------------- | -------------------------------------- |
+| `AGENTS.md`        | Codex 与 Claude 共用的编码、验证、提交和产物管理规则 | 修改公共 AI 协作规则时只改这里         |
+| `CLAUDE.md`        | Claude Code 入口、快速开始和代码导航                 | 只补充 Claude 专属导航，不复制公共规则 |
+| `PROJECT_SPECS.md` | 当前架构、技术栈、产品边界和部署事实                 | 项目事实发生变化时修改这里             |
+| `README.md`        | 面向开发者和部署人员的项目介绍、启动方式和文档导航   | 项目入口或使用流程发生变化时修改       |
+
+Codex 会直接读取 `AGENTS.md`；Claude Code 通过 `CLAUDE.md` 中的 `@AGENTS.md`
+导入同一份公共规则。普通 Markdown 链接只用于导航，不会替代规则导入。公共规则与项目事实发生冲突时，以
+`AGENTS.md` 的协作规则和 `PROJECT_SPECS.md` 的事实内容为准。
+
 ## 公开公测边界
 
 - 当前产品定位为免费受限公测；登录增强能力包括账号文件管理、任务历史、账号数据导出和注销，不代表付费权益已经上线。
@@ -501,9 +514,9 @@ bunx drizzle-kit migrate
 
 ## 文档
 
+- [AGENTS.md](./AGENTS.md) - Codex 与 Claude 共用的公共协作规则入口
+- [CLAUDE.md](./CLAUDE.md) - Claude Code 专属入口和快速开发导航
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
-- [AGENTS.md](./AGENTS.md) - 团队开发规范
-- [CLAUDE.md](./CLAUDE.md) - AI 开发指南
 - [task/](./task/) - phase1-phase8 任务文档
 
 ## 当前进度

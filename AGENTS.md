@@ -1,12 +1,14 @@
 # Utils-Plane 项目规范
 
-> 本文档定义团队编码规范和开发约定。项目事实以 [PROJECT_SPECS.md](./PROJECT_SPECS.md) 为准。
+> 本文档是 Codex 与 Claude 共用的公共协作规则入口，定义团队编码规范和开发约定。项目事实以
+> [PROJECT_SPECS.md](./PROJECT_SPECS.md) 为准。
 
 ## 文档结构
 
+- [README.md](./README.md) - 项目介绍、启动方式和文档导航
+- [AGENTS.md](./AGENTS.md) - Codex 与 Claude 共用的 AI 协作规则入口
+- [CLAUDE.md](./CLAUDE.md) - Claude Code 专属入口，通过 `@AGENTS.md` 导入本文档
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
-- [README.md](./README.md) - 项目介绍、启动方式和功能概览
-- [CLAUDE.md](./CLAUDE.md) - AI 助手开发指南
 - [task/](./task/) - phase1-phase8 任务文档
 
 ## 项目概述
@@ -15,8 +17,10 @@ Utils-Plane 是一个全栈文件处理工具平台，支持图片压缩/转换/
 
 ## 当前应用结构
 
-- `apps/web` - Next.js 14 App Router 前端，包含营销页、Dashboard、工具入口、具体工具页、文件/回收站、任务、设置和认证页面。
-- `apps/api` - NestJS 11 API，当前模块包括 `auth`、`files`、`tasks`、`health`，任务处理覆盖图片、PDF、字体、证件照和文档转 PDF。
+- `apps/web` - Next.js 14 App
+  Router 前端，包含营销页、Dashboard、工具入口、具体工具页、文件/回收站、任务、设置和认证页面。
+- `apps/api` - NestJS 11 API，当前模块包括
+  `auth`、`files`、`tasks`、`health`，任务处理覆盖图片、PDF、字体、证件照和文档转 PDF。
 - `packages/db` - Drizzle ORM schema、migration 和数据库客户端。
 - `packages/auth` - Better-Auth 配置、session 校验和可信 origin 工具。
 - `packages/validators` - Zod 请求验证 schema。
@@ -33,7 +37,9 @@ Utils-Plane 是一个全栈文件处理工具平台，支持图片压缩/转换/
 - 共享校验优先放在 `packages/validators`，运行时边界使用 Zod。
 - 前端文案需要同时维护 `apps/web/messages/zh.json` 和 `apps/web/messages/en.json`。
 - 项目文档默认使用中文；除非第三方协议、API 名称、代码标识或用户明确要求，新增或更新文档时不要改用英文。
-- 新增或调整工具页时，同步检查 `apps/web/src/lib/tools/tool-metadata.ts`、中英文 messages、任务类型、README 和 `PROJECT_SPECS.md`。
+- 新增或调整工具页时，同步检查
+  `apps/web/src/lib/tools/tool-metadata.ts`、中英文 messages、任务类型、README 和
+  `PROJECT_SPECS.md`。
 - 本地优先工具优先在浏览器完成处理；服务端任务才进入文件上传、任务队列和登录/存储流程。
 
 ### 文件命名规范
@@ -57,17 +63,13 @@ export type { File, NewFile, Task, NewTask } from './schema';
 export const auth;
 export type { Auth, Session, User };
 export async function verifySession(headers: Headers);
-export {
-  getAllowedCorsOrigins,
-  getTrustedOrigins,
-  isOriginAllowed,
-  normalizeOrigin,
-};
+export { getAllowedCorsOrigins, getTrustedOrigins, isOriginAllowed, normalizeOrigin };
 ```
 
 ## Git 提交规范
 
-提交信息必须使用中文描述变更内容；允许保留 `feat`、`fix`、`docs` 等约定式提交前缀和 scope，但冒号后的标题与正文默认使用中文。
+提交信息必须使用中文描述变更内容；允许保留 `feat`、`fix`、`docs`
+等约定式提交前缀和 scope，但冒号后的标题与正文默认使用中文。
 
 每次完成代码、配置或文档修改并通过必要验证后，必须创建 Git 提交，不要将已完成的修改长期留在工作区。提交标题和正文必须使用中文；只有用户明确要求暂不提交时才可以例外。
 
@@ -133,20 +135,26 @@ cp .env.example .env.local
 | MinIO API       | http://localhost:9000              |
 | MinIO Console   | http://localhost:9001              |
 
-关键环境变量见 `.env.example` 和 [PROJECT_SPECS.md](./PROJECT_SPECS.md)。访问 `/admin/queues` 还需要设置 `ADMIN_USER` 和 `ADMIN_PASSWORD`。
+关键环境变量见 `.env.example` 和 [PROJECT_SPECS.md](./PROJECT_SPECS.md)。访问 `/admin/queues`
+还需要设置 `ADMIN_USER` 和 `ADMIN_PASSWORD`。
 
-本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行 `cd apps/api && bun run dev`，不要放进 Docker 容器运行。
+本地 Docker Compose 只运行 PostgreSQL、Redis、MinIO 等依赖服务；API 开发态在宿主机本地执行
+`cd apps/api && bun run dev`，不要放进 Docker 容器运行。
 
-Markdown / Word 转 PDF 的服务端导出优先使用 LibreOffice。生产组合镜像已安装 `libreoffice-writer` 和 CJK 字体；宿主机本地运行 API 时，如果要验证服务端 DOCX/Markdown 高保真转换，请安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。Markdown 本地导出不依赖服务端。
+Markdown / Word 转 PDF 的服务端导出优先使用 LibreOffice。生产组合镜像已安装 `libreoffice-writer`
+和 CJK 字体；宿主机本地运行 API 时，如果要验证服务端 DOCX/Markdown 高保真转换，请安装 LibreOffice 或设置
+`LIBREOFFICE_BIN`。Markdown 本地导出不依赖服务端。
 
 ## 注意事项
 
 1. 不要提交 `.env.local`。
 2. 修改 schema 后执行 migration。
 3. API 修改后重新导出 OpenAPI。
-4. Windows 开发优先使用 Git Bash 或 WSL；PowerShell 路径中包含 `[locale]`、`(app)` 时要使用 literal path。
+4. Windows 开发优先使用 Git Bash 或 WSL；PowerShell 路径中包含 `[locale]`、`(app)` 时要使用 literal
+   path。
 5. `BETTER_AUTH_SECRET` 必须使用 `openssl rand -base64 32` 生成。
-6. Docker 发布包只用于本地上传服务器，`utils-plane-all.tar`、`utils-plane-api.tar`、`utils-plane-offline-all.tar` 不提交到 Git。
+6. Docker 发布包只用于本地上传服务器，`utils-plane-all.tar`、`utils-plane-api.tar`、`utils-plane-offline-all.tar`
+   不提交到 Git。
 
 ### 日志文件规范
 
@@ -154,7 +162,8 @@ Markdown / Word 转 PDF 的服务端导出优先使用 LibreOffice。生产组�
 
 ### 核对截图规范
 
-- 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/` 下；不要直接保存到项目根目录。
+- 本地核对截图、Playwright 截图和页面视觉对比图统一放在 `artifacts/screenshots/`
+  下；不要直接保存到项目根目录。
 - 调用截图工具时显式使用 `artifacts/screenshots/<name>.png` 作为输出路径。
 - `artifacts/screenshots/` 只作为本地验证产物目录，不提交到 Git。
 - Playwright MCP 自动生成的 `.playwright-mcp/` 目录也属于本地验证产物，不提交到 Git。

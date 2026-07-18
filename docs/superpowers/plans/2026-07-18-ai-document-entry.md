@@ -202,3 +202,369 @@ git log -1 --oneline
 
 预期：除用户原有且未纳入本次范围的改动外没有新增未提交文件，最新提交为
 `docs: 统一 AI 协作文档入口`。
+
+---
+
+# Markdown / Word 转 PDF 稳定性与多页预览实施计划
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 修复生产环境 Markdown 服务端 PDF 的空白首页/内容缺失问题，并为 PDF 结果预览增加多页翻页和完整缩略图。
+
+**Architecture:** 保留 LibreOffice 作为 Markdown 高保真转换首选，为每次转换隔离 user profile，并按页校验和清理输出；校验失败时尝试第二种 LibreOffice filter，最后使用现有 fallback。前端在 `PdfResultPreview` 内管理当前页、主 canvas 和全部缩略图，使用现有 `pdf-client` 渲染 API，不改变任务或文件接口。
+
+**Tech Stack:** NestJS、Bun test、pdf-lib、MuPDF、LibreOffice、Next.js 14、React 18、pdfjs-dist、Vitest、Testing Library、Prettier。
+
+**范围约束:** 保留用户现有 `apps/web/package.json` 端口修改，不暂存 `.env*`、Docker tar 包或其他无关文件。每个任务完成并通过对应验证后创建中文 Git 提交。
+
+### Task 1: 为服务端输出校验建立失败测试
+
+**Files:**
+
+- Modify: `apps/api/src/modules/tasks/services/pdf.service.test.ts`
+- Test target: `apps/api/src/modules/tasks/services/pdf.service.ts`
+
+- [ ] **Step 1: 添加可生成指定页面文本的测试辅助函数**
+
+在现有 `createMinimalDocx` 辅助函数之后添加：
+
+```typescript
+async function createTextPdf(pages: string[]): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+
+  for (const text of pages) {
+    const page = doc.addPage([595.28, 841.89]);
+    if (text) {
+      page.drawText(text, { x: 56, y: 780, size: 12, font });
+    }
+  }
+
+  return Buffer.from(await doc.save());
+}
+```
+
+同时把导入改为 `import { PDFDocument, StandardFonts } from 'pdf-lib';`。
+
+- [ ] **Step 2: 写首页空白和正文缺失的回归测试**
+
+在 `describe('PdfService.documentToPdf', ...)` 中添加以下两个测试。测试通过 monkey patch 控制 LibreOffice 输出，模拟线上坏结果：
+
+```typescript
+it('removes leading blank pages from an otherwise valid Markdown PDF', async () => {
+  const service = new PdfService();
+  const originalConverter = (service as any).convertWithLibreOffice;
+  (service as any).convertWithLibreOffice = async (
+    sourcePath: string,
+    outputDir: string
+  ) => {
+    const outputPath = join(
+      outputDir,
+      sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+    );
+    await writeFile(
+      outputPath,
+      await createTextPdf(['', 'Expected title and body'])
+    );
+    return outputPath;
+  };
+
+  try {
+    const pdf = await service.documentToPdf(
+      {
+        buffer: Buffer.from('# Expected title\n\nExpected title and body'),
+        filename: 'source.md',
+      },
+      { sourceFormat: 'markdown' }
+    );
+
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
+    await expect(service.toText(pdf, { format: 'text' })).resolves.toContain(
+      'Expected title and body'
+    );
+  } finally {
+    (service as any).convertWithLibreOffice = originalConverter;
+  }
+});
+
+it('falls back when a LibreOffice PDF is missing Markdown content', async () => {
+  const service = new PdfService();
+  const originalConverter = (service as any).convertWithLibreOffice;
+  (service as any).convertWithLibreOffice = async (
+    sourcePath: string,
+    outputDir: string
+  ) => {
+    const outputPath = join(
+      outputDir,
+      sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+    );
+    await writeFile(outputPath, await createTextPdf(['Only one fragment']));
+    return outputPath;
+  };
+
+  try {
+    const pdf = await service.documentToPdf(
+      {
+        buffer: Buffer.from('# Required heading\n\nContent that must survive'),
+        filename: 'source.md',
+      },
+      { sourceFormat: 'markdown' }
+    );
+    const text = await service.toText(pdf, { format: 'text' });
+
+    expect(text).toContain('Required heading');
+    expect(text).toContain('Content that must survive');
+  } finally {
+    (service as any).convertWithLibreOffice = originalConverter;
+  }
+});
+```
+
+- [ ] **Step 3: 运行服务端测试确认新测试先失败**
+
+运行：
+
+```powershell
+bun --cwd apps/api test src/modules/tasks/services/pdf.service.test.ts
+```
+
+预期：现有测试通过，但新增测试失败；首页空白测试仍得到 2 页，正文缺失测试仍得到 `Only one fragment`。这证明测试捕获的是当前缺陷而不是拼写错误。
+
+- [ ] **Step 4: 提交失败测试**
+
+确认 `git diff --name-only` 只有 `apps/api/src/modules/tasks/services/pdf.service.test.ts` 后运行：
+
+```powershell
+git commit --only -m "test: 覆盖文档 PDF 空白页和内容缺失" -- apps/api/src/modules/tasks/services/pdf.service.test.ts
+```
+
+### Task 2: 实现隔离的 LibreOffice 转换和严格 Markdown 校验
+
+**Files:**
+
+- Modify: `apps/api/src/modules/tasks/services/pdf.service.ts:90-170,386-455,869-910`
+- Test: `apps/api/src/modules/tasks/services/pdf.service.test.ts`
+
+- [ ] **Step 1: 扩展 HTML 文档结构测试**
+
+在 `buildMarkdownDocumentHtml` 的测试中增加：
+
+```typescript
+expect(html).toContain('<html lang="zh-CN">');
+expect(html).toContain('<main class="markdown-document">');
+```
+
+- [ ] **Step 2: 添加可测试的 LibreOffice 参数构造函数**
+
+在服务文件中从 `node:url` 导入 `pathToFileURL`，并添加导出函数：
+
+```typescript
+export function buildLibreOfficeArgs(
+  sourcePath: string,
+  outputDir: string,
+  profileDir: string,
+  filter: 'pdf:writer_pdf_Export' | 'pdf'
+): string[] {
+  return [
+    `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
+    '--headless',
+    '--invisible',
+    '--nodefault',
+    '--nolockcheck',
+    '--nologo',
+    '--nofirststartwizard',
+    '--convert-to',
+    filter,
+    '--outdir',
+    outputDir,
+    sourcePath,
+  ];
+}
+```
+
+在服务端测试中断言参数包含 `-env:UserInstallation=file:///`、`--nodefault` 和传入的 filter。该纯函数不启动 LibreOffice，测试在 Windows 和 Linux 路径下都可运行。
+
+- [ ] **Step 3: 实现 Markdown 文本片段提取和 PDF 页面文本读取**
+
+新增内部辅助函数，规则固定如下：先把 Markdown 转成已安全清理的 HTML，在块级结束标签前插入换行，移除其余标签并解码常见 HTML 实体；再把连续空白归一化，每个长度至少为 2 的非空块作为待校验片段。PDF 页面文本使用现有 `getMupdf()`，按 `doc.countPages()` 顺序读取 `page.toStructuredText().asText()`。
+
+```typescript
+function normalizeDocumentText(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+```
+
+片段提取必须使用和 HTML 生成相同的 `marked` 配置，避免校验文本与实际导出内容不一致。
+
+- [ ] **Step 4: 实现前置空白页清理和严格校验**
+
+增加 `normalizeMarkdownPdfOutput(pdf, markdown)`：
+
+1. 读取每页文本，找到第一张非空页；全部为空则抛出 `Error('LibreOffice produced a blank Markdown PDF')`。
+2. 将所有 Markdown 片段归一化后逐一检查是否出现在从第一张非空页开始的 PDF 文本中；缺少任何片段就抛出带缺失片段数量的错误。
+3. 如果第一张非空页不是第 1 页，使用 `PDFDocument.load`、`copyPages` 复制剩余页面生成新 PDF，只删除前置空白页。
+4. 返回校验后的 PDF buffer。
+
+将 `ensureMarkdownPdfHasContent` 替换为该函数，保留 DOCX fallback 不变。
+
+- [ ] **Step 5: 实现隔离 profile 和双 filter 转换**
+
+将 `convertWithLibreOffice` 改为接收 `filter` 参数。每次调用在任务临时目录下创建独立的输出目录和 profile 目录，把 `buildLibreOfficeArgs(...)` 传给 `execFileAsync`，成功后只返回本次输出路径。`documentToPdf` 的 Markdown 分支按 `['pdf:writer_pdf_Export', 'pdf']` 顺序尝试：读取输出、调用 `normalizeMarkdownPdfOutput`，成功立即返回；任一命令异常或校验异常则进入下一 filter。两次都失败才调用现有 `renderMarkdownFallbackPdf`。DOCX 只调用一次显式 Writer filter。
+
+- [ ] **Step 6: 运行服务端测试确认变绿**
+
+运行：
+
+```powershell
+bun --cwd apps/api test src/modules/tasks/services/pdf.service.test.ts
+```
+
+预期：该文件所有测试通过，新增首页空白、正文缺失和命令参数测试均为 PASS。
+
+- [ ] **Step 7: 提交服务端修复**
+
+```powershell
+git commit --only -m "fix: 修复 Markdown 服务端 PDF 输出" -- apps/api/src/modules/tasks/services/pdf.service.ts apps/api/src/modules/tasks/services/pdf.service.test.ts
+```
+
+### Task 3: 为多页结果预览建立失败测试
+
+**Files:**
+
+- Modify: `apps/web/src/components/tools/__tests__/markdown-preview.test.tsx`
+- Test target: `apps/web/src/components/tools/pdf-result-preview.tsx`
+
+- [ ] **Step 1: 添加 pdf-client mock 和 canvas 数据 URL mock**
+
+在现有测试文件中导入 `fireEvent`、`waitFor`、`vi` 和 `PdfResultPreview`，并添加：
+
+```typescript
+vi.mock('@/lib/processing/pdf-client', () => ({
+  loadPdf: vi.fn(async () => ({ numPages: 3 })),
+  renderPdfPage: vi.fn(async (_pdf, pageNumber, _scale, targetCanvas) => {
+    const canvas = targetCanvas ?? document.createElement('canvas');
+    Object.defineProperty(canvas, 'width', { configurable: true, value: 600 });
+    Object.defineProperty(canvas, 'height', { configurable: true, value: 840 });
+    canvas.toDataURL = () => `data:image/png;base64,page-${pageNumber}`;
+    return canvas;
+  }),
+}));
+```
+
+- [ ] **Step 2: 写三页翻页、缩略图和边界测试**
+
+渲染 `PdfResultPreview` 时传入 `previousLabel="上一页"`、`nextLabel="下一页"`、`pageIndicator={(page,total) => `第 ${page} / ${total} 页`}`、`thumbnailLabel={page => `第 ${page} 页缩略图`}` 和 `loadingLabel="加载中"`。断言：等待后有 3 个缩略图按钮；初始页码为第 1/3 页且上一页禁用；点击下一页后为第 2/3 页；点击第 3 页缩略图后为第 3/3 页且下一页禁用；主图 `src` 使用 page-3 data URL。
+
+- [ ] **Step 3: 运行 Web 定向测试确认先失败**
+
+```powershell
+bun --cwd apps/web test src/components/tools/__tests__/markdown-preview.test.tsx
+```
+
+预期：原有 Markdown 测试通过，新增 PDF 预览测试失败，因为当前组件没有分页按钮、缩略图或对应 props。
+
+- [ ] **Step 4: 提交前端失败测试**
+
+```powershell
+git commit --only -m "test: 覆盖 PDF 多页预览交互" -- apps/web/src/components/tools/__tests__/markdown-preview.test.tsx
+```
+
+### Task 4: 实现多页翻页和完整缩略图
+
+**Files:**
+
+- Modify: `apps/web/src/components/tools/pdf-result-preview.tsx`
+- Modify: `apps/web/src/app/[locale]/(app)/pdf/from-document/page.tsx`
+- Modify: `apps/web/messages/zh.json`
+- Modify: `apps/web/messages/en.json`
+- Test: `apps/web/src/components/tools/__tests__/markdown-preview.test.tsx`
+
+- [ ] **Step 1: 扩展 `PdfResultPreviewProps` 和状态**
+
+新增 `previousLabel`、`nextLabel`、`pageIndicator`、`thumbnailLabel`、`loadingLabel` props；状态包含 `currentPage`、`mainCanvas`、`thumbnails: Record<number, HTMLCanvasElement>`、`thumbnailErrors` 和 `error`。文件变化时清空旧状态并把当前页重置为 1。
+
+- [ ] **Step 2: 实现 PDF 加载、主页面渲染和有限并发缩略图队列**
+
+加载后设置 `pdf.numPages`，主页面用 `renderPdfPage(pdf, currentPage, 0.7)`；缩略图用 `renderPdfPage(pdf, page, 0.2)`，最多同时运行 3 个 worker。每个异步回调先检查 `cancelled`，组件卸载时只设置取消标记，不再写入状态。加载新文件时若旧文档提供 `destroy()`，调用并忽略其清理异常。
+
+- [ ] **Step 3: 添加导航和完整页面布局**
+
+主预览使用：
+
+```tsx
+<div className="max-h-[560px] overflow-auto rounded border border-border bg-background p-2">
+  {mainCanvas && (
+    <PdfPagePreviewImage
+      canvas={mainCanvas}
+      alt={pageIndicator(currentPage, pdf.numPages)}
+      className="mx-auto h-auto max-h-[520px] max-w-full w-auto object-contain"
+    />
+  )}
+</div>
+```
+
+页面下方放上一页/下一页按钮和页码；缩略图使用 `button` 网格，图片只设置 `h-auto max-w-full w-auto object-contain`，容器 `max-h-[360px] overflow-y-auto`，不设置会裁切页面的固定 aspect ratio。当前页按钮添加 `aria-current="page"` 和边框高亮。
+
+- [ ] **Step 4: 接入中英文文案**
+
+在两个 message 文件 `PdfTool.fromDocument` 下增加同名键。中文值为 `上一页`、`下一页`、`第 {page} / {total} 页`、`第 {page} 页缩略图`、`正在加载 PDF...`；英文值为 `Previous page`、`Next page`、`Page {page} of {total}`、`Thumbnail for page {page}`、`Loading PDF...`。页面通过 `t(...)` 生成函数并传给组件，不能在组件内硬编码文案。
+
+- [ ] **Step 5: 运行 Web 定向测试确认变绿**
+
+```powershell
+bun --cwd apps/web test src/components/tools/__tests__/markdown-preview.test.tsx
+```
+
+预期：Markdown 与 PDF 预览测试全部 PASS，且无 React act 警告。
+
+- [ ] **Step 6: 提交前端修复**
+
+```powershell
+git commit --only -m "fix: 支持 PDF 多页翻页和完整缩略图" -- apps/web/src/components/tools/pdf-result-preview.tsx "apps/web/src/app/[locale]/(app)/pdf/from-document/page.tsx" apps/web/messages/zh.json apps/web/messages/en.json apps/web/src/components/tools/__tests__/markdown-preview.test.tsx
+```
+
+### Task 5: 全量验证与收尾
+
+**Files:**
+
+- Test: `apps/api/src/modules/tasks/services/pdf.service.test.ts`
+- Test: `apps/web/src/components/tools/__tests__/markdown-preview.test.tsx`
+- Verify: `apps/api/src/modules/tasks/services/pdf.service.ts`
+- Verify: `apps/web/src/components/tools/pdf-result-preview.tsx`
+
+- [ ] **Step 1: 运行 API 与 Web 全量测试**
+
+```powershell
+bun run test:api
+bun run test:web
+```
+
+预期：两个命令均以退出码 0 完成，失败数为 0。
+
+- [ ] **Step 2: 运行格式和差异门禁**
+
+```powershell
+bunx prettier --check apps/api/src/modules/tasks/services/pdf.service.ts apps/api/src/modules/tasks/services/pdf.service.test.ts apps/web/src/components/tools/pdf-result-preview.tsx apps/web/src/components/tools/__tests__/markdown-preview.test.tsx "apps/web/src/app/[locale]/(app)/pdf/from-document/page.tsx" apps/web/messages/zh.json apps/web/messages/en.json
+git diff --check
+```
+
+预期：Prettier 输出 `All matched files use Prettier code style!`，`git diff --check` 无输出。
+
+- [ ] **Step 3: 检查提交范围和工作区**
+
+```powershell
+git status --short
+git log -5 --oneline
+```
+
+预期：只剩用户原有的 `apps/web/package.json` 修改；本次提交不包含 `.env*`、Docker tar 包或规格之外的文件。若验证发现代码仍有未提交修改，先按文件范围创建中文修复提交再结束。

@@ -133,14 +133,7 @@ const MARKDOWN_HTML_STYLE = `
 `;
 
 function stripUnsafeHtml(html: string): string {
-  return html
-    .replace(
-      /<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
-      ''
-    )
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*\/?>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
-    .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, '');
+  return sanitizeHtml(html);
 }
 
 function parseMarkdown(markdown: string): string {
@@ -193,71 +186,158 @@ function extractMarkdownTextFragments(markdown: string): string[] {
     .filter(Boolean);
 }
 
-const HIDDEN_HTML_ELEMENTS = new Set([
+const UNSAFE_HTML_ELEMENTS = new Set([
   'embed',
-  'head',
   'iframe',
   'link',
   'meta',
-  'noscript',
   'object',
   'script',
   'style',
+]);
+
+const HIDDEN_HTML_ELEMENTS = new Set([
+  ...UNSAFE_HTML_ELEMENTS,
+  'head',
+  'noscript',
   'template',
   'title',
 ]);
 
 const VOID_HTML_ELEMENTS = new Set(['embed', 'link', 'meta']);
 
+type HtmlToken =
+  | { type: 'text'; value: string }
+  | { type: 'markup'; value: string }
+  | {
+      type: 'tag';
+      value: string;
+      tagName: string;
+      isClosing: boolean;
+      isSelfClosing: boolean;
+    };
+
+function sanitizeHtml(html: string): string {
+  let result = '';
+  const unsafeElements: string[] = [];
+
+  for (const token of tokenizeHtml(html)) {
+    if (token.type !== 'tag') {
+      if (unsafeElements.length === 0) result += token.value;
+      continue;
+    }
+
+    if (token.isClosing) {
+      const unsafeIndex = unsafeElements.lastIndexOf(token.tagName);
+      if (unsafeIndex !== -1) {
+        unsafeElements.splice(unsafeIndex);
+        continue;
+      }
+    } else if (
+      UNSAFE_HTML_ELEMENTS.has(token.tagName) &&
+      !VOID_HTML_ELEMENTS.has(token.tagName) &&
+      !token.isSelfClosing
+    ) {
+      unsafeElements.push(token.tagName);
+    }
+
+    if (unsafeElements.length > 0 || UNSAFE_HTML_ELEMENTS.has(token.tagName)) {
+      continue;
+    }
+
+    result += sanitizeHtmlTagAttributes(token.value);
+  }
+
+  return result;
+}
+
+function sanitizeHtmlTagAttributes(tag: string): string {
+  return tag
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    .replace(
+      /\s(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi,
+      ''
+    );
+}
+
 function extractVisibleHtmlText(html: string): string {
   let result = '';
   const hiddenElements: string[] = [];
 
-  for (let index = 0; index < html.length; ) {
-    if (html[index] !== '<') {
-      if (hiddenElements.length === 0) result += html[index];
-      index++;
+  for (const token of tokenizeHtml(html)) {
+    if (token.type === 'text') {
+      if (hiddenElements.length === 0) result += token.value;
+      continue;
+    }
+    if (token.type === 'markup') {
       continue;
     }
 
-    if (html.startsWith('<!--', index)) {
-      const commentEnd = html.indexOf('-->', index + 4);
-      index = commentEnd === -1 ? html.length : commentEnd + 3;
-      continue;
-    }
-
-    const tagEnd = findHtmlTagEnd(html, index + 1);
-    if (tagEnd === -1) {
-      if (hiddenElements.length === 0) result += '<';
-      index++;
-      continue;
-    }
-
-    const tag = html.slice(index + 1, tagEnd);
-    const tagMatch = tag.match(/^\s*(\/?)\s*([a-z][\w:-]*)/i);
-    if (!tagMatch) {
-      index = tagEnd + 1;
-      continue;
-    }
-
-    const isClosing = tagMatch[1] === '/';
-    const tagName = tagMatch[2]!.toLowerCase();
-    if (isClosing) {
-      const hiddenIndex = hiddenElements.lastIndexOf(tagName);
+    if (token.isClosing) {
+      const hiddenIndex = hiddenElements.lastIndexOf(token.tagName);
       if (hiddenIndex !== -1) hiddenElements.splice(hiddenIndex);
     } else if (
-      HIDDEN_HTML_ELEMENTS.has(tagName) &&
-      !VOID_HTML_ELEMENTS.has(tagName) &&
-      !/\/\s*$/.test(tag)
+      HIDDEN_HTML_ELEMENTS.has(token.tagName) &&
+      !VOID_HTML_ELEMENTS.has(token.tagName) &&
+      !token.isSelfClosing
     ) {
-      hiddenElements.push(tagName);
+      hiddenElements.push(token.tagName);
     }
 
     if (hiddenElements.length === 0) result += '\n';
-    index = tagEnd + 1;
   }
 
   return result;
+}
+
+function* tokenizeHtml(html: string): Generator<HtmlToken> {
+  let index = 0;
+
+  while (index < html.length) {
+    const tagStart = html.indexOf('<', index);
+    if (tagStart === -1) {
+      yield { type: 'text', value: html.slice(index) };
+      return;
+    }
+    if (tagStart > index) {
+      yield { type: 'text', value: html.slice(index, tagStart) };
+    }
+
+    if (html.startsWith('<!--', tagStart)) {
+      const commentEnd = html.indexOf('-->', tagStart + 4);
+      if (commentEnd === -1) {
+        yield { type: 'markup', value: html.slice(tagStart) };
+        return;
+      }
+      yield {
+        type: 'markup',
+        value: html.slice(tagStart, commentEnd + 3),
+      };
+      index = commentEnd + 3;
+      continue;
+    }
+
+    const tagEnd = findHtmlTagEnd(html, tagStart + 1);
+    if (tagEnd === -1) {
+      yield { type: 'text', value: html.slice(tagStart) };
+      return;
+    }
+
+    const value = html.slice(tagStart, tagEnd + 1);
+    const tagMatch = value.match(/^<\s*(\/?)\s*([a-z][\w:-]*)/i);
+    if (!tagMatch) {
+      yield { type: 'markup', value };
+    } else {
+      yield {
+        type: 'tag',
+        value,
+        tagName: tagMatch[2]!.toLowerCase(),
+        isClosing: tagMatch[1] === '/',
+        isSelfClosing: /\/\s*>$/.test(value),
+      };
+    }
+    index = tagEnd + 1;
+  }
 }
 
 function findHtmlTagEnd(html: string, start: number): number {

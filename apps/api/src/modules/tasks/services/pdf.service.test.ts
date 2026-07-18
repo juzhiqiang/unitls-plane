@@ -123,6 +123,48 @@ describe('buildMarkdownDocumentHtml', () => {
     expect(html).not.toContain('<script>');
     expect(html).toContain('<h1>Safe</h1>');
   });
+
+  it('removes an unsafe tag whose quoted attribute contains a closing delimiter', () => {
+    const html = buildMarkdownDocumentHtml(
+      '<meta title="hidden > metadata">\nVisible body'
+    );
+
+    expect(html).toContain('Visible body');
+    expect(html).not.toContain('hidden');
+    expect(html).not.toContain('metadata');
+  });
+
+  it('keeps unsafe elements and executable attributes out of document HTML', () => {
+    const html = buildMarkdownDocumentHtml(
+      [
+        '<script title="unsafe > script-marker">script payload</script>',
+        '<style title="unsafe > style-marker">style payload</style>',
+        '<iframe title="unsafe > iframe-marker">iframe payload</iframe>',
+        '<object title="unsafe > object-marker">object payload</object>',
+        '<embed title="unsafe > embed-marker">',
+        '<link title="unsafe > link-marker">',
+        '<meta title="unsafe > meta-marker">',
+        '<a href=" javascript:alert(1)" onclick="run(\'a > b\')">Visible link</a>',
+        '<img src="javascript:alert(2)" onerror="run(\'c > d\')">',
+      ].join('\n')
+    );
+
+    expect(html).toContain('Visible link');
+    for (const unsafeText of [
+      'script payload',
+      'style payload',
+      'iframe payload',
+      'object payload',
+      'embed-marker',
+      'link-marker',
+      'meta-marker',
+      'onclick=',
+      'onerror=',
+      'javascript:',
+    ]) {
+      expect(html).not.toContain(unsafeText);
+    }
+  });
 });
 
 describe('PdfService.documentToPdf', () => {

@@ -61,6 +61,30 @@ function renderPdfPreview(file = createFile()) {
   );
 }
 
+function renderPdfPreviewWithLabels(file = createFile()) {
+  return render(
+    <PdfResultPreview
+      file={file}
+      label="result.pdf"
+      previousLabel="Previous"
+      nextLabel="Next"
+      pageIndicator={(page, total) => `Page ${page} of ${total}`}
+      thumbnailLabel={page => `Thumbnail ${page}`}
+      loadingLabel="Loading PDF"
+    />
+  );
+}
+
+function createTrackedCanvas(pageNumber: number) {
+  const canvas = createCanvas(pageNumber);
+  const toDataURL = vi.fn(() => `data:image/png;base64,tracked-${pageNumber}`);
+  Object.defineProperty(canvas, 'toDataURL', {
+    configurable: true,
+    value: toDataURL,
+  });
+  return { canvas, toDataURL };
+}
+
 beforeEach(() => {
   pdfClientMocks.loadPdf.mockReset();
   pdfClientMocks.renderPdfPage.mockReset();
@@ -111,10 +135,12 @@ describe('PdfResultPreview', () => {
     expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '下一页' })).toBeEnabled();
     expect(firstThumbnail).toHaveAttribute('aria-current', 'page');
-    expect(within(firstThumbnail).getByRole('img')).toHaveAttribute(
-      'src',
-      'data:image/png;base64,page-1'
-    );
+    await waitFor(() => {
+      expect(within(firstThumbnail).getByRole('img')).toHaveAttribute(
+        'src',
+        'data:image/png;base64,page-1'
+      );
+    });
     expect(screen.getByRole('img', { name: '第 1 / 3 页' })).toHaveAttribute(
       'src',
       'data:image/png;base64,page-1'
@@ -168,6 +194,9 @@ describe('PdfResultPreview', () => {
 
     const thumbnail = await screen.findByRole('button', {
       name: '第 1 页缩略图',
+    });
+    await waitFor(() => {
+      expect(within(thumbnail).getByRole('img')).toBeInTheDocument();
     });
     const image = within(thumbnail).getByRole('img');
 
@@ -342,5 +371,105 @@ describe('PdfResultPreview', () => {
         'data:image/png;base64,page-2'
       );
     });
+  });
+
+  it('keeps the thumbnail grid visible while thumbnail renders are pending', async () => {
+    const deferredRenders: Array<{
+      pageNumber: number;
+      resolve: (canvas: HTMLCanvasElement) => void;
+    }> = [];
+    const pdf = createPdf(3);
+    pdfClientMocks.loadPdf.mockResolvedValue(pdf);
+    pdfClientMocks.renderPdfPage.mockImplementation(
+      async (_pdf: MockPdf, pageNumber: number, scale: number) => {
+        if (scale === 0.2) {
+          return new Promise<HTMLCanvasElement>(resolve => {
+            deferredRenders.push({ pageNumber, resolve });
+          });
+        }
+        return createCanvas(pageNumber);
+      }
+    );
+
+    const view = renderPdfPreviewWithLabels();
+    try {
+      await screen.findByText('3p');
+      const thumbnailButtons = screen.getAllByRole('button', {
+        name: /Thumbnail \d/,
+      });
+      expect(thumbnailButtons).toHaveLength(3);
+      for (const button of thumbnailButtons) {
+        expect(button).toBeVisible();
+        expect(within(button).getByText('Loading PDF')).toBeInTheDocument();
+      }
+      expect(
+        pdfClientMocks.renderPdfPage.mock.calls.filter(call => call[2] === 0.7)
+      ).toHaveLength(1);
+      expect(
+        pdfClientMocks.renderPdfPage.mock.calls.filter(call => call[2] === 0.2)
+      ).toHaveLength(3);
+    } finally {
+      await act(async () => {
+        for (const { pageNumber, resolve } of deferredRenders) {
+          resolve(createCanvas(pageNumber));
+        }
+        await Promise.resolve();
+      });
+      view.unmount();
+    }
+  });
+
+  it('does not re-encode completed thumbnails when navigating pages', async () => {
+    const pdf = createPdf(3);
+    const thumbnailCanvases = new Map<
+      number,
+      ReturnType<typeof createTrackedCanvas>
+    >();
+    pdfClientMocks.loadPdf.mockResolvedValue(pdf);
+    pdfClientMocks.renderPdfPage.mockImplementation(
+      async (_pdf: MockPdf, pageNumber: number, scale: number) => {
+        if (scale === 0.2) {
+          const tracked = createTrackedCanvas(pageNumber);
+          thumbnailCanvases.set(pageNumber, tracked);
+          return tracked.canvas;
+        }
+        return createCanvas(pageNumber);
+      }
+    );
+
+    renderPdfPreviewWithLabels();
+
+    const firstThumbnail = await screen.findByRole('button', {
+      name: 'Thumbnail 1',
+    });
+    await waitFor(() => {
+      expect(within(firstThumbnail).getByRole('img')).toBeInTheDocument();
+      expect(thumbnailCanvases.get(1)?.toDataURL).toHaveBeenCalled();
+    });
+    const firstThumbnailDataUrlCalls =
+      thumbnailCanvases.get(1)!.toDataURL.mock.calls.length;
+
+    expect(pdfClientMocks.renderPdfPage).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      0.7
+    );
+    expect(pdfClientMocks.renderPdfPage).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      0.2
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Page 2 of 3' })).toHaveAttribute(
+        'src',
+        'data:image/png;base64,page-2'
+      );
+    });
+
+    expect(thumbnailCanvases.get(1)!.toDataURL).toHaveBeenCalledTimes(
+      firstThumbnailDataUrlCalls
+    );
   });
 });

@@ -696,6 +696,43 @@ describe('PdfService.documentToPdf', () => {
     }
   });
 
+  it('does not fall back solely for a one-character Markdown fragment', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    const originalFallback = (service as any).renderMarkdownFallbackPdf;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(outputPath, await createTextPdf(['Other body']));
+      return outputPath;
+    };
+    (service as any).renderMarkdownFallbackPdf = async () => {
+      throw new Error('unexpected fallback');
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from('# 中\n\nOther body', 'utf8'),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(text).toContain('Other body');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
+      (service as any).renderMarkdownFallbackPdf = originalFallback;
+    }
+  });
+
   it('falls back when a Markdown PDF omits visible noscript text', async () => {
     const service = new PdfService();
     const originalConverter = (service as any).convertWithLibreOffice;

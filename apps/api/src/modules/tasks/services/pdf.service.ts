@@ -189,7 +189,7 @@ function extractMarkdownTextFragments(markdown: string): string[] {
   return extractVisibleHtmlText(html)
     .split(/\n+/)
     .map(normalizeDocumentText)
-    .filter(Boolean);
+    .filter(fragment => fragment.length >= 2);
 }
 
 const UNSAFE_HTML_ELEMENTS = new Set([

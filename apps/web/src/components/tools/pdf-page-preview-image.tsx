@@ -1,5 +1,7 @@
 'use client';
 
+import { memo } from 'react';
+
 interface PdfPagePreviewImageProps {
   canvas: HTMLCanvasElement;
   alt: string;
@@ -7,7 +9,7 @@ interface PdfPagePreviewImageProps {
   draggable?: boolean;
 }
 
-export function PdfPagePreviewImage({
+export const PdfPagePreviewImage = memo(function PdfPagePreviewImage({
   canvas,
   alt,
   className,
@@ -25,4 +27,4 @@ export function PdfPagePreviewImage({
       draggable={draggable}
     />
   );
-}
+});

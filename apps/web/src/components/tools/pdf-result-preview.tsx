@@ -47,7 +47,6 @@ export function PdfResultPreview({
   >({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [thumbnailsLoading, setThumbnailsLoading] = useState(false);
   const activePdfRef = useRef<PDFDocumentProxy | null>(null);
   const renderPdfPageRef = useRef<RenderPdfPage | null>(null);
 
@@ -60,7 +59,6 @@ export function PdfResultPreview({
     setThumbnailErrors({});
     setError(null);
     setLoading(true);
-    setThumbnailsLoading(false);
     renderPdfPageRef.current = null;
 
     const previousPdf = activePdfRef.current;
@@ -120,10 +118,11 @@ export function PdfResultPreview({
     if (!pdf || !renderPdfPage) return;
     let cancelled = false;
     let nextPage = 1;
+    const nextThumbnails: Record<number, HTMLCanvasElement> = {};
+    const nextThumbnailErrors: Record<number, string> = {};
 
     setThumbnails({});
     setThumbnailErrors({});
-    setThumbnailsLoading(true);
 
     const renderNext = async () => {
       while (!cancelled) {
@@ -132,14 +131,11 @@ export function PdfResultPreview({
         try {
           const canvas = await renderPdfPage(pdf, page, 0.2);
           if (!cancelled) {
-            setThumbnails(previous => ({ ...previous, [page]: canvas }));
+            nextThumbnails[page] = canvas;
           }
         } catch (err) {
           if (!cancelled) {
-            setThumbnailErrors(previous => ({
-              ...previous,
-              [page]: (err as Error).message,
-            }));
+            nextThumbnailErrors[page] = (err as Error).message;
           }
         }
       }
@@ -148,7 +144,10 @@ export function PdfResultPreview({
     void Promise.all(
       Array.from({ length: Math.min(3, pdf.numPages) }, () => renderNext())
     ).then(() => {
-      if (!cancelled) setThumbnailsLoading(false);
+      if (!cancelled) {
+        setThumbnails(nextThumbnails);
+        setThumbnailErrors(nextThumbnailErrors);
+      }
     });
 
     return () => {
@@ -224,16 +223,9 @@ export function PdfResultPreview({
           </div>
 
           <div className="mt-3 max-h-[360px] overflow-y-auto">
-            {thumbnailsLoading ? (
-              <div className="py-6 text-center text-xs font-mono text-muted-foreground">
-                {loadingLabel}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                {Array.from(
-                  { length: totalPages },
-                  (_, index) => index + 1
-                ).map(page => {
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+                page => {
                   const thumbnail = thumbnails[page];
                   const thumbnailError = thumbnailErrors[page];
                   const labelForPage = thumbnailLabel(page);
@@ -264,9 +256,9 @@ export function PdfResultPreview({
                       )}
                     </button>
                   );
-                })}
-              </div>
-            )}
+                }
+              )}
+            </div>
           </div>
         </>
       )}

@@ -30,4 +30,51 @@ describe('Dockerfile runtime assets', () => {
       expect(source).toContain("patch('packages/utils/package.json'");
     }
   });
+
+  it('runs the production API with Node-compatible runtime dependencies', () => {
+    const combinedDockerfile = readFileSync(
+      join(repoRoot, 'Dockerfile'),
+      'utf8'
+    );
+    const apiDockerfile = readFileSync(
+      join(repoRoot, 'apps/api/Dockerfile'),
+      'utf8'
+    );
+    const combinedEntrypoint = readFileSync(
+      join(repoRoot, 'docker/start-all.sh'),
+      'utf8'
+    );
+    const productionCompose = readFileSync(
+      join(repoRoot, 'docker-compose.prod.yml'),
+      'utf8'
+    );
+    const accountExportService = readFileSync(
+      join(repoRoot, 'apps/api/src/modules/account/account-export.service.ts'),
+      'utf8'
+    );
+
+    for (const source of [combinedDockerfile, apiDockerfile]) {
+      expect(source).not.toContain(
+        'COPY --from=base /usr/local/bin/bun /usr/local/bin/bun'
+      );
+      expect(source).not.toContain('cp -RL apps/api/node_modules');
+    }
+    expect(apiDockerfile).toContain(
+      'CMD ["sh", "-c", "node apps/api/dist/scripts/migrate.js && node apps/api/dist/main.js"]'
+    );
+    expect(combinedEntrypoint).toContain(
+      'node apps/api/dist/scripts/migrate.js'
+    );
+    expect(combinedEntrypoint).toContain('node apps/api/dist/main.js &');
+    expect(productionCompose).toContain(
+      'node apps/api/dist/scripts/migrate.js && node apps/api/dist/main.js'
+    );
+    expect(accountExportService).not.toContain(
+      "import { Database } from 'bun:sqlite'"
+    );
+    expect(accountExportService).toContain("? 'bun:sqlite' : 'node:sqlite'");
+    expect(accountExportService).toContain(
+      'process.getBuiltinModule(sqliteModuleName)'
+    );
+  });
 });

@@ -7,7 +7,6 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import * as archiver from 'archiver';
-import { Database } from 'bun:sqlite';
 import { createReadStream } from 'node:fs';
 import {
   chmod,
@@ -54,6 +53,93 @@ const ACCOUNT_EXPORT_TEMP_PREFIX = 'utils-plane-account-export-';
 const SQLITE_CLOSE_ATTEMPTS = 3;
 export const ACCOUNT_EXPORT_TEMP_ROOT = Symbol('ACCOUNT_EXPORT_TEMP_ROOT');
 
+interface ArchivePathDatabase {
+  exec(sql: string): void;
+  has(path: string): boolean;
+  add(path: string): void;
+  close(): void;
+}
+
+interface BunSqliteDatabase {
+  exec(sql: string): void;
+  query<Result, Params extends unknown[]>(
+    sql: string
+  ): {
+    get(...params: Params): Result | null;
+    run(...params: Params): unknown;
+  };
+  close(throwOnError?: boolean): void;
+}
+
+interface NodeSqliteStatement {
+  get(value: string): unknown;
+  run(value: string): unknown;
+}
+
+interface NodeSqliteDatabase {
+  exec(sql: string): void;
+  prepare(sql: string): NodeSqliteStatement;
+  close(): void;
+}
+
+function openArchivePathDatabase(path: string): ArchivePathDatabase {
+  const versions = process.versions as unknown as Record<
+    string,
+    string | undefined
+  >;
+  const sqliteModuleName = versions.bun ? 'bun:sqlite' : 'node:sqlite';
+  const sqliteModule = process.getBuiltinModule(sqliteModuleName);
+
+  if (!sqliteModule) {
+    throw new Error(
+      `SQLite runtime module is unavailable: ${sqliteModuleName}`
+    );
+  }
+
+  if (versions.bun) {
+    const { Database } = sqliteModule as {
+      Database: new (
+        path: string,
+        options: { create: boolean; strict: boolean }
+      ) => BunSqliteDatabase;
+    };
+    const database = new Database(path, { create: true, strict: true });
+
+    return {
+      exec: sql => database.exec(sql),
+      has: value =>
+        database
+          .query<
+            { present: number },
+            [string]
+          >('SELECT 1 AS present FROM used_paths WHERE path = ?')
+          .get(value) !== null,
+      add: value =>
+        database
+          .query<unknown, [string]>('INSERT INTO used_paths (path) VALUES (?)')
+          .run(value),
+      close: () => database.close(false),
+    };
+  }
+
+  const { DatabaseSync } = sqliteModule as {
+    DatabaseSync: new (path: string) => NodeSqliteDatabase;
+  };
+  const database = new DatabaseSync(path);
+
+  return {
+    exec: sql => database.exec(sql),
+    has: value =>
+      database
+        .prepare('SELECT 1 AS present FROM used_paths WHERE path = ?')
+        .get(value) !== undefined,
+    add: value => {
+      database.prepare('INSERT INTO used_paths (path) VALUES (?)').run(value);
+    },
+    close: () => database.close(),
+  };
+}
+
 type AccountExportManifestEntry = ReturnType<typeof createManifestEntry>;
 
 interface AccountExportSpoolEntry {
@@ -71,11 +157,11 @@ interface AccountExportSpool {
 type AccountExportTaskEntry = ReturnType<typeof createExportTask>;
 
 class SqliteArchivePathRegistry implements ArchivePathRegistry {
-  private readonly database: Database;
+  private readonly database: ArchivePathDatabase;
   private closed = false;
 
   constructor(path: string) {
-    this.database = new Database(path, { create: true, strict: true });
+    this.database = openArchivePathDatabase(path);
     try {
       this.database.exec(`
         PRAGMA journal_mode = OFF;
@@ -107,20 +193,11 @@ class SqliteArchivePathRegistry implements ArchivePathRegistry {
   }
 
   has(path: string): boolean {
-    return (
-      this.database
-        .query<
-          { present: number },
-          [string]
-        >('SELECT 1 AS present FROM used_paths WHERE path = ?')
-        .get(path) !== null
-    );
+    return this.database.has(path);
   }
 
   add(path: string): void {
-    this.database
-      .query<unknown, [string]>('INSERT INTO used_paths (path) VALUES (?)')
-      .run(path);
+    this.database.add(path);
   }
 
   complete(): void {
@@ -143,11 +220,11 @@ class SqliteArchivePathRegistry implements ArchivePathRegistry {
   }
 }
 
-function closeSqliteDatabase(database: Database): void {
+function closeSqliteDatabase(database: ArchivePathDatabase): void {
   const errors: Error[] = [];
   for (let attempt = 0; attempt < SQLITE_CLOSE_ATTEMPTS; attempt++) {
     try {
-      database.close(false);
+      database.close();
       return;
     } catch (error) {
       errors.push(toError(error, 'SQLite close failed'));

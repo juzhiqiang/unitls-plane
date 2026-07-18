@@ -165,6 +165,19 @@ describe('buildMarkdownDocumentHtml', () => {
       expect(html).not.toContain(unsafeText);
     }
   });
+
+  it('preserves comparison text alongside normal tags and comments', () => {
+    const html = buildMarkdownDocumentHtml(
+      '<div>Alpha < Beta and Gamma > Omega; 2 < 3 > 1; value <= 4; score <3 <!-- note --></div>'
+    );
+
+    expect(html).toContain('<div>');
+    expect(html).toContain('Alpha < Beta and Gamma > Omega');
+    expect(html).toContain('2 < 3 > 1');
+    expect(html).toContain('value <= 4');
+    expect(html).toContain('score <3');
+    expect(html).toContain('<!-- note -->');
+  });
 });
 
 describe('PdfService.documentToPdf', () => {
@@ -384,6 +397,41 @@ describe('PdfService.documentToPdf', () => {
     } finally {
       (service as any).convertWithLibreOffice = originalConverter;
       (service as any).renderMarkdownFallbackPdf = originalFallback;
+    }
+  });
+
+  it('falls back when a Markdown PDF omits visible comparison text', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(outputPath, await createTextPdf(['Alpha Omega']));
+      return outputPath;
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from(
+            '<div>Alpha < Beta and Gamma > Omega</div>',
+            'utf8'
+          ),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(text).toContain('Beta and Gamma');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
     }
   });
 

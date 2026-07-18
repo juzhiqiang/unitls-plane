@@ -303,6 +303,12 @@ function* tokenizeHtml(html: string): Generator<HtmlToken> {
       yield { type: 'text', value: html.slice(index, tagStart) };
     }
 
+    if (!isHtmlMarkupStart(html, tagStart)) {
+      yield { type: 'text', value: '<' };
+      index = tagStart + 1;
+      continue;
+    }
+
     if (html.startsWith('<!--', tagStart)) {
       const commentEnd = html.indexOf('-->', tagStart + 4);
       if (commentEnd === -1) {
@@ -324,7 +330,7 @@ function* tokenizeHtml(html: string): Generator<HtmlToken> {
     }
 
     const value = html.slice(tagStart, tagEnd + 1);
-    const tagMatch = value.match(/^<\s*(\/?)\s*([a-z][\w:-]*)/i);
+    const tagMatch = value.match(/^<(\/?)([a-z][\w:-]*)/i);
     if (!tagMatch) {
       yield { type: 'markup', value };
     } else {
@@ -338,6 +344,20 @@ function* tokenizeHtml(html: string): Generator<HtmlToken> {
     }
     index = tagEnd + 1;
   }
+}
+
+function isHtmlMarkupStart(html: string, tagStart: number): boolean {
+  const next = html[tagStart + 1];
+  return (
+    isAsciiLetter(next) ||
+    (next === '/' && isAsciiLetter(html[tagStart + 2])) ||
+    next === '!' ||
+    next === '?'
+  );
+}
+
+function isAsciiLetter(value: string | undefined): boolean {
+  return value !== undefined && /^[A-Za-z]$/.test(value);
 }
 
 function findHtmlTagEnd(html: string, start: number): number {

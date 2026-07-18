@@ -248,6 +248,30 @@ describe('buildMarkdownDocumentHtml', () => {
     }
   });
 
+  it('removes base elements that can rewrite relative link destinations', () => {
+    const html = buildMarkdownDocumentHtml(
+      '<base href="/etc/secret/" />\n<a href="relative">Relative link</a>'
+    );
+
+    expect(html).not.toContain('<base');
+    expect(html).not.toContain('/etc/secret');
+    expect(html).toContain('<a href="relative">Relative link</a>');
+  });
+
+  it('removes foreign namespace content before serializing its resources', () => {
+    const html = buildMarkdownDocumentHtml(
+      '<svg><image href="/etc/passwd"></image><use href="../../secret.png"></use><script>alert(1)</script></svg>\n<p>Visible</p>'
+    );
+
+    expect(html).not.toContain('<svg');
+    expect(html).not.toContain('<image');
+    expect(html).not.toContain('<use');
+    expect(html).not.toContain('/etc/passwd');
+    expect(html).not.toContain('../../secret.png');
+    expect(html).not.toContain('alert(1)');
+    expect(html).toContain('<p>Visible</p>');
+  });
+
   it('removes an unsafe tag whose quoted attribute contains a closing delimiter', () => {
     const html = buildMarkdownDocumentHtml(
       '<meta title="hidden > metadata">\nVisible body'
@@ -669,6 +693,53 @@ describe('PdfService.documentToPdf', () => {
       expect(text).toContain('Content that must survive');
     } finally {
       (service as any).convertWithLibreOffice = originalConverter;
+    }
+  });
+
+  it('falls back when a Markdown PDF omits visible noscript text', async () => {
+    const service = new PdfService();
+    const originalConverter = (service as any).convertWithLibreOffice;
+    const originalFallback = (service as any).renderMarkdownFallbackPdf;
+    const fallbackPdf = await createTextPdf([
+      'Required fallback text Other body',
+    ]);
+    let fallbackCalls = 0;
+    (service as any).convertWithLibreOffice = async (
+      sourcePath: string,
+      outputDir: string
+    ) => {
+      const outputPath = join(
+        outputDir,
+        sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
+      );
+      await writeFile(outputPath, await createTextPdf(['Other body']));
+      return outputPath;
+    };
+    (service as any).renderMarkdownFallbackPdf = async () => {
+      fallbackCalls++;
+      return fallbackPdf;
+    };
+
+    try {
+      const pdf = await service.documentToPdf(
+        {
+          buffer: Buffer.from(
+            '<noscript>Required fallback text</noscript><p>Other body</p>',
+            'utf8'
+          ),
+          filename: 'server-export.md',
+          mimeType: 'text/markdown',
+        },
+        { sourceFormat: 'markdown' }
+      );
+
+      expect(fallbackCalls).toBe(1);
+      const text = await service.toText(pdf, { format: 'text' });
+      expect(text).toContain('Required fallback text');
+      expect(text).toContain('Other body');
+    } finally {
+      (service as any).convertWithLibreOffice = originalConverter;
+      (service as any).renderMarkdownFallbackPdf = originalFallback;
     }
   });
 

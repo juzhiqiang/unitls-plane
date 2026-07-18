@@ -196,6 +196,7 @@ const UNSAFE_HTML_ELEMENTS = new Set([
   'embed',
   'iframe',
   'link',
+  'base',
   'meta',
   'object',
   'script',
@@ -206,11 +207,11 @@ const UNSAFE_HTML_ELEMENTS = new Set([
 const HIDDEN_HTML_ELEMENTS = new Set([
   ...UNSAFE_HTML_ELEMENTS,
   'head',
-  'noscript',
   'title',
 ]);
 
 const HTML_PARSER_OPTIONS = { scriptingEnabled: false } as const;
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 function sanitizeHtml(html: string): string {
   const fragment = parseSanitizedHtml(html);
@@ -230,7 +231,10 @@ function sanitizeHtmlTree(parent: DefaultTreeAdapterTypes.ParentNode): void {
     if (!defaultTreeAdapter.isElementNode(child)) continue;
 
     const tagName = child.tagName.toLowerCase();
-    if (UNSAFE_HTML_ELEMENTS.has(tagName)) {
+    if (
+      child.namespaceURI !== HTML_NAMESPACE ||
+      UNSAFE_HTML_ELEMENTS.has(tagName)
+    ) {
       defaultTreeAdapter.detachNode(child);
       continue;
     }

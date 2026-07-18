@@ -393,6 +393,15 @@ export default function FromDocumentPage() {
             <PdfResultPreview
               file={result}
               label={t('fromDocument.resultPreview')}
+              previousLabel={t('fromDocument.previousPage')}
+              nextLabel={t('fromDocument.nextPage')}
+              pageIndicator={(page, total) =>
+                t('fromDocument.pageIndicator', { page, total })
+              }
+              thumbnailLabel={page =>
+                t('fromDocument.thumbnailLabel', { page })
+              }
+              loadingLabel={t('fromDocument.loadingPdf')}
             />
           }
           action={<DownloadButton file={result} />}

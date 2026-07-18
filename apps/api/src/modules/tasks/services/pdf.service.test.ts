@@ -90,13 +90,14 @@ async function createVisualThenTextPdf(
   visual:
     | 'image'
     | 'vector'
+    | 'tiny-vector'
     | 'transparent-image'
     | 'white-image'
     | 'outside-image'
 ): Promise<Buffer> {
   const doc = await PDFDocument.create();
   const visualPage = doc.addPage([595.28, 841.89]);
-  if (visual !== 'vector') {
+  if (visual !== 'vector' && visual !== 'tiny-vector') {
     const transparent = visual === 'transparent-image';
     const white = visual === 'white-image';
     const png = await sharp({
@@ -124,9 +125,9 @@ async function createVisualThenTextPdf(
     visualPage.drawRectangle({
       x: 56,
       y: 720,
-      width: 80,
-      height: 80,
-      color: rgb(0.86, 0.15, 0.15),
+      width: visual === 'tiny-vector' ? 0.1 : 80,
+      height: visual === 'tiny-vector' ? 0.1 : 80,
+      color: visual === 'tiny-vector' ? rgb(0, 0, 0) : rgb(0.86, 0.15, 0.15),
     });
   }
 
@@ -218,6 +219,35 @@ describe('buildMarkdownDocumentHtml', () => {
     expect(html).toContain('<h1>Safe</h1>');
   });
 
+  it('does not treat quotes inside unquoted attributes as quoted delimiters', () => {
+    for (const [attribute, sanitizedAttribute] of [
+      ["data=it's", `data="it's"`],
+      ['data=a"b', 'data="a&quot;b"'],
+    ] as const) {
+      const html = buildMarkdownDocumentHtml(
+        `<div ${attribute}><script>alert(1)</script><p>Visible</p></div>`
+      );
+
+      expect(html).not.toContain('<script>');
+      expect(html).not.toContain('alert(1)');
+      expect(html).toContain(sanitizedAttribute);
+      expect(html).toContain('<p>Visible</p>');
+    }
+  });
+
+  it('removes scripts after HTML5 comment closing variants', () => {
+    for (const markdown of [
+      '<!-- benign --!><script>alert(1)</script><p>Visible</p>',
+      '<!--><script>alert(1)</script><p>Visible</p>',
+    ]) {
+      const html = buildMarkdownDocumentHtml(markdown);
+
+      expect(html).not.toContain('<script>');
+      expect(html).not.toContain('alert(1)');
+      expect(html).toContain('<p>Visible</p>');
+    }
+  });
+
   it('removes an unsafe tag whose quoted attribute contains a closing delimiter', () => {
     const html = buildMarkdownDocumentHtml(
       '<meta title="hidden > metadata">\nVisible body'
@@ -268,7 +298,10 @@ describe('buildMarkdownDocumentHtml', () => {
         '<button formaction=javascript:alert(1)>Unsafe action</button>',
         '<a href=jav&#x61;script:alert(1)>Numeric entity URL</a>',
         '<a href=javascript&colon;alert(1)>Named entity URL</a>',
+        '<a href="java&#10;script:alert(1)">C0 control URL</a>',
+        '<a href="java&#x85;script:alert(1)">C1 control URL</a>',
         '<a href=vbscript:alert(1)>VBScript URL</a>',
+        '<img src="http&amp;colon;//evil" alt="Double encoded resource">',
         '<img src=file:///etc/passwd alt="File URL">',
         '<svg><a xlink:href=javascript:alert(1)>SVG URL</a></svg>',
         '<img src=./local.png alt="Relative image">',
@@ -305,6 +338,10 @@ describe('buildMarkdownDocumentHtml', () => {
     }
     expect(html).toContain('Unsafe URL');
     expect(html).toContain('Unsafe action');
+    expect(html).toContain('<a>C0 control URL</a>');
+    expect(html).toContain('<a>C1 control URL</a>');
+    expect(html).toContain('<img alt="Double encoded resource">');
+    expect(html).not.toContain('http&amp;colon;//evil');
     expect(html).toContain('Styled text');
     expect(html).toContain('id="safe-block"');
     expect(html).toContain('class="safe-link"');
@@ -333,7 +370,8 @@ describe('buildMarkdownDocumentHtml', () => {
     );
 
     expect(html).not.toContain('<img src=x onerror=');
-    expect(html).toContain('&lt;img src=x onerror=&quot;alert(1)&gt;');
+    expect(html).toContain('&lt;img src=x onerror="alert(1)&gt;');
+    expect(html).toContain('Visible body');
   });
 
   it('preserves comparison text alongside normal tags and comments', () => {
@@ -342,10 +380,10 @@ describe('buildMarkdownDocumentHtml', () => {
     );
 
     expect(html).toContain('<div>');
-    expect(html).toContain('Alpha < Beta and Gamma > Omega');
-    expect(html).toContain('2 < 3 > 1');
-    expect(html).toContain('value <= 4');
-    expect(html).toContain('score <3');
+    expect(html).toContain('Alpha &lt; Beta and Gamma &gt; Omega');
+    expect(html).toContain('2 &lt; 3 &gt; 1');
+    expect(html).toContain('value &lt;= 4');
+    expect(html).toContain('score &lt;3');
     expect(html).toContain('<!-- note -->');
   });
 });
@@ -474,6 +512,14 @@ describe('PdfService.documentToPdf', () => {
   it('keeps a leading vector-only page in a Markdown PDF', async () => {
     const pdf = await convertMarkdownWithMockPdf(
       await createVisualThenTextPdf('vector')
+    );
+
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2);
+  });
+
+  it('keeps a leading page with a 0.1pt visible vector', async () => {
+    const pdf = await convertMarkdownWithMockPdf(
+      await createVisualThenTextPdf('tiny-vector')
     );
 
     expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2);
@@ -776,6 +822,32 @@ describe('PdfService.documentToPdf', () => {
       } else {
         process.env.LIBREOFFICE_BIN = previousLibreOfficeBin;
       }
+    }
+  });
+});
+
+describe('PdfService.compressPdf', () => {
+  it('destroys the source document when creating a heavy output PDF fails', async () => {
+    const input = await createTextPdf(['Compress me']);
+    const mupdf = await import('mupdf');
+    let destroyedDocuments = 0;
+    const restoreDestroy = trackDestroy(
+      mupdf.Document.prototype,
+      () => destroyedDocuments++
+    );
+    const originalCreate = PDFDocument.create;
+    PDFDocument.create = async () => {
+      throw new Error('output PDF creation failed');
+    };
+
+    try {
+      await expect(
+        new PdfService().compressPdf(input, { level: 'heavy' })
+      ).rejects.toThrow('output PDF creation failed');
+      expect(destroyedDocuments).toBe(1);
+    } finally {
+      PDFDocument.create = originalCreate;
+      restoreDestroy();
     }
   });
 });

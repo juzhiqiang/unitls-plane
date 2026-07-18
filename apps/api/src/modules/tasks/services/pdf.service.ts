@@ -8,6 +8,12 @@ import { inflateRawSync } from 'node:zlib';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PDFDocument, degrees, rgb, StandardFonts } from 'pdf-lib';
 import { marked } from 'marked';
+import {
+  defaultTreeAdapter,
+  parseFragment,
+  serialize,
+  type DefaultTreeAdapterTypes,
+} from 'parse5';
 import TurndownService from 'turndown';
 
 const execFileAsync = promisify(execFile);
@@ -194,63 +200,44 @@ const UNSAFE_HTML_ELEMENTS = new Set([
   'object',
   'script',
   'style',
+  'template',
 ]);
 
 const HIDDEN_HTML_ELEMENTS = new Set([
   ...UNSAFE_HTML_ELEMENTS,
   'head',
   'noscript',
-  'template',
   'title',
 ]);
 
-const VOID_HTML_ELEMENTS = new Set(['embed', 'link', 'meta']);
-
-type HtmlToken =
-  | { type: 'text'; value: string }
-  | { type: 'markup'; value: string }
-  | HtmlTagToken;
-
-interface HtmlTagToken {
-  type: 'tag';
-  value: string;
-  tagName: string;
-  rawTagName: string;
-  isClosing: boolean;
-  isSelfClosing: boolean;
-}
+const HTML_PARSER_OPTIONS = { scriptingEnabled: false } as const;
 
 function sanitizeHtml(html: string): string {
-  let result = '';
-  const unsafeElements: string[] = [];
+  const fragment = parseSanitizedHtml(html);
+  return serialize(fragment, HTML_PARSER_OPTIONS);
+}
 
-  for (const token of tokenizeHtml(html)) {
-    if (token.type !== 'tag') {
-      if (unsafeElements.length === 0) result += token.value;
+function parseSanitizedHtml(
+  html: string
+): DefaultTreeAdapterTypes.DocumentFragment {
+  const fragment = parseFragment(html, HTML_PARSER_OPTIONS);
+  sanitizeHtmlTree(fragment);
+  return fragment;
+}
+
+function sanitizeHtmlTree(parent: DefaultTreeAdapterTypes.ParentNode): void {
+  for (const child of [...parent.childNodes]) {
+    if (!defaultTreeAdapter.isElementNode(child)) continue;
+
+    const tagName = child.tagName.toLowerCase();
+    if (UNSAFE_HTML_ELEMENTS.has(tagName)) {
+      defaultTreeAdapter.detachNode(child);
       continue;
     }
 
-    if (token.isClosing) {
-      const unsafeIndex = unsafeElements.lastIndexOf(token.tagName);
-      if (unsafeIndex !== -1) {
-        unsafeElements.splice(unsafeIndex);
-        continue;
-      }
-    } else if (
-      UNSAFE_HTML_ELEMENTS.has(token.tagName) &&
-      !VOID_HTML_ELEMENTS.has(token.tagName)
-    ) {
-      unsafeElements.push(token.tagName);
-    }
-
-    if (unsafeElements.length > 0 || UNSAFE_HTML_ELEMENTS.has(token.tagName)) {
-      continue;
-    }
-
-    result += sanitizeHtmlTagAttributes(token);
+    child.attrs = child.attrs.filter(isAllowedHtmlAttribute);
+    sanitizeHtmlTree(child);
   }
-
-  return result;
 }
 
 const URL_HTML_ATTRIBUTES = new Set([
@@ -288,93 +275,25 @@ const ALLOWED_DOCUMENT_URL_SCHEMES = new Set([
   'tel',
 ]);
 
-interface HtmlAttribute {
-  name: string;
-  value?: string;
-}
+function isAllowedHtmlAttribute(
+  attribute: DefaultTreeAdapterTypes.Element['attrs'][number]
+): boolean {
+  if (attribute.namespace || attribute.prefix) return false;
 
-function sanitizeHtmlTagAttributes(token: HtmlTagToken): string {
-  if (token.isClosing) return `</${token.rawTagName}>`;
-
-  const attributes = parseHtmlAttributes(token).filter(attribute => {
-    const name = attribute.name.toLowerCase();
-    if (
-      name.startsWith('on') ||
-      DROPPED_HTML_ATTRIBUTES.has(name) ||
-      !/^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(attribute.name)
-    ) {
-      return false;
-    }
-    if (!URL_HTML_ATTRIBUTES.has(name)) return true;
-    return (
-      attribute.value !== undefined &&
-      isAllowedDocumentUrl(name, attribute.value)
-    );
-  });
-
-  const serializedAttributes = attributes
-    .map(attribute => {
-      if (attribute.value === undefined) return ` ${attribute.name}`;
-      return ` ${attribute.name}="${escapeHtmlAttributeValue(attribute.value)}"`;
-    })
-    .join('');
-  return `<${token.rawTagName}${serializedAttributes}${token.isSelfClosing ? ' /' : ''}>`;
-}
-
-function parseHtmlAttributes(token: HtmlTagToken): HtmlAttribute[] {
-  const attributes: HtmlAttribute[] = [];
-  const end = token.isSelfClosing
-    ? token.value.search(/\/\s*>$/)
-    : token.value.length - 1;
-  let index = 1 + token.rawTagName.length;
-
-  while (index < end) {
-    while (index < end && isHtmlWhitespace(token.value[index])) index++;
-    if (index >= end) break;
-
-    const nameStart = index;
-    while (
-      index < end &&
-      !isHtmlWhitespace(token.value[index]) &&
-      token.value[index] !== '='
-    ) {
-      index++;
-    }
-    if (index === nameStart) {
-      index++;
-      continue;
-    }
-
-    const name = token.value.slice(nameStart, index);
-    while (index < end && isHtmlWhitespace(token.value[index])) index++;
-    if (token.value[index] !== '=') {
-      attributes.push({ name });
-      continue;
-    }
-
-    index++;
-    while (index < end && isHtmlWhitespace(token.value[index])) index++;
-    const quote = token.value[index];
-    if (quote === '"' || quote === "'") {
-      const valueStart = ++index;
-      while (index < end && token.value[index] !== quote) index++;
-      attributes.push({ name, value: token.value.slice(valueStart, index) });
-      if (index < end) index++;
-      continue;
-    }
-
-    const valueStart = index;
-    while (index < end && !isHtmlWhitespace(token.value[index])) index++;
-    attributes.push({ name, value: token.value.slice(valueStart, index) });
+  const name = attribute.name.toLowerCase();
+  if (
+    name.startsWith('on') ||
+    DROPPED_HTML_ATTRIBUTES.has(name) ||
+    !/^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(attribute.name)
+  ) {
+    return false;
   }
-
-  return attributes;
+  if (!URL_HTML_ATTRIBUTES.has(name)) return true;
+  return isAllowedDocumentUrl(name, attribute.value);
 }
 
 function isAllowedDocumentUrl(attributeName: string, value: string): boolean {
-  const normalized = decodeHtmlAttributeEntities(value)
-    .trim()
-    .replace(/[\u0000-\u0020\u007f-\u009f]/g, '');
+  const normalized = stripUrlControlCharacters(value.trim());
   const allowsRelative = !RESOURCE_URL_HTML_ATTRIBUTES.has(attributeName);
   if (normalized === '') return allowsRelative;
   if (
@@ -406,165 +325,39 @@ function isAllowedDocumentUrl(attributeName: string, value: string): boolean {
   return !prefix.includes('&');
 }
 
-function decodeHtmlAttributeEntities(value: string): string {
-  return value
-    .replace(/&#x([\da-f]+);?/gi, (_, codePoint: string) =>
-      decodeHtmlCodePoint(codePoint, 16)
-    )
-    .replace(/&#(\d+);?/g, (_, codePoint: string) =>
-      decodeHtmlCodePoint(codePoint, 10)
-    )
-    .replace(/&(amp|colon|newline|tab);/gi, (_, entity: string) => {
-      switch (entity.toLowerCase()) {
-        case 'amp':
-          return '&';
-        case 'colon':
-          return ':';
-        case 'newline':
-          return '\n';
-        case 'tab':
-          return '\t';
-        default:
-          return '';
-      }
-    });
-}
-
-function decodeHtmlCodePoint(value: string, radix: number): string {
-  const codePoint = Number.parseInt(value, radix);
-  return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
-    ? String.fromCodePoint(codePoint)
-    : '';
-}
-
-function escapeHtmlAttributeValue(value: string): string {
-  return value
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function isHtmlWhitespace(value: string | undefined): boolean {
-  return value !== undefined && /[\t\n\f\r ]/.test(value);
-}
-
-function extractVisibleHtmlText(html: string): string {
+function stripUrlControlCharacters(value: string): string {
   let result = '';
-  const hiddenElements: string[] = [];
-
-  for (const token of tokenizeHtml(html)) {
-    if (token.type === 'text') {
-      if (hiddenElements.length === 0) result += token.value;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)!;
+    if (codePoint <= 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f)) {
       continue;
     }
-    if (token.type === 'markup') {
-      continue;
-    }
-
-    if (token.isClosing) {
-      const hiddenIndex = hiddenElements.lastIndexOf(token.tagName);
-      if (hiddenIndex !== -1) hiddenElements.splice(hiddenIndex);
-    } else if (
-      HIDDEN_HTML_ELEMENTS.has(token.tagName) &&
-      !VOID_HTML_ELEMENTS.has(token.tagName)
-    ) {
-      hiddenElements.push(token.tagName);
-    }
-
-    if (hiddenElements.length === 0) result += '\n';
+    result += character;
   }
-
   return result;
 }
 
-function* tokenizeHtml(html: string): Generator<HtmlToken> {
-  let index = 0;
-
-  while (index < html.length) {
-    const tagStart = html.indexOf('<', index);
-    if (tagStart === -1) {
-      yield { type: 'text', value: html.slice(index) };
-      return;
-    }
-    if (tagStart > index) {
-      yield { type: 'text', value: html.slice(index, tagStart) };
-    }
-
-    if (!isHtmlMarkupStart(html, tagStart)) {
-      yield { type: 'text', value: '<' };
-      index = tagStart + 1;
-      continue;
-    }
-
-    if (html.startsWith('<!--', tagStart)) {
-      const commentEnd = html.indexOf('-->', tagStart + 4);
-      if (commentEnd === -1) {
-        yield { type: 'markup', value: html.slice(tagStart) };
-        return;
-      }
-      yield {
-        type: 'markup',
-        value: html.slice(tagStart, commentEnd + 3),
-      };
-      index = commentEnd + 3;
-      continue;
-    }
-
-    const tagEnd = findHtmlTagEnd(html, tagStart + 1);
-    if (tagEnd === -1) {
-      yield { type: 'text', value: html.slice(tagStart) };
-      return;
-    }
-
-    const value = html.slice(tagStart, tagEnd + 1);
-    const tagMatch = value.match(/^<(\/?)([a-z][\w:-]*)/i);
-    if (!tagMatch) {
-      yield { type: 'markup', value };
-    } else {
-      yield {
-        type: 'tag',
-        value,
-        tagName: tagMatch[2]!.toLowerCase(),
-        rawTagName: tagMatch[2]!,
-        isClosing: tagMatch[1] === '/',
-        isSelfClosing: /\/\s*>$/.test(value),
-      };
-    }
-    index = tagEnd + 1;
-  }
+function extractVisibleHtmlText(html: string): string {
+  return collectVisibleHtmlText(parseSanitizedHtml(html));
 }
 
-function isHtmlMarkupStart(html: string, tagStart: number): boolean {
-  const next = html[tagStart + 1];
-  return (
-    isAsciiLetter(next) ||
-    (next === '/' && isAsciiLetter(html[tagStart + 2])) ||
-    next === '!' ||
-    next === '?'
-  );
-}
+function collectVisibleHtmlText(
+  parent: DefaultTreeAdapterTypes.ParentNode
+): string {
+  let result = '';
 
-function isAsciiLetter(value: string | undefined): boolean {
-  return value !== undefined && /^[A-Za-z]$/.test(value);
-}
-
-function findHtmlTagEnd(html: string, start: number): number {
-  let quote: '"' | "'" | undefined;
-
-  for (let index = start; index < html.length; index++) {
-    const character = html[index];
-    if (quote) {
-      if (character === quote) quote = undefined;
+  for (const child of parent.childNodes) {
+    if (defaultTreeAdapter.isTextNode(child)) {
+      result += child.value;
       continue;
     }
-    if (character === '"' || character === "'") {
-      quote = character;
-    } else if (character === '>') {
-      return index;
-    }
+    if (!defaultTreeAdapter.isElementNode(child)) continue;
+    if (HIDDEN_HTML_ELEMENTS.has(child.tagName.toLowerCase())) continue;
+
+    result += `\n${collectVisibleHtmlText(child)}\n`;
   }
 
-  return -1;
+  return result;
 }
 
 export function buildLibreOfficeArgs(
@@ -965,7 +758,7 @@ export class PdfService {
     page: import('mupdf').Page
   ): boolean {
     const pixmap = page.toPixmap(
-      [0.2, 0, 0, 0.2, 0, 0],
+      [1, 0, 0, 1, 0, 0],
       mupdf.ColorSpace.DeviceGray,
       false,
       false
@@ -1262,8 +1055,8 @@ export class PdfService {
     const scale = dpi / 72;
 
     const srcDoc = mupdf.Document.openDocument(input, 'application/pdf');
-    const newDoc = await PDFDocument.create();
     try {
+      const newDoc = await PDFDocument.create();
       for (let i = 0; i < srcDoc.countPages(); i++) {
         const page = srcDoc.loadPage(i);
         try {

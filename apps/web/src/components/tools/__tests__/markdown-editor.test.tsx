@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import hljs from 'highlight.js/lib/core';
 import { describe, expect, it, vi } from 'vitest';
 import { MarkdownEditor } from '../markdown-editor';
 
@@ -177,6 +178,53 @@ describe('MarkdownEditor', () => {
 
     expect(highlightedCode?.style.transform).toBe('translate3d(0px, 0px, 0px)');
     expect(gutterContent?.style.transform).toBe('translate3d(0px, 0px, 0px)');
+  });
+
+  it('falls back to safe plain text for oversized markdown sources', () => {
+    const repeatedBlock = [
+      '# Heading',
+      '- list item',
+      '**bold text** and [a link](https://example.com)',
+      '<img src=x onerror=alert(1)>',
+      '',
+    ].join('\n');
+    const source = Array.from({ length: 8_000 }, () => repeatedBlock).join('');
+
+    expect(source.length).toBeGreaterThan(256 * 1024);
+
+    const { container } = render(
+      <MarkdownEditor label="Markdown" value={source} onChange={vi.fn()} />
+    );
+    const code = container.querySelector('code.hljs') as HTMLElement | null;
+
+    expect(code).toBeInTheDocument();
+    expect(code?.textContent).toBe(source);
+    expect(code?.querySelectorAll('span[class*="hljs-"]')).toHaveLength(0);
+    expect(code?.querySelector('img')).not.toBeInTheDocument();
+  });
+
+  it('escapes markdown source when highlighting fails', () => {
+    const source = '<img src=x onerror=alert(1)> & <Title />';
+    const highlightSpy = vi
+      .spyOn(hljs, 'highlight')
+      .mockImplementationOnce(() => {
+        throw new Error('forced');
+      });
+
+    try {
+      const { container } = render(
+        <MarkdownEditor label="Markdown" value={source} onChange={vi.fn()} />
+      );
+      const code = container.querySelector('code.hljs') as HTMLElement | null;
+
+      expect(code).toBeInTheDocument();
+      expect(code?.textContent).toBe(source);
+      expect(code?.querySelector('img')).not.toBeInTheDocument();
+      expect(code?.innerHTML).toContain('&lt;');
+      expect(code?.innerHTML).toContain('&amp;');
+    } finally {
+      highlightSpy.mockRestore();
+    }
   });
 
   it('emits raw markdown changes without transforming the source', () => {

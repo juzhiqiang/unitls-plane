@@ -108,6 +108,77 @@ describe('MarkdownEditor', () => {
     expect(highlightLayer?.scrollLeft).toBe(32);
   });
 
+  it('compensates for clamped scroll offsets at the maximum boundary', () => {
+    const { container } = render(
+      <MarkdownEditor
+        label="Markdown"
+        value={Array.from(
+          { length: 80 },
+          (_, index) => `line ${index + 1}`
+        ).join('\n')}
+        onChange={vi.fn()}
+      />
+    );
+
+    const textarea = screen.getByRole('textbox', { name: 'Markdown' });
+    const gutter = container.querySelector(
+      'div.preview-scroll[aria-hidden="true"]'
+    ) as HTMLElement | null;
+    const gutterContent = container.querySelector(
+      '[data-scroll-content="gutter"]'
+    ) as HTMLElement | null;
+    const highlightLayer = container.querySelector(
+      'pre[aria-hidden="true"]'
+    ) as HTMLElement | null;
+    const highlightedCode = container.querySelector(
+      'code.hljs'
+    ) as HTMLElement | null;
+
+    expect(gutter).toBeInTheDocument();
+    expect(gutterContent).toBeInTheDocument();
+    expect(highlightLayer).toBeInTheDocument();
+    expect(highlightedCode).toBeInTheDocument();
+
+    const defineClampedScrollProperty = (
+      element: HTMLElement,
+      property: 'scrollTop' | 'scrollLeft',
+      max: number
+    ) => {
+      let value = 0;
+      Object.defineProperty(element, property, {
+        configurable: true,
+        get: () => value,
+        set: (next: number) => {
+          value = Math.min(next, max);
+        },
+      });
+    };
+
+    defineClampedScrollProperty(highlightLayer!, 'scrollTop', 136);
+    defineClampedScrollProperty(highlightLayer!, 'scrollLeft', 24);
+    defineClampedScrollProperty(gutter!, 'scrollTop', 136);
+    defineClampedScrollProperty(gutter!, 'scrollLeft', 24);
+
+    textarea.scrollTop = 144;
+    textarea.scrollLeft = 32;
+    fireEvent.scroll(textarea);
+
+    expect(highlightLayer?.scrollTop).toBe(136);
+    expect(highlightLayer?.scrollLeft).toBe(24);
+    expect(gutter?.scrollTop).toBe(136);
+    expect(highlightedCode?.style.transform).toBe(
+      'translate3d(-8px, -8px, 0px)'
+    );
+    expect(gutterContent?.style.transform).toBe('translate3d(0px, -8px, 0px)');
+
+    textarea.scrollTop = 120;
+    textarea.scrollLeft = 16;
+    fireEvent.scroll(textarea);
+
+    expect(highlightedCode?.style.transform).toBe('translate3d(0px, 0px, 0px)');
+    expect(gutterContent?.style.transform).toBe('translate3d(0px, 0px, 0px)');
+  });
+
   it('emits raw markdown changes without transforming the source', () => {
     const onChange = vi.fn();
     render(

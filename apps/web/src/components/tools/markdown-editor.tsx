@@ -50,7 +50,9 @@ export function MarkdownEditor({
   disabled,
 }: MarkdownEditorProps) {
   const gutterRef = useRef<HTMLDivElement>(null);
+  const gutterContentRef = useRef<HTMLDivElement>(null);
   const highlightLayerRef = useRef<HTMLPreElement>(null);
+  const highlightContentRef = useRef<HTMLElement>(null);
   const lines = useMemo(() => value.split('\n'), [value]);
   const stats = useMemo(() => countMarkdownStats(value), [value]);
   const highlightedSource = useMemo(
@@ -63,11 +65,23 @@ export function MarkdownEditor({
 
     if (gutterRef.current) {
       gutterRef.current.scrollTop = scrollTop;
+
+      if (gutterContentRef.current) {
+        gutterContentRef.current.style.transform = `translate3d(0px, ${-(
+          scrollTop - gutterRef.current.scrollTop
+        )}px, 0px)`;
+      }
     }
 
     if (highlightLayerRef.current) {
       highlightLayerRef.current.scrollTop = scrollTop;
       highlightLayerRef.current.scrollLeft = scrollLeft;
+
+      if (highlightContentRef.current) {
+        highlightContentRef.current.style.transform = `translate3d(${-(
+          scrollLeft - highlightLayerRef.current.scrollLeft
+        )}px, ${-(scrollTop - highlightLayerRef.current.scrollTop)}px, 0px)`;
+      }
     }
   };
 
@@ -95,11 +109,13 @@ export function MarkdownEditor({
           aria-hidden="true"
           className="preview-scroll overflow-hidden border-r border-border bg-muted/15 py-3 text-right font-mono text-[12px] leading-6 text-muted-foreground/60"
         >
-          {lines.map((_, index) => (
-            <div key={index} className="h-6 select-none pr-3 tabular-nums">
-              {index + 1}
-            </div>
-          ))}
+          <div ref={gutterContentRef} data-scroll-content="gutter">
+            {lines.map((_, index) => (
+              <div key={index} className="h-6 select-none pr-3 tabular-nums">
+                {index + 1}
+              </div>
+            ))}
+          </div>
         </div>
         <div
           className={cn(
@@ -113,6 +129,8 @@ export function MarkdownEditor({
             className="pointer-events-none absolute inset-0 m-0 overflow-hidden px-4 py-3 font-mono text-[13px] leading-6 text-foreground whitespace-pre"
           >
             <code
+              ref={highlightContentRef}
+              data-scroll-content="highlight"
               className="hljs block min-w-max"
               dangerouslySetInnerHTML={{ __html: highlightedSource }}
             />

@@ -27,7 +27,7 @@
     "services:logs": "docker compose logs -f",
     "docker:package:all": "docker build --build-arg NEXT_PUBLIC_API_URL=http://202.104.149.204:5006 --build-arg NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009 --build-arg NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true --build-arg NEXT_PUBLIC_RELEASE=prod --build-arg NEXT_PUBLIC_APP_URL=http://202.104.149.204:5005 --build-arg NEXT_PUBLIC_SUPPORT_EMAIL -t utils-plane:all -f Dockerfile . && docker save utils-plane:all -o utils-plane-all.tar",
     "docker:package:api": "docker build -t utils-plane-api:latest -f apps/api/Dockerfile . && docker save utils-plane-api:latest -o utils-plane-api.tar",
-    "docker:package:offline": "docker build --build-arg NEXT_PUBLIC_API_URL=http://202.104.149.204:5006 --build-arg NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009 --build-arg NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true --build-arg NEXT_PUBLIC_RELEASE=prod --build-arg NEXT_PUBLIC_APP_URL=http://202.104.149.204:5005 --build-arg NEXT_PUBLIC_SUPPORT_EMAIL -t utils-plane:all -f Dockerfile . && docker save utils-plane:all postgres:16-alpine redis:7-alpine minio/minio:latest minio/mc:latest -o utils-plane-offline-all.tar"
+    "docker:package:offline": "bun scripts/docker-package-offline.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

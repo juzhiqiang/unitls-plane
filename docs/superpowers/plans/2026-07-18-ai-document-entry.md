@@ -211,13 +211,19 @@ git log -1 --oneline
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 修复生产环境 Markdown 服务端 PDF 的空白首页/内容缺失问题，并为 PDF 结果预览增加多页翻页和完整缩略图。
+**Goal:**
+修复生产环境 Markdown 服务端 PDF 的空白首页/内容缺失问题，并为 PDF 结果预览增加多页翻页和完整缩略图。
 
-**Architecture:** 保留 LibreOffice 作为 Markdown 高保真转换首选，为每次转换隔离 user profile，并按页校验和清理输出；校验失败时尝试第二种 LibreOffice filter，最后使用现有 fallback。前端在 `PdfResultPreview` 内管理当前页、主 canvas 和全部缩略图，使用现有 `pdf-client` 渲染 API，不改变任务或文件接口。
+**Architecture:** 保留 LibreOffice 作为 Markdown 高保真转换首选，为每次转换隔离 user
+profile，并按页校验和清理输出；校验失败时尝试第二种 LibreOffice
+filter，最后使用现有 fallback。前端在 `PdfResultPreview`
+内管理当前页、主 canvas 和全部缩略图，使用现有 `pdf-client` 渲染 API，不改变任务或文件接口。
 
-**Tech Stack:** NestJS、Bun test、pdf-lib、MuPDF、LibreOffice、Next.js 14、React 18、pdfjs-dist、Vitest、Testing Library、Prettier。
+**Tech Stack:** NestJS、Bun test、pdf-lib、MuPDF、LibreOffice、Next.js 14、React
+18、pdfjs-dist、Vitest、Testing Library、Prettier。
 
-**范围约束:** 保留用户现有 `apps/web/package.json` 端口修改，不暂存 `.env*`、Docker tar 包或其他无关文件。每个任务完成并通过对应验证后创建中文 Git 提交。
+**范围约束:** 保留用户现有 `apps/web/package.json` 端口修改，不暂存 `.env*`、Docker
+tar 包或其他无关文件。每个任务完成并通过对应验证后创建中文 Git 提交。
 
 ### Task 1: 为服务端输出校验建立失败测试
 
@@ -250,24 +256,19 @@ async function createTextPdf(pages: string[]): Promise<Buffer> {
 
 - [ ] **Step 2: 写首页空白和正文缺失的回归测试**
 
-在 `describe('PdfService.documentToPdf', ...)` 中添加以下两个测试。测试通过 monkey patch 控制 LibreOffice 输出，模拟线上坏结果：
+在 `describe('PdfService.documentToPdf', ...)` 中添加以下两个测试。测试通过 monkey
+patch 控制 LibreOffice 输出，模拟线上坏结果：
 
 ```typescript
 it('removes leading blank pages from an otherwise valid Markdown PDF', async () => {
   const service = new PdfService();
   const originalConverter = (service as any).convertWithLibreOffice;
-  (service as any).convertWithLibreOffice = async (
-    sourcePath: string,
-    outputDir: string
-  ) => {
+  (service as any).convertWithLibreOffice = async (sourcePath: string, outputDir: string) => {
     const outputPath = join(
       outputDir,
       sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
     );
-    await writeFile(
-      outputPath,
-      await createTextPdf(['', 'Expected title and body'])
-    );
+    await writeFile(outputPath, await createTextPdf(['', 'Expected title and body']));
     return outputPath;
   };
 
@@ -292,10 +293,7 @@ it('removes leading blank pages from an otherwise valid Markdown PDF', async () 
 it('falls back when a LibreOffice PDF is missing Markdown content', async () => {
   const service = new PdfService();
   const originalConverter = (service as any).convertWithLibreOffice;
-  (service as any).convertWithLibreOffice = async (
-    sourcePath: string,
-    outputDir: string
-  ) => {
+  (service as any).convertWithLibreOffice = async (sourcePath: string, outputDir: string) => {
     const outputPath = join(
       outputDir,
       sourcePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '.pdf')
@@ -330,7 +328,8 @@ it('falls back when a LibreOffice PDF is missing Markdown content', async () => 
 bun --cwd apps/api test src/modules/tasks/services/pdf.service.test.ts
 ```
 
-预期：现有测试通过，但新增测试失败；首页空白测试仍得到 2 页，正文缺失测试仍得到 `Only one fragment`。这证明测试捕获的是当前缺陷而不是拼写错误。
+预期：现有测试通过，但新增测试失败；首页空白测试仍得到 2 页，正文缺失测试仍得到
+`Only one fragment`。这证明测试捕获的是当前缺陷而不是拼写错误。
 
 - [ ] **Step 4: 提交失败测试**
 
@@ -384,11 +383,13 @@ export function buildLibreOfficeArgs(
 }
 ```
 
-在服务端测试中断言参数包含 `-env:UserInstallation=file:///`、`--nodefault` 和传入的 filter。该纯函数不启动 LibreOffice，测试在 Windows 和 Linux 路径下都可运行。
+在服务端测试中断言参数包含 `-env:UserInstallation=file:///`、`--nodefault`
+和传入的 filter。该纯函数不启动 LibreOffice，测试在 Windows 和 Linux 路径下都可运行。
 
 - [ ] **Step 3: 实现 Markdown 文本片段提取和 PDF 页面文本读取**
 
-新增内部辅助函数，规则固定如下：先把 Markdown 转成已安全清理的 HTML，在块级结束标签前插入换行，移除其余标签并解码常见 HTML 实体；再把连续空白归一化，每个长度至少为 2 的非空块作为待校验片段。PDF 页面文本使用现有 `getMupdf()`，按 `doc.countPages()` 顺序读取 `page.toStructuredText().asText()`。
+新增内部辅助函数，规则固定如下：先把 Markdown 转成已安全清理的 HTML，在块级结束标签前插入换行，移除其余标签并解码常见 HTML 实体；再把连续空白归一化，每个长度至少为 2 的非空块作为待校验片段。PDF 页面文本使用现有
+`getMupdf()`，按 `doc.countPages()` 顺序读取 `page.toStructuredText().asText()`。
 
 ```typescript
 function normalizeDocumentText(value: string): string {
@@ -410,16 +411,23 @@ function normalizeDocumentText(value: string): string {
 
 增加 `normalizeMarkdownPdfOutput(pdf, markdown)`：
 
-1. 读取每页文本，找到第一张非空页；全部为空则抛出 `Error('LibreOffice produced a blank Markdown PDF')`。
+1. 读取每页文本，找到第一张非空页；全部为空则抛出
+   `Error('LibreOffice produced a blank Markdown PDF')`。
 2. 将所有 Markdown 片段归一化后逐一检查是否出现在从第一张非空页开始的 PDF 文本中；缺少任何片段就抛出带缺失片段数量的错误。
-3. 如果第一张非空页不是第 1 页，使用 `PDFDocument.load`、`copyPages` 复制剩余页面生成新 PDF，只删除前置空白页。
+3. 如果第一张非空页不是第 1 页，使用 `PDFDocument.load`、`copyPages`
+   复制剩余页面生成新 PDF，只删除前置空白页。
 4. 返回校验后的 PDF buffer。
 
 将 `ensureMarkdownPdfHasContent` 替换为该函数，保留 DOCX fallback 不变。
 
 - [ ] **Step 5: 实现隔离 profile 和双 filter 转换**
 
-将 `convertWithLibreOffice` 改为接收 `filter` 参数。每次调用在任务临时目录下创建独立的输出目录和 profile 目录，把 `buildLibreOfficeArgs(...)` 传给 `execFileAsync`，成功后只返回本次输出路径。`documentToPdf` 的 Markdown 分支按 `['pdf:writer_pdf_Export', 'pdf']` 顺序尝试：读取输出、调用 `normalizeMarkdownPdfOutput`，成功立即返回；任一命令异常或校验异常则进入下一 filter。两次都失败才调用现有 `renderMarkdownFallbackPdf`。DOCX 只调用一次显式 Writer filter。
+将 `convertWithLibreOffice` 改为接收 `filter`
+参数。每次调用在任务临时目录下创建独立的输出目录和 profile 目录，把 `buildLibreOfficeArgs(...)` 传给
+`execFileAsync`，成功后只返回本次输出路径。`documentToPdf` 的 Markdown 分支按
+`['pdf:writer_pdf_Export', 'pdf']` 顺序尝试：读取输出、调用
+`normalizeMarkdownPdfOutput`，成功立即返回；任一命令异常或校验异常则进入下一 filter。两次都失败才调用现有
+`renderMarkdownFallbackPdf`。DOCX 只调用一次显式 Writer filter。
 
 - [ ] **Step 6: 运行服务端测试确认变绿**
 
@@ -463,7 +471,12 @@ vi.mock('@/lib/processing/pdf-client', () => ({
 
 - [ ] **Step 2: 写三页翻页、缩略图和边界测试**
 
-渲染 `PdfResultPreview` 时传入 `previousLabel="上一页"`、`nextLabel="下一页"`、`pageIndicator={(page,total) => `第 ${page} / ${total} 页`}`、`thumbnailLabel={page => `第 ${page} 页缩略图`}` 和 `loadingLabel="加载中"`。断言：等待后有 3 个缩略图按钮；初始页码为第 1/3 页且上一页禁用；点击下一页后为第 2/3 页；点击第 3 页缩略图后为第 3/3 页且下一页禁用；主图 `src` 使用 page-3 data URL。
+渲染 `PdfResultPreview` 时传入
+`previousLabel="上一页"`、`nextLabel="下一页"`、`pageIndicator={(page,total) => `第
+${page} /
+${total} 页`}`、`thumbnailLabel={page => `第 ${page} 页缩略图`}` 和
+`loadingLabel="加载中"`。断言：等待后有 3 个缩略图按钮；初始页码为第 1/3 页且上一页禁用；点击下一页后为第 2/3 页；点击第 3 页缩略图后为第 3/3 页且下一页禁用；主图
+`src` 使用 page-3 data URL。
 
 - [ ] **Step 3: 运行 Web 定向测试确认先失败**
 
@@ -491,11 +504,16 @@ git commit --only -m "test: 覆盖 PDF 多页预览交互" -- apps/web/src/compo
 
 - [ ] **Step 1: 扩展 `PdfResultPreviewProps` 和状态**
 
-新增 `previousLabel`、`nextLabel`、`pageIndicator`、`thumbnailLabel`、`loadingLabel` props；状态包含 `currentPage`、`mainCanvas`、`thumbnails: Record<number, HTMLCanvasElement>`、`thumbnailErrors` 和 `error`。文件变化时清空旧状态并把当前页重置为 1。
+新增 `previousLabel`、`nextLabel`、`pageIndicator`、`thumbnailLabel`、`loadingLabel` props；状态包含
+`currentPage`、`mainCanvas`、`thumbnails: Record<number, HTMLCanvasElement>`、`thumbnailErrors` 和
+`error`。文件变化时清空旧状态并把当前页重置为 1。
 
 - [ ] **Step 2: 实现 PDF 加载、主页面渲染和有限并发缩略图队列**
 
-加载后设置 `pdf.numPages`，主页面用 `renderPdfPage(pdf, currentPage, 0.7)`；缩略图用 `renderPdfPage(pdf, page, 0.2)`，最多同时运行 3 个 worker。每个异步回调先检查 `cancelled`，组件卸载时只设置取消标记，不再写入状态。加载新文件时若旧文档提供 `destroy()`，调用并忽略其清理异常。
+加载后设置 `pdf.numPages`，主页面用 `renderPdfPage(pdf, currentPage, 0.7)`；缩略图用
+`renderPdfPage(pdf, page, 0.2)`，最多同时运行 3 个 worker。每个异步回调先检查
+`cancelled`，组件卸载时只设置取消标记，不再写入状态。加载新文件时若旧文档提供
+`destroy()`，调用并忽略其清理异常。
 
 - [ ] **Step 3: 添加导航和完整页面布局**
 
@@ -513,11 +531,17 @@ git commit --only -m "test: 覆盖 PDF 多页预览交互" -- apps/web/src/compo
 </div>
 ```
 
-页面下方放上一页/下一页按钮和页码；缩略图使用 `button` 网格，图片只设置 `h-auto max-w-full w-auto object-contain`，容器 `max-h-[360px] overflow-y-auto`，不设置会裁切页面的固定 aspect ratio。当前页按钮添加 `aria-current="page"` 和边框高亮。
+页面下方放上一页/下一页按钮和页码；缩略图使用 `button` 网格，图片只设置
+`h-auto max-w-full w-auto object-contain`，容器
+`max-h-[360px] overflow-y-auto`，不设置会裁切页面的固定 aspect ratio。当前页按钮添加
+`aria-current="page"` 和边框高亮。
 
 - [ ] **Step 4: 接入中英文文案**
 
-在两个 message 文件 `PdfTool.fromDocument` 下增加同名键。中文值为 `上一页`、`下一页`、`第 {page} / {total} 页`、`第 {page} 页缩略图`、`正在加载 PDF...`；英文值为 `Previous page`、`Next page`、`Page {page} of {total}`、`Thumbnail for page {page}`、`Loading PDF...`。页面通过 `t(...)` 生成函数并传给组件，不能在组件内硬编码文案。
+在两个 message 文件 `PdfTool.fromDocument` 下增加同名键。中文值为
+`上一页`、`下一页`、`第 {page} / {total} 页`、`第 {page} 页缩略图`、`正在加载 PDF...`；英文值为
+`Previous page`、`Next page`、`Page {page} of {total}`、`Thumbnail for page {page}`、`Loading PDF...`。页面通过
+`t(...)` 生成函数并传给组件，不能在组件内硬编码文案。
 
 - [ ] **Step 5: 运行 Web 定向测试确认变绿**
 
@@ -567,4 +591,134 @@ git status --short
 git log -5 --oneline
 ```
 
-预期：只剩用户原有的 `apps/web/package.json` 修改；本次提交不包含 `.env*`、Docker tar 包或规格之外的文件。若验证发现代码仍有未提交修改，先按文件范围创建中文修复提交再结束。
+预期：只剩用户原有的 `apps/web/package.json` 修改；本次提交不包含 `.env*`、Docker
+tar 包或规格之外的文件。若验证发现代码仍有未提交修改，先按文件范围创建中文修复提交再结束。
+
+## 附录：Markdown 编辑器固定高度与源码高亮实施计划（2026-07-19）
+
+> For agentic
+> workers: 本附录沿用本计划的 subagent-driven-development 要求；每个任务先写失败测试，再实现并在独立复审后提交。
+
+Goal：让 Markdown 编辑器固定为 520px 高度，并在保留原生输入行为的前提下按 Markdown token 高亮源码。
+
+Architecture：MarkdownEditor 继续以受控 textarea 作为唯一输入源，在其下方叠加只读高亮层。高亮层由项目已有的 highlight.js
+Markdown
+grammar 生成 HTML；textarea、行号和高亮层共享字体、行高、内边距，并由 textarea 的滚动事件同步纵向和横向位置。
+
+Tech Stack：Next.js 14、React 18、TypeScript、highlight.js 11、Vitest、Testing Library、Tailwind
+CSS。
+
+### 任务 1：为固定视口和源码高亮建立失败测试
+
+Files：
+
+- Modify：`apps/web/src/components/tools/__tests__/markdown-editor.test.tsx`
+- Test target：apps/web/src/components/tools/markdown-editor.tsx
+
+- [ ] Step 1：写固定高度和滚动契约测试
+
+在现有 MarkdownEditor 测试中渲染长 Markdown，断言 textarea 具有 wrap=off、h-full、resize-none、overflow-auto，且容器包含 h-[520px]。测试必须证明编辑器外层是固定高度，而不是当前的 min-h-[520px]
+加 resize-y。
+
+- [ ] Step 2：写 Markdown token 高亮测试
+
+使用包含标题、列表、链接、强调和代码围栏的源码，断言存在 pre[aria-hidden=true]
+高亮层、code.hljs 节点和至少两个 span[class*=hljs-]
+token，同时确认标题和链接文本仍可见。高亮层必须是只读展示，不应替代 textarea。
+
+- [ ] Step 3：写滚动同步测试并保留原始输入测试
+
+设置 textarea 的 scrollTop=144 和 scrollLeft=32 后触发 scroll 事件，断言行号容器与高亮层收到相同 scrollTop，高亮层收到相同 scrollLeft。保留现有 onChange 用例，确保高亮只改变显示层，不转换 Markdown 字符串。
+
+- [ ] Step 4：运行测试确认 RED
+
+运行：
+
+    bun run --cwd apps/web test src/components/tools/__tests__/markdown-editor.test.tsx
+
+预期：现有基础编辑器用例通过，新增固定视口、高亮层和滚动同步用例因当前组件没有对应结构而失败；失败原因不能是测试导入或语法错误。
+
+- [ ] Step 5：格式检查并提交失败测试
+
+运行：
+
+    bunx prettier --check apps/web/src/components/tools/__tests__/markdown-editor.test.tsx
+    git diff --check
+    git commit --only -m "test: 覆盖 Markdown 编辑器固定高度和源码高亮" -- apps/web/src/components/tools/__tests__/markdown-editor.test.tsx
+
+提交范围只能包含现有测试文件，保留用户已有的 apps/web/package.json 修改。
+
+### 任务 2：实现固定高度、同步滚动和 Markdown 源码高亮
+
+Files：
+
+- Modify：apps/web/src/components/tools/markdown-editor.tsx
+
+- [ ] Step 1：注册 Markdown 高亮语言并提供安全回退
+
+在 markdown-editor.tsx 中从 highlight.js/lib/core 导入 hljs，从 highlight.js/lib/languages/markdown 导入 Markdown
+grammar，并在模块级注册 markdown。实现 highlightMarkdownSource(value)：正常路径调用 hljs.highlight(value,
+{ language: 'markdown', ignoreIllegals: true
+}).value；异常路径返回转义了 ampersand、尖括号、双引号和单引号的纯文本 HTML。用 useMemo 只在源码变化时重新计算。
+
+- [ ] Step 2：将编辑视口改为固定高度
+
+把当前 min-h-[520px]
+和 resize-y 改为 h-[520px]、min-h-0、resize-none。textarea 使用 h-full、w-full、overflow-auto、whitespace-pre 和 wrap=off；保留现有字号、行高、行号、disabled、value、onChange 和统计逻辑。
+
+- [ ] Step 3：叠加高亮层并同步两轴滚动
+
+在 textarea 所在区域加入绝对定位的 pre 和 code.hljs。pre 设置 aria-hidden=true、pointer-events-none、与 textarea 相同的 px/py、字体和 leading；code 使用 dangerouslySetInnerHTML 展示高亮结果。textarea 放在高亮层上方，文字透明但保留 foreground
+caret 与选区。滚动处理器同时更新 gutter 的 scrollTop、高亮层的 scrollTop 和 scrollLeft，不能让高亮层抢占焦点。
+
+- [ ] Step 4：运行目标测试确认 GREEN
+
+运行：
+
+    bun run --cwd apps/web test src/components/tools/__tests__/markdown-editor.test.tsx
+
+预期：所有 MarkdownEditor 测试通过，没有 React act 警告、未处理 Promise 或高亮 HTML 解析错误。
+
+- [ ] Step 5：提交编辑器实现
+
+运行：
+
+    bunx prettier --check apps/web/src/components/tools/markdown-editor.tsx apps/web/src/components/tools/__tests__/markdown-editor.test.tsx
+    git diff --check
+    git commit --only -m "feat: 增加 Markdown 编辑器源码高亮" -- apps/web/src/components/tools/markdown-editor.tsx apps/web/src/components/tools/__tests__/markdown-editor.test.tsx
+
+提交不得包含消息文件、全局配色变量、任务接口或 apps/web/package.json。
+
+### 任务 3：全量验证与视觉核对
+
+Files：
+
+- Verify：apps/web/src/components/tools/markdown-editor.tsx
+- Verify：`apps/web/src/components/tools/__tests__/markdown-editor.test.tsx`
+- Verify：apps/web/src/app/globals.css
+
+- [ ] Step 1：运行 Web 全量测试、lint 和 build
+
+运行：
+
+    bun run test:web
+    bun run --cwd apps/web lint
+    bun run --cwd apps/web build
+
+预期：Web 测试失败数为 0，lint 无 error，build 退出码为 0；Windows standalone trace 的既有 symlink
+warning 单独记录，不修改无关配置。
+
+- [ ] Step 2：检查高亮颜色和滚动边界
+
+启动 Web 开发服务，在 Markdown /
+Word 转 PDF 页面分别输入长文档和超长单行，核对桌面与窄视口：编辑器高度不变化，纵向/横向滚动条可操作，行号和高亮文字不漂移，光标仍可见。截图只写入 artifacts/screenshots/，不提交仓库。
+
+- [ ] Step 3：检查提交范围并收口
+
+运行：
+
+    git status --short
+    git log -5 --oneline
+    git diff --check
+
+预期：只剩用户原有的 apps/web/package.json 修改；提交信息为中文；没有 .env\*、Docker 包、截图或生成缓存进入提交。

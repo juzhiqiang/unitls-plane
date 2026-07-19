@@ -66,6 +66,7 @@ describe('MarkdownEditor', () => {
     );
 
     expect(highlightLayer).toBeInTheDocument();
+    expect(highlightLayer).toHaveClass('pointer-events-none');
     expect(highlightedCode).toBeInTheDocument();
     expect(highlightedTokens?.length).toBeGreaterThanOrEqual(2);
     expect(highlightedCode).toHaveTextContent('Highlighted title');

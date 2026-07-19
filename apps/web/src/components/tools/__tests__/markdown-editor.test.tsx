@@ -89,7 +89,7 @@ describe('MarkdownEditor', () => {
 
     const textarea = screen.getByRole('textbox', { name: 'Markdown' });
     const gutter = container.querySelector(
-      '[aria-hidden="true"]:not(pre)'
+      'div.preview-scroll[aria-hidden="true"]'
     ) as HTMLElement | null;
     const highlightLayer = container.querySelector(
       'pre[aria-hidden="true"]'

@@ -1,8 +1,12 @@
 'use client';
 
 import { useMemo, useRef, type UIEvent } from 'react';
+import hljs from 'highlight.js/lib/core';
+import markdown from 'highlight.js/lib/languages/markdown';
 import { FileCode2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+hljs.registerLanguage('markdown', markdown);
 
 interface MarkdownEditorProps {
   value: string;
@@ -19,6 +23,31 @@ function countMarkdownStats(value: string) {
   return { lines, chars, words };
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, character => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+
+    return entities[character];
+  });
+}
+
+function highlightMarkdownSource(value: string) {
+  try {
+    return hljs.highlight(value, {
+      language: 'markdown',
+      ignoreIllegals: true,
+    }).value;
+  } catch {
+    return escapeHtml(value);
+  }
+}
+
 export function MarkdownEditor({
   value,
   onChange,
@@ -26,12 +55,24 @@ export function MarkdownEditor({
   disabled,
 }: MarkdownEditorProps) {
   const gutterRef = useRef<HTMLDivElement>(null);
+  const highlightLayerRef = useRef<HTMLPreElement>(null);
   const lines = useMemo(() => value.split('\n'), [value]);
   const stats = useMemo(() => countMarkdownStats(value), [value]);
+  const highlightedSource = useMemo(
+    () => highlightMarkdownSource(value),
+    [value]
+  );
 
   const handleScroll = (event: UIEvent<HTMLTextAreaElement>) => {
+    const { scrollLeft, scrollTop } = event.currentTarget;
+
     if (gutterRef.current) {
-      gutterRef.current.scrollTop = event.currentTarget.scrollTop;
+      gutterRef.current.scrollTop = scrollTop;
+    }
+
+    if (highlightLayerRef.current) {
+      highlightLayerRef.current.scrollTop = scrollTop;
+      highlightLayerRef.current.scrollLeft = scrollLeft;
     }
   };
 
@@ -53,7 +94,7 @@ export function MarkdownEditor({
         </div>
       </div>
 
-      <div className="grid min-h-[520px] grid-cols-[3.75rem_minmax(0,1fr)] bg-background">
+      <div className="grid h-[520px] min-h-0 grid-cols-[3.75rem_minmax(0,1fr)] bg-background">
         <div
           ref={gutterRef}
           aria-hidden="true"
@@ -65,20 +106,37 @@ export function MarkdownEditor({
             </div>
           ))}
         </div>
-        <textarea
-          value={value}
-          onChange={event => onChange(event.target.value)}
-          onScroll={handleScroll}
-          disabled={disabled}
-          spellCheck={false}
-          aria-label={label}
+        <div
           className={cn(
-            'preview-scroll min-h-[520px] w-full resize-y bg-transparent px-4 py-3',
-            'font-mono text-[13px] leading-6 text-foreground outline-none',
-            'selection:bg-accent/20 placeholder:text-muted-foreground',
-            'disabled:opacity-50'
+            'relative h-[520px] min-h-0 min-w-0',
+            disabled && 'opacity-50'
           )}
-        />
+        >
+          <pre
+            ref={highlightLayerRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 m-0 overflow-hidden px-4 py-3 font-mono text-[13px] leading-6 text-foreground whitespace-pre"
+          >
+            <code
+              className="hljs block min-w-max"
+              dangerouslySetInnerHTML={{ __html: highlightedSource }}
+            />
+          </pre>
+          <textarea
+            value={value}
+            onChange={event => onChange(event.target.value)}
+            onScroll={handleScroll}
+            disabled={disabled}
+            spellCheck={false}
+            wrap="off"
+            aria-label={label}
+            className={cn(
+              'preview-scroll relative z-10 h-full w-full resize-none overflow-auto bg-transparent px-4 py-3',
+              'font-mono text-[13px] leading-6 text-transparent caret-foreground outline-none whitespace-pre',
+              'selection:bg-accent/20 placeholder:text-muted-foreground'
+            )}
+          />
+        </div>
       </div>
     </section>
   );

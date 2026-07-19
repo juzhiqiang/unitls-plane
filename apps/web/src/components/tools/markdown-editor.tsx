@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 
 hljs.registerLanguage('markdown', markdown);
 
+const MAX_HIGHLIGHT_SOURCE_LENGTH = 256 * 1024;
+
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -33,6 +35,11 @@ function escapeHtml(value: string) {
 }
 
 function highlightMarkdownSource(value: string) {
+  // Keep controlled textarea updates responsive for very large documents.
+  if (value.length > MAX_HIGHLIGHT_SOURCE_LENGTH) {
+    return escapeHtml(value);
+  }
+
   try {
     return hljs.highlight(value, {
       language: 'markdown',

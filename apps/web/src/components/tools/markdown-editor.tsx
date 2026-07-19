@@ -24,17 +24,12 @@ function countMarkdownStats(value: string) {
 }
 
 function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, character => {
-    const entities: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    };
-
-    return entities[character];
-  });
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function highlightMarkdownSource(value: string) {

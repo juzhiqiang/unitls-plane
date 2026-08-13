@@ -54,7 +54,7 @@ Codex 会直接读取 `AGENTS.md`；Claude Code 通过 `CLAUDE.md` 中的 `@AGEN
 
 - 图片压缩
 - 图片格式转换
-- GIF/APNG 制作与 GIF 压缩
+- GIF/APNG 制作与压缩
 - 长图拼接
 - 图片加水印
 - 图片旋转、水平/垂直翻转、自动方向校正

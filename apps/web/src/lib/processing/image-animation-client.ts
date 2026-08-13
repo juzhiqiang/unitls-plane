@@ -7,6 +7,7 @@ import * as UPNG from 'upng-js';
 
 export type AnimationOutputFormat = 'gif' | 'apng';
 export type AnimationFitMode = 'contain' | 'cover';
+export type AnimationFileFormat = 'gif' | 'apng';
 type GifPalette = number[][];
 type GifPaletteFormat = 'rgba4444' | 'rgb565';
 type GifFrameBuffer = Uint8Array | Uint8ClampedArray;
@@ -49,6 +50,8 @@ const quantize = quantizeUntyped as (
 ) => GifPalette;
 const APNG_ACTL_TYPE = [0x61, 0x63, 0x54, 0x4c] as const;
 const PNG_SIGNATURE_LENGTH = 8;
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
+const GIF_SIGNATURES = ['GIF87a', 'GIF89a'] as const;
 const UINT32_MAX = 0xffffffff;
 
 export interface AnimationSourceSize {
@@ -275,7 +278,18 @@ function isActlChunk(bytes: Uint8Array, typeOffset: number): boolean {
   );
 }
 
+function hasSignature(
+  bytes: Uint8Array,
+  signature: readonly number[]
+): boolean {
+  return signature.every((byte, index) => bytes[index] === byte);
+}
+
 function findApngActlChunkOffset(bytes: Uint8Array): number | undefined {
+  if (!hasSignature(bytes, PNG_SIGNATURE)) {
+    return undefined;
+  }
+
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = PNG_SIGNATURE_LENGTH;
 
@@ -292,6 +306,42 @@ function findApngActlChunkOffset(bytes: Uint8Array): number | undefined {
     }
 
     offset = chunkEnd;
+  }
+
+  return undefined;
+}
+
+export async function getAnimationFileFormat(
+  file: File
+): Promise<AnimationFileFormat | undefined> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return getAnimationFileFormatFromBytes(bytes, file.name, file.type);
+}
+
+function getAnimationFileFormatFromBytes(
+  bytes: Uint8Array,
+  filename: string,
+  mimeType: string
+): AnimationFileFormat | undefined {
+  const name = filename.toLowerCase();
+
+  if (
+    (mimeType === 'image/gif' || name.endsWith('.gif')) &&
+    GIF_SIGNATURES.some(signature =>
+      hasSignature(
+        bytes,
+        Array.from(signature).map(character => character.charCodeAt(0))
+      )
+    )
+  ) {
+    return 'gif';
+  }
+
+  if (
+    hasSignature(bytes, PNG_SIGNATURE) &&
+    findApngActlChunkOffset(bytes) !== undefined
+  ) {
+    return 'apng';
   }
 
   return undefined;
@@ -738,6 +788,16 @@ export async function compressGif(
 
   const normalized = normalizeAnimationCompressOptions(options);
   const bytes = new Uint8Array(await file.arrayBuffer());
+  const format = getAnimationFileFormatFromBytes(bytes, file.name, file.type);
+
+  if (format === 'apng') {
+    return compressApng(bytes, normalized, limits);
+  }
+
+  if (format !== 'gif') {
+    throw new Error('Animation file must be a valid GIF or APNG');
+  }
+
   const reader = new GifReader(bytes);
   const info: GifInfo = {
     width: reader.width,
@@ -815,5 +875,86 @@ export async function compressGif(
     {
       type: 'image/gif',
     }
+  );
+}
+
+function compressApng(
+  bytes: Uint8Array,
+  options: AnimationCompressOptions,
+  limits: AnimationPlanLimits
+): File {
+  const decoded = UPNG.decode(toArrayBuffer(bytes));
+  const frameCount = decoded.frames.length;
+
+  if (!decoded.tabs.acTL || frameCount < 2) {
+    throw new Error('Animation file must contain at least two APNG frames');
+  }
+
+  const plan = resolveCompressedGifPlan(
+    {
+      width: decoded.width,
+      height: decoded.height,
+      frameCount,
+    },
+    options,
+    limits
+  );
+  const outputFrameCount = Math.ceil(frameCount / plan.frameStep);
+  validateAnimationFrameBudget(
+    outputFrameCount,
+    'apng',
+    limits,
+    plan.width * plan.height
+  );
+  const frames = UPNG.toRGBA8(decoded);
+  const targetSize = { width: plan.width, height: plan.height };
+  const minOutputDelayMs = Math.round(1000 / plan.targetFps);
+  const outputFrames: ArrayBuffer[] = [];
+  const outputDelays: number[] = [];
+  let pendingDelayMs = 0;
+
+  for (let index = 0; index < frameCount; index += 1) {
+    const frame = frames[index];
+    if (!frame) {
+      throw new Error('Unable to decode APNG frame');
+    }
+    const sourceDelay = Math.max(
+      minOutputDelayMs,
+      Math.round(decoded.frames[index]?.delay ?? minOutputDelayMs)
+    );
+    pendingDelayMs += sourceDelay;
+
+    if (index === 0 || index % plan.frameStep === 0) {
+      const scaled = scaleRgbaFrame(
+        new Uint8ClampedArray(frame),
+        { width: decoded.width, height: decoded.height },
+        targetSize
+      );
+      outputFrames.push(getImageDataBuffer(scaled));
+      outputDelays.push(Math.max(pendingDelayMs, minOutputDelayMs));
+      pendingDelayMs = 0;
+    }
+  }
+
+  if (pendingDelayMs > 0 && outputDelays.length > 0) {
+    outputDelays[outputDelays.length - 1] = Math.max(
+      outputDelays[outputDelays.length - 1] ?? minOutputDelayMs,
+      pendingDelayMs
+    );
+  }
+
+  const encoded = UPNG.encode(
+    outputFrames,
+    plan.width,
+    plan.height,
+    getPaletteColorCount(options.quality),
+    outputDelays
+  );
+  const apng = patchApngRepeatCount(encoded, decoded.tabs.acTL.num_plays);
+
+  return new File(
+    [toArrayBuffer(apng)],
+    getAnimationOutputName(options.filename, 'apng'),
+    { type: 'image/apng' }
   );
 }

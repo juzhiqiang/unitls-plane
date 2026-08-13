@@ -548,9 +548,9 @@
   },
   "ImageAnimation": {
     "title": "GIF/APNG 制作与压缩",
-    "description": "制作轻量动图、压缩已有 GIF；登录后可使用 APNG 和高级参数。",
+    "description": "制作轻量动图，压缩已有 GIF/APNG；登录后可使用 APNG 和高级参数。",
     "dropzoneCreateHint": "上传 PNG、JPG 或 WebP 图片作为动画帧。",
-    "dropzoneCompressHint": "上传一个 GIF 文件进行基础压缩。",
+    "dropzoneCompressHint": "上传一个 GIF 或 APNG 文件进行基础压缩。",
     "processingLabel": "正在处理动画图片…",
     "modes": {
       "create": "制作",
@@ -581,16 +581,16 @@
     "convertDescription": "首版优先完成制作和压缩；GIF/APNG/WebP 动图互转会在后续扩展。",
     "start": "生成动画",
     "startWithCount": "生成 {count} 帧动画",
-    "compressAction": "压缩 GIF",
+    "compressAction": "压缩动图",
     "processing": "处理中…",
     "resultTitle": "动画已生成",
-    "compressedResultTitle": "GIF 已压缩",
+    "compressedResultTitle": "动图已压缩",
     "resultDescription": "{name}，{size}",
     "compressionResultDescription": "从 {before} 压缩到 {after}",
     "previewAlt": "动画结果预览",
     "limits": {
       "needAtLeastTwo": "至少需要 2 张图片才能制作动画。",
-      "gifOnly": "压缩模式首版仅支持 GIF 文件。",
+      "gifOnly": "请上传有效的 GIF 或 APNG 动图文件。",
       "apngLogin": "APNG 是登录增强选项。",
       "invalidSize": "请输入有效的画布尺寸。",
       "processingFailed": "动画处理失败，请减少帧数或降低尺寸后重试。"

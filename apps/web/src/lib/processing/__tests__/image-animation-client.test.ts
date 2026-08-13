@@ -5,6 +5,7 @@ import {
   findTransparentPaletteIndex,
   getCompressedGifFrameDelayMs,
   getCompressedGifWriterOptions,
+  getAnimationFileFormat,
   getAnimationOutputName,
   getImageAnimationEntitlements,
   normalizeAnimationCreateOptions,
@@ -116,6 +117,26 @@ describe('image animation client helpers', () => {
     expect(getAnimationOutputName('promo-loop', 'gif')).toBe('promo-loop.gif');
     expect(getAnimationOutputName('hero.apng', 'gif')).toBe('hero.gif');
     expect(getAnimationOutputName('', 'apng')).toBe('animated-image.apng');
+  });
+
+  it('recognizes APNG content even when browsers report image/png', async () => {
+    const apng = new File(
+      [buildMinimalApng(0).buffer as ArrayBuffer],
+      'jrgjtj-bg.png',
+      {
+        type: 'image/png',
+      }
+    );
+
+    await expect(getAnimationFileFormat(apng)).resolves.toBe('apng');
+  });
+
+  it('does not treat a static PNG as an APNG input', async () => {
+    const png = new File([new Uint8Array(pngSignature).buffer], 'still.png', {
+      type: 'image/png',
+    });
+
+    await expect(getAnimationFileFormat(png)).resolves.toBeUndefined();
   });
 
   it('normalizes create options into safe integer bounds', () => {

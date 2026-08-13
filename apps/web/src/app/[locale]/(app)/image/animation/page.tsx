@@ -17,6 +17,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import {
   compressGif,
   createAnimationFromImages,
+  getAnimationFileFormat,
   getImageAnimationEntitlements,
   type AnimationFitMode,
   type AnimationOutputFormat,
@@ -59,10 +60,6 @@ const OUTPUT_FORMAT_LABELS: Record<AnimationOutputFormat, string> = {
 
 function makeFrameId(file: File): string {
   return `${file.name}-${file.lastModified}-${file.size}-${createBrowserId()}`;
-}
-
-function isGifFile(file: File): boolean {
-  return file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
 }
 
 function AnimationResultPreview({
@@ -207,11 +204,11 @@ export default function ImageAnimationPage() {
     );
   };
 
-  const handleGifDrop = (dropped: File[]) => {
+  const handleGifDrop = async (dropped: File[]) => {
     const file = dropped[0];
     if (!file) return;
 
-    if (!isGifFile(file)) {
+    if ((await getAnimationFileFormat(file)) === undefined) {
       setGifFile(null);
       setError(t('limits.gifOnly'));
       return;
@@ -600,7 +597,11 @@ export default function ImageAnimationPage() {
       {mode === 'compress' && (
         <>
           <FileDropzone
-            accept={{ 'image/gif': ['.gif'] }}
+            accept={{
+              'image/gif': ['.gif'],
+              'image/apng': ['.apng'],
+              'image/png': ['.png', '.apng'],
+            }}
             maxSize={entitlements.maxFileSize}
             multiple={false}
             onDrop={handleGifDrop}

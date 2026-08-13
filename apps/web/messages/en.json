@@ -548,9 +548,9 @@
   },
   "ImageAnimation": {
     "title": "GIF / APNG maker",
-    "description": "Create lightweight animations, compress existing GIFs, and unlock APNG plus advanced controls when signed in.",
+    "description": "Create lightweight animations, compress existing GIF/APNG files, and unlock APNG plus advanced controls when signed in.",
     "dropzoneCreateHint": "Upload PNG, JPG, or WebP images as animation frames.",
-    "dropzoneCompressHint": "Upload one GIF file for basic compression.",
+    "dropzoneCompressHint": "Upload one GIF or APNG file for basic compression.",
     "processingLabel": "Processing animated image…",
     "modes": {
       "create": "Create",
@@ -581,16 +581,16 @@
     "convertDescription": "The first version prioritizes creation and compression. GIF/APNG/WebP animation conversion can expand here later.",
     "start": "Generate animation",
     "startWithCount": "Generate {count}-frame animation",
-    "compressAction": "Compress GIF",
+    "compressAction": "Compress animation",
     "processing": "Processing…",
     "resultTitle": "Animation ready",
-    "compressedResultTitle": "GIF compressed",
+    "compressedResultTitle": "Animation compressed",
     "resultDescription": "{name}, {size}",
     "compressionResultDescription": "Compressed from {before} to {after}",
     "previewAlt": "Animated result preview",
     "limits": {
       "needAtLeastTwo": "At least two images are required to create an animation.",
-      "gifOnly": "The first compression version supports GIF files only.",
+      "gifOnly": "Upload a valid GIF or APNG animation file.",
       "apngLogin": "APNG is available after sign-in.",
       "invalidSize": "Enter a valid canvas size.",
       "processingFailed": "Animation processing failed. Try fewer frames or a smaller size."

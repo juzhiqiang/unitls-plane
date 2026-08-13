@@ -309,7 +309,7 @@ cd packages/api-client && bun run generate
 
 工具清单：
 
-- 图片：压缩、格式转换、水印、长图拼接、GIF/APNG 制作与 GIF 压缩、证件照生成、批量处理、压缩前后对比。
+- 图片：压缩、格式转换、水印、长图拼接、GIF/APNG 制作与压缩、证件照生成、批量处理、压缩前后对比。
 - PDF：合并、拆分、重排、旋转、图片转 PDF、Markdown /
   Word 转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
 - 字体：TTF/OTF/WOFF/WOFF2 转换。

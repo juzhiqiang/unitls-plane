@@ -60,6 +60,12 @@ function compressedName(file: File, outputType: CompressFormat): string {
   return `compressed-${base}.${ext}`;
 }
 
+export function getImageCompressionIndices(
+  items: readonly FileItem[]
+): number[] {
+  return items.map((_, index) => index);
+}
+
 async function processOnServer(
   file: File,
   config: Record<string, unknown>,
@@ -172,9 +178,7 @@ export default function CompressPage() {
       return;
     }
 
-    const indicesToProcess = items
-      .map((it, i) => (it.status === 'done' && it.result ? -1 : i))
-      .filter(i => i >= 0);
+    const indicesToProcess = getImageCompressionIndices(items);
 
     if (indicesToProcess.length === 0) return;
 
@@ -182,16 +186,10 @@ export default function CompressPage() {
     setGlobalError(null);
     setProgress(0);
     setItems(prev =>
-      prev.map(it =>
-        it.status === 'done' && it.result
-          ? it
-          : { file: it.file, status: 'pending' as const }
-      )
+      prev.map(it => ({ file: it.file, status: 'pending' as const }))
     );
 
-    const fileProgress: number[] = items.map(it =>
-      it.status === 'done' && it.result ? 100 : 0
-    );
+    const fileProgress: number[] = items.map(() => 0);
     const updateOverall = () => {
       const sum = fileProgress.reduce((a, b) => a + b, 0);
       setProgress(Math.round(sum / items.length));

@@ -355,8 +355,12 @@
       "createdAt": "Member since",
       "plan": "Current plan",
       "planValues": {
-        "free": "Free beta",
-        "enhanced": "Signed-in enhanced capabilities"
+        "free": "Free beta (Free Beta)",
+        "pro_preview": "Free beta with top limits (Pro Preview)",
+        "pro": "Professional (Pro)",
+        "team": "Team (Team)",
+        "private": "Private (Private)",
+        "unknown": "Unknown plan (Unknown)"
       },
       "emailVerified": "Email status",
       "verified": "Verified",

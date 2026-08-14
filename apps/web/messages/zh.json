@@ -355,8 +355,12 @@
       "createdAt": "注册时间",
       "plan": "当前套餐",
       "planValues": {
-        "free": "免费公测",
-        "enhanced": "登录增强能力"
+        "free": "免费公测（Free Beta）",
+        "pro_preview": "免费公测顶额权益（Pro Preview）",
+        "pro": "专业版（Pro）",
+        "team": "团队版（Team）",
+        "private": "私有版（Private）",
+        "unknown": "未知套餐（Unknown）"
       },
       "emailVerified": "邮箱状态",
       "verified": "已验证",

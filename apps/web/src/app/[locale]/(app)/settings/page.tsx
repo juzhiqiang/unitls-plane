@@ -26,6 +26,13 @@ import { Camera, Download, Trash2 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+const PLAN_LABEL_KEYS = {
+  free: 'free',
+  pro_preview: 'pro_preview',
+  pro: 'pro',
+  team: 'team',
+  private: 'private',
+} as const;
 
 export default function SettingsPage() {
   const t = useTranslations('Settings');
@@ -79,11 +86,16 @@ export default function SettingsPage() {
   }
 
   const user = session.user;
-  const userPlan = (user as { plan?: string }).plan ?? 'free';
-  const planLabel =
-    userPlan === 'free'
-      ? t('account.planValues.free')
-      : t('account.planValues.enhanced');
+  const userPlan = ((user as { plan?: string }).plan ?? 'free')
+    .trim()
+    .toLowerCase();
+  const planLabelKey = Object.prototype.hasOwnProperty.call(
+    PLAN_LABEL_KEYS,
+    userPlan
+  )
+    ? PLAN_LABEL_KEYS[userPlan as keyof typeof PLAN_LABEL_KEYS]
+    : 'unknown';
+  const planLabel = t(`account.planValues.${planLabelKey}`);
   const initial = (user.name || user.email || 'U').charAt(0).toUpperCase();
 
   const handleAvatarPick = () => fileInputRef.current?.click();

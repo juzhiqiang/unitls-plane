@@ -28,8 +28,8 @@ describe('marketing homepage copy', () => {
       'Signed-in enhanced capabilities'
     );
 
-    expect(zh.Settings.account.planValues.free).toBe('免费公测');
-    expect(en.Settings.account.planValues.free).toBe('Free beta');
+    expect(zh.Settings.account.planValues.free).toBe('免费公测（Free Beta）');
+    expect(en.Settings.account.planValues.free).toBe('Free beta (Free Beta)');
   });
 
   it('does not promise a commercial or future payment model in user copy', () => {

@@ -1,5 +1,6 @@
 export * from './entitlements';
 export * from './release';
+export * from './plan-display';
 
 export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0] || '';

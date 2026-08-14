@@ -40,7 +40,8 @@
       "beta": "公测说明",
       "changelog": "更新日志",
       "support": "支持",
-      "navigation": "公开信息"
+      "navigation": "公开信息",
+      "plans": "套餐与额度"
     },
     "hero": {
       "titleLine1": "文件开始进化",
@@ -1317,6 +1318,37 @@
           ]
         }
       ]
+    },
+    "plans": {
+      "metadata": {
+        "title": "套餐与额度 | Utils Plane",
+        "description": "查看 Utils Plane 各套餐的单文件上传额度与定位说明。"
+      },
+      "eyebrow": "套餐与额度",
+      "title": "套餐与额度",
+      "intro": "公测期间所有套餐免费。以下额度适用于本地和服务端处理的单文件大小限制。",
+      "betaNote": "公测期间所有套餐免费。Pro Preview 账号使用与 Private 相同的顶额权益；普通免费登录账号为 50MB。",
+      "columns": {
+        "plan": "套餐",
+        "uploadLimit": "单文件上限",
+        "notes": "说明"
+      },
+      "planLabels": {
+        "free": "匿名用户（Anonymous）",
+        "signed_in": "免费登录用户（Free Beta）",
+        "pro_preview": "免费公测顶额权益（Pro Preview）",
+        "pro": "专业版（Pro）",
+        "team": "团队版（Team）",
+        "private": "私有版（Private）"
+      },
+      "planNotes": {
+        "free": "无需登录，浏览器本地处理",
+        "signed_in": "登录后的免费公测账号",
+        "pro_preview": "公测期间使用与 Private 相同的顶额权益",
+        "pro": "专业版套餐",
+        "team": "团队版套餐",
+        "private": "私有版套餐"
+      }
     }
   },
   "Format": {},

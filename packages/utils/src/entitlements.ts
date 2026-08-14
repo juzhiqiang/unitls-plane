@@ -62,7 +62,7 @@ const FEATURE_MIN_PLAN: Record<FeatureKey, EntitlementPlan> = {
   'pdf.document.serverExport': 'signed_in',
 };
 
-const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
+export const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'upload.maxFileSize': {
     free: 10 * 1024 * 1024,
     signed_in: 50 * 1024 * 1024,

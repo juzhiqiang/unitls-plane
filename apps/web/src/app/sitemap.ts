@@ -12,6 +12,7 @@ const PUBLIC_PATHS = Array.from(
     '/privacy',
     '/terms',
     '/beta',
+    '/plans',
     '/changelog',
     ...allTools.map(tool => tool.href),
   ])

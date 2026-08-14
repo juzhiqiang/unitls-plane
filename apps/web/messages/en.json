@@ -40,7 +40,8 @@
       "beta": "Beta notice",
       "changelog": "Changelog",
       "support": "Support",
-      "navigation": "Public information"
+      "navigation": "Public information",
+      "plans": "Plans & limits"
     },
     "hero": {
       "titleLine1": "Files Evolve",
@@ -1319,6 +1320,37 @@
           ]
         }
       ]
+    },
+    "plans": {
+      "metadata": {
+        "title": "Plans & limits | Utils Plane",
+        "description": "View the per-file upload limits and descriptions for each Utils Plane plan."
+      },
+      "eyebrow": "Plans & limits",
+      "title": "Plans & limits",
+      "intro": "All plans are free during the public beta. These limits apply to the maximum single-file size for both local and server processing.",
+      "betaNote": "All plans are free during the public beta. Pro Preview accounts use the same top-tier allowance as Private; regular free signed-in accounts are limited to 50 MB.",
+      "columns": {
+        "plan": "Plan",
+        "uploadLimit": "Upload limit",
+        "notes": "Notes"
+      },
+      "planLabels": {
+        "free": "Anonymous",
+        "signed_in": "Free Beta",
+        "pro_preview": "Pro Preview",
+        "pro": "Pro",
+        "team": "Team",
+        "private": "Private"
+      },
+      "planNotes": {
+        "free": "No login required; browser-only processing",
+        "signed_in": "Signed-in free beta account",
+        "pro_preview": "Top-tier allowance during the public beta",
+        "pro": "Professional plan",
+        "team": "Team plan",
+        "private": "Private plan"
+      }
     }
   },
   "Format": {},

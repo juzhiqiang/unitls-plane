@@ -172,6 +172,8 @@ describe('public trust pages', () => {
     }
     expect(layout).toMatch(/<Link\s+href="\/changelog"/);
     expect(layout).toContain("t('footer.changelog')");
+    expect(layout).toMatch(/<Link\s+href="\/plans"/);
+    expect(layout).toContain("t('footer.plans')");
     expect(layout).toContain('mailto:${supportEmail}');
     expect(layout).toContain('getSupportEmail');
   });

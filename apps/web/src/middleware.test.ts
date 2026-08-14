@@ -45,7 +45,7 @@ describe('middleware auth routes', () => {
 
   it('allows unauthenticated users to read public trust pages', () => {
     for (const locale of ['zh', 'en']) {
-      for (const page of ['privacy', 'terms', 'beta', 'changelog']) {
+      for (const page of ['privacy', 'terms', 'beta', 'changelog', 'plans']) {
         const response = middleware(request(`/${locale}/${page}`));
 
         expect(response.status).not.toBe(307);

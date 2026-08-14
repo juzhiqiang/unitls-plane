@@ -1,222 +1,158 @@
-# 图片压缩超大文件 Implementation Plan
+# 图片压缩套餐额度 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 允许图片压缩页接收最大 250
-MB 的文件进行浏览器本地处理，同时继续按当前账号套餐限制服务端上传。
+**Goal:** 让图片压缩的本地与服务端处理共同遵守账号套餐单文件额度，并使显式 Pro
+Preview 账号获得顶额会员权益。
 
-**Architecture:**
-在图片压缩页辅助模块集中计算本地入口上限、会话对应的服务端额度和推荐处理模式。页面根据选中文件实时禁用不合法的服务端模式，并在执行前再次校验；共享上传控件负责将容量标签和
-`file-too-large` 错误本地化。
+**Architecture:** 共享权益层负责所有计划的额度事实，图片压缩页只把当前会话映射到
+`upload.maxFileSize`。上传控件在选择阶段执行动态限制并本地化错误，页面在处理前做一次防御校验。
 
-**Tech Stack:** Next.js 14、React 18、TypeScript、next-intl、react-dropzone、Vitest、Testing Library
+**Tech Stack:** TypeScript、Bun Test、Next.js 14、React
+18、next-intl、react-dropzone、Vitest、Testing Library
 
 ---
 
-### Task 1: 图片压缩额度与推荐模式
+### Task 1: Pro Preview 顶额共享权益
+
+**Files:**
+
+- Modify: `packages/utils/src/entitlements.ts`
+- Test: `packages/utils/src/entitlements.test.ts`
+
+- [ ] **Step 1: 写入失败测试**
+
+导入 `isPlanAtLeast` 和 `LimitKey`，断言 `pro_preview` 达到 `private` 等级，并遍历全部限制键比较：
+
+```typescript
+expect(isPlanAtLeast('pro_preview', 'private')).toBe(true);
+
+for (const limit of limitKeys) {
+  expect(getLimit({ userId: 'preview', plan: 'pro_preview' }, limit)).toBe(
+    getLimit({ userId: 'private', plan: 'private' }, limit)
+  );
+}
+```
+
+- [ ] **Step 2: 运行测试确认 RED**
+
+Run: `bun test packages/utils/src/entitlements.test.ts`
+
+Expected: FAIL，当前 `pro_preview` 等级和各限制仍低于 `private`。
+
+- [ ] **Step 3: 实现最小共享权益修改**
+
+将 `PLAN_RANK.pro_preview` 设为与 `private` 相同，并将 `LIMITS` 中每个 `pro_preview` 值改为对应的
+`private` 值；保留 `resolveEntitlementPlan` 返回 `pro_preview`。
+
+- [ ] **Step 4: 运行测试确认 GREEN**
+
+Run: `bun test packages/utils/src/entitlements.test.ts`
+
+Expected: PASS。
+
+### Task 2: 图片压缩动态套餐额度
 
 **Files:**
 
 - Modify: `apps/web/src/app/[locale]/(app)/image/compress/image-compress-utils.ts`
+- Modify: `apps/web/src/app/[locale]/(app)/image/compress/page.tsx`
 - Test: `apps/web/src/app/[locale]/(app)/image/compress/__tests__/page.test.ts`
 
 - [ ] **Step 1: 写入失败测试**
 
-为辅助函数添加以下断言：
+为 `getImageCompressionMaxFileSize(session)` 断言以下结果：游客 10 MB、普通登录 50 MB、Pro Preview
+250 MB、Pro 100 MB、Team 150 MB、Private 250 MB。读取页面源码并断言：
 
 ```typescript
-expect(IMAGE_COMPRESSION_LOCAL_MAX_FILE_SIZE).toBe(250 * 1024 * 1024);
-expect(getImageCompressionServerMaxFileSize(null)).toBe(10 * 1024 * 1024);
-expect(
-  getImageCompressionServerMaxFileSize({
-    user: { id: 'user-1', plan: 'pro', role: 'user' },
-  })
-).toBe(100 * 1024 * 1024);
-expect(
-  hasImageCompressionServerOversizeFile(
-    [new File([new Uint8Array(51 * 1024 * 1024)], 'large.png')],
-    50 * 1024 * 1024
-  )
-).toBe(true);
-expect(
-  getImageCompressionRecommendation(
-    [new File([new Uint8Array(51 * 1024 * 1024)], 'large.png')],
-    50 * 1024 * 1024
-  )
-).toBe('local');
+expect(source).toContain('maxSize={maxFileSize}');
+expect(source).not.toContain('maxSize={50 * 1024 * 1024}');
 ```
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [ ] **Step 2: 运行测试确认 RED**
 
 Run: `bun --cwd apps/web test -- "src/app/[locale]/(app)/image/compress/__tests__/page.test.ts"`
 
-Expected: FAIL，原因是新常量和辅助函数尚未导出。
+Expected: FAIL，页面仍固定 50 MB，辅助函数仍使用旧接口。
 
-- [ ] **Step 3: 实现最小额度辅助函数**
+- [ ] **Step 3: 实现动态共同额度**
 
-在 `image-compress-utils.ts` 中从 `@utils-plane/utils` 导入
-`getLimit`，定义可选的会话用户结构，并实现：
+辅助模块把会话用户映射到共享 `getLimit`，只导出 `getImageCompressionMaxFileSize`。页面使用返回值作为
+`FileDropzone.maxSize`，保留现有推荐模式；`handleProcess`
+在本地和服务端分支之前检查全部文件是否超过当前额度，超额时显示本地化错误并终止。
 
-```typescript
-export const IMAGE_COMPRESSION_LOCAL_MAX_FILE_SIZE = 250 * 1024 * 1024;
-
-export function getImageCompressionServerMaxFileSize(session: CompressionSession): number {
-  const user = session?.user;
-  return getLimit(
-    user ? { userId: user.id, plan: user.plan, role: user.role } : undefined,
-    'upload.maxFileSize'
-  );
-}
-
-export function hasImageCompressionServerOversizeFile(
-  files: readonly File[],
-  serverMaxFileSize: number
-): boolean {
-  return files.some(file => file.size > serverMaxFileSize);
-}
-```
-
-推荐模式先检查服务端额度，未超额时继续调用现有 `shouldProcessLocally` 规则。
-
-- [ ] **Step 4: 运行测试并确认 GREEN**
+- [ ] **Step 4: 运行测试确认 GREEN**
 
 Run: `bun --cwd apps/web test -- "src/app/[locale]/(app)/image/compress/__tests__/page.test.ts"`
 
 Expected: PASS。
 
-### Task 2: 服务端模式禁用态
-
-**Files:**
-
-- Modify: `apps/web/src/components/tools/mode-toggle.tsx`
-- Create: `apps/web/src/components/tools/__tests__/mode-toggle.test.tsx`
-
-- [ ] **Step 1: 写入失败组件测试**
-
-渲染 `ModeToggle`，传入 `serverDisabled` 和 `serverDisabledReason`，断言：
-
-```typescript
-expect(screen.getByRole('button', { name: 'Local' })).toBeEnabled();
-expect(screen.getByRole('button', { name: 'Server' })).toBeDisabled();
-expect(screen.getByText('Server files are limited to 50 MB.')).toBeInTheDocument();
-```
-
-- [ ] **Step 2: 运行测试并确认 RED**
-
-Run: `bun --cwd apps/web test -- src/components/tools/__tests__/mode-toggle.test.tsx`
-
-Expected: FAIL，原因是组件尚无服务端独立禁用属性。
-
-- [ ] **Step 3: 实现服务端独立禁用**
-
-在 `ModeToggleProps` 中加入：
-
-```typescript
-serverDisabled?: boolean;
-serverDisabledReason?: string;
-```
-
-仅当按钮为 `server` 时合并 `serverDisabled`，保留 `disabled` 对两个按钮的处理；在分段控件下方显示
-`serverDisabledReason`。
-
-- [ ] **Step 4: 运行测试并确认 GREEN**
-
-Run: `bun --cwd apps/web test -- src/components/tools/__tests__/mode-toggle.test.tsx`
-
-Expected: PASS。
-
-### Task 3: 上传容量本地化与页面接线
+### Task 3: 上传容量本地化
 
 **Files:**
 
 - Modify: `apps/web/src/components/tools/file-dropzone.tsx`
 - Modify: `apps/web/src/components/tools/__tests__/file-dropzone.test.tsx`
-- Modify: `apps/web/src/app/[locale]/(app)/image/compress/page.tsx`
 - Modify: `apps/web/messages/zh.json`
 - Modify: `apps/web/messages/en.json`
 
-- [ ] **Step 1: 写入上传错误失败测试**
-
-分别使用中英文 messages 渲染 `FileDropzone`，投递超过 `maxSize` 的文件，断言显示：
-
-```text
-large.png: File must be 1 KB or smaller
-large.png: 文件不能超过 1 KB
-```
-
-并断言页面不再出现 `File is larger than 1024 bytes`。
-
-- [ ] **Step 2: 运行测试并确认 RED**
+- [ ] **Step 1: 运行已有失败测试确认 RED**
 
 Run: `bun --cwd apps/web test -- src/components/tools/__tests__/file-dropzone.test.tsx`
 
-Expected: FAIL，当前组件直接显示 react-dropzone 的原始英文错误。
+Expected: FAIL，当前显示 `File is larger than 1024 bytes`。
 
-- [ ] **Step 3: 实现本地化容量标签和错误**
+- [ ] **Step 2: 添加中英文消息并实现映射**
 
-在 `ToolsShared` 中同时增加：
+在 `ToolsShared` 中增加：
 
 ```json
 "dropzoneMaxSize": "最大 {size}",
 "dropzoneFileTooLarge": "文件不能超过 {size}"
 ```
 
-英文对应为 `"{size} max"` 和 `"File must be {size} or smaller"`。`FileDropzone` 将 `formatMaxSize`
-的纯容量结果交给消息模板，并将错误码 `file-too-large` 映射到本地化文案。
+英文对应为 `"{size} max"` 和 `"File must be {size} or smaller"`。`FileDropzone`
+将格式化容量交给消息模板，并按错误码 `file-too-large` 替换原始错误。
 
-- [ ] **Step 4: 将额度行为接入图片压缩页**
+图片压缩的 `dropzoneHint` 改为只显示支持格式；增加处理前防御校验使用的 `fileTooLargeForPlan`
+中英文消息。
 
-页面使用 `IMAGE_COMPRESSION_LOCAL_MAX_FILE_SIZE` 作为 `FileDropzone.maxSize`；从会话计算
-`serverMaxFileSize`，并基于全部已选文件计算 `serverDisabled` 与推荐模式。超额时通过 `useEffect`
-将现有服务端模式切回本地，向 `ModeToggle` 传入当前额度原因，并在 `handleProcess`
-的服务端分支前再次阻止超额上传。
+- [ ] **Step 3: 运行测试确认 GREEN**
 
-同步更新 `ImageCompress.dropzoneHint`：
-
-```text
-支持 JPG / PNG / WebP / AVIF，本地处理单文件最高 250 MB
-JPG, PNG, WebP, or AVIF — local processing up to 250 MB per file
-```
-
-- [ ] **Step 5: 运行聚焦测试并确认 GREEN**
-
-Run:
-`bun --cwd apps/web test -- "src/app/[locale]/(app)/image/compress/__tests__/page.test.ts" src/components/tools/__tests__/mode-toggle.test.tsx src/components/tools/__tests__/file-dropzone.test.tsx`
+Run: `bun --cwd apps/web test -- src/components/tools/__tests__/file-dropzone.test.tsx`
 
 Expected: PASS。
 
-### Task 4: 完整验证与提交
+### Task 4: 文档与完整验证
 
 **Files:**
 
-- Verify: all changed files
+- Modify: `README.md`
+- Modify: `PROJECT_SPECS.md`
 
-- [ ] **Step 1: 运行 Web 全量测试**
+- [ ] **Step 1: 同步项目事实**
 
-Run: `bun run test:web`
+在文件策略中记录单文件额度：游客 10 MB、普通登录 50 MB、Pro 100 MB、Team 150 MB、Private 250
+MB；显式 Pro Preview 与 Private 共享顶额权益，本地工具若声明套餐限制则与服务端使用同一额度。
 
-Expected: 54 个或更多测试文件全部通过，0 failures。
-
-- [ ] **Step 2: 运行变更文件格式检查**
-
-Run: `bun run format:check:changed`
-
-Expected: exit 0。
-
-- [ ] **Step 3: 运行生产构建**
-
-Run: `bun run --cwd apps/web build`
-
-Expected: Next.js 编译、类型检查和静态页面生成完成，exit 0；Windows
-standalone 符号链接可能继续输出已知 `EPERM` 警告。
-
-- [ ] **Step 4: 核对差异并提交**
+- [ ] **Step 2: 运行完整验证**
 
 ```bash
+bun run test:packages
+bun run test:web
+bun run format:check:changed
+bun run --cwd apps/web build
 git diff --check
-git status --short
-git add apps/web/src/app/[locale]/(app)/image/compress/image-compress-utils.ts apps/web/src/app/[locale]/(app)/image/compress/__tests__/page.test.ts apps/web/src/app/[locale]/(app)/image/compress/page.tsx apps/web/src/components/tools/mode-toggle.tsx apps/web/src/components/tools/__tests__/mode-toggle.test.tsx apps/web/src/components/tools/file-dropzone.tsx apps/web/src/components/tools/__tests__/file-dropzone.test.tsx apps/web/messages/zh.json apps/web/messages/en.json
-git commit -m "fix(web): 支持超大图片本地压缩"
+```
+
+Expected: 所有命令 exit 0；Windows standalone 符号链接可能继续输出已知 `EPERM`
+警告，但构建退出码必须为 0。
+
+- [ ] **Step 3: 创建中文提交**
+
+```bash
+git add packages/utils/src/entitlements.ts packages/utils/src/entitlements.test.ts apps/web/src/app/[locale]/(app)/image/compress/image-compress-utils.ts apps/web/src/app/[locale]/(app)/image/compress/__tests__/page.test.ts apps/web/src/app/[locale]/(app)/image/compress/page.tsx apps/web/src/components/tools/file-dropzone.tsx apps/web/src/components/tools/__tests__/file-dropzone.test.tsx apps/web/messages/zh.json apps/web/messages/en.json README.md PROJECT_SPECS.md
+git commit -m "fix(web): 按套餐限制图片压缩文件大小"
 ```

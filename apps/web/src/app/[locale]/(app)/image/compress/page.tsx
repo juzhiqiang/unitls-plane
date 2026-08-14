@@ -7,6 +7,7 @@ import { authClient } from '@/lib/auth-client';
 import { api } from '@/lib/api-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
+  DEFAULT_IMAGE_COMPRESS_OPTIONS,
   ImageCompressOptions,
   type ImageCompressOptionsState,
   type CompressFormat,
@@ -34,6 +35,7 @@ import { toServerTransformConfig } from '@/lib/processing/image-transform-client
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
+import { getImageCompressionIndices } from './image-compress-utils';
 
 const SUPPORTED_OUTPUT_TYPES = new Set<CompressFormat>([
   'image/jpeg',
@@ -58,12 +60,6 @@ function compressedName(file: File, outputType: CompressFormat): string {
   const dot = file.name.lastIndexOf('.');
   const base = dot > 0 ? file.name.slice(0, dot) : file.name;
   return `compressed-${base}.${ext}`;
-}
-
-export function getImageCompressionIndices(
-  items: readonly FileItem[]
-): number[] {
-  return items.map((_, index) => index);
 }
 
 async function processOnServer(
@@ -110,13 +106,9 @@ export default function CompressPage() {
   const tShared = useTranslations('ToolsShared');
   const tool = getToolByHref('/image/compress')!;
   const [items, setItems] = useState<FileItem[]>([]);
-  const [options, setOptions] = useState<ImageCompressOptionsState>({
-    quality: 80,
-    sizePreset: 'desktop',
-    customWidth: 1920,
-    customHeight: 1080,
-    outputType: 'image/jpeg',
-  });
+  const [options, setOptions] = useState<ImageCompressOptionsState>(
+    DEFAULT_IMAGE_COMPRESS_OPTIONS
+  );
   const [transform, setTransform] = useState(DEFAULT_IMAGE_TRANSFORM);
   const [mode, setMode] = useState<ProcessMode>('local');
   const [progress, setProgress] = useState(0);

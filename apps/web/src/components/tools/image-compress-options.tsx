@@ -35,6 +35,14 @@ export interface ImageCompressOptionsState {
   outputType: CompressFormat;
 }
 
+export const DEFAULT_IMAGE_COMPRESS_OPTIONS: ImageCompressOptionsState = {
+  quality: 80,
+  sizePreset: 'original',
+  customWidth: 1920,
+  customHeight: 1080,
+  outputType: 'image/jpeg',
+};
+
 export function resolveSize(state: ImageCompressOptionsState): {
   width?: number;
   height?: number;
@@ -48,7 +56,7 @@ export function resolveSize(state: ImageCompressOptionsState): {
 }
 
 export function toCompressOptions(
-  state: ImageCompressOptionsState,
+  state: ImageCompressOptionsState
 ): CompressOptions {
   const { width, height } = resolveSize(state);
   return {
@@ -117,7 +125,7 @@ export function ImageCompressOptions({
           max={100}
           value={value.quality}
           disabled={disabled}
-          onChange={(e) =>
+          onChange={e =>
             onChange({ ...value, quality: Number(e.target.value) })
           }
           className="w-full accent-accent"
@@ -130,7 +138,7 @@ export function ImageCompressOptions({
           {t('size')}
         </div>
         <div className="grid grid-cols-3 gap-1.5">
-          {PRESET_ORDER.map((preset) => {
+          {PRESET_ORDER.map(preset => {
             const sub = presetSubLabel(preset);
             const active = value.sizePreset === preset;
             return (
@@ -173,7 +181,7 @@ export function ImageCompressOptions({
                 max={8192}
                 value={value.customWidth}
                 disabled={disabled}
-                onChange={(e) =>
+                onChange={e =>
                   onChange({
                     ...value,
                     customWidth: Number(e.target.value) || 0,
@@ -196,7 +204,7 @@ export function ImageCompressOptions({
                 max={8192}
                 value={value.customHeight}
                 disabled={disabled}
-                onChange={(e) =>
+                onChange={e =>
                   onChange({
                     ...value,
                     customHeight: Number(e.target.value) || 0,
@@ -221,7 +229,7 @@ export function ImageCompressOptions({
           {t('outputFormat')}
         </div>
         <div className="inline-flex border border-border rounded-md p-0.5">
-          {(Object.keys(FORMAT_LABELS) as CompressFormat[]).map((fmt) => (
+          {(Object.keys(FORMAT_LABELS) as CompressFormat[]).map(fmt => (
             <button
               key={fmt}
               type="button"

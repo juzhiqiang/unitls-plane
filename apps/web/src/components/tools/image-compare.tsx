@@ -1,23 +1,29 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { formatBytes } from '@/lib/format';
 
+const IMAGE_COMPARE_MAX_HEIGHT = 480;
+
+export function getImageCompareFrameStyle(aspectRatio: number): CSSProperties {
+  const safeAspectRatio =
+    Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+
+  return {
+    aspectRatio: safeAspectRatio,
+    width: '100%',
+    maxWidth: `${Math.round(IMAGE_COMPARE_MAX_HEIGHT * safeAspectRatio)}px`,
+  };
+}
+
 const ImageCompareSlider = dynamic(
   () =>
-    import('./image-compare-slider.client').then(
-      mod => mod.ImageCompareSlider
-    ),
+    import('./image-compare-slider.client').then(mod => mod.ImageCompareSlider),
   {
     ssr: false,
-    loading: () => (
-      <div
-        aria-hidden
-        className="aspect-video max-h-[480px] bg-muted/20"
-      />
-    ),
+    loading: () => <div aria-hidden className="h-full w-full bg-muted/20" />,
   }
 );
 
@@ -32,13 +38,31 @@ export function ImageCompare({ original, result }: ImageCompareProps) {
   const locale = useLocale();
   const [originalUrl, setOriginalUrl] = useState('');
   const [resultUrl, setResultUrl] = useState('');
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     const oUrl = URL.createObjectURL(original);
     const rUrl = URL.createObjectURL(result);
+    const image = new Image();
+
+    setAspectRatio(null);
     setOriginalUrl(oUrl);
     setResultUrl(rUrl);
+
+    image.onload = () => {
+      const nextAspectRatio = image.naturalWidth / image.naturalHeight;
+      setAspectRatio(
+        Number.isFinite(nextAspectRatio) && nextAspectRatio > 0
+          ? nextAspectRatio
+          : 1
+      );
+    };
+    image.onerror = () => setAspectRatio(1);
+    image.src = oUrl;
+
     return () => {
+      image.onload = null;
+      image.onerror = null;
       URL.revokeObjectURL(oUrl);
       URL.revokeObjectURL(rUrl);
     };
@@ -46,7 +70,7 @@ export function ImageCompare({ original, result }: ImageCompareProps) {
 
   const ratio = ((1 - result.size / original.size) * 100).toFixed(1);
 
-  if (!originalUrl || !resultUrl) return null;
+  if (!originalUrl || !resultUrl || aspectRatio === null) return null;
 
   return (
     <div className="space-y-4">
@@ -75,7 +99,10 @@ export function ImageCompare({ original, result }: ImageCompareProps) {
         </div>
       </div>
 
-      <div className="rounded-md border border-border overflow-hidden">
+      <div
+        className="mx-auto overflow-hidden rounded-md border border-border bg-muted/20"
+        style={getImageCompareFrameStyle(aspectRatio)}
+      >
         <ImageCompareSlider originalUrl={originalUrl} resultUrl={resultUrl} />
       </div>
 

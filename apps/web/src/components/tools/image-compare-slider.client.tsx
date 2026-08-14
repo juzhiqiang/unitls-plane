@@ -10,15 +10,32 @@ interface ImageCompareSliderProps {
   resultUrl: string;
 }
 
+const imageStyle = {
+  objectFit: 'contain' as const,
+  objectPosition: 'center',
+};
+
 export function ImageCompareSlider({
   originalUrl,
   resultUrl,
 }: ImageCompareSliderProps) {
   return (
     <ReactCompareSlider
-      itemOne={<ReactCompareSliderImage src={originalUrl} alt="Original" />}
-      itemTwo={<ReactCompareSliderImage src={resultUrl} alt="Result" />}
-      className="aspect-video max-h-[480px]"
+      itemOne={
+        <ReactCompareSliderImage
+          src={originalUrl}
+          alt="Original"
+          style={imageStyle}
+        />
+      }
+      itemTwo={
+        <ReactCompareSliderImage
+          src={resultUrl}
+          alt="Result"
+          style={imageStyle}
+        />
+      }
+      className="h-full w-full"
     />
   );
 }

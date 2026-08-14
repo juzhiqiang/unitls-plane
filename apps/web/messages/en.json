@@ -38,6 +38,7 @@
       "terms": "Terms",
       "privacy": "Privacy",
       "beta": "Beta notice",
+      "changelog": "Changelog",
       "support": "Support",
       "navigation": "Public information"
     },
@@ -1272,6 +1273,49 @@
           "title": "5. Feedback and support",
           "paragraphs": [
             "Contact the support address below about processing failures, accounts, data deletion, or unclear boundaries. Feedback may include reproduction steps and non-sensitive examples, but must not include real sensitive files."
+          ]
+        }
+      ]
+    },
+    "changelog": {
+      "metadata": {
+        "title": "Changelog | Utils Plane",
+        "description": "Read curated, user-facing updates for each Utils Plane release."
+      },
+      "eyebrow": "Curated updates",
+      "title": "Changelog",
+      "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
+      "entries": [
+        {
+          "version": "v0.1.0",
+          "date": "2026-08-14",
+          "title": "First public beta release",
+          "summary": "Utils Plane brings file-processing tools, a local-first workflow, and signed-in account capabilities into one workbench.",
+          "groups": [
+            {
+              "title": "New",
+              "items": [
+                "Image compression, format conversion, GIF / APNG animation, and long-image stitching prioritize browser processing; Markdown / Word documents support local editing, preview, and PDF export.",
+                "Heavy PDF operations, font conversion, and ID photo generation run as signed-in server tasks with task-history tracking.",
+                "Signed-in users get account files and ZIP data export; per-file limits follow the account plan, with the top public-beta allowance reserved for Pro Preview."
+              ]
+            },
+            {
+              "title": "Improved",
+              "items": [
+                "Image compression now keeps the default size selected after upload, shows the full comparison, and supports repeat compression.",
+                "GIF / APNG animation compression and upload validation are more complete, with clearer large-file boundaries.",
+                "Tool pages show processing location, sign-in requirements, retention, and current limits."
+              ]
+            },
+            {
+              "title": "Fixed",
+              "items": [
+                "APNG uploads no longer fail with a GIF-only file-type message.",
+                "Compressing another image after a successful result works again.",
+                "Plan names now show a localized description followed by the English identifier."
+              ]
+            }
           ]
         }
       ]

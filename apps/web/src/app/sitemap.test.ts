@@ -13,6 +13,7 @@ const PUBLIC_PATHS = [
     '/privacy',
     '/terms',
     '/beta',
+    '/changelog',
     ...allTools.map(tool => tool.href),
   ]),
 ];

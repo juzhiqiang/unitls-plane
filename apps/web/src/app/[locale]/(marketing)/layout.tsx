@@ -72,6 +72,12 @@ export default async function MarketingLayout({
               >
                 {t('footer.beta')}
               </Link>
+              <Link
+                href="/changelog"
+                className="hover:text-foreground transition-colors"
+              >
+                {t('footer.changelog')}
+              </Link>
               <a
                 href={`mailto:${supportEmail}`}
                 className="hover:text-foreground transition-colors"

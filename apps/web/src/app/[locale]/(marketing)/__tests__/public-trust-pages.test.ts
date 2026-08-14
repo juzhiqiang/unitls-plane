@@ -170,6 +170,8 @@ describe('public trust pages', () => {
     for (const path of ['/privacy', '/terms', '/beta']) {
       expect(layout).toMatch(new RegExp(`<Link\\s+href="${path}"`));
     }
+    expect(layout).toMatch(/<Link\s+href="\/changelog"/);
+    expect(layout).toContain("t('footer.changelog')");
     expect(layout).toContain('mailto:${supportEmail}');
     expect(layout).toContain('getSupportEmail');
   });

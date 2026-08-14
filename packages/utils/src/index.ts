@@ -1,4 +1,5 @@
 export * from './entitlements';
+export * from './release';
 
 export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0] || '';

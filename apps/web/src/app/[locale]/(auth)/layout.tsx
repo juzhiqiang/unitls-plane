@@ -1,4 +1,5 @@
 import { Link } from '@/i18n/navigation';
+import { APP_VERSION_LABEL } from '@utils-plane/utils';
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { BrandMark } from '@/components/brand/brand-mark';
@@ -70,7 +71,15 @@ export default async function AuthLayout({
                 {t('statusLabel')} / {t('systemStatus')}
               </span>
             </div>
-            <div>{t('buildLabel')} / v1.0.0</div>
+            <div>
+              {t('buildLabel')} /{' '}
+              <Link
+                href="/changelog"
+                className="transition-colors hover:text-foreground"
+              >
+                {APP_VERSION_LABEL}
+              </Link>
+            </div>
             <div className="my-2 h-px w-16 bg-border" />
             <div>&copy; 2026</div>
           </div>

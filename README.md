@@ -521,6 +521,12 @@ bunx drizzle-kit migrate
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
 - [task/](./task/) - phase1-phase8 任务文档
 
+## 当前版本与更新日志
+
+当前统一版本为 `v0.1.0`，根包、Web、API 和所有共享包使用同一版本号。面向用户的精选更新日志位于
+`/{locale}/changelog`，营销页页脚和登录/注册页版本号均提供入口。日志只记录对用户有意义的新功能、体验改进和问题修复，不逐条复制 Git 提交；新增公开版本时同步维护
+`apps/web/messages/zh.json` 与 `apps/web/messages/en.json` 中的 `PublicSite.changelog`。
+
 ## 当前进度
 
 项目已完成基础 monorepo、认证、数据库、文件模块、任务队列、Web 工具页、文件/任务管理、图片长图拼接、GIF/APNG 动图工具、Markdown

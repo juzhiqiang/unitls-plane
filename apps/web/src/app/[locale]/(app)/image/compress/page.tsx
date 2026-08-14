@@ -35,7 +35,10 @@ import { toServerTransformConfig } from '@/lib/processing/image-transform-client
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
-import { getImageCompressionIndices } from './image-compress-utils';
+import {
+  getImageCompressionIndices,
+  getImageCompressionMaxFileSize,
+} from './image-compress-utils';
 
 const SUPPORTED_OUTPUT_TYPES = new Set<CompressFormat>([
   'image/jpeg',
@@ -119,6 +122,8 @@ export default function CompressPage() {
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
+  const maxFileSize = getImageCompressionMaxFileSize(session);
+  const controlsDisabled = processing || sessionLoading;
 
   const recommendation: ProcessMode =
     items.length > 0
@@ -162,7 +167,16 @@ export default function CompressPage() {
   };
 
   const handleProcess = async () => {
-    if (items.length === 0) return;
+    if (sessionLoading || items.length === 0) return;
+
+    if (items.some(item => item.file.size > maxFileSize)) {
+      setGlobalError(
+        t('fileTooLargeForPlan', {
+          size: `${Math.round(maxFileSize / (1024 * 1024))} MB`,
+        })
+      );
+      return;
+    }
 
     if (mode === 'server' && !sessionLoading && !session) {
       const next = encodeURIComponent('/image/compress');
@@ -266,10 +280,10 @@ export default function CompressPage() {
     >
       <FileDropzone
         accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
-        maxSize={50 * 1024 * 1024}
+        maxSize={maxFileSize}
         multiple
         onDrop={handleDrop}
-        disabled={processing}
+        disabled={controlsDisabled}
         hint={t('dropzoneHint')}
         processingLabel={
           mode === 'local' ? tShared('mode.local') : tShared('mode.server')
@@ -287,27 +301,27 @@ export default function CompressPage() {
           <ImageCompressOptions
             value={options}
             onChange={setOptions}
-            disabled={processing}
+            disabled={controlsDisabled}
           />
 
           <ImageTransformOptions
             value={transform}
             onChange={setTransform}
-            disabled={processing}
+            disabled={controlsDisabled}
           />
 
           <ModeToggle
             value={mode}
             onChange={setMode}
             recommendation={recommendation}
-            disabled={processing}
+            disabled={controlsDisabled}
             serverLoginRequired={needsServerLogin}
           />
 
           <button
             type="button"
             onClick={handleProcess}
-            disabled={processing}
+            disabled={controlsDisabled}
             className="w-full h-10 text-sm font-mono bg-foreground text-background rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {processing

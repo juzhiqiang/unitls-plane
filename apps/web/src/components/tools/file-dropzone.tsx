@@ -20,8 +20,8 @@ export interface FileDropzoneProps {
 function formatMaxSize(bytes?: number): string | null {
   if (!bytes) return null;
   const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${Math.round(mb)} MB max`;
-  return `${Math.round(bytes / 1024)} KB max`;
+  if (mb >= 1) return `${Math.round(mb)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
 }
 
 export function FileDropzone({
@@ -36,7 +36,10 @@ export function FileDropzone({
   density = 'default',
 }: FileDropzoneProps) {
   const t = useTranslations('ToolsShared');
-  const maxSizeLabel = formatMaxSize(maxSize);
+  const formattedMaxSize = formatMaxSize(maxSize);
+  const maxSizeLabel = formattedMaxSize
+    ? t('dropzoneMaxSize', { size: formattedMaxSize })
+    : null;
   const { getRootProps, getInputProps, isDragActive, fileRejections } =
     useDropzone({
       accept,
@@ -78,7 +81,14 @@ export function FileDropzone({
         <div className="mt-3 text-xs text-destructive font-mono">
           {fileRejections.map(({ file, errors }) => (
             <div key={file.name}>
-              {file.name}: {errors.map(e => e.message).join(', ')}
+              {file.name}:{' '}
+              {errors
+                .map(error =>
+                  error.code === 'file-too-large' && formattedMaxSize
+                    ? t('dropzoneFileTooLarge', { size: formattedMaxSize })
+                    : error.message
+                )
+                .join(', ')}
             </div>
           ))}
         </div>

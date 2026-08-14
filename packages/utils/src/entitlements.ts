@@ -41,7 +41,7 @@ export type LimitKey =
 const PLAN_RANK: Record<EntitlementPlan, number> = {
   free: 0,
   signed_in: 1,
-  pro_preview: 2,
+  pro_preview: 5,
   pro: 3,
   team: 4,
   private: 5,
@@ -66,7 +66,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'upload.maxFileSize': {
     free: 10 * 1024 * 1024,
     signed_in: 50 * 1024 * 1024,
-    pro_preview: 50 * 1024 * 1024,
+    pro_preview: 250 * 1024 * 1024,
     pro: 100 * 1024 * 1024,
     team: 150 * 1024 * 1024,
     private: 250 * 1024 * 1024,
@@ -74,7 +74,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.animation.maxInputFiles': {
     free: 24,
     signed_in: 120,
-    pro_preview: 120,
+    pro_preview: 300,
     pro: 180,
     team: 240,
     private: 300,
@@ -82,7 +82,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.animation.maxFileSize': {
     free: 8 * 1024 * 1024,
     signed_in: 50 * 1024 * 1024,
-    pro_preview: 50 * 1024 * 1024,
+    pro_preview: 150 * 1024 * 1024,
     pro: 80 * 1024 * 1024,
     team: 100 * 1024 * 1024,
     private: 150 * 1024 * 1024,
@@ -90,7 +90,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.animation.maxFrames': {
     free: 60,
     signed_in: 240,
-    pro_preview: 240,
+    pro_preview: 600,
     pro: 360,
     team: 480,
     private: 600,
@@ -98,7 +98,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.animation.maxCanvasPixels': {
     free: 16_000_000,
     signed_in: 64_000_000,
-    pro_preview: 64_000_000,
+    pro_preview: 160_000_000,
     pro: 96_000_000,
     team: 128_000_000,
     private: 160_000_000,
@@ -106,7 +106,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.animation.maxTotalFramePixels': {
     free: 48_000_000,
     signed_in: 160_000_000,
-    pro_preview: 160_000_000,
+    pro_preview: 400_000_000,
     pro: 240_000_000,
     team: 320_000_000,
     private: 400_000_000,
@@ -114,7 +114,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.animation.maxOutputWidth': {
     free: 960,
     signed_in: 1920,
-    pro_preview: 1920,
+    pro_preview: 4096,
     pro: 2560,
     team: 3200,
     private: 4096,
@@ -122,7 +122,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.stitch.maxFiles': {
     free: 12,
     signed_in: 40,
-    pro_preview: 40,
+    pro_preview: 200,
     pro: 80,
     team: 120,
     private: 200,
@@ -130,7 +130,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.stitch.maxFileSize': {
     free: 10 * 1024 * 1024,
     signed_in: 50 * 1024 * 1024,
-    pro_preview: 50 * 1024 * 1024,
+    pro_preview: 150 * 1024 * 1024,
     pro: 80 * 1024 * 1024,
     team: 100 * 1024 * 1024,
     private: 150 * 1024 * 1024,
@@ -138,7 +138,7 @@ const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
   'image.stitch.maxCanvasPixels': {
     free: 32_000_000,
     signed_in: 96_000_000,
-    pro_preview: 96_000_000,
+    pro_preview: 240_000_000,
     pro: 140_000_000,
     team: 180_000_000,
     private: 240_000_000,

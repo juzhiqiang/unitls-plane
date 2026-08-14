@@ -316,9 +316,10 @@ cd packages/api-client && bun run generate
 
 ## 文件与任务策略
 
-- 匿名上传单文件上限 10MB，登录用户单文件上限 50MB。
+- 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式
+  `pro_preview` 账号使用与 Private 相同的顶额权益，普通 `plan: free` 登录账号仍为 50MB。
 - 匿名文件保留 24 小时后永久删除，登录用户文件归入账号文件；回收站文件保留 30 天后永久删除。
-- 图片压缩、图片格式转换、长图拼接、GIF/APNG 制作优先支持浏览器本地处理。
+- 图片压缩、图片格式转换、长图拼接、GIF/APNG 制作优先支持浏览器本地处理；图片压缩的本地和服务端处理共同遵守当前账号的单文件额度。
 - Markdown 转 PDF 支持在线编辑、预览和本地导出；登录后可选择服务端导出。Word/DOCX 转 PDF 走服务端任务。
 - 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；生产组合镜像内置 `libreoffice-writer`
   和 CJK 字体，服务端仍保留 PDF fallback。

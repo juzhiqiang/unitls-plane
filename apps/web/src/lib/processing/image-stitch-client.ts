@@ -1,4 +1,8 @@
 import { canUseFeature, getLimit } from '@utils-plane/utils';
+import {
+  getEntitlementUserFromSession,
+  type EntitlementSession,
+} from '@/lib/entitlement-session';
 
 export type ImageStitchOutputType = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -60,10 +64,10 @@ export const DEFAULT_IMAGE_STITCH_LIMITS = {
 } satisfies Record<string, ImageStitchPlanLimits>;
 
 export function getImageStitchEntitlements(
-  session: unknown
+  session: EntitlementSession
 ): ImageStitchEntitlements {
-  const user = session ? { userId: 'signed-in' } : null;
-  const isLoggedIn = Boolean(session);
+  const user = getEntitlementUserFromSession(session);
+  const isLoggedIn = Boolean(user);
 
   return {
     maxFiles: getLimit(user, 'image.stitch.maxFiles'),
@@ -122,11 +126,25 @@ export function validateImageStitchLayout(
   }
 }
 
+function validateImageStitchInputs(
+  files: File[],
+  limits: ImageStitchPlanLimits
+): void {
+  if (files.length > limits.maxFiles) {
+    throw new Error('Too many files for the current plan');
+  }
+  if (files.some(file => file.size > limits.maxFileSize)) {
+    throw new Error('File is too large for the current plan');
+  }
+}
+
 export async function stitchImages(
   files: File[],
   options: ImageStitchOptions,
   limits: ImageStitchPlanLimits
 ): Promise<File> {
+  validateImageStitchInputs(files, limits);
+
   const images = await Promise.all(files.map(loadImage));
   const layout = buildImageStitchLayout(
     images.map(image => ({

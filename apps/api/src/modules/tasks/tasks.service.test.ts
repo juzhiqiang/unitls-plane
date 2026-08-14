@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
+import { BadRequestException } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ErrorCodes } from '../../common/errors/error-codes';
 
 let insertedTask: Record<string, unknown> | null = null;
 const events: string[] = [];
@@ -224,6 +226,45 @@ describe('TasksService task creation', () => {
       { jobId: TASK_ID, delay: 1000 }
     );
     expect(events.indexOf('commit')).toBeLessThan(events.indexOf('queue-add'));
+  });
+
+  it('rejects historical compression files above the current account limit', async () => {
+    const filesService = {
+      getById: vi.fn().mockResolvedValue({
+        id: 'file-1',
+        userId: 'user-1',
+        originalSize: 51 * 1024 * 1024,
+      }),
+    };
+    const { service, imageQueue, taskJobReconciler } =
+      createService(filesService);
+
+    const error = await service
+      .create(
+        { type: 'compress', inputFileIds: ['file-1'], inputConfig: {} },
+        { id: 'user-1', plan: 'free', role: 'user' }
+      )
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(BadRequestException);
+    if (!(error instanceof BadRequestException)) {
+      throw new Error('Expected a BadRequestException');
+    }
+    expect(error.getStatus()).toBe(400);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.FILE_TOO_LARGE,
+      message: 'File size exceeds limit of 50MB',
+    });
+
+    expect(filesService.getById).toHaveBeenCalledWith(
+      'file-1',
+      'user-1',
+      transaction
+    );
+    expect(transactionInsert).not.toHaveBeenCalled();
+    expect(cleanupObligationService.recordTaskJob).not.toHaveBeenCalled();
+    expect(taskJobReconciler.reconcile).not.toHaveBeenCalled();
+    expect(imageQueue.add).not.toHaveBeenCalled();
   });
 
   it('commits file checks, task, and outbox before queueing', async () => {

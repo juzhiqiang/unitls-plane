@@ -2,12 +2,17 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { db, tasks, type User } from '@utils-plane/db';
-import { canUseFeature, type EntitlementUser } from '@utils-plane/utils';
+import {
+  canUseFeature,
+  getLimit,
+  type EntitlementUser,
+} from '@utils-plane/utils';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
@@ -73,7 +78,7 @@ export class TasksService {
 
   private async createTask(
     input: CreateTaskInput,
-    user: Pick<User, 'id'> | null,
+    user: Pick<User, 'id' | 'plan' | 'role'> | null,
     database: ActiveUserTransaction,
     identity: TaskJobIdentity
   ): Promise<Task> {
@@ -219,7 +224,7 @@ export class TasksService {
 
   private async assertCanAccessInputFiles(
     input: CreateTaskInput,
-    user: Pick<User, 'id'> | null,
+    user: Pick<User, 'id' | 'plan' | 'role'> | null,
     transaction?: ActiveUserTransaction
   ): Promise<void> {
     const fileIds = new Set<string>(input.inputFileIds);
@@ -233,11 +238,24 @@ export class TasksService {
       }
     }
 
+    const entitlementUser: EntitlementUser | null = user
+      ? { userId: user.id, plan: user.plan, role: user.role }
+      : null;
+    const maxFileSize =
+      input.type === 'compress'
+        ? getLimit(entitlementUser, 'upload.maxFileSize')
+        : null;
+
     for (const fileId of fileIds) {
-      if (transaction) {
-        await this.filesService.getById(fileId, user?.id ?? null, transaction);
-      } else {
-        await this.filesService.getById(fileId, user?.id ?? null);
+      const file = transaction
+        ? await this.filesService.getById(fileId, user?.id ?? null, transaction)
+        : await this.filesService.getById(fileId, user?.id ?? null);
+
+      if (maxFileSize !== null && file.originalSize > maxFileSize) {
+        throw new BadRequestException({
+          code: ErrorCodes.FILE_TOO_LARGE,
+          message: `File size exceeds limit of ${maxFileSize / 1024 / 1024}MB`,
+        });
       }
     }
   }

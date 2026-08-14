@@ -103,7 +103,7 @@ export default function ImageAnimationPage() {
   const locale = useLocale();
   const tool = getToolByHref('/image/animation')!;
   const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: sessionLoading } = authClient.useSession();
   const entitlements = getImageAnimationEntitlements(session);
   const [mode, setMode] = useState<AnimationMode>('create');
   const [frames, setFrames] = useState<AnimationFrameFile[]>([]);
@@ -131,6 +131,7 @@ export default function ImageAnimationPage() {
   const [resultKind, setResultKind] = useState<ResultKind>('create');
   const [originalSize, setOriginalSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const controlsDisabled = processing || sessionLoading;
 
   const stage = result
     ? 'result'
@@ -142,9 +143,9 @@ export default function ImageAnimationPage() {
         : 'upload';
   const canCreate =
     frames.length >= 2 &&
-    !processing &&
+    !controlsDisabled &&
     (createOptions.outputFormat !== 'apng' || entitlements.canExportApng);
-  const canCompress = Boolean(gifFile) && !processing;
+  const canCompress = Boolean(gifFile) && !controlsDisabled;
 
   const clearProcessingState = () => {
     setResult(null);
@@ -227,6 +228,8 @@ export default function ImageAnimationPage() {
   };
 
   const handleCreate = async () => {
+    if (sessionLoading) return;
+
     if (frames.length < 2) {
       setError(t('limits.needAtLeastTwo'));
       return;
@@ -270,6 +273,8 @@ export default function ImageAnimationPage() {
   };
 
   const handleCompress = async () => {
+    if (sessionLoading) return;
+
     if (!gifFile) {
       setError(t('limits.gifOnly'));
       return;
@@ -323,7 +328,7 @@ export default function ImageAnimationPage() {
           <button
             key={item}
             type="button"
-            disabled={processing}
+            disabled={controlsDisabled}
             onClick={() => handleModeChange(item)}
             className={cn(
               'h-9 min-w-24 flex-1 rounded-sm px-3 font-mono text-xs transition-colors sm:flex-none',
@@ -344,7 +349,7 @@ export default function ImageAnimationPage() {
             maxSize={entitlements.maxFileSize}
             multiple
             onDrop={handleCreateDrop}
-            disabled={processing}
+            disabled={controlsDisabled}
             hint={t('dropzoneCreateHint')}
             processingLabel={t('processingLabel')}
           />
@@ -605,7 +610,7 @@ export default function ImageAnimationPage() {
             maxSize={entitlements.maxFileSize}
             multiple={false}
             onDrop={handleGifDrop}
-            disabled={processing}
+            disabled={controlsDisabled}
             hint={t('dropzoneCompressHint')}
             processingLabel={t('processingLabel')}
           />
@@ -752,7 +757,8 @@ export default function ImageAnimationPage() {
           <button
             type="button"
             onClick={handleCommercialLogin}
-            className="h-9 shrink-0 rounded-md border border-border px-3 font-mono text-xs text-foreground transition-colors hover:bg-muted/40"
+            disabled={controlsDisabled}
+            className="h-9 shrink-0 rounded-md border border-border px-3 font-mono text-xs text-foreground transition-colors hover:bg-muted/40 disabled:opacity-50"
           >
             {t('loginAction')}
           </button>

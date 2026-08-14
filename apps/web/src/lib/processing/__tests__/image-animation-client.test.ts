@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildAnimationFrameLayout,
@@ -110,6 +112,39 @@ describe('image animation client helpers', () => {
         canExportApng: true,
         canUseAdvancedCompression: true,
       }
+    );
+  });
+
+  it('gives explicit pro preview accounts top-tier animation limits', () => {
+    expect(
+      getImageAnimationEntitlements({
+        user: { id: 'preview', plan: 'pro_preview', role: 'user' },
+      })
+    ).toMatchObject({
+      maxInputFiles: 300,
+      maxFileSize: 150 * 1024 * 1024,
+      maxFrames: 600,
+      maxCanvasPixels: 160_000_000,
+      maxTotalFramePixels: 400_000_000,
+      maxOutputWidth: 4096,
+    });
+  });
+
+  it('disables animation controls while account limits are loading', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/app/[locale]/(app)/image/animation/page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain(
+      'const { data: session, isPending: sessionLoading } = authClient.useSession();'
+    );
+    expect(source).toContain(
+      'const controlsDisabled = processing || sessionLoading;'
+    );
+    expect(source.match(/if \(sessionLoading\) return;/g)).toHaveLength(2);
+    expect(source).toContain(
+      'const canCompress = Boolean(gifFile) && !controlsDisabled;'
     );
   });
 

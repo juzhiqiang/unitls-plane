@@ -21,6 +21,13 @@ Preview 账号获得顶额会员权益。
 
 - Modify: `packages/utils/src/entitlements.ts`
 - Test: `packages/utils/src/entitlements.test.ts`
+- Create: `apps/web/src/lib/entitlement-session.ts`
+- Modify: `apps/web/src/app/[locale]/(app)/image/animation/page.tsx`
+- Modify: `apps/web/src/app/[locale]/(app)/image/stitch/page.tsx`
+- Modify: `apps/web/src/lib/processing/image-animation-client.ts`
+- Modify: `apps/web/src/lib/processing/image-stitch-client.ts`
+- Test: `apps/web/src/lib/processing/__tests__/image-animation-client.test.ts`
+- Test: `apps/web/src/lib/processing/__tests__/image-stitch-client.test.ts`
 
 - [ ] **Step 1: 写入失败测试**
 
@@ -52,6 +59,23 @@ Expected: FAIL，当前 `pro_preview` 等级和各限制仍低于 `private`。
 Run: `bun test packages/utils/src/entitlements.test.ts`
 
 Expected: PASS。
+
+- [ ] **Step 5: 验证浏览器端消费者读取真实计划**
+
+先为 GIF/APNG 和长图拼接添加显式 `pro_preview`
+会话的顶额断言并确认失败。随后新增共享会话映射工具，将 `id`、`plan`、`role` 转为
+`EntitlementUser`，替换两个客户端原先仅判断登录状态的逻辑。
+
+Run:
+`bun --cwd apps/web test -- src/lib/processing/__tests__/image-animation-client.test.ts src/lib/processing/__tests__/image-stitch-client.test.ts`
+
+Expected: 两个测试文件全部通过。
+
+- [ ] **Step 6: 封住本地工具的会话加载与套餐变化窗口**
+
+先为 GIF/APNG 和长图拼接页面添加会话 pending 断言，确认上传和处理入口在会话加载时禁用。随后为
+`stitchImages`
+添加失败测试，要求文件数或单文件大小超过当前权益时在图片解码前拒绝；实现输入校验后重新运行两个处理测试文件。
 
 ### Task 2: 图片压缩动态套餐额度
 
@@ -89,6 +113,12 @@ Run: `bun --cwd apps/web test -- "src/app/[locale]/(app)/image/compress/__tests_
 
 Expected: PASS。
 
+- [ ] **Step 5: 防止会话加载窗口误用游客额度**
+
+先断言页面定义
+`controlsDisabled = processing || sessionLoading`，并将它传给上传、压缩选项、变换选项、模式切换和开始按钮；同时断言
+`handleProcess` 在 `sessionLoading` 时直接返回。确认测试失败后实现该保护并重新运行本页测试。
+
 ### Task 3: 上传容量本地化
 
 **Files:**
@@ -125,7 +155,31 @@ Run: `bun --cwd apps/web test -- src/components/tools/__tests__/file-dropzone.te
 
 Expected: PASS。
 
-### Task 4: 文档与完整验证
+### Task 4: 历史文件按当前套餐重新校验
+
+**Files:**
+
+- Modify: `apps/api/src/modules/tasks/tasks.service.ts`
+- Test: `apps/api/src/modules/tasks/tasks.service.test.ts`
+
+- [ ] **Step 1: 写入失败测试并确认 RED**
+
+模拟普通登录账号持有一个 51 MB 的历史文件，创建 `compress` 任务应返回 50
+MB 超限错误，并且不插入任务、不写 outbox、不入队。
+
+Run: `bun test apps/api/src/modules/tasks/tasks.service.test.ts`
+
+- [ ] **Step 2: 在事务内实现当前套餐校验并确认 GREEN**
+
+将完整的 `id`、`plan`、`role` 保留到文件访问检查，从 `FilesService.getById` 返回的数据库记录读取
+`originalSize`，对 `compress` 使用当前 `upload.maxFileSize`。超限时抛出带 `FILE_TOO_LARGE` 错误码的
+`BadRequestException`。
+
+Run: `bun test apps/api/src/modules/tasks/tasks.service.test.ts`
+
+Expected: PASS。
+
+### Task 5: 文档与完整验证
 
 **Files:**
 
@@ -141,9 +195,11 @@ MB；显式 Pro Preview 与 Private 共享顶额权益，本地工具若声明�
 
 ```bash
 bun run test:packages
+bun run test:api
 bun run test:web
 bun run format:check:changed
 bun run --cwd apps/web build
+bun run test:e2e -- public-beta-smoke.spec.ts
 git diff --check
 ```
 
@@ -153,6 +209,6 @@ Expected: 所有命令 exit 0；Windows standalone 符号链接可能继续输�
 - [ ] **Step 3: 创建中文提交**
 
 ```bash
-git add packages/utils/src/entitlements.ts packages/utils/src/entitlements.test.ts apps/web/src/app/[locale]/(app)/image/compress/image-compress-utils.ts apps/web/src/app/[locale]/(app)/image/compress/__tests__/page.test.ts apps/web/src/app/[locale]/(app)/image/compress/page.tsx apps/web/src/components/tools/file-dropzone.tsx apps/web/src/components/tools/__tests__/file-dropzone.test.tsx apps/web/messages/zh.json apps/web/messages/en.json README.md PROJECT_SPECS.md
-git commit -m "fix(web): 按套餐限制图片压缩文件大小"
+git add packages/utils/src/entitlements.ts packages/utils/src/entitlements.test.ts apps/web/src/lib/entitlement-session.ts apps/web/src/app/[locale]/(app)/image/animation/page.tsx apps/web/src/app/[locale]/(app)/image/stitch/page.tsx apps/web/src/lib/processing/image-animation-client.ts apps/web/src/lib/processing/image-stitch-client.ts apps/web/src/lib/processing/__tests__/image-animation-client.test.ts apps/web/src/lib/processing/__tests__/image-stitch-client.test.ts apps/web/src/app/[locale]/(app)/image/compress/image-compress-utils.ts apps/web/src/app/[locale]/(app)/image/compress/__tests__/page.test.ts apps/web/src/app/[locale]/(app)/image/compress/page.tsx apps/web/src/components/tools/file-dropzone.tsx apps/web/src/components/tools/__tests__/file-dropzone.test.tsx apps/web/messages/zh.json apps/web/messages/en.json apps/api/src/modules/tasks/tasks.service.ts apps/api/src/modules/tasks/tasks.service.test.ts README.md PROJECT_SPECS.md docs/superpowers/specs/2026-08-14-image-compress-large-file-design.md docs/superpowers/plans/2026-08-14-image-compress-large-file.md
+git commit -m "fix: 按套餐限制文件处理额度"
 ```

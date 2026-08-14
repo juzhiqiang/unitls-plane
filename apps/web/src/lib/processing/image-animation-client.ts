@@ -4,6 +4,10 @@ import { GIFEncoder as createUntypedGifEncoder, applyPalette as applyUntypedPale
 import { canUseFeature, getLimit } from '@utils-plane/utils';
 import { GifReader } from 'omggif';
 import * as UPNG from 'upng-js';
+import {
+  getEntitlementUserFromSession,
+  type EntitlementSession,
+} from '@/lib/entitlement-session';
 
 export type AnimationOutputFormat = 'gif' | 'apng';
 export type AnimationFitMode = 'contain' | 'cover';
@@ -465,10 +469,10 @@ function scaleRgbaFrame(
 }
 
 export function getImageAnimationEntitlements(
-  session: unknown
+  session: EntitlementSession
 ): AnimationEntitlements {
-  const user = session ? { userId: 'signed-in' } : null;
-  const isLoggedIn = Boolean(session);
+  const user = getEntitlementUserFromSession(session);
+  const isLoggedIn = Boolean(user);
 
   return {
     maxInputFiles: getLimit(user, 'image.animation.maxInputFiles'),

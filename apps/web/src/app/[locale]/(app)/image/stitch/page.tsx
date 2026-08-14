@@ -90,7 +90,7 @@ export default function ImageStitchPage() {
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/image/stitch')!;
   const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: sessionLoading } = authClient.useSession();
   const entitlements = getImageStitchEntitlements(session);
   const [files, setFiles] = useState<SortableImageFile[]>([]);
   const [options, setOptions] = useState<StitchOptionsState>({
@@ -109,11 +109,12 @@ export default function ImageStitchPage() {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const controlsDisabled = processing || sessionLoading;
 
   const outputWidth = resolveWidth(options);
   const background = resolveBackground(options);
   const hasResults = results.length > 0;
-  const canGenerate = files.length >= 2 && !processing;
+  const canGenerate = files.length >= 2 && !controlsDisabled;
   const batchWidthValues = useMemo(
     () => (session ? parseBatchWidths(batchWidths) : []),
     [batchWidths, session]
@@ -176,6 +177,8 @@ export default function ImageStitchPage() {
   };
 
   const handleGenerate = async () => {
+    if (sessionLoading) return;
+
     if (files.length < 2) {
       setError(t('limits.needAtLeastTwo'));
       return;
@@ -215,7 +218,9 @@ export default function ImageStitchPage() {
             outputType: options.outputType,
             quality: options.quality,
             filename:
-              widths.length > 1 ? `${options.filename}-${width}` : options.filename,
+              widths.length > 1
+                ? `${options.filename}-${width}`
+                : options.filename,
             brandFooter: brandFooter.trim() || undefined,
           },
           entitlements
@@ -246,7 +251,7 @@ export default function ImageStitchPage() {
         maxSize={entitlements.maxFileSize}
         multiple
         onDrop={handleDrop}
-        disabled={processing}
+        disabled={controlsDisabled}
         hint={t('dropzoneHint')}
         processingLabel={t('processingLabel')}
       />
@@ -526,7 +531,8 @@ export default function ImageStitchPage() {
               <button
                 type="button"
                 onClick={handleCommercialLogin}
-                className="h-9 shrink-0 rounded-md border border-border px-3 font-mono text-xs text-foreground transition-colors hover:bg-muted/40"
+                disabled={controlsDisabled}
+                className="h-9 shrink-0 rounded-md border border-border px-3 font-mono text-xs text-foreground transition-colors hover:bg-muted/40 disabled:opacity-50"
               >
                 {t('loginAction')}
               </button>

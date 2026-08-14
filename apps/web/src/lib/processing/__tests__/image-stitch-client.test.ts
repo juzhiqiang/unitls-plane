@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_IMAGE_STITCH_LIMITS,
   buildImageStitchLayout,
   getImageStitchEntitlements,
   getStitchOutputName,
+  stitchImages,
   validateImageStitchLayout,
   type ImageStitchSource,
 } from '../image-stitch-client';
@@ -72,6 +75,81 @@ describe('image stitch client helpers', () => {
     ).toThrow('Canvas is too large for the current plan');
   });
 
+  it('rejects too many files before decoding images', async () => {
+    let decodeAttempted = false;
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          decodeAttempted = true;
+          throw new Error('Image decoding started');
+        }
+      }
+    );
+
+    try {
+      const files = [
+        new File(['first'], 'first.png', { type: 'image/png' }),
+        new File(['second'], 'second.png', { type: 'image/png' }),
+      ];
+
+      await expect(
+        stitchImages(
+          files,
+          {
+            width: 500,
+            gap: 0,
+            background: '#ffffff',
+            outputType: 'image/png',
+            quality: 0.92,
+            filename: 'too-many',
+          },
+          { maxFiles: 1, maxFileSize: 1024, maxCanvasPixels: 1_000_000 }
+        )
+      ).rejects.toThrow('Too many files for the current plan');
+      expect(decodeAttempted).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects oversized files before decoding images', async () => {
+    let decodeAttempted = false;
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          decodeAttempted = true;
+          throw new Error('Image decoding started');
+        }
+      }
+    );
+
+    try {
+      const files = [
+        new File([new Uint8Array(2)], 'large.png', { type: 'image/png' }),
+      ];
+
+      await expect(
+        stitchImages(
+          files,
+          {
+            width: 500,
+            gap: 0,
+            background: '#ffffff',
+            outputType: 'image/png',
+            quality: 0.92,
+            filename: 'too-large',
+          },
+          { maxFiles: 1, maxFileSize: 1, maxCanvasPixels: 1_000_000 }
+        )
+      ).rejects.toThrow('File is too large for the current plan');
+      expect(decodeAttempted).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('gives logged-in users commercial feature flags and higher limits', () => {
     expect(getImageStitchEntitlements(null)).toMatchObject({
       isLoggedIn: false,
@@ -84,5 +162,35 @@ describe('image stitch client helpers', () => {
       canBatchExport: true,
       canUseBrandFooter: true,
     });
+  });
+
+  it('gives explicit pro preview accounts top-tier stitch limits', () => {
+    expect(
+      getImageStitchEntitlements({
+        user: { id: 'preview', plan: 'pro_preview', role: 'user' },
+      })
+    ).toMatchObject({
+      maxFiles: 200,
+      maxFileSize: 150 * 1024 * 1024,
+      maxCanvasPixels: 240_000_000,
+    });
+  });
+
+  it('disables stitch controls while account limits are loading', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/app/[locale]/(app)/image/stitch/page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain(
+      'const { data: session, isPending: sessionLoading } = authClient.useSession();'
+    );
+    expect(source).toContain(
+      'const controlsDisabled = processing || sessionLoading;'
+    );
+    expect(source).toContain('if (sessionLoading) return;');
+    expect(source).toContain(
+      'const canGenerate = files.length >= 2 && !controlsDisabled;'
+    );
   });
 });

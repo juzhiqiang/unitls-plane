@@ -2,8 +2,23 @@ import { describe, expect, it } from 'bun:test';
 import {
   canUseFeature,
   getLimit,
+  isPlanAtLeast,
   resolveEntitlementPlan,
+  type LimitKey,
 } from './entitlements';
+
+const limitKeys: LimitKey[] = [
+  'upload.maxFileSize',
+  'image.animation.maxInputFiles',
+  'image.animation.maxFileSize',
+  'image.animation.maxFrames',
+  'image.animation.maxCanvasPixels',
+  'image.animation.maxTotalFramePixels',
+  'image.animation.maxOutputWidth',
+  'image.stitch.maxFiles',
+  'image.stitch.maxFileSize',
+  'image.stitch.maxCanvasPixels',
+];
 
 describe('entitlements', () => {
   it('treats anonymous users as free and signed-in free users as signed_in', () => {
@@ -20,6 +35,16 @@ describe('entitlements', () => {
     expect(resolveEntitlementPlan({ userId: 'user-1', role: 'admin' })).toBe(
       'pro'
     );
+  });
+
+  it('grants pro preview accounts the same top-tier limits as private accounts', () => {
+    expect(isPlanAtLeast('pro_preview', 'private')).toBe(true);
+
+    for (const limit of limitKeys) {
+      expect(getLimit({ userId: 'preview', plan: 'pro_preview' }, limit)).toBe(
+        getLimit({ userId: 'private', plan: 'private' }, limit)
+      );
+    }
   });
 
   it('gates commercial features behind signed-in or stronger plans', () => {

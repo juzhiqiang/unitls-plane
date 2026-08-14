@@ -466,7 +466,8 @@
   "ImageCompress": {
     "title": "Compress images",
     "description": "Upload in batches — multiple files are bundled into a ZIP",
-    "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB per file",
+    "dropzoneHint": "JPG, PNG, WebP, or AVIF",
+    "fileTooLargeForPlan": "A file exceeds your account's {size} per-file limit. Remove it and try again.",
     "quality": "Quality",
     "size": "Size",
     "widthPx": "Width (px)",
@@ -1041,6 +1042,8 @@
     },
     "dropzoneRelease": "Release to upload",
     "dropzonePrompt": "Click or drag files here",
+    "dropzoneMaxSize": "{size} max",
+    "dropzoneFileTooLarge": "File must be {size} or smaller",
     "fileList": {
       "filename": "Filename",
       "original": "Original",

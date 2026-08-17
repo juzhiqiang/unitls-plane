@@ -33,6 +33,7 @@
     "@utils-plane/api-client": "workspace:*",
     "@utils-plane/auth": "workspace:*",
     "@utils-plane/utils": "workspace:*",
+    "@utils-plane/validators": "workspace:*",
     "autoprefixer": "^10.5.0",
     "better-auth": "^1.6.11",
     "browser-image-compression": "^2.0.2",

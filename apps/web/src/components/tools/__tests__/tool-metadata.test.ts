@@ -46,12 +46,13 @@ describe('tool metadata', () => {
     expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(8);
   });
 
-  it('registers the id photo generator as a server image tool', () => {
+  it('registers the id photo generator as a local-first image tool with account-file retention', () => {
     const tool = getToolByHref('/image/id-photo');
 
     expect(tool?.key).toBe('imageIdPhoto');
-    expect(tool?.processing).toBe('server');
+    expect(tool?.processing).toBe('local-first');
     expect(tool?.retention).toBe('account-files');
+    expect(tool?.requiresLogin).toBe(false);
   });
 
   it('registers long image stitching as a free local image composition tool', () => {

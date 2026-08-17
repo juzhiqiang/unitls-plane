@@ -658,6 +658,7 @@
     "failed": "Generation failed",
     "resultTitle": "ID photo generated",
     "resultSize": "Size",
+    "previewAlt": "ID photo preview",
     "presets": {
       "oneInch": "One inch",
       "twoInch": "Two inch",

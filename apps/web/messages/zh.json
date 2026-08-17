@@ -658,6 +658,7 @@
     "failed": "生成失败",
     "resultTitle": "证件照已生成",
     "resultSize": "大小",
+    "previewAlt": "证件照预览",
     "presets": {
       "oneInch": "一寸",
       "twoInch": "二寸",

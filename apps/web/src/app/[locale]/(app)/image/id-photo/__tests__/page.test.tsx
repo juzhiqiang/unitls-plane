@@ -125,6 +125,9 @@ describe('IdPhotoPage', () => {
 
     const { container } = renderPage();
 
+    // 默认本地路;切到服务端路再触发生成,走任务链路
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+
     const input = container.querySelector(
       'input[type="file"]'
     ) as HTMLInputElement;
@@ -150,5 +153,32 @@ describe('IdPhotoPage', () => {
     expect(fetchMock).toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+
+  it('defaults to local mode and renders the local start button', async () => {
+    const { container } = renderPage();
+    const input = container.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [makeFile()] } });
+
+    const startButton = await screen.findByRole('button', {
+      name: 'Generate ID photo',
+    });
+    expect(startButton).toBeInTheDocument();
+    // 本地模式不显示 segmentation mode(标准/AI 精修)
+    expect(screen.queryByText('Cutout mode')).not.toBeInTheDocument();
+  });
+
+  it('switching to server mode shows segmentation mode options', async () => {
+    const { container } = renderPage();
+    const input = container.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [makeFile()] } });
+    await screen.findByRole('button', { name: 'Generate ID photo' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+    expect(screen.getByText('Cutout mode')).toBeInTheDocument();
   });
 });

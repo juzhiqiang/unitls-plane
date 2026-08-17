@@ -14,12 +14,14 @@ import {
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ResultPanel } from '@/components/tools/result-panel';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { DownloadButton } from '@/components/tools/download-button';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { useObjectUrl } from '@/hooks/use-object-url';
+import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
 
 const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   preset: 'one_inch',
@@ -46,9 +48,13 @@ export default function IdPhotoPage() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingMode, setProcessingMode] = useState<'local' | 'server'>('local');
+  const [highPrecision, setHighPrecision] = useState(false);
 
   const sourceUrl = useObjectUrl(file);
   const resultUrl = useObjectUrl(resultFile);
+  const local = useLocalIdPhoto();
+  const localResultUrl = useObjectUrl(local.resultBlob);
 
   const taskQuery = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
@@ -77,6 +83,20 @@ export default function IdPhotoPage() {
   };
 
   const handleProcess = async () => {
+    if (processingMode === 'local') {
+      if (!file) return;
+      await local.process(
+        file,
+        highPrecision ? 'high' : 'balanced',
+        {
+          preset: options.preset,
+          backgroundColor: options.backgroundColor,
+          outputType: options.outputType,
+        },
+      );
+      return;
+    }
+    // —— 以下为服务端逻辑,保持不变 ——
     if (!file) return;
     if (!sessionLoading && !session) {
       router.push(`/login?next=${encodeURIComponent('/image/id-photo')}`);
@@ -108,13 +128,38 @@ export default function IdPhotoPage() {
     }
   };
 
-  const stage = resultFile
+  const localProcessing =
+    local.status === 'loading-model' ||
+    local.status === 'running' ||
+    local.status === 'compositing';
+  const isProcessing =
+    processingMode === 'local' ? localProcessing : processing;
+  const hasResult =
+    processingMode === 'local' ? !!local.resultBlob : !!resultFile;
+  const stage: ToolStage = hasResult
     ? 'result'
-    : processing
+    : isProcessing
       ? 'processing'
       : file
         ? 'configure'
         : 'upload';
+  const localStageKey =
+    local.status === 'loading-model'
+      ? 'loadingModel'
+      : local.status === 'running'
+        ? 'running'
+        : 'compositing';
+  const buttonLabel = isProcessing
+    ? processingMode === 'local'
+      ? t(`localStages.${localStageKey}`)
+      : t('processing')
+    : t('start');
+  const ext = options.outputType === 'image/png' ? 'png' : 'jpg';
+  const localResultFile = local.resultBlob
+    ? new File([local.resultBlob], `id-photo.${ext}`, {
+        type: options.outputType,
+      })
+    : null;
 
   return (
     <ToolPageShell
@@ -126,11 +171,33 @@ export default function IdPhotoPage() {
       recovery={tShell('catalogRecovery')}
       stage={stage}
     >
+      <div className="inline-flex rounded-md border border-border p-0.5 text-sm">
+        {(['local', 'server'] as const).map(m => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => {
+              setProcessingMode(m);
+              local.reset();
+              setResultFile(null);
+              setError(null);
+            }}
+            className={`rounded-[5px] px-3 py-1.5 font-mono transition-colors ${
+              processingMode === m
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground'
+            }`}
+          >
+            {t(`processingModes.${m}`)}
+          </button>
+        ))}
+      </div>
+
       <FileDropzone
         accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
         maxSize={50 * 1024 * 1024}
         onDrop={handleDrop}
-        disabled={processing}
+        disabled={isProcessing}
         hint={t('dropzoneHint')}
         processingLabel={t('processingLabel')}
       />
@@ -156,37 +223,73 @@ export default function IdPhotoPage() {
           <IdPhotoOptions
             value={options}
             onChange={setOptions}
-            disabled={processing}
+            disabled={isProcessing}
             t={t}
+            mode={processingMode}
+            highPrecision={highPrecision}
+            highPrecisionDisabled={local.ep !== 'webgpu'}
+            onHighPrecisionChange={setHighPrecision}
           />
 
           <button
             type="button"
             onClick={handleProcess}
-            disabled={processing}
+            disabled={isProcessing}
             className="h-10 w-full rounded-md bg-foreground text-sm font-mono text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {processing ? t('processing') : t('start')}
+            {buttonLabel}
           </button>
         </div>
       )}
 
-      {processing && (
+      {isProcessing && (
         <ProcessingProgress
-          progress={taskQuery.data?.progress ?? 5}
-          label={t('processing')}
+          progress={
+            processingMode === 'local'
+              ? local.status === 'loading-model'
+                ? Math.round(local.progress * 100)
+                : local.status === 'running'
+                  ? 60
+                  : 90
+              : (taskQuery.data?.progress ?? 5)
+          }
+          label={buttonLabel}
         />
       )}
 
-      {error && (
+      {(processingMode === 'local' ? local.error : error) && (
         <FailureRecoveryPanel
-          message={error}
+          message={
+            processingMode === 'local' ? (local.error ?? '') : (error ?? '')
+          }
           onRetry={handleProcess}
-          onReset={() => setFile(null)}
+          onReset={() => {
+            setFile(null);
+            local.reset();
+          }}
         />
       )}
 
-      {resultFile && (
+      {processingMode === 'local' && localResultFile && (
+        <ResultPanel
+          title={t('resultTitle')}
+          description={`id-photo.${ext}`}
+          preview={
+            localResultUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={localResultUrl}
+                alt={t('previewAlt')}
+                className="mx-auto max-h-80 w-auto object-contain rounded-md border border-border"
+              />
+            ) : null
+          }
+          meta={[]}
+          action={<DownloadButton file={localResultFile} />}
+        />
+      )}
+
+      {processingMode === 'server' && resultFile && (
         <ResultPanel
           title={t('resultTitle')}
           description={resultFile.name}

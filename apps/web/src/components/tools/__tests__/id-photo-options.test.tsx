@@ -62,9 +62,9 @@ describe('IdPhotoOptions', () => {
     expect(screen.queryByText('Standard')).not.toBeInTheDocument();
     expect(screen.queryByText('AI refine')).not.toBeInTheDocument();
 
-    // 高精度开关应出现:label header + checkbox 旁 span 都是 localHighPrecision,
-    // 因此至少一处出现即可。
-    expect(screen.getAllByText('localHighPrecision').length).toBeGreaterThan(0);
+    // 高精度开关应出现:label header + checkbox 旁 span 都渲染 localHighPrecision 文案。
+    // Task 8 已补该 key,t 现在返回翻译文案,断言解析后的文本出现即可。
+    expect(screen.getAllByText(t('localHighPrecision')).length).toBeGreaterThan(0);
     // checkbox 存在且未禁用(CPU 置灰需由 highPrecisionDisabled 控制)
     const toggle = document.querySelector(
       'input[type="checkbox"]'
@@ -106,9 +106,9 @@ describe('IdPhotoOptions', () => {
     // 里置灰 checkbox 的惯用机制;真实浏览器会拦截点击,不会触发 onChange)。
     expect(toggle.disabled).toBe(true);
 
-    // 置灰提示文案也应出现
+    // 置灰提示文案也应出现(Task 8 已补 localHighPrecisionLockedHint,断言解析后文案)
     expect(
-      screen.getByText('localHighPrecisionLockedHint')
+      screen.getByText(t('localHighPrecisionLockedHint'))
     ).toBeInTheDocument();
   });
 });

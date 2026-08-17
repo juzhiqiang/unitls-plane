@@ -659,6 +659,20 @@
     "resultTitle": "证件照已生成",
     "resultSize": "大小",
     "previewAlt": "证件照预览",
+    "processingModeLabel": "处理模式",
+    "processingModes": {
+      "local": "本地处理",
+      "server": "服务端处理"
+    },
+    "localHighPrecision": "高精度",
+    "localHighPrecisionLockedHint": "高精度需 WebGPU,当前使用均衡档",
+    "localStages": {
+      "loadingModel": "正在加载模型",
+      "running": "正在抠图",
+      "compositing": "正在合成"
+    },
+    "localFailed": "本地处理失败,可重试或切服务端",
+    "localNoWebGpu": "当前环境不支持本地处理,请使用服务端",
     "presets": {
       "oneInch": "一寸",
       "twoInch": "二寸",

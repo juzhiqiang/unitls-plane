@@ -659,6 +659,20 @@
     "resultTitle": "ID photo generated",
     "resultSize": "Size",
     "previewAlt": "ID photo preview",
+    "processingModeLabel": "Processing",
+    "processingModes": {
+      "local": "Local",
+      "server": "Server"
+    },
+    "localHighPrecision": "High precision",
+    "localHighPrecisionLockedHint": "High precision requires WebGPU; using balanced tier",
+    "localStages": {
+      "loadingModel": "Loading model",
+      "running": "Segmenting",
+      "compositing": "Compositing"
+    },
+    "localFailed": "Local processing failed. Retry or switch to server.",
+    "localNoWebGpu": "Local processing is unavailable in this environment. Use server.",
     "presets": {
       "oneInch": "One inch",
       "twoInch": "Two inch",

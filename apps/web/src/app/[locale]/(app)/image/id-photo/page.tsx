@@ -19,6 +19,7 @@ import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useObjectUrl } from '@/hooks/use-object-url';
 
 const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   preset: 'one_inch',
@@ -45,6 +46,8 @@ export default function IdPhotoPage() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const sourceUrl = useObjectUrl(file);
 
   const taskQuery = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
@@ -133,6 +136,14 @@ export default function IdPhotoPage() {
 
       {file && (
         <div className="space-y-6">
+          {sourceUrl && (
+            <img
+              src={sourceUrl}
+              alt={t('previewAlt')}
+              className="mx-auto max-h-64 w-auto object-contain rounded-md border border-border"
+            />
+          )}
+
           <div className="text-xs font-mono text-muted-foreground">
             {t('selected', {
               filename: file.name,

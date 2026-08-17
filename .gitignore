@@ -77,3 +77,4 @@ utils-plane-offline-all.tar
 
 # Local ML model assets.
 apps/api/models/*.onnx
+apps/web/public/onnx/

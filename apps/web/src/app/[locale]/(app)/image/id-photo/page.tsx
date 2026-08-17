@@ -48,6 +48,7 @@ export default function IdPhotoPage() {
   const [error, setError] = useState<string | null>(null);
 
   const sourceUrl = useObjectUrl(file);
+  const resultUrl = useObjectUrl(resultFile);
 
   const taskQuery = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
@@ -188,6 +189,15 @@ export default function IdPhotoPage() {
         <ResultPanel
           title={t('resultTitle')}
           description={resultFile.name}
+          preview={
+            resultUrl ? (
+              <img
+                src={resultUrl}
+                alt={t('previewAlt')}
+                className="mx-auto max-h-80 w-auto object-contain rounded-md border border-border"
+              />
+            ) : null
+          }
           meta={[
             {
               label: t('resultSize'),

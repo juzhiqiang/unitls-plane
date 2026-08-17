@@ -106,4 +106,49 @@ describe('IdPhotoPage', () => {
     expect(img).toBeInTheDocument();
     expect(img.getAttribute('src')).toBe('blob:preview-url');
   });
+
+  it('renders the generated id photo preview after the task completes', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: { name: 'Tester', email: 't@example.com' } },
+      isPending: false,
+    });
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      blob: () =>
+        Promise.resolve(new Blob(['result'], { type: 'image/jpeg' })),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = renderPage();
+
+    const input = container.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [makeFile()] } });
+
+    // react-dropzone 异步触发 onDrop:等待「生成」按钮出现后再点击
+    const startButton = await screen.findByRole('button', {
+      name: 'Generate ID photo',
+    });
+    fireEvent.click(startButton);
+
+    await waitFor(() => {
+      expect(taskMutate).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      await mocks.onCompleted('output-file-1');
+    });
+
+    // 完成后上传预览 + 结果预览都使用同一 alt,应至少两张
+    const previews = await screen.findAllByAltText('ID photo preview');
+    expect(previews.length).toBeGreaterThanOrEqual(2);
+    expect(fetchMock).toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
 });

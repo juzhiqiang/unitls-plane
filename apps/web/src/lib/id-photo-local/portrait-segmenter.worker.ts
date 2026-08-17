@@ -1,0 +1,174 @@
+/// <reference lib="webworker" />
+import * as ort from 'onnxruntime-web/webgpu';
+import type { SegmenterEp, SegmenterRequest, SegmenterResponse } from './segmenter-protocol';
+
+// ===== 校准点:以 docs/id-photo-models.md 实测为准,Task 2 执行后校准 =====
+const INPUT_SIZE = 1024; // BiRefNet/RMBG 惯例输入边长,实测后校准
+const IMAGENET_MEAN = [0.485, 0.456, 0.406] as const;
+const IMAGENET_STD = [0.229, 0.224, 0.225] as const;
+// =====================================================================
+
+ort.env.wasm.wasmPaths = '/onnx/';
+ort.env.wasm.numThreads = 1;
+ort.env.wasm.simd = true;
+ort.env.wasm.proxy = false;
+
+// 最小 WebGPU 探测契约(web app 未引入 @webgpu/types,以本地类型避免硬依赖)
+interface GpuAdapterLike {
+  requestAdapter(): Promise<unknown>;
+}
+interface NavigatorGpuLike {
+  gpu?: GpuAdapterLike;
+}
+
+async function probeWebGpu(): Promise<boolean> {
+  if (typeof navigator === 'undefined') return false;
+  const gpu = (navigator as unknown as NavigatorGpuLike).gpu;
+  if (!gpu) return false;
+  try {
+    const adapter = await gpu.requestAdapter();
+    return !!adapter;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchModelWithProgress(
+  url: string,
+  onProgress: (ratio: number) => void,
+): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error(`model fetch failed: ${res.status}`);
+  const total = Number(res.headers.get('Content-Length') || 0);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value!);
+    received += value!.length;
+    onProgress(total ? received / total : 0);
+  }
+  const out = new Uint8Array(received);
+  let p = 0;
+  for (const c of chunks) {
+    out.set(c, p);
+    p += c.length;
+  }
+  return out;
+}
+
+export async function detectEp(): Promise<SegmenterEp> {
+  return (await probeWebGpu()) ? 'webgpu' : 'wasm';
+}
+
+export async function handleInit(
+  modelUrl: string,
+  post: (msg: SegmenterResponse) => void,
+): Promise<ort.InferenceSession> {
+  const ep = await detectEp();
+  const bytes = await fetchModelWithProgress(modelUrl, (ratio) =>
+    post({ type: 'progress', ratio }),
+  );
+  const session = await ort.InferenceSession.create(bytes, {
+    executionProviders: ep === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'],
+    graphOptimizationLevel: 'all',
+    enableMemPattern: false,
+    enableCpuMemArena: false,
+  });
+  post({
+    type: 'ready',
+    ep,
+    inputNames: session.inputNames,
+    outputNames: session.outputNames,
+  });
+  return session;
+}
+
+/** 把 ImageBitmap 预处理成 NCHW float32 张量数据(按短边 contain 绘制到 size×size)。 */
+export function preprocess(
+  bitmap: ImageBitmap,
+  size: number,
+): { data: Float32Array; dims: [number, number, number, number] } {
+  const canvas = new OffscreenCanvas(size, size);
+  const ctx = canvas.getContext('2d')!;
+  const scale = Math.min(size / bitmap.width, size / bitmap.height);
+  const dw = bitmap.width * scale;
+  const dh = bitmap.height * scale;
+  ctx.drawImage(bitmap, (size - dw) / 2, (size - dh) / 2, dw, dh);
+  const { data } = ctx.getImageData(0, 0, size, size);
+  // RGBA → NCHW float32,按通道平面归一化(ImageNet 惯例)
+  const out = new Float32Array(3 * size * size);
+  const plane = size * size;
+  for (let i = 0; i < plane; i++) {
+    out[i] = (data[i * 4]! / 255 - IMAGENET_MEAN[0]) / IMAGENET_STD[0];
+    out[plane + i] =
+      (data[i * 4 + 1]! / 255 - IMAGENET_MEAN[1]) / IMAGENET_STD[1];
+    out[2 * plane + i] =
+      (data[i * 4 + 2]! / 255 - IMAGENET_MEAN[2]) / IMAGENET_STD[2];
+  }
+  return { data: out, dims: [1, 3, size, size] };
+}
+
+/** 把模型输出张量(mask,假定已 [0,1])resize 回原图尺寸的 alpha(0..1)。 */
+export function postprocess(
+  rawData: Float32Array,
+  maskW: number,
+  maskH: number,
+  dstW: number,
+  dstH: number,
+): Float32Array {
+  // rawData 假设已 [0,1](模型输出经 sigmoid);若未 sigmoid,在此补:
+  // const a = 1 / (1 + Math.exp(-rawData[i]));
+  const tmp = new OffscreenCanvas(maskW, maskH);
+  const tctx = tmp.getContext('2d')!;
+  const img = tctx.createImageData(maskW, maskH);
+  for (let i = 0; i < maskW * maskH; i++) {
+    const a = Math.max(0, Math.min(1, rawData[i]!));
+    img.data[i * 4] = a * 255;
+    img.data[i * 4 + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+  const out = new OffscreenCanvas(dstW, dstH);
+  const octx = out.getContext('2d')!;
+  octx.drawImage(tmp, 0, 0, maskW, maskH, 0, 0, dstW, dstH);
+  const resized = octx.getImageData(0, 0, dstW, dstH);
+  const alpha = new Float32Array(dstW * dstH);
+  for (let i = 0; i < dstW * dstH; i++) {
+    alpha[i] = resized.data[i * 4]! / 255;
+  }
+  return alpha;
+}
+
+let session: ort.InferenceSession | null = null;
+
+// jsdom 无 self.addEventListener,守卫避免加载报错
+if (typeof self !== 'undefined' && 'addEventListener' in self) {
+  self.addEventListener('message', async (e: MessageEvent<SegmenterRequest>) => {
+    const post = (msg: SegmenterResponse) =>
+      (self as unknown as Worker).postMessage(msg);
+    try {
+      if (e.data.type === 'init') {
+        session = await handleInit(e.data.modelUrl, post);
+      } else if (e.data.type === 'run') {
+        if (!session) throw new Error('session not ready');
+        const { bitmap, srcW, srcH } = e.data;
+        const { data, dims } = preprocess(bitmap, INPUT_SIZE);
+        const inputName = session.inputNames[0]!;
+        const input = new ort.Tensor('float32', data, dims);
+        const outputs = await session.run({ [inputName]: input });
+        const outputName = session.outputNames[0]!;
+        const out = outputs[outputName]!;
+        const rawData = (await out.getData()) as Float32Array;
+        // 模型输出空间尺寸:假设 [1,1,INPUT_SIZE,INPUT_SIZE],以实测为准
+        const maskH = INPUT_SIZE;
+        const maskW = INPUT_SIZE;
+        const mask = postprocess(rawData, maskW, maskH, srcW, srcH);
+        post({ type: 'result', mask, maskW: srcW, maskH: srcH });
+      }
+    } catch (err) {
+      post({ type: 'error', message: (err as Error).message });
+    }
+  });
+}

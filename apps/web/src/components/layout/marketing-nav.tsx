@@ -123,7 +123,7 @@ export function MarketingNav({ labels }: MarketingNavProps) {
               {labels.login}
             </Link>
             <Button asChild size="sm" className="h-8">
-              <Link href="/register">
+              <Link href="/login">
                 {labels.getStarted}
               </Link>
             </Button>
@@ -210,7 +210,7 @@ export function MarketingNav({ labels }: MarketingNavProps) {
                 </Link>
                 <Button asChild className="mt-2 w-full h-11">
                   <Link
-                    href="/register"
+                    href="/login"
                     onClick={() => setMobileOpen(false)}
                   >
                     {labels.getStarted}

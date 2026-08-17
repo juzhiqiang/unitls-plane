@@ -138,6 +138,7 @@ export default function IdPhotoPage() {
       {file && (
         <div className="space-y-6">
           {sourceUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={sourceUrl}
               alt={t('previewAlt')}
@@ -191,6 +192,7 @@ export default function IdPhotoPage() {
           description={resultFile.name}
           preview={
             resultUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={resultUrl}
                 alt={t('previewAlt')}

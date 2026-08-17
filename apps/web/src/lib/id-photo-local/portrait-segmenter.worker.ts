@@ -33,7 +33,8 @@ async function probeWebGpu(): Promise<boolean> {
   }
 }
 
-async function fetchModelWithProgress(
+/** 单次抓取模型字节并按进度回调;失败由 fetchModelWithProgress 重试。 */
+async function fetchOnce(
   url: string,
   onProgress: (ratio: number) => void,
 ): Promise<Uint8Array> {
@@ -57,6 +58,28 @@ async function fetchModelWithProgress(
     p += c.length;
   }
   return out;
+}
+
+/**
+ * 抓取模型字节,失败重试一次(设计要求)。第一次失败等 500ms 后重试,
+ * 第二次仍失败才抛出。onProgress 在每次尝试内独立报告(重试时从 0 重新计数)。
+ */
+export async function fetchModelWithProgress(
+  url: string,
+  onProgress: (ratio: number) => void,
+): Promise<Uint8Array> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await fetchOnce(url, onProgress);
+    } catch (err) {
+      lastErr = err;
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 export async function detectEp(): Promise<SegmenterEp> {
@@ -111,7 +134,41 @@ export function preprocess(
   return { data: out, dims: [1, 3, size, size] };
 }
 
-/** 把模型输出张量(mask,假定已 [0,1])resize 回原图尺寸的 alpha(0..1)。 */
+/**
+ * 把任意数值 typed array 归一为 Float32Array。
+ * - float32:直接返回(零拷贝)
+ * - uint8:按 /255 归一(掩码以 0..255 编码时)
+ * - 其它类型:best-effort 数值转换;Task 2 实测后可精化(HIGH 5 防御性硬化)
+ */
+function toF32(
+  raw: { readonly length: number; [index: number]: unknown },
+  type: string,
+): Float32Array {
+  if (type === 'float32') return raw as unknown as Float32Array;
+  const len = raw.length;
+  const f = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const v = Number(raw[i]);
+    f[i] = type === 'uint8' ? v / 255 : v;
+  }
+  return f;
+}
+
+/**
+ * 从输出张量 dims 推断掩码空间尺寸(NCHW 优先,回退 INPUT_SIZE)。
+ * 不再硬编码 INPUT_SIZE,避免与模型实际输出尺寸不一致(LOW 12)。
+ */
+function inferMaskSize(dims: readonly number[]): { maskH: number; maskW: number } {
+  if (dims.length === 4) {
+    return { maskH: dims[2] ?? INPUT_SIZE, maskW: dims[3] ?? INPUT_SIZE };
+  }
+  if (dims.length === 3) {
+    return { maskH: dims[1] ?? INPUT_SIZE, maskW: dims[2] ?? INPUT_SIZE };
+  }
+  return { maskH: INPUT_SIZE, maskW: INPUT_SIZE };
+}
+
+/** 把模型输出张量(mask)resize 回原图尺寸的 alpha(0..1)。 */
 export function postprocess(
   rawData: Float32Array,
   maskW: number,
@@ -119,8 +176,11 @@ export function postprocess(
   dstW: number,
   dstH: number,
 ): Float32Array {
-  // rawData 假设已 [0,1](模型输出经 sigmoid);若未 sigmoid,在此补:
-  // const a = 1 / (1 + Math.exp(-rawData[i]));
+  // 无条件 sigmoid:对已 [0,1] 的输入仍单调近线性,影响可忽略;
+  // 对未 sigmoid 的 logits 输出则正确压缩到 [0,1]。Task 2 实测后可移除(HIGH 5)。
+  for (let i = 0; i < rawData.length; i++) {
+    rawData[i] = 1 / (1 + Math.exp(-rawData[i]!));
+  }
   const tmp = new OffscreenCanvas(maskW, maskH);
   const tctx = tmp.getContext('2d')!;
   const img = tctx.createImageData(maskW, maskH);
@@ -160,10 +220,10 @@ if (typeof self !== 'undefined' && 'addEventListener' in self) {
         const outputs = await session.run({ [inputName]: input });
         const outputName = session.outputNames[0]!;
         const out = outputs[outputName]!;
-        const rawData = (await out.getData()) as Float32Array;
-        // 模型输出空间尺寸:假设 [1,1,INPUT_SIZE,INPUT_SIZE],以实测为准
-        const maskH = INPUT_SIZE;
-        const maskW = INPUT_SIZE;
+        // 从输出张量取类型与 dims,统一转 float32 并按实际尺寸处理(HIGH 5 / LOW 12)
+        const raw = await out.getData();
+        const rawData = toF32(raw, out.type);
+        const { maskH, maskW } = inferMaskSize(out.dims);
         const mask = postprocess(rawData, maskW, maskH, srcW, srcH);
         post({ type: 'result', mask, maskW: srcW, maskH: srcH });
       }

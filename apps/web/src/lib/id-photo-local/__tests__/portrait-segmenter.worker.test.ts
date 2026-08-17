@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // mock onnxruntime-web/webgpu:捕获 create 的模型字节、返回假 session
 const fakeOutputs = {
@@ -94,23 +94,93 @@ describe('portrait-segmenter.worker pure functions', () => {
     expect(data).toBeInstanceOf(Float32Array);
   });
 
-  it('postprocess clamps mask values and resizes to dst size', async () => {
+  it('postprocess applies sigmoid then resizes to dst size', async () => {
     const { postprocess } = await import('../portrait-segmenter.worker');
-    // rawData 超出 [0,1] → clamp;同尺寸 2x2 → 1:1 拷贝验证数据通路。
-    // 注意:postprocess 经 8-bit ImageData 往返(a*255 存为 Uint8ClampedArray),
-    // 故 0.5 → 127.5 → 128 → 0.50196,精度上限约 1/255,与 composite.ts 的 8-bit alpha 一致。
-    const rawData = new Float32Array([2.0, -1.0, 0.5, 1.5]);
+    // postprocess 无条件对输入做 sigmoid(消除"注释掉的 sigmoid 隐患",HIGH 5):
+    // 大正 logits → ~1,大负 logits → ~0,中值经 8-bit ImageData 往返(a*255 存为
+    // Uint8ClampedArray 再 /255),精度上限约 1/255,与 composite.ts 的 8-bit alpha 一致。
+    const rawData = new Float32Array([10.0, -10.0, 0.0, 0.5]);
     const alpha = postprocess(rawData, 2, 2, 2, 2);
     expect(alpha).toBeInstanceOf(Float32Array);
     expect(alpha.length).toBe(4);
-    expect(alpha[0]!).toBeCloseTo(1.0, 5); // clamp(2.0) → 1
-    expect(alpha[1]!).toBeCloseTo(0.0, 5); // clamp(-1.0) → 0
-    expect(alpha[2]!).toBeCloseTo(0.5, 2); // 8-bit 往返,2 位小数足够
-    expect(alpha[3]!).toBeCloseTo(1.0, 5); // clamp(1.5) → 1
+    expect(alpha[0]!).toBeCloseTo(1.0, 5); // sigmoid(10) ≈ 0.99995 → 255 → 1
+    expect(alpha[1]!).toBeCloseTo(0.0, 5); // sigmoid(-10) ≈ 0.000045 → 0 → 0
+    expect(alpha[2]!).toBeCloseTo(0.5, 2); // sigmoid(0) = 0.5 → 127.5→128 → 0.50196
+    expect(alpha[3]!).toBeCloseTo(0.62, 2); // sigmoid(0.5) ≈ 0.6225 → 159 → 0.6235
   });
 
   it('detectEp returns wasm when no gpu adapter', async () => {
     const { detectEp } = await import('../portrait-segmenter.worker');
     expect(await detectEp()).toBe('wasm');
+  });
+});
+
+describe('fetchModelWithProgress', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function okResponse(bytes: Uint8Array) {
+    let yielded = false;
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (!yielded) {
+              yielded = true;
+              return { done: false, value: bytes };
+            }
+            return { done: true };
+          },
+        }),
+      },
+      headers: { get: () => String(bytes.length) },
+    };
+  }
+
+  function failResponse(status = 500) {
+    return {
+      ok: false,
+      status,
+      body: null,
+      headers: { get: () => null },
+    };
+  }
+
+  it('returns bytes on first success without retry', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(okResponse(new Uint8Array([1, 2, 3, 4])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const onProgress = vi.fn();
+    const { fetchModelWithProgress } = await import('../portrait-segmenter.worker');
+    const result = await fetchModelWithProgress('http://x/m.onnx', onProgress);
+    expect(result).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalled();
+  });
+
+  it('retries once after first failure then succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(failResponse(503))
+      .mockResolvedValueOnce(okResponse(new Uint8Array([9, 8, 7])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { fetchModelWithProgress } = await import('../portrait-segmenter.worker');
+    const result = await fetchModelWithProgress('http://x/m.onnx', () => {});
+    expect(result).toEqual(new Uint8Array([9, 8, 7]));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws after second failure', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(failResponse(404));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { fetchModelWithProgress } = await import('../portrait-segmenter.worker');
+    await expect(
+      fetchModelWithProgress('http://x/m.onnx', () => {}),
+    ).rejects.toThrow('model fetch failed: 404');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

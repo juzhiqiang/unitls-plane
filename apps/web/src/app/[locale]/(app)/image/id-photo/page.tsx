@@ -260,7 +260,13 @@ export default function IdPhotoPage() {
       {(processingMode === 'local' ? local.error : error) && (
         <FailureRecoveryPanel
           message={
-            processingMode === 'local' ? (local.error ?? '') : (error ?? '')
+            processingMode === 'local'
+              ? // 无 WebGPU(ep=wasm 兜底)时本地能力受限,引导切服务端;
+                // 其它失败(含 ep=null 尚未探测、ep=webgpu 推理失败)用通用文案
+                local.ep === 'wasm'
+                ? t('localNoWebGpu')
+                : t('localFailed')
+              : (error ?? '')
           }
           onRetry={handleProcess}
           onReset={() => {

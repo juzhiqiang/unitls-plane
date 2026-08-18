@@ -80,8 +80,9 @@ COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/models ./models
-# 证件照本地抠图 onnx 模型(离线镜像内置,启动时同步到 MinIO models 桶)。
-# docker/models/ 在 .gitignore 内,构建前把 rmbg-1.4-fp16.onnx / rmbg-2.0-q4f16.onnx 放入。
+# 证件照本地抠图 @imgly/ISNet 资产(离线镜像内置,启动时同步到 MinIO models 桶)。
+# docker/models/ 在 .gitignore 内,构建前把 @imgly 分块资产放入 docker/models/imgly/1.7.0/dist/
+# (含 resources.json + 6 个资源键的分块文件;由 scripts/prepare-id-photo-models.sh 下载)。
 COPY docker/models/ ./models/id-photo/
 COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules

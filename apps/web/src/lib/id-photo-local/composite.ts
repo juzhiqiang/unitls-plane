@@ -46,45 +46,35 @@ export function cropToPresetBounds(
 }
 
 /**
- * 把原图前景(经 mask alpha 保留)叠到纯色背景上,按 preset 裁剪输出。
- * @param source 原图(已解码为 ImageBitmap)
- * @param maskAlpha 与原图同尺寸的单通道 alpha(0..1),长度 = srcW*srcH
+ * 把透明抠图 cutout 叠到纯色背景上,按 preset 宽高比 contain 居中裁剪并缩放到目标像素。
+ *
+ * @imgly `removeBackground` 已产出含 alpha matte 的透明 RGBA 抠图,无需再用 mask 烤前景;
+ * 此处只做"叠底 + 按证件照比例居中裁剪 + 缩放到 preset 像素"。
+ *
+ * @param cutout removeBackground 产出的透明 ImageBitmap(自带 alpha)
  * @param backgroundColor #rrggbb
  * @param presetW presetH 目标像素(如 295×413)
  */
 export async function compositeIdPhoto(
-  source: ImageBitmap,
-  maskAlpha: Float32Array,
-  srcW: number,
-  srcH: number,
+  cutout: ImageBitmap,
   backgroundColor: string,
   presetW: number,
   presetH: number,
   outputType: 'image/jpeg' | 'image/png',
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
-  // 1. 前景 × alpha:把 alpha 烤进一张与原图同尺寸的 RGBA canvas
-  const fg = new OffscreenCanvas(srcW, srcH);
-  const fctx = fg.getContext('2d')!;
-  fctx.drawImage(source, 0, 0, srcW, srcH);
-  const imageData = fctx.getImageData(0, 0, srcW, srcH);
-  const data = imageData.data;
-  for (let i = 0; i < srcW * srcH; i++) {
-    const a = maskAlpha[i]!;
-    data[i * 4 + 3] = Math.round(a * 255);
-  }
-  fctx.putImageData(imageData, 0, 0);
-
-  // 2. 裁剪区域(原图坐标)+ 缩放到 preset 像素
+  const srcW = cutout.width;
+  const srcH = cutout.height;
+  // 裁剪区域(原图坐标,按 preset 宽高比 contain 居中)+ 缩放到 preset 像素
   const crop = cropToPresetBounds(srcW, srcH, presetW, presetH);
   const out = new OffscreenCanvas(presetW, presetH);
   const octx = out.getContext('2d')!;
   // 纯色背景
   octx.fillStyle = `rgb(${r},${g},${b})`;
   octx.fillRect(0, 0, presetW, presetH);
-  // 前景叠上(已带 alpha)
+  // 透明抠图叠上(source-over:前景 × alpha + 背景 × (1-alpha))
   octx.drawImage(
-    fg,
+    cutout,
     crop.x,
     crop.y,
     crop.width,

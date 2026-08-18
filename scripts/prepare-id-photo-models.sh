@@ -1,63 +1,58 @@
 #!/usr/bin/env bash
-# 预置证件照本地抠图模型到 MinIO/S3 models 桶。
+# 预置证件照本地抠图 @imgly/ISNet 资产到本地 MinIO models 桶(匿名只读)。
 #
-# ModelScope 的 briaai/RMBG-{1.4,2.0} 仓库已提供预转好的 onnx 变体,
-# 无需本地 Python 转换,直接下载即可:
-#   - RMBG-1.4: onnx/model_fp16.onnx  (~84MB, fp16)
-#   - RMBG-2.0: onnx/model_q4f16.onnx (~234MB, q4f16)
+# 本地开发用:把 @imgly/background-removal 运行所需的分块资产(resources.json + 6 个资源键的
+# 分块文件)拉到 MinIO,前端即可在浏览器本地完成证件照抠图,无需服务端。
+#
+# 步骤:
+#   1) node scripts/download-imgly-assets.cjs 从 @imgly CDN 下载到 docker/models/imgly/1.7.0/dist/
+#   2) aws-cli 把该目录同步到 s3://models/imgly/1.7.0/dist/(保持扁平分块结构)
+#
+# 公网访问 URL(与前端 imglyPublicPath() 对齐):
+#   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/imgly/1.7.0/dist/resources.json
+#   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/imgly/1.7.0/dist/<chunk.name>
 #
 # 用法:
 #   export S3_ENDPOINT=http://localhost:9000
 #   export S3_ACCESS_KEY=minioadmin
 #   export S3_SECRET_KEY=minioadmin
-#   export AWS_DEFAULT_REGION=us-east-1   # MinIO 默认 region
 #   ./scripts/prepare-id-photo-models.sh
 #
-# 依赖: curl、aws-cli(S3 兼容,用于上传)、python3 + onnx(仅 inspect I/O,可选)。
+# 依赖:node、aws-cli(或 aws-cli-v2)、本地 MinIO 已启动(bun run services:up)。
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUCKET="${S3_MODELS_BUCKET:-models}"
-WORKDIR="${WORKDIR:-./.cache/id-photo-models}"
-REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+REGION="${AWS_DEFAULT_REGION:-${S3_REGION:-us-east-1}}"
+VERSION="1.7.0"
+DIST_DIR="$ROOT/docker/models/imgly/$VERSION/dist"
+S3_KEY_PREFIX="imgly/$VERSION/dist"
 
-# name|source_url|out_name
-MODELS=(
-  "rmbg-1.4|https://modelscope.cn/models/briaai/RMBG-1.4/resolve/master/onnx/model_fp16.onnx|rmbg-1.4-fp16.onnx"
-  "rmbg-2.0|https://modelscope.cn/models/briaai/RMBG-2.0/resolve/master/onnx/model_q4f16.onnx|rmbg-2.0-q4f16.onnx"
-)
+: "${S3_ENDPOINT:?S3_ENDPOINT is required (e.g. http://localhost:9000)}"
+: "${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}"
+: "${S3_SECRET_KEY:?S3_SECRET_KEY is required}"
+export AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY"
+export AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY"
+export AWS_DEFAULT_REGION="$REGION"
+# MinIO 用 path-style
+export AWS_S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-true}"
 
-mkdir -p "$WORKDIR"
+# 1. 从 @imgly CDN 下载资产(幂等:已存在且尺寸正确的分块跳过)
+node "$ROOT/scripts/download-imgly-assets.cjs" all
 
-# 创建只读匿名桶(若不存在)
+# 2. 确保 models 桶存在 + 匿名只读策略(允许前端公开拉取)
 aws --endpoint-url "$S3_ENDPOINT" s3 mb "s3://$BUCKET" --region "$REGION" 2>/dev/null || true
-# MinIO 匿名只读策略(允许前端公开拉取模型)
 aws --endpoint-url "$S3_ENDPOINT" s3api put-bucket-policy --bucket "$BUCKET" --region "$REGION" \
   --policy '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::'"$BUCKET"'/*"]}]}' \
   2>/dev/null || echo "[prepare] bucket policy set skipped (non-MinIO or already set)"
 
-for entry in "${MODELS[@]}"; do
-  IFS='|' read -r name src_url out_name <<< "$entry"
-  out="$WORKDIR/$out_name"
-  if [ -f "$out" ]; then
-    echo "==> $name: $out_name already exists, skipping download"
-  else
-    echo "==> $name: downloading $src_url"
-    curl -fL "$src_url" -o "$out"
-  fi
-  echo "==> $name: uploading to s3://$BUCKET/$out_name"
-  aws --endpoint-url "$S3_ENDPOINT" s3 cp "$out" "s3://$BUCKET/$out_name" --region "$REGION" \
-    --content-type application/octet-stream \
-    --cache-control "public, max-age=31536000, immutable"
-done
+# 3. 同步资产树到 MinIO(分块文件保持扁平 SHA256 命名;资产按版本不可变,长期缓存)
+echo "==> uploading $DIST_DIR → s3://$BUCKET/$S3_KEY_PREFIX/"
+aws --endpoint-url "$S3_ENDPOINT" s3 sync "$DIST_DIR" "s3://$BUCKET/$S3_KEY_PREFIX/" \
+  --region "$REGION" --no-progress \
+  --cache-control "public, max-age=31536000, immutable"
 
-echo "==> inspecting I/O names/shapes for docs (requires python3 + onnx)"
-for out_name in rmbg-1.4-fp16.onnx rmbg-2.0-q4f16.onnx; do
-  if python3 -c "import onnx" 2>/dev/null; then
-    echo "--- $out_name ---"
-    python3 scripts/inspect-onnx-io.py "$WORKDIR/$out_name" | tee "$WORKDIR/${out_name%.onnx}-io.txt"
-  else
-    echo "[prepare] python onnx not installed, skipping I/O inspect for $out_name"
-  fi
-done
-
-echo "Done. Fill docs/id-photo-models.md with the I/O info above (if not already)."
+echo
+echo "==> 证件照 @imgly/ISNet 资产已就绪。"
+echo "    publicPath: \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/$S3_KEY_PREFIX/"
+echo "    清单:       \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/$S3_KEY_PREFIX/resources.json"

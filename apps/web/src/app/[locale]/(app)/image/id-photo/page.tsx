@@ -249,14 +249,10 @@ export default function IdPhotoPage() {
 
       {(processingMode === 'local' ? local.error : error) && (
         <FailureRecoveryPanel
+          // @imgly 均衡档(isnet_fp16)在 CPU 也能本地处理,失败一律用通用文案;
+          // 高精度需要 WebGPU 的限制已由 highPrecisionDisabled 开关单独表达。
           message={
-            processingMode === 'local'
-              ? // 无 WebGPU(ep=wasm 兜底)时本地能力受限,引导切服务端;
-                // 其它失败(含 ep=null 尚未探测、ep=webgpu 推理失败)用通用文案
-                local.ep === 'wasm'
-                ? t('localNoWebGpu')
-                : t('localFailed')
-              : (error ?? '')
+            processingMode === 'local' ? t('localFailed') : (error ?? '')
           }
           onRetry={handleProcess}
           onReset={() => {

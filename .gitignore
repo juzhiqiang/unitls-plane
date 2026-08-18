@@ -23,6 +23,7 @@ build/
 # 防止 tsc 输出物混进源码目录
 apps/*/src/**/*.js
 apps/*/src/**/*.js.map
+*.tsbuildinfo
 apps/*/src/**/*.d.ts
 apps/*/src/**/*.d.ts.map
 packages/*/src/**/*.js

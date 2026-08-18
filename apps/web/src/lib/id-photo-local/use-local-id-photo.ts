@@ -15,6 +15,9 @@ import {
 /** 本地执行后端(WebGPU 可用性),用于高精度开关门控与 device 选择。 */
 export type LocalEp = 'webgpu' | 'wasm';
 
+// 在模块作用域取值:hook 内的 `process` 回调会遮蔽全局 process,不能在其中写 process.env。
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
 export type LocalStage =
   | 'idle'
   | 'loading-model'
@@ -37,7 +40,7 @@ export interface UseLocalIdPhoto {
       preset: IdPhotoPreset;
       backgroundColor: string;
       outputType: IdPhotoOutputType;
-    },
+    }
   ) => Promise<void>;
   reset: () => void;
 }
@@ -115,7 +118,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             opts.backgroundColor,
             spec.widthPx,
             spec.heightPx,
-            opts.outputType,
+            opts.outputType
           );
           if (sid !== sessionIdRef.current) return;
           setResultBlob(blob);
@@ -125,13 +128,19 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
         }
       } catch (err) {
         if (sid !== sessionIdRef.current) return;
+        // UI 只展示「本地处理失败」这类兜底文案,真实错误(ort 后端/资产加载)必须能看到,
+        // 否则排查只能靠猜。仅开发态打印,生产不噪音。
+        if (IS_DEV) {
+          // eslint-disable-next-line no-console
+          console.error('[id-photo-local] process failed:', err);
+        }
         setError((err as Error).message);
         setStatus('error');
       } finally {
         inFlightRef.current = false;
       }
     },
-    [ep],
+    [ep]
   );
 
   const reset = useCallback(() => {
@@ -150,7 +159,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
       sessionIdRef.current++;
       inFlightRef.current = false;
     },
-    [],
+    []
   );
 
   // 挂载时探测 WebGPU,使高精度开关在首次处理前就可交互。
@@ -158,7 +167,11 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     let cancelled = false;
     const gpu =
       typeof navigator !== 'undefined'
-        ? (navigator as unknown as { gpu?: { requestAdapter?: () => Promise<unknown> } }).gpu
+        ? (
+            navigator as unknown as {
+              gpu?: { requestAdapter?: () => Promise<unknown> };
+            }
+          ).gpu
         : undefined;
     if (!gpu?.requestAdapter) {
       setEp('wasm');
@@ -166,7 +179,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     }
     gpu
       .requestAdapter()
-      .then((adapter) => {
+      .then(adapter => {
         if (!cancelled) setEp(adapter ? 'webgpu' : 'wasm');
       })
       .catch(() => {

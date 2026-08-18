@@ -125,15 +125,18 @@ describe('IdPhotoPage', () => {
 
     const { container } = renderPage();
 
-    // 默认本地路;切到服务端路再触发生成,走任务链路
-    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
-
+    // ModeToggle 只在丢文件后渲染:先丢文件,再切服务端路,再触发生成
     const input = container.querySelector(
       'input[type="file"]'
     ) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [makeFile()] } });
 
-    // react-dropzone 异步触发 onDrop:等待「生成」按钮出现后再点击
+    // react-dropzone 异步触发 onDrop:等待「生成」按钮出现后再切换模式
+    await screen.findByRole('button', {
+      name: 'Generate ID photo',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+
     const startButton = await screen.findByRole('button', {
       name: 'Generate ID photo',
     });

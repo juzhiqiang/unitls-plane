@@ -9,6 +9,7 @@ node_modules/
 log/
 artifacts/screenshots/
 .playwright-mcp/
+.cache/
 
 # ==========================================
 # 2. Monorepo / 工具链自身的缓存

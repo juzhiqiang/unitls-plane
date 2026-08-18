@@ -1,7 +1,12 @@
 export type SegmenterEp = 'webgpu' | 'wasm';
 
 export type SegmenterRequest =
-  | { type: 'init'; modelUrl: string }
+  | {
+      type: 'init';
+      modelUrl: string;
+      mean: readonly [number, number, number];
+      std: readonly [number, number, number];
+    }
   | { type: 'run'; bitmap: ImageBitmap; srcW: number; srcH: number };
 
 export type SegmenterResponse =

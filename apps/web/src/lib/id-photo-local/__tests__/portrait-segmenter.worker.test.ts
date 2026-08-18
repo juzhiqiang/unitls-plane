@@ -86,11 +86,13 @@ describe('portrait-segmenter.worker pure functions', () => {
   it('preprocess normalizes RGB into NCHW float32', async () => {
     const { preprocess } = await import('../portrait-segmenter.worker');
     const bitmap = { width: 8, height: 8 } as ImageBitmap;
-    const { data, dims } = preprocess(bitmap, 8);
+    const mean = [0.5, 0.5, 0.5] as const;
+    const std = [0.5, 0.5, 0.5] as const;
+    const { data, dims } = preprocess(bitmap, 8, mean, std);
     expect(dims).toEqual([1, 3, 8, 8]);
     expect(data.length).toBe(3 * 8 * 8);
     // jsdom 下 ImageBitmap 是桩对象,drawImage 不写入像素,故归一化结果为 (0/255 - mean)/std;
-    // 仅校验结构,数值校准以 docs/id-photo-models.md 实测为准(Task 2 后)。
+    // 仅校验结构,数值校准以 docs/id-photo-models.md 实测为准。
     expect(data).toBeInstanceOf(Float32Array);
   });
 

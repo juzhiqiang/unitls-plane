@@ -22,6 +22,7 @@ import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
+import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 
 const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   preset: 'one_inch',
@@ -48,7 +49,7 @@ export default function IdPhotoPage() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [processingMode, setProcessingMode] = useState<'local' | 'server'>('local');
+  const [processingMode, setProcessingMode] = useState<ProcessMode>('local');
   const [highPrecision, setHighPrecision] = useState(false);
 
   const sourceUrl = useObjectUrl(file);
@@ -171,28 +172,6 @@ export default function IdPhotoPage() {
       recovery={tShell('catalogRecovery')}
       stage={stage}
     >
-      <div className="inline-flex rounded-md border border-border p-0.5 text-sm">
-        {(['local', 'server'] as const).map(m => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => {
-              setProcessingMode(m);
-              local.reset();
-              setResultFile(null);
-              setError(null);
-            }}
-            className={`rounded-[5px] px-3 py-1.5 font-mono transition-colors ${
-              processingMode === m
-                ? 'bg-foreground text-background'
-                : 'text-muted-foreground'
-            }`}
-          >
-            {t(`processingModes.${m}`)}
-          </button>
-        ))}
-      </div>
-
       <FileDropzone
         accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
         maxSize={50 * 1024 * 1024}
@@ -229,6 +208,17 @@ export default function IdPhotoPage() {
             highPrecision={highPrecision}
             highPrecisionDisabled={local.ep !== 'webgpu'}
             onHighPrecisionChange={setHighPrecision}
+          />
+
+          <ModeToggle
+            value={processingMode}
+            onChange={m => {
+              setProcessingMode(m);
+              local.reset();
+              setResultFile(null);
+              setError(null);
+            }}
+            disabled={isProcessing}
           />
 
           <button

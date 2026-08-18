@@ -2,10 +2,9 @@
 import * as ort from 'onnxruntime-web/webgpu';
 import type { SegmenterEp, SegmenterRequest, SegmenterResponse } from './segmenter-protocol';
 
-// ===== 校准点:以 docs/id-photo-models.md 实测为准,Task 2 执行后校准 =====
-const INPUT_SIZE = 1024; // BiRefNet/RMBG 惯例输入边长,实测后校准
-const IMAGENET_MEAN = [0.485, 0.456, 0.406] as const;
-const IMAGENET_STD = [0.229, 0.224, 0.225] as const;
+// ===== 校准点:以 docs/id-photo-models.md 实测为准 =====
+const INPUT_SIZE = 1024; // BiRefNet/RMBG 惯例输入边长
+// 归一化参数由 init 消息传入(模型特定),不再用全局常量
 // =====================================================================
 
 ort.env.wasm.wasmPaths = '/onnx/';
@@ -88,8 +87,13 @@ export async function detectEp(): Promise<SegmenterEp> {
 
 export async function handleInit(
   modelUrl: string,
+  mean: readonly [number, number, number],
+  std: readonly [number, number, number],
   post: (msg: SegmenterResponse) => void,
 ): Promise<ort.InferenceSession> {
+  // 保存归一化参数供 run 时使用
+  normMean = mean;
+  normStd = std;
   const ep = await detectEp();
   const bytes = await fetchModelWithProgress(modelUrl, (ratio) =>
     post({ type: 'progress', ratio }),
@@ -109,27 +113,28 @@ export async function handleInit(
   return session;
 }
 
-/** 把 ImageBitmap 预处理成 NCHW float32 张量数据(按短边 contain 绘制到 size×size)。 */
+/**
+ * 把 ImageBitmap 预处理成 NCHW float32 张量数据。
+ * RMBG 官方预处理:直接拉伸到 size×size(不 letterbox),再按模型特定 mean/std 归一化。
+ */
 export function preprocess(
   bitmap: ImageBitmap,
   size: number,
+  mean: readonly [number, number, number],
+  std: readonly [number, number, number],
 ): { data: Float32Array; dims: [number, number, number, number] } {
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d')!;
-  const scale = Math.min(size / bitmap.width, size / bitmap.height);
-  const dw = bitmap.width * scale;
-  const dh = bitmap.height * scale;
-  ctx.drawImage(bitmap, (size - dw) / 2, (size - dh) / 2, dw, dh);
+  // 拉伸填充整个 canvas(与 RMBG 官方 Image.resize((1024,1024)) 一致)
+  ctx.drawImage(bitmap, 0, 0, size, size);
   const { data } = ctx.getImageData(0, 0, size, size);
-  // RGBA → NCHW float32,按通道平面归一化(ImageNet 惯例)
+  // RGBA → NCHW float32,按通道平面归一化
   const out = new Float32Array(3 * size * size);
   const plane = size * size;
   for (let i = 0; i < plane; i++) {
-    out[i] = (data[i * 4]! / 255 - IMAGENET_MEAN[0]) / IMAGENET_STD[0];
-    out[plane + i] =
-      (data[i * 4 + 1]! / 255 - IMAGENET_MEAN[1]) / IMAGENET_STD[1];
-    out[2 * plane + i] =
-      (data[i * 4 + 2]! / 255 - IMAGENET_MEAN[2]) / IMAGENET_STD[2];
+    out[i] = (data[i * 4]! / 255 - mean[0]) / std[0];
+    out[plane + i] = (data[i * 4 + 1]! / 255 - mean[1]) / std[1];
+    out[2 * plane + i] = (data[i * 4 + 2]! / 255 - mean[2]) / std[2];
   }
   return { data: out, dims: [1, 3, size, size] };
 }
@@ -190,6 +195,9 @@ export function postprocess(
   tctx.putImageData(img, 0, 0);
   const out = new OffscreenCanvas(dstW, dstH);
   const octx = out.getContext('2d')!;
+  // 高质量插值,减少 mask 缩放锯齿
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = 'high';
   octx.drawImage(tmp, 0, 0, maskW, maskH, 0, 0, dstW, dstH);
   const resized = octx.getImageData(0, 0, dstW, dstH);
   const alpha = new Float32Array(dstW * dstH);
@@ -200,6 +208,9 @@ export function postprocess(
 }
 
 let session: ort.InferenceSession | null = null;
+// 当前 session 的归一化参数(由 init 消息设置)
+let normMean: readonly [number, number, number] = [0.5, 0.5, 0.5];
+let normStd: readonly [number, number, number] = [0.5, 0.5, 0.5];
 
 // jsdom 无 self.addEventListener,守卫避免加载报错
 if (typeof self !== 'undefined' && 'addEventListener' in self) {
@@ -208,11 +219,11 @@ if (typeof self !== 'undefined' && 'addEventListener' in self) {
       (self as unknown as Worker).postMessage(msg);
     try {
       if (e.data.type === 'init') {
-        session = await handleInit(e.data.modelUrl, post);
+        session = await handleInit(e.data.modelUrl, e.data.mean, e.data.std, post);
       } else if (e.data.type === 'run') {
         if (!session) throw new Error('session not ready');
         const { bitmap, srcW, srcH } = e.data;
-        const { data, dims } = preprocess(bitmap, INPUT_SIZE);
+        const { data, dims } = preprocess(bitmap, INPUT_SIZE, normMean, normStd);
         const inputName = session.inputNames[0]!;
         const input = new ort.Tensor('float32', data, dims);
         const outputs = await session.run({ [inputName]: input });

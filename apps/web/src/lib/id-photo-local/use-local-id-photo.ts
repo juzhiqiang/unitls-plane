@@ -178,7 +178,12 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
         if (!readyRef.current || effectiveTier !== loadedTierRef.current) {
           loadedTierRef.current = effectiveTier;
           setStatus('loading-model');
-          worker.postMessage({ type: 'init', modelUrl: modelUrl(meta) });
+          worker.postMessage({
+            type: 'init',
+            modelUrl: modelUrl(meta),
+            mean: meta.mean,
+            std: meta.std,
+          });
         } else {
           setStatus('running');
           postRunFromPending(worker);
@@ -262,6 +267,30 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     },
     [clearPending],
   );
+
+  // 挂载时立即探测 WebGPU,使高精度开关在首次处理前就可交互(不必等 worker init)。
+  useEffect(() => {
+    let cancelled = false;
+    const gpu =
+      typeof navigator !== 'undefined'
+        ? (navigator as unknown as { gpu?: { requestAdapter?: () => Promise<unknown> } }).gpu
+        : undefined;
+    if (!gpu?.requestAdapter) {
+      setEp('wasm');
+      return;
+    }
+    gpu
+      .requestAdapter()
+      .then((adapter) => {
+        if (!cancelled) setEp(adapter ? 'webgpu' : 'wasm');
+      })
+      .catch(() => {
+        if (!cancelled) setEp('wasm');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return { status, progress, ep, error, resultBlob, process, reset };
 }

@@ -259,25 +259,37 @@ describe('handleInit EP selection', () => {
     return opts.executionProviders;
   }
 
-  it('q4f16 强制 wasm,即便 WebGPU 可用(MatMulNBits 不支持 WebGPU EP)', async () => {
+  function graphOptOf(callIndex: number): string {
+    const opts = createMock.mock.calls[callIndex]![1] as {
+      graphOptimizationLevel: string;
+    };
+    return opts.graphOptimizationLevel;
+  }
+
+  it('q4f16 强制 wasm + 降到 opt basic,即便 WebGPU 可用', async () => {
+    // q4f16:MatMulNBits 不支持 WebGPU EP(强制 wasm);且 'all' 下
+    // SimplifiedLayerNormFusion 图错误使 session 初始化失败,降到 'basic' 绕过
     setGpuAvailable(true);
     await call('q4f16');
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(providersOf(0)).toEqual(['wasm']);
+    expect(graphOptOf(0)).toBe('basic');
   });
 
-  it('fp16 + WebGPU 可用 → webgpu 优先 + wasm 回退', async () => {
+  it('fp16 + WebGPU 可用 → webgpu 优先 + wasm 回退,opt all', async () => {
     setGpuAvailable(true);
     await call('fp16');
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(providersOf(0)).toEqual(['webgpu', 'wasm']);
+    expect(graphOptOf(0)).toBe('all');
   });
 
-  it('fp16 + 无 WebGPU → 纯 wasm', async () => {
+  it('fp16 + 无 WebGPU → 纯 wasm,opt all', async () => {
     setGpuAvailable(false);
     await call('fp16');
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(providersOf(0)).toEqual(['wasm']);
+    expect(graphOptOf(0)).toBe('all');
   });
 
   it('fp16 WebGPU 创建失败 → 退回纯 wasm 重试并 ready', async () => {
@@ -294,6 +306,7 @@ describe('handleInit EP selection', () => {
     expect(createMock).toHaveBeenCalledTimes(2);
     expect(providersOf(0)).toEqual(['webgpu', 'wasm']);
     expect(providersOf(1)).toEqual(['wasm']);
+    expect(graphOptOf(0)).toBe('all');
     expect(post).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'ready' }),
     );

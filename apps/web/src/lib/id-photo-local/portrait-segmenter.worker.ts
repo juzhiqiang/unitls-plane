@@ -109,13 +109,18 @@ export async function handleInit(
   const epCandidates: SegmenterEp[][] = useWebGpu
     ? [['webgpu', 'wasm'], ['wasm']]
     : [['wasm']];
+  // q4f16 在 graphOptimizationLevel 'all' 下触发 SimplifiedLayerNormFusion 图错误
+  // (InsertedPrecisionFreeCast_.../patch_embed/norm/Constant_output_0 名缺失),
+  // session 初始化即抛错 → "处理失败";实测降到 'basic' 可绕过该融合,数值结果
+  // 不变(融合仅用于加速)。fp16 在 'all' 下正常(实测),保留以获得加速。
+  const optLevel: 'basic' | 'all' = quant === 'q4f16' ? 'basic' : 'all';
   let session: ort.InferenceSession | null = null;
   let lastErr: unknown;
   for (const providers of epCandidates) {
     try {
       session = await ort.InferenceSession.create(bytes, {
         executionProviders: providers,
-        graphOptimizationLevel: 'all',
+        graphOptimizationLevel: optLevel,
         enableMemPattern: false,
         enableCpuMemArena: false,
       });

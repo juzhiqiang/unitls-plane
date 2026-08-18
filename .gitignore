@@ -7,7 +7,7 @@ node_modules/
 *.log
 *.err
 log/
-artifacts/screenshots/
+artifacts/
 .playwright-mcp/
 .cache/
 

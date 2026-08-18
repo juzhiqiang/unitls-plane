@@ -66,6 +66,7 @@
 
 ## 离线镜像
 
-- 组合镜像构建时把两 onnx 放 `docker/models/`,Dockerfile `COPY` 进镜像 `/app/models/`。
-- `docker/entrypoint.sh` 启动时用 `aws s3 cp`(或 `mc`)把模型同步到本地 MinIO `models` 桶(只读匿名),失败不阻塞启动(便于 MinIO 未就绪时重试)。
-- 模型文件不进 Git(大),构建前放 `docker/models/`(已 gitignore)。
+- 组合镜像构建时把两 onnx 放 `docker/models/`(已 gitignore,仅保留 `.gitkeep`),Dockerfile `COPY docker/models/ ./models/id-photo/` 进镜像 `/app/models/id-photo/`。
+- `docker/start-all.sh` 在 migrate 之后、API 启动之前调用 `node apps/api/dist/scripts/sync-id-photo-models.js`,用 `@aws-sdk/client-s3`(镜像内已有依赖,无需额外安装 `mc`)把模型同步到本地 MinIO `models` 桶并设匿名只读策略。
+- 同步脚本失败不阻塞启动(返回 0,打印 skip 日志),便于 MinIO 未就绪时下次重启重试。
+- 模型文件不进 Git(大),构建前放 `docker/models/`。

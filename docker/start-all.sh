@@ -18,6 +18,12 @@ trap terminate INT TERM
 
 node apps/api/dist/scripts/migrate.js
 
+# 同步证件照本地抠图模型到 MinIO models 桶(离线镜像内置模型时使用)。
+# 失败不阻塞启动(MinIO 未就绪时下次重启重试)。
+if [ -f apps/api/dist/scripts/sync-id-photo-models.js ]; then
+  node apps/api/dist/scripts/sync-id-photo-models.js || echo "[start-all] id-photo model sync skipped (failed or MinIO not ready)"
+fi
+
 node apps/api/dist/main.js &
 api_pid="$!"
 

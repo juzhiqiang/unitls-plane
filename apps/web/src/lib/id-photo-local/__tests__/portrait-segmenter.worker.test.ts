@@ -196,3 +196,123 @@ describe('fetchModelWithProgress', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('handleInit EP selection', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    createMock.mockClear();
+    createMock.mockResolvedValue({
+      inputNames: ['input'],
+      outputNames: ['out'],
+      run: runMock,
+    });
+    // fetch 返回最小字节,使 fetchModelWithProgress 成功;create 的 EP 选择是断言重点
+    const bytes = new Uint8Array([1, 2, 3]);
+    let yielded = false;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (!yielded) {
+              yielded = true;
+              return { done: false, value: bytes };
+            }
+            return { done: true };
+          },
+        }),
+      },
+      headers: { get: () => String(bytes.length) },
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function setGpuAvailable(available: boolean) {
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: async () => (available ? {} : null) },
+      configurable: true,
+    });
+  }
+
+  async function call(quant: 'fp16' | 'q4f16') {
+    const { handleInit } = await import('../portrait-segmenter.worker');
+    const post = vi.fn();
+    await handleInit(
+      'http://x/m.onnx',
+      [0.5, 0.5, 0.5],
+      [0.5, 0.5, 0.5],
+      quant,
+      post,
+    );
+    return { post };
+  }
+
+  function providersOf(callIndex: number): string[] {
+    const opts = createMock.mock.calls[callIndex]![1] as {
+      executionProviders: string[];
+    };
+    return opts.executionProviders;
+  }
+
+  it('q4f16 强制 wasm,即便 WebGPU 可用(MatMulNBits 不支持 WebGPU EP)', async () => {
+    setGpuAvailable(true);
+    await call('q4f16');
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(providersOf(0)).toEqual(['wasm']);
+  });
+
+  it('fp16 + WebGPU 可用 → webgpu 优先 + wasm 回退', async () => {
+    setGpuAvailable(true);
+    await call('fp16');
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(providersOf(0)).toEqual(['webgpu', 'wasm']);
+  });
+
+  it('fp16 + 无 WebGPU → 纯 wasm', async () => {
+    setGpuAvailable(false);
+    await call('fp16');
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(providersOf(0)).toEqual(['wasm']);
+  });
+
+  it('fp16 WebGPU 创建失败 → 退回纯 wasm 重试并 ready', async () => {
+    setGpuAvailable(true);
+    createMock.mockReset();
+    createMock
+      .mockRejectedValueOnce(new Error('webgpu init failed'))
+      .mockResolvedValue({
+        inputNames: ['input'],
+        outputNames: ['out'],
+        run: runMock,
+      });
+    const { post } = await call('fp16');
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(providersOf(0)).toEqual(['webgpu', 'wasm']);
+    expect(providersOf(1)).toEqual(['wasm']);
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ready' }),
+    );
+  });
+
+  it('q4f16 wasm 创建也失败 → 抛出(无其它 EP 可试)', async () => {
+    setGpuAvailable(true);
+    createMock.mockReset();
+    createMock.mockRejectedValue(new Error('wasm init failed'));
+    const { handleInit } = await import('../portrait-segmenter.worker');
+    await expect(
+      handleInit(
+        'http://x/m.onnx',
+        [0.5, 0.5, 0.5],
+        [0.5, 0.5, 0.5],
+        'q4f16',
+        vi.fn(),
+      ),
+    ).rejects.toThrow('wasm init failed');
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+});

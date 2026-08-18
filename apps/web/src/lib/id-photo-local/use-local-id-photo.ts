@@ -183,6 +183,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             modelUrl: modelUrl(meta),
             mean: meta.mean,
             std: meta.std,
+            quant: meta.quant,
           });
         } else {
           setStatus('running');

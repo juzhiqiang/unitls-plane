@@ -89,6 +89,7 @@ export async function handleInit(
   modelUrl: string,
   mean: readonly [number, number, number],
   std: readonly [number, number, number],
+  quant: 'fp16' | 'q4f16',
   post: (msg: SegmenterResponse) => void,
 ): Promise<ort.InferenceSession> {
   // 保存归一化参数供 run 时使用
@@ -98,12 +99,32 @@ export async function handleInit(
   const bytes = await fetchModelWithProgress(modelUrl, (ratio) =>
     post({ type: 'progress', ratio }),
   );
-  const session = await ort.InferenceSession.create(bytes, {
-    executionProviders: ep === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'],
-    graphOptimizationLevel: 'all',
-    enableMemPattern: false,
-    enableCpuMemArena: false,
-  });
+  // q4f16 量化模型含 MatMulNBits 算子,onnxruntime-web 的 WebGPU EP 不支持;
+  // 即便列出 ['webgpu','wasm'],WebGPU 也会在创建/推理时直接抛错而非回退到 wasm,
+  // 故 q4f16 强制只用 wasm EP。fp16 模型可走 WebGPU(优先) + wasm 回退;
+  // 若 WebGPU 创建整图失败(驱动/显存等),再退回纯 wasm 重试一次。
+  // ep 仍按 WebGPU 可用性上报(ready.ep),用于前端高精度开关可用性判断,
+  // 与 session 实际后端解耦。
+  const useWebGpu = ep === 'webgpu' && quant !== 'q4f16';
+  const epCandidates: SegmenterEp[][] = useWebGpu
+    ? [['webgpu', 'wasm'], ['wasm']]
+    : [['wasm']];
+  let session: ort.InferenceSession | null = null;
+  let lastErr: unknown;
+  for (const providers of epCandidates) {
+    try {
+      session = await ort.InferenceSession.create(bytes, {
+        executionProviders: providers,
+        graphOptimizationLevel: 'all',
+        enableMemPattern: false,
+        enableCpuMemArena: false,
+      });
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!session) throw lastErr;
   post({
     type: 'ready',
     ep,
@@ -219,7 +240,13 @@ if (typeof self !== 'undefined' && 'addEventListener' in self) {
       (self as unknown as Worker).postMessage(msg);
     try {
       if (e.data.type === 'init') {
-        session = await handleInit(e.data.modelUrl, e.data.mean, e.data.std, post);
+        session = await handleInit(
+          e.data.modelUrl,
+          e.data.mean,
+          e.data.std,
+          e.data.quant,
+          post,
+        );
       } else if (e.data.type === 'run') {
         if (!session) throw new Error('session not ready');
         const { bitmap, srcW, srcH } = e.data;

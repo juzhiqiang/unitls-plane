@@ -58,6 +58,7 @@
 5. dtype:两模型输出均为 float32(dtype=1),`toF32` 零拷贝正确。✅
 6. **归一化(模型特定)**:RMBG-1.4 官方用 `mean=std=[0.5,0.5,0.5]`(非 ImageNet);RMBG-2.0/BiRefNet 用 ImageNet `mean=[0.485,0.456,0.406]`/`std=[0.229,0.224,0.225]`。`ModelMeta.mean`/`std` 按模型配置,init 消息传入 worker。
 7. **预处理拉伸(非 letterbox)**:RMBG 官方 `Image.resize((1024,1024))` 是拉伸填充,不是 contain/letterbox。worker `preprocess` 用 `drawImage(bitmap,0,0,size,size)` 拉伸填充整个 canvas。
+8. **EP 选择按量化方式(高精度报错根因)**:RMBG-2.0 `q4f16` 量化含 `MatMulNBits` 算子,onnxruntime-web 的 WebGPU EP 不支持;即便列 `['webgpu','wasm']`,WebGPU 也会在 session 创建/推理时直接抛错而非按算子回退到 wasm。故 `handleInit` 按 `quant` 决策:`q4f16` 强制 `['wasm']`(高精度在 CPU/wasm 上跑),`fp16` 走 `['webgpu','wasm']` 且 WebGPU 整图创建失败时再退回纯 `['wasm']`。`ModelMeta.quant` 经 init 消息传入 worker;`ready.ep` 仍上报 WebGPU 可用性(用于前端高精度开关),与 session 实际后端解耦。
 
 ## 对象存储
 

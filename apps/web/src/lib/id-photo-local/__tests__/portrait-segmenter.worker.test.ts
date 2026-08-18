@@ -94,19 +94,29 @@ describe('portrait-segmenter.worker pure functions', () => {
     expect(data).toBeInstanceOf(Float32Array);
   });
 
-  it('postprocess applies sigmoid then resizes to dst size', async () => {
+  it('postprocess clamps [0,1] mask and resizes to dst size', async () => {
     const { postprocess } = await import('../portrait-segmenter.worker');
-    // postprocess 无条件对输入做 sigmoid(消除"注释掉的 sigmoid 隐患",HIGH 5):
-    // 大正 logits → ~1,大负 logits → ~0,中值经 8-bit ImageData 往返(a*255 存为
-    // Uint8ClampedArray 再 /255),精度上限约 1/255,与 composite.ts 的 8-bit alpha 一致。
-    const rawData = new Float32Array([10.0, -10.0, 0.0, 0.5]);
+    // RMBG-1.4/2.0 的 onnx 输出均已 sigmoid(图内含 Sigmoid 节点 / alphas 即 alpha
+    // matte),postprocess 不再重复 sigmoid,仅 clamp [0,1] 作安全边界后转 8-bit alpha
+    // 往返(a*255 存 Uint8ClampedArray 再 /255,精度上限约 1/255)。
+    // 校准依据见 docs/id-photo-models.md。
+    const rawData = new Float32Array([1.0, 0.0, 0.5, 0.62]);
     const alpha = postprocess(rawData, 2, 2, 2, 2);
     expect(alpha).toBeInstanceOf(Float32Array);
     expect(alpha.length).toBe(4);
-    expect(alpha[0]!).toBeCloseTo(1.0, 5); // sigmoid(10) ≈ 0.99995 → 255 → 1
-    expect(alpha[1]!).toBeCloseTo(0.0, 5); // sigmoid(-10) ≈ 0.000045 → 0 → 0
-    expect(alpha[2]!).toBeCloseTo(0.5, 2); // sigmoid(0) = 0.5 → 127.5→128 → 0.50196
-    expect(alpha[3]!).toBeCloseTo(0.62, 2); // sigmoid(0.5) ≈ 0.6225 → 159 → 0.6235
+    expect(alpha[0]!).toBeCloseTo(1.0, 5); // 1.0 → 255 → 1
+    expect(alpha[1]!).toBeCloseTo(0.0, 5); // 0.0 → 0 → 0
+    expect(alpha[2]!).toBeCloseTo(0.50196, 2); // 0.5 → 127.5→128 → 0.50196
+    expect(alpha[3]!).toBeCloseTo(0.6235, 2); // 0.62 → 158.1→158 → 0.6196
+  });
+
+  it('postprocess clamps out-of-range values to [0,1]', async () => {
+    const { postprocess } = await import('../portrait-segmenter.worker');
+    // 防御:即便模型异常输出超出 [0,1],clamp 保证 alpha 合法。
+    const rawData = new Float32Array([2.0, -1.0, 0.5, 0.5]);
+    const alpha = postprocess(rawData, 2, 2, 2, 2);
+    expect(alpha[0]!).toBeCloseTo(1.0, 5); // 2.0 clamp → 1
+    expect(alpha[1]!).toBeCloseTo(0.0, 5); // -1.0 clamp → 0
   });
 
   it('detectEp returns wasm when no gpu adapter', async () => {

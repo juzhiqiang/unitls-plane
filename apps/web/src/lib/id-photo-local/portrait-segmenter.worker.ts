@@ -176,11 +176,9 @@ export function postprocess(
   dstW: number,
   dstH: number,
 ): Float32Array {
-  // 无条件 sigmoid:对已 [0,1] 的输入仍单调近线性,影响可忽略;
-  // 对未 sigmoid 的 logits 输出则正确压缩到 [0,1]。Task 2 实测后可移除(HIGH 5)。
-  for (let i = 0; i < rawData.length; i++) {
-    rawData[i] = 1 / (1 + Math.exp(-rawData[i]!));
-  }
+  // RMBG-1.4 / RMBG-2.0 的 onnx 输出均已 sigmoid(图内含 Sigmoid 节点 / alphas
+  // 即 alpha matte),输出已是 [0,1],此处不再重复 sigmoid(否则压缩对比度)。
+  // 仅 clamp 到 [0,1] 作安全边界。校准依据见 docs/id-photo-models.md。
   const tmp = new OffscreenCanvas(maskW, maskH);
   const tctx = tmp.getContext('2d')!;
   const img = tctx.createImageData(maskW, maskH);

@@ -14,15 +14,23 @@ vi.mock('@imgly/background-removal', () => ({
 import { useLocalIdPhoto } from '../use-local-id-photo';
 
 // 合成阶段用的 cutout bitmap(createImageBitmap 桩产出)
-let lastCutout: { width: number; height: number; close: ReturnType<typeof vi.fn> };
+let lastCutout: {
+  width: number;
+  height: number;
+  close: ReturnType<typeof vi.fn>;
+};
 
 beforeEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 
   removeBackgroundMock.mockReset();
   removeBackgroundMock.mockImplementation(
-    async (_file: unknown, cfg: { progress?: (k: string, c: number, t: number) => void }) => {
+    async (
+      _file: unknown,
+      cfg: { progress?: (k: string, c: number, t: number) => void }
+    ) => {
       const p = cfg.progress;
       await Promise.resolve();
       p?.('fetch:/models/isnet_fp16', 50, 100);
@@ -32,18 +40,35 @@ beforeEach(() => {
       p?.('compute:mask', 2, 4);
       p?.('compute:encode', 4, 4);
       return new Blob(['png'], { type: 'image/png' });
-    },
+    }
   );
 
   // compositeIdPhoto 在 jsdom 下需要 2D 上下文与 convertToBlob;最小可用桩。
+  // getImageData/putImageData 供 alpha 收敛(solidifyAlpha)使用。
   class FakeCtx {
     fillStyle = '';
     drawImage(..._args: unknown[]): void {}
     fillRect(_x: number, _y: number, _w: number, _h: number): void {}
+    getImageData(
+      _x: number,
+      _y: number,
+      w: number,
+      h: number
+    ): { data: Uint8ClampedArray; width: number; height: number } {
+      return {
+        data: new Uint8ClampedArray(Math.max(1, w * h) * 4),
+        width: w,
+        height: h,
+      };
+    }
+    putImageData(..._args: unknown[]): void {}
   }
   class FakeCanvas {
     ctx: FakeCtx;
-    constructor(public width: number, public height: number) {
+    constructor(
+      public width: number,
+      public height: number
+    ) {
       this.ctx = new FakeCtx();
     }
     getContext(): FakeCtx {
@@ -83,7 +108,8 @@ const defaultOpts = {
   backgroundColor: '#438edb',
   outputType: 'image/jpeg' as const,
 };
-const makeFile = (name = 'a.jpg') => new File(['img'], name, { type: 'image/jpeg' });
+const makeFile = (name = 'a.jpg') =>
+  new File(['img'], name, { type: 'image/jpeg' });
 
 // 注入 navigator.gpu(adapter 非 null → webgpu 可用)
 function enableWebGpu() {
@@ -128,7 +154,7 @@ describe('useLocalIdPhoto', () => {
     expect(lastCfg().model).toBe('isnet_fp16');
     expect(lastCfg().device).toBe('cpu');
     expect(lastCfg().publicPath).toBe(
-      'http://localhost:9000/models/imgly/1.7.0/dist/',
+      'http://localhost:9000/models/imgly/1.7.0/dist/'
     );
   });
 
@@ -150,7 +176,10 @@ describe('useLocalIdPhoto', () => {
     const seen: string[] = [];
     removeBackgroundMock.mockReset();
     removeBackgroundMock.mockImplementation(
-      async (_file: unknown, cfg: { progress?: (k: string, c: number, t: number) => void }) => {
+      async (
+        _file: unknown,
+        cfg: { progress?: (k: string, c: number, t: number) => void }
+      ) => {
         const p = cfg.progress;
         const phases: Array<[string, number, number]> = [
           ['fetch:/models/isnet_fp16', 50, 100],
@@ -165,7 +194,7 @@ describe('useLocalIdPhoto', () => {
           p?.(k, c, t);
         }
         return new Blob(['png'], { type: 'image/png' });
-      },
+      }
     );
 
     const { result } = renderHook(() => useLocalIdPhoto());
@@ -174,7 +203,9 @@ describe('useLocalIdPhoto', () => {
     });
     await waitFor(() => expect(result.current.status).toBe('done'));
     expect(seen.filter(k => k.startsWith('fetch:')).length).toBeGreaterThan(0);
-    expect(seen.filter(k => k.startsWith('compute:')).length).toBeGreaterThan(0);
+    expect(seen.filter(k => k.startsWith('compute:')).length).toBeGreaterThan(
+      0
+    );
   });
 
   it('guards against reentry during an in-flight process', async () => {
@@ -185,7 +216,7 @@ describe('useLocalIdPhoto', () => {
       () =>
         new Promise<Blob>(resolve => {
           gate = () => resolve(new Blob(['png'], { type: 'image/png' }));
-        }),
+        })
     );
 
     const { result } = renderHook(() => useLocalIdPhoto());
@@ -195,7 +226,9 @@ describe('useLocalIdPhoto', () => {
       p1 = result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
       p2 = result.current.process(makeFile('b.jpg'), 'balanced', defaultOpts);
       // 仅第一个进入 removeBackground(被 gate 挂起);第二个被 inFlight 守卫丢弃
-      await waitFor(() => expect(removeBackgroundMock).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(removeBackgroundMock).toHaveBeenCalledTimes(1)
+      );
     });
     expect(removeBackgroundMock).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -214,7 +247,7 @@ describe('useLocalIdPhoto', () => {
       () =>
         new Promise<Blob>(resolve => {
           resolveProcess = b => resolve(b);
-        }),
+        })
     );
     await act(async () => {
       result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);

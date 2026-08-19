@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { authClient } from '@/lib/auth-client';
-import { api } from '@/lib/api-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   DEFAULT_IMAGE_COMPRESS_OPTIONS,
@@ -34,6 +33,7 @@ import {
   compressImage,
   shouldProcessLocally,
 } from '@/lib/processing/image-client';
+import { runImageTask } from '@/lib/processing/run-image-task';
 import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
@@ -58,44 +58,6 @@ function compressedName(file: File, outputType: CompressFormat): string {
   const dot = file.name.lastIndexOf('.');
   const base = dot > 0 ? file.name.slice(0, dot) : file.name;
   return `compressed-${base}.${ext}`;
-}
-
-async function processOnServer(
-  file: File,
-  config: Record<string, unknown>,
-  uploadMutate: (file: File) => Promise<unknown>,
-  createTaskMutate: (input: any) => Promise<{ id: string }>,
-  outputType: CompressFormat
-): Promise<File> {
-  const uploaded = (await uploadMutate(file)) as { id: string };
-  const task = await createTaskMutate({
-    type: 'compress',
-    inputFileIds: [uploaded.id],
-    inputConfig: config,
-  });
-
-  while (true) {
-    const { data, error } = await api.GET('/tasks/{id}/status', {
-      params: { path: { id: task.id } },
-    });
-    if (error) throw new Error('Failed to poll task status');
-    if (data?.status === 'completed') {
-      const outputFileId = (data as any).outputFileId as string;
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) throw new Error('Failed to download result');
-      const blob = await response.blob();
-      return new File([blob], compressedName(file, outputType), {
-        type: blob.type,
-      });
-    }
-    if (data?.status === 'failed') {
-      throw new Error((data as any).errorMessage ?? 'Task failed');
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
 }
 
 export default function CompressPage() {
@@ -223,16 +185,22 @@ export default function CompressPage() {
             },
           });
         } else {
-          result = await processOnServer(
-            item.file,
-            {
+          result = await runImageTask({
+            file: item.file,
+            type: 'compress',
+            inputConfig: {
               ...toServerCompressConfig(options),
               transform: toServerTransformConfig(transform),
             },
-            f => uploadFile.mutateAsync(f),
-            input => createTask.mutateAsync(input) as Promise<{ id: string }>,
-            options.outputType
-          );
+            outputName: compressedName(item.file, options.outputType),
+            upload: file => uploadFile.mutateAsync(file),
+            createTask: input =>
+              createTask.mutateAsync(input as never) as Promise<{ id: string }>,
+            onProgress: value => {
+              fileProgress[i] = value;
+              updateOverall();
+            },
+          });
           fileProgress[i] = 100;
           updateOverall();
         }

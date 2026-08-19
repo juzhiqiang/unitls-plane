@@ -15,6 +15,8 @@ import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ImageCompare } from '@/components/tools/image-compare';
 import { DownloadButton } from '@/components/tools/download-button';
+import { ZipDownloadButton } from '@/components/tools/zip-download-button';
+import { FileList, type FileItem } from '@/components/tools/file-list';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
@@ -29,11 +31,11 @@ import {
   type ImageOutputType,
 } from '@/lib/processing/image-convert-client';
 import { shouldProcessLocally } from '@/lib/processing/image-client';
+import { runImageTask } from '@/lib/processing/run-image-task';
 import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
-import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
 
 export default function ConvertPage() {
@@ -43,8 +45,7 @@ export default function ConvertPage() {
   const tUnits = useTranslations('Common.units');
   const locale = useLocale();
   const tool = getToolByHref('/image/convert')!;
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [resultFile, setResultFile] = useState<File | null>(null);
+  const [items, setItems] = useState<FileItem[]>([]);
   const [options, setOptions] = useState<ImageConvertOptionsState>({
     toFormat: 'image/webp',
     quality: 90,
@@ -53,60 +54,49 @@ export default function ConvertPage() {
   const [mode, setMode] = useState<ProcessMode>('local');
   const [progress, setProgress] = useState(0);
   const [processing, setProcessing] = useState(false);
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
-  const taskQuery = useTaskProgress(taskId, {
-    onCompleted: async outputFileId => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' }
-      );
-      const blob = await response.blob();
-      const newName = getConvertedImageName(
-        originalFile?.name ?? 'converted',
-        options.toFormat
-      );
-      const file = new File([blob], newName, { type: blob.type });
-      setResultFile(file);
-      setProcessing(false);
-      setTaskId(null);
-    },
-    onFailed: err => {
-      setError(err.message);
-      setProcessing(false);
-      setTaskId(null);
-    },
-  });
-
   const locallyEncodable = useImageEncodingSupport(CONVERT_FORMATS);
   // 本地编码不了目标格式时(典型是 AVIF),必须走服务端,否则 canvas 会静默产出 PNG。
   const formatNeedsServer = !locallyEncodable.has(options.toFormat);
   const recommendation: ProcessMode =
-    formatNeedsServer || (originalFile && !shouldProcessLocally(originalFile))
+    formatNeedsServer ||
+    (items.length > 0 && !items.every(it => shouldProcessLocally(it.file)))
       ? 'server'
       : 'local';
   const needsServerLogin = mode === 'server' && !sessionLoading && !session;
+  const controlsDisabled = processing || sessionLoading;
 
   const handleDrop = (files: File[]) => {
-    if (files[0]) {
-      setOriginalFile(files[0]);
-      setResultFile(null);
-      setError(null);
-      setProgress(0);
-    }
+    if (files.length === 0) return;
+    setItems(prev => [
+      ...prev,
+      ...files.map(file => ({ file, status: 'pending' as const })),
+    ]);
+    setGlobalError(null);
+    setProgress(0);
+  };
+
+  const handleRemove = (index: number) => {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateItem = (index: number, patch: Partial<FileItem>) => {
+    setItems(prev =>
+      prev.map((it, i) => (i === index ? { ...it, ...patch } : it))
+    );
   };
 
   const handleProcess = async () => {
-    if (!originalFile) return;
+    if (sessionLoading || items.length === 0) return;
 
     if (mode === 'local' && formatNeedsServer) {
-      setError(t('formatNeedsServerError'));
+      setGlobalError(t('formatNeedsServerError'));
       return;
     }
 
@@ -117,48 +107,83 @@ export default function ConvertPage() {
     }
 
     setProcessing(true);
-    setError(null);
+    setGlobalError(null);
     setProgress(0);
-    setResultFile(null);
+    setItems(prev =>
+      prev.map(it => ({ file: it.file, status: 'pending' as const }))
+    );
 
-    try {
-      if (mode === 'local') {
-        setProgress(30);
-        const result = await convertImageFormat(
-          originalFile,
-          options.toFormat as ImageOutputType,
-          options.quality / 100,
-          transform
+    const fileProgress: number[] = items.map(() => 0);
+    const updateOverall = () => {
+      const sum = fileProgress.reduce((a, b) => a + b, 0);
+      setProgress(Math.round(sum / items.length));
+    };
+    updateOverall();
+
+    const tasks = items.map(async (item, index) => {
+      updateItem(index, { status: 'processing' });
+      try {
+        const outputName = getConvertedImageName(
+          item.file.name,
+          options.toFormat
         );
-        setProgress(100);
-        setResultFile(result);
-        setProcessing(false);
-      } else {
-        const uploaded = await uploadFile.mutateAsync(originalFile);
-        const task = await createTask.mutateAsync({
-          type: 'convert',
-          inputFileIds: [(uploaded as any).id],
-          inputConfig: {
-            toFormat: SERVER_CONVERT_FORMATS[options.toFormat],
-            quality: options.quality,
-            transform: toServerTransformConfig(transform),
-          },
+        let result: File;
+
+        if (mode === 'local') {
+          result = await convertImageFormat(
+            item.file,
+            options.toFormat as ImageOutputType,
+            options.quality / 100,
+            transform
+          );
+        } else {
+          result = await runImageTask({
+            file: item.file,
+            type: 'convert',
+            inputConfig: {
+              toFormat: SERVER_CONVERT_FORMATS[options.toFormat],
+              quality: options.quality,
+              transform: toServerTransformConfig(transform),
+            },
+            outputName,
+            upload: file => uploadFile.mutateAsync(file),
+            createTask: input =>
+              createTask.mutateAsync(input as never) as Promise<{ id: string }>,
+            onProgress: value => {
+              fileProgress[index] = value;
+              updateOverall();
+            },
+          });
+        }
+
+        fileProgress[index] = 100;
+        updateOverall();
+        updateItem(index, { result, status: 'done' });
+      } catch (err) {
+        updateItem(index, {
+          status: 'failed',
+          error: (err as Error).message,
         });
-        setTaskId(task.id);
+        fileProgress[index] = 100;
+        updateOverall();
       }
-    } catch (err) {
-      setError((err as Error).message);
-      setProcessing(false);
-    }
+    });
+
+    await Promise.all(tasks);
+    setProcessing(false);
   };
 
-  const serverProgress = taskQuery.data?.progress ?? 0;
-  const currentProgress = mode === 'local' ? progress : serverProgress;
-  const stage = resultFile
+  const isSingle = items.length === 1;
+  const singleItem = isSingle ? items[0] : null;
+  const successResults = items
+    .filter(it => it.status === 'done' && it.result)
+    .map(it => it.result as File);
+  const hasAnyResult = successResults.length > 0;
+  const stage = hasAnyResult
     ? 'result'
     : processing
       ? 'processing'
-      : originalFile
+      : items.length > 0
         ? 'configure'
         : 'upload';
 
@@ -185,27 +210,27 @@ export default function ConvertPage() {
           ],
         }}
         maxSize={50 * 1024 * 1024}
+        multiple
         onDrop={handleDrop}
-        disabled={processing}
+        disabled={controlsDisabled}
         hint={t('dropzoneHint')}
         processingLabel={
           mode === 'local' ? tShared('mode.local') : tShared('mode.server')
         }
       />
 
-      {originalFile && (
+      {items.length > 0 && (
         <div className="space-y-6">
-          <div className="text-xs font-mono text-muted-foreground">
-            {t('selected', {
-              filename: originalFile.name,
-              size: formatBytes(originalFile.size, tUnits, locale),
-            })}
-          </div>
+          <FileList
+            items={items}
+            onRemove={handleRemove}
+            disabled={processing}
+          />
 
           <ImageConvertOptions
             value={options}
             onChange={setOptions}
-            disabled={processing}
+            disabled={controlsDisabled}
             locallyEncodable={locallyEncodable}
             localMode={mode === 'local'}
           />
@@ -213,67 +238,98 @@ export default function ConvertPage() {
           <ImageTransformOptions
             value={transform}
             onChange={setTransform}
-            disabled={processing}
+            disabled={controlsDisabled}
           />
 
           <ModeToggle
             value={mode}
             onChange={setMode}
             recommendation={recommendation}
-            disabled={processing}
+            disabled={controlsDisabled}
             serverLoginRequired={needsServerLogin}
           />
 
           <button
             type="button"
             onClick={handleProcess}
-            disabled={processing}
+            disabled={controlsDisabled}
             className="w-full h-10 text-sm font-mono bg-foreground text-background rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {processing
               ? t('processing')
               : needsServerLogin
                 ? tShared('mode.loginToUseServer')
-                : t('start')}
+                : items.length > 1
+                  ? t('startWithCount', { count: items.length })
+                  : t('start')}
           </button>
         </div>
       )}
 
       {processing && (
-        <ProcessingProgress progress={currentProgress} stage="processing" />
+        <ProcessingProgress progress={progress} stage="processing" />
       )}
 
-      {error && (
+      {globalError && (
         <FailureRecoveryPanel
-          message={error}
+          message={globalError}
           onRetry={handleProcess}
           onReset={() => {
-            setOriginalFile(null);
-            setResultFile(null);
-            setError(null);
-            setTaskId(null);
+            setItems([]);
+            setGlobalError(null);
             setProgress(0);
           }}
         />
       )}
 
-      {resultFile && originalFile && (
+      {hasAnyResult && (
         <div className="space-y-6">
-          <ImageCompare original={originalFile} result={resultFile} />
+          {isSingle && singleItem?.result && (
+            <ImageCompare
+              original={singleItem.file}
+              result={singleItem.result}
+            />
+          )}
+
           <ResultPanel
-            title={resultFile.name}
-            description={tShell('result.ready')}
-            meta={[
-              {
-                label: tShared('compare.original'),
-                value: formatBytes(originalFile.size, tUnits, locale),
-              },
-              {
-                label: tShared('compare.result'),
-                value: formatBytes(resultFile.size, tUnits, locale),
-              },
-            ]}
-            action={<DownloadButton file={resultFile} />}
+            title={
+              successResults.length === 1
+                ? successResults[0]!.name
+                : `converted-${successResults.length}-files.zip`
+            }
+            description={
+              successResults.length === 1
+                ? tShell('result.ready')
+                : tShell('result.filesReady', { count: successResults.length })
+            }
+            meta={
+              isSingle && singleItem?.result
+                ? [
+                    {
+                      label: tShared('compare.original'),
+                      value: formatBytes(singleItem.file.size, tUnits, locale),
+                    },
+                    {
+                      label: tShared('compare.result'),
+                      value: formatBytes(
+                        singleItem.result.size,
+                        tUnits,
+                        locale
+                      ),
+                    },
+                  ]
+                : []
+            }
+            action={
+              successResults.length === 1 ? (
+                <DownloadButton file={successResults[0]!} />
+              ) : (
+                <ZipDownloadButton
+                  files={successResults}
+                  zipName={`converted-${successResults.length}-files.zip`}
+                />
+              )
+            }
           />
         </div>
       )}

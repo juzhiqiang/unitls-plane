@@ -509,7 +509,7 @@
   },
   "ImageConvert": {
     "title": "Convert format",
-    "description": "Convert between JPEG, PNG, WebP, and AVIF",
+    "description": "Convert between JPEG, PNG, WebP, and AVIF — batch supported, multiple files bundled into a ZIP",
     "dropzoneHint": "JPG, PNG, WebP, AVIF, or HEIC — up to 50 MB",
     "selected": "Selected: {filename} ({size})",
     "targetFormat": "Target format",
@@ -517,6 +517,7 @@
     "formatNeedsServerError": "This browser cannot encode the selected format locally. Switch to server processing, or choose JPEG or PNG.",
     "quality": "Quality",
     "start": "Convert",
+    "startWithCount": "Convert {count} images",
     "processing": "Processing…"
   },
   "ImageStitch": {

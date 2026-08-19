@@ -509,7 +509,7 @@
   },
   "ImageConvert": {
     "title": "格式转换",
-    "description": "在 JPEG / PNG / WebP / AVIF 之间相互转换",
+    "description": "在 JPEG / PNG / WebP / AVIF 之间相互转换，支持批量，多文件以 ZIP 打包下载",
     "dropzoneHint": "支持 JPG / PNG / WebP / AVIF / HEIC，最大 50MB",
     "selected": "已选择: {filename} ({size})",
     "targetFormat": "目标格式",
@@ -517,6 +517,7 @@
     "formatNeedsServerError": "当前浏览器不能本地编码所选格式，请切换到服务端处理，或改用 JPEG / PNG。",
     "quality": "质量",
     "start": "开始转换",
+    "startWithCount": "开始转换 ({count} 张)",
     "processing": "处理中..."
   },
   "ImageStitch": {

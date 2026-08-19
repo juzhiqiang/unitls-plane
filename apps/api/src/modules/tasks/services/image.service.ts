@@ -6,6 +6,8 @@ export interface CompressOptions {
   quality?: number;
   maxWidth?: number;
   maxHeight?: number;
+  /** 目标体积上限(KB)。传入时按该上限迭代降质/降分辨率,不传则只按 quality 编码。 */
+  maxSizeKB?: number;
   transform?: ImageTransformOptions;
 }
 
@@ -114,12 +116,25 @@ function buildWatermarkSvg(
 </svg>`;
 }
 
+/** 目标体积模式的搜索边界。 */
+const TARGET_SIZE_MIN_KB = 10;
+const TARGET_SIZE_MAX_KB = 20 * 1024;
+const TARGET_SIZE_MIN_QUALITY = 10;
+/** 逐级降采样的宽度比例;质量已到底仍超标时才会用到。 */
+const TARGET_SIZE_SCALE_STEPS = [1, 0.8, 0.64, 0.5, 0.4, 0.32, 0.25];
+/** PNG 无损,只能靠调色板色数与降采样控体积。 */
+const TARGET_SIZE_PNG_COLORS = [256, 128, 64, 32, 16];
+
 @Injectable()
 export class ImageService implements OnModuleInit {
   onModuleInit() {
     sharp.cache(false);
   }
   async compress(input: Buffer, opts: CompressOptions): Promise<Buffer> {
+    if (opts.maxSizeKB !== undefined) {
+      return this.compressToTargetSize(input, opts);
+    }
+
     const buf = Buffer.from(input);
     let pipeline = applyImageTransform(
       sharp(buf, { failOn: 'truncated' }),
@@ -149,6 +164,128 @@ export class ImageService implements OnModuleInit {
       default:
         throw new Error(`Unsupported format: ${opts.format}`);
     }
+  }
+
+  /**
+   * 压缩到目标体积以内。
+   *
+   * 每次尝试都从原始 buffer 重建 pipeline,而不是复用上一轮的编码结果 —— 复用会让
+   * 有损格式的画质损失逐轮叠加。代价是多几次解码,对队列任务可以接受。
+   *
+   * 搜索策略:先在原始尺寸上二分质量;质量到底仍超标才逐级降采样,且每一级先用最低
+   * 质量试探一次,试探都放不下就直接跳到下一级,避免在不可能的尺度上做完整二分。
+   *
+   * 目标确实无法达成时(例如极小目标 + 超大图),返回过程中体积最小的一版,而不是让
+   * 任务失败 —— 与本地模式 browser-image-compression 的尽力而为行为保持一致。
+   */
+  private async compressToTargetSize(
+    input: Buffer,
+    opts: CompressOptions
+  ): Promise<Buffer> {
+    const format = opts.format ?? 'jpeg';
+    const targetBytes =
+      clamp(
+        Math.round(opts.maxSizeKB ?? TARGET_SIZE_MAX_KB),
+        TARGET_SIZE_MIN_KB,
+        TARGET_SIZE_MAX_KB
+      ) * 1024;
+    const initialQuality = clamp(
+      Math.round(opts.quality ?? 92),
+      TARGET_SIZE_MIN_QUALITY,
+      100
+    );
+
+    const metadata = await sharp(input, { failOn: 'truncated' }).metadata();
+    if (!metadata.width || !metadata.height) {
+      throw new Error('File is not a valid image');
+    }
+    // 方向修正会交换宽高,基准宽度必须取修正之后的值。
+    const swapsAxes =
+      opts.transform?.rotate === 90 || opts.transform?.rotate === 270;
+    const orientedWidth = swapsAxes ? metadata.height : metadata.width;
+    // maxHeight 只在等比缩放下间接约束宽度,交给 render 里的 fit:inside 处理。
+    const boundedWidth = Math.min(
+      orientedWidth,
+      opts.maxWidth ?? orientedWidth
+    );
+
+    let smallest: Buffer | undefined;
+    const render = async (
+      quality: number,
+      width: number,
+      colors?: number
+    ): Promise<Buffer> => {
+      let pipeline = applyImageTransform(
+        sharp(input, { failOn: 'truncated' }),
+        opts.transform
+      ).resize({
+        width,
+        height: opts.maxHeight,
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+
+      switch (format) {
+        case 'jpeg':
+          pipeline = pipeline.jpeg({ quality, mozjpeg: true });
+          break;
+        case 'webp':
+          pipeline = pipeline.webp({ quality });
+          break;
+        case 'avif':
+          pipeline = pipeline.avif({ quality, effort: 4 });
+          break;
+        case 'png':
+          pipeline = pipeline.png({
+            compressionLevel: 9,
+            palette: true,
+            colors: colors ?? 256,
+          });
+          break;
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+
+      const output = await pipeline.toBuffer();
+      if (!smallest || output.length < smallest.length) {
+        smallest = output;
+      }
+      return output;
+    };
+
+    for (const scale of TARGET_SIZE_SCALE_STEPS) {
+      const width = Math.max(16, Math.round(boundedWidth * scale));
+
+      if (format === 'png') {
+        for (const colors of TARGET_SIZE_PNG_COLORS) {
+          const output = await render(initialQuality, width, colors);
+          if (output.length <= targetBytes) return output;
+        }
+        continue;
+      }
+
+      // 先用最低质量探底:放不下说明这个尺度不可能达标,直接降采样。
+      const probe = await render(TARGET_SIZE_MIN_QUALITY, width);
+      if (probe.length > targetBytes) continue;
+
+      // 该尺度可行,二分找出满足目标的最高质量。
+      let lo = TARGET_SIZE_MIN_QUALITY;
+      let hi = initialQuality;
+      let best = probe;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        const output = await render(mid, width);
+        if (output.length <= targetBytes) {
+          best = output;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return best;
+    }
+
+    return smallest ?? (await render(TARGET_SIZE_MIN_QUALITY, boundedWidth));
   }
 
   async convert(input: Buffer, opts: ConvertOptions): Promise<Buffer> {

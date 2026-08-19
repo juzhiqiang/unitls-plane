@@ -474,7 +474,15 @@
     "description": "Upload in batches — multiple files are bundled into a ZIP",
     "dropzoneHint": "JPG, PNG, WebP, or AVIF",
     "fileTooLargeForPlan": "A file exceeds your account's {size} per-file limit. Remove it and try again.",
+    "mode": "Mode",
+    "modes": {
+      "quality": "By quality",
+      "targetSize": "To target size"
+    },
     "quality": "Quality",
+    "targetSize": "Target size",
+    "targetSizeHint": "Quality is adjusted automatically until the file fits. The quality slider does not apply in this mode.",
+    "targetSizePngHint": "PNG is lossless, so size is reduced by cutting colours and resolution — expect a more visible quality drop than JPEG or WebP.",
     "size": "Size",
     "widthPx": "Width (px)",
     "heightPx": "Height (px)",

@@ -474,7 +474,15 @@
     "description": "支持批量上传，多文件以 ZIP 打包下载",
     "dropzoneHint": "支持 JPG / PNG / WebP / AVIF",
     "fileTooLargeForPlan": "文件超过当前账号的 {size} 单文件额度，请移除后重试。",
+    "mode": "压缩模式",
+    "modes": {
+      "quality": "按质量",
+      "targetSize": "压到指定大小"
+    },
     "quality": "质量",
+    "targetSize": "目标大小",
+    "targetSizeHint": "自动调整质量直到不超过该体积，质量滑杆此时不生效。",
+    "targetSizePngHint": "PNG 是无损格式，只能靠减少色数和降低分辨率来压缩，画质变化会比 JPEG / WebP 明显。",
     "size": "尺寸",
     "widthPx": "宽 (px)",
     "heightPx": "高 (px)",

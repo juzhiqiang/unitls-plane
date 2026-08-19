@@ -12,7 +12,7 @@ import {
   type ImageCompressOptionsState,
   type CompressFormat,
   toCompressOptions,
-  resolveSize,
+  toServerCompressConfig,
 } from '@/components/tools/image-compress-options';
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
@@ -202,13 +202,6 @@ export default function CompressPage() {
     };
     updateOverall();
 
-    const formatMap: Record<CompressFormat, string> = {
-      'image/jpeg': 'jpeg',
-      'image/webp': 'webp',
-      'image/png': 'png',
-    };
-    const { width, height } = resolveSize(options);
-
     const tasks = indicesToProcess.map(async i => {
       const item = items[i]!;
       updateItem(i, { status: 'processing' });
@@ -224,16 +217,12 @@ export default function CompressPage() {
             },
           });
         } else {
-          const config: Record<string, unknown> = {
-            format: formatMap[options.outputType] ?? 'jpeg',
-            quality: options.quality,
-            ...(width !== undefined && { maxWidth: width }),
-            ...(height !== undefined && { maxHeight: height }),
-            transform: toServerTransformConfig(transform),
-          };
           result = await processOnServer(
             item.file,
-            config,
+            {
+              ...toServerCompressConfig(options),
+              transform: toServerTransformConfig(transform),
+            },
             f => uploadFile.mutateAsync(f),
             input => createTask.mutateAsync(input) as Promise<{ id: string }>,
             options.outputType

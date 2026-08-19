@@ -5,6 +5,22 @@ import type { CompressOptions } from '@/lib/processing/image-client';
 
 export type CompressFormat = 'image/jpeg' | 'image/webp' | 'image/png';
 
+/**
+ * 压缩模式。
+ * - quality:  只按质量编码,不限制体积(所见即所得)。
+ * - targetSize: 迭代降质/缩放直到落在目标体积内,质量滑杆此时不生效。
+ */
+export type CompressMode = 'quality' | 'targetSize';
+
+export const COMPRESS_MODES: CompressMode[] = ['quality', 'targetSize'];
+
+/** 目标体积可选范围(KB)。下限对齐各类报名系统常见的 20KB 要求。 */
+export const MIN_TARGET_SIZE_KB = 10;
+export const MAX_TARGET_SIZE_KB = 20 * 1024;
+
+/** 报名/OA 系统最常见的几档体积要求。 */
+export const TARGET_SIZE_PRESETS_KB = [20, 50, 100, 200, 500, 1024];
+
 export type SizePreset =
   | 'original'
   | 'desktop'
@@ -28,7 +44,9 @@ export const SIZE_PRESETS: Record<SizePreset, PresetMeta> = {
 };
 
 export interface ImageCompressOptionsState {
+  mode: CompressMode;
   quality: number; // 1-100
+  targetSizeKB: number;
   sizePreset: SizePreset;
   customWidth: number;
   customHeight: number;
@@ -36,12 +54,23 @@ export interface ImageCompressOptionsState {
 }
 
 export const DEFAULT_IMAGE_COMPRESS_OPTIONS: ImageCompressOptionsState = {
+  mode: 'quality',
   quality: 80,
+  targetSizeKB: 500,
   sizePreset: 'original',
   customWidth: 1920,
   customHeight: 1080,
   outputType: 'image/jpeg',
 };
+
+export function clampTargetSizeKB(value: number): number {
+  if (!Number.isFinite(value))
+    return DEFAULT_IMAGE_COMPRESS_OPTIONS.targetSizeKB;
+  return Math.min(
+    MAX_TARGET_SIZE_KB,
+    Math.max(MIN_TARGET_SIZE_KB, Math.round(value))
+  );
+}
 
 export function resolveSize(state: ImageCompressOptionsState): {
   width?: number;
@@ -55,15 +84,54 @@ export function resolveSize(state: ImageCompressOptionsState): {
   return { width: preset.width, height: preset.height };
 }
 
+/**
+ * 目标体积模式下用于起步的编码质量。
+ *
+ * 不复用用户的 quality:目标体积模式里质量滑杆是隐藏的,而 browser-image-compression
+ * 是从 initialQuality 往下搜索,起点太低会让它没有下探空间、直接输出偏小的图。
+ */
+const TARGET_SIZE_INITIAL_QUALITY = 0.92;
+
 export function toCompressOptions(
   state: ImageCompressOptionsState
 ): CompressOptions {
   const { width, height } = resolveSize(state);
+  const targetSize = state.mode === 'targetSize';
+
   return {
-    quality: state.quality / 100,
+    quality: targetSize ? TARGET_SIZE_INITIAL_QUALITY : state.quality / 100,
+    // 只在目标体积模式下限制体积;质量模式必须不传,否则库会把结果再压一遍。
+    ...(targetSize && {
+      maxSizeMB: clampTargetSizeKB(state.targetSizeKB) / 1024,
+    }),
     ...(width !== undefined && { maxWidth: width }),
     ...(height !== undefined && { maxHeight: height }),
     outputType: state.outputType,
+  };
+}
+
+/** 服务端 compress 任务的 inputConfig(与本地模式保持同一套语义)。 */
+export function toServerCompressConfig(
+  state: ImageCompressOptionsState
+): Record<string, unknown> {
+  const { width, height } = resolveSize(state);
+  const formatMap: Record<CompressFormat, string> = {
+    'image/jpeg': 'jpeg',
+    'image/webp': 'webp',
+    'image/png': 'png',
+  };
+
+  return {
+    format: formatMap[state.outputType],
+    quality:
+      state.mode === 'targetSize'
+        ? Math.round(TARGET_SIZE_INITIAL_QUALITY * 100)
+        : state.quality,
+    ...(state.mode === 'targetSize' && {
+      maxSizeKB: clampTargetSizeKB(state.targetSizeKB),
+    }),
+    ...(width !== undefined && { maxWidth: width }),
+    ...(height !== undefined && { maxHeight: height }),
   };
 }
 
@@ -102,35 +170,120 @@ export function ImageCompressOptions({
   const t = useTranslations('ImageCompress');
   const isCustom = value.sizePreset === 'custom';
   const isOriginal = value.sizePreset === 'original';
+  const isTargetSize = value.mode === 'targetSize';
 
   return (
     <div className="space-y-6">
-      {/* Quality */}
+      {/* Compress mode */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+          {t('mode')}
+        </div>
+        <div className="inline-flex border border-border rounded-md p-0.5">
+          {COMPRESS_MODES.map(mode => (
+            <button
+              key={mode}
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ ...value, mode })}
+              className={`px-3 h-8 text-xs font-mono transition-colors rounded-sm ${
+                value.mode === mode
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t(`modes.${mode}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Quality (quality mode only) */}
+      {!isTargetSize && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="quality"
+              className="text-xs font-mono text-muted-foreground uppercase tracking-wider"
+            >
+              {t('quality')}
+            </label>
+            <span className="text-xs font-mono tabular-nums">
+              {value.quality}%
+            </span>
+          </div>
+          <input
+            id="quality"
+            type="range"
+            min={1}
+            max={100}
+            value={value.quality}
+            disabled={disabled}
+            onChange={e =>
+              onChange({ ...value, quality: Number(e.target.value) })
+            }
+            className="w-full accent-accent"
+          />
+        </div>
+      )}
+
+      {/* Target size (target-size mode only) */}
+      {isTargetSize && (
+        <div className="space-y-2">
           <label
-            htmlFor="quality"
+            htmlFor="targetSizeKB"
             className="text-xs font-mono text-muted-foreground uppercase tracking-wider"
           >
-            {t('quality')}
+            {t('targetSize')}
           </label>
-          <span className="text-xs font-mono tabular-nums">
-            {value.quality}%
-          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {TARGET_SIZE_PRESETS_KB.map(kb => (
+              <button
+                key={kb}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange({ ...value, targetSizeKB: kb })}
+                className={`px-2.5 py-1.5 text-xs font-mono tabular-nums transition-colors rounded-md border ${
+                  value.targetSizeKB === kb
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/40'
+                }`}
+              >
+                {kb >= 1024 ? `${kb / 1024} MB` : `${kb} KB`}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              id="targetSizeKB"
+              type="number"
+              min={MIN_TARGET_SIZE_KB}
+              max={MAX_TARGET_SIZE_KB}
+              value={value.targetSizeKB}
+              disabled={disabled}
+              onChange={e =>
+                onChange({
+                  ...value,
+                  targetSizeKB: Number(e.target.value) || 0,
+                })
+              }
+              onBlur={e =>
+                onChange({
+                  ...value,
+                  targetSizeKB: clampTargetSizeKB(Number(e.target.value)),
+                })
+              }
+              className="w-32 h-9 px-3 bg-transparent border border-border rounded-md text-sm font-mono tabular-nums focus:outline-none focus:border-accent"
+            />
+            <span className="text-xs font-mono text-muted-foreground">KB</span>
+          </div>
+          <p className="text-[10px] font-mono text-muted-foreground">
+            {value.outputType === 'image/png'
+              ? t('targetSizePngHint')
+              : t('targetSizeHint')}
+          </p>
         </div>
-        <input
-          id="quality"
-          type="range"
-          min={1}
-          max={100}
-          value={value.quality}
-          disabled={disabled}
-          onChange={e =>
-            onChange({ ...value, quality: Number(e.target.value) })
-          }
-          className="w-full accent-accent"
-        />
-      </div>
+      )}
 
       {/* Size preset */}
       <div className="space-y-2">

@@ -354,3 +354,123 @@ describe('ImageService.compress metadata', () => {
     expect(await readExifText(output)).not.toContain('TestCam');
   });
 });
+
+/** 统计各象限的着墨像素,用来验证水印真的落在指定角落。 */
+async function quadrantInk(
+  buffer: Buffer
+): Promise<{ tl: number; tr: number; bl: number; br: number }> {
+  const { data, info } = await sharp(buffer)
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const q = { tl: 0, tr: 0, bl: 0, br: 0 };
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const i = (y * info.width + x) * info.channels;
+      if ((data[i] ?? 255) >= 200) continue;
+      const top = y < info.height / 2;
+      const left = x < info.width / 2;
+      if (top && left) q.tl += 1;
+      else if (top) q.tr += 1;
+      else if (left) q.bl += 1;
+      else q.br += 1;
+    }
+  }
+  return q;
+}
+
+async function whiteCanvas(): Promise<Buffer> {
+  return sharp({
+    create: {
+      width: 600,
+      height: 400,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
+describe('ImageService.watermark positions', () => {
+  const base = {
+    text: 'WM',
+    fontSize: 36,
+    opacity: 1,
+    color: { r: 0, g: 0, b: 0 },
+    outputFormat: 'png' as const,
+    margin: 24,
+  };
+
+  it('places the watermark in the requested corner', async () => {
+    const service = new ImageService();
+    const input = await whiteCanvas();
+
+    const topLeft = await quadrantInk(
+      await service.watermark(input, { ...base, position: 'top-left' })
+    );
+    expect(topLeft.tl).toBeGreaterThan(topLeft.br);
+    expect(topLeft.tl).toBeGreaterThan(topLeft.tr);
+
+    const bottomRight = await quadrantInk(
+      await service.watermark(input, { ...base, position: 'bottom-right' })
+    );
+    expect(bottomRight.br).toBeGreaterThan(bottomRight.tl);
+
+    const topRight = await quadrantInk(
+      await service.watermark(input, { ...base, position: 'top-right' })
+    );
+    expect(topRight.tr).toBeGreaterThan(topRight.bl);
+
+    const bottomLeft = await quadrantInk(
+      await service.watermark(input, { ...base, position: 'bottom-left' })
+    );
+    expect(bottomLeft.bl).toBeGreaterThan(bottomLeft.tr);
+  });
+
+  it('supports every nine-grid position without throwing', async () => {
+    const service = new ImageService();
+    const input = await whiteCanvas();
+    const positions = [
+      'top-left',
+      'top-center',
+      'top-right',
+      'middle-left',
+      'center',
+      'middle-right',
+      'bottom-left',
+      'bottom-center',
+      'bottom-right',
+    ] as const;
+
+    for (const position of positions) {
+      const output = await service.watermark(input, { ...base, position });
+      const metadata = await sharp(output).metadata();
+      expect(metadata.width).toBe(600);
+      expect(metadata.height).toBe(400);
+    }
+  });
+
+  it('outline adds ink without moving the watermark', async () => {
+    const service = new ImageService();
+    const input = await whiteCanvas();
+
+    const plain = await service.watermark(input, {
+      ...base,
+      position: 'center',
+    });
+    const outlined = await service.watermark(input, {
+      ...base,
+      position: 'center',
+      outline: true,
+    });
+
+    const [a, b] = await Promise.all([
+      quadrantInk(plain),
+      quadrantInk(outlined),
+    ]);
+    const total = (q: typeof a) => q.tl + q.tr + q.bl + q.br;
+    // 描边只该让笔画变粗,不该把水印挪走。
+    expect(total(b)).toBeGreaterThan(total(a));
+  });
+});

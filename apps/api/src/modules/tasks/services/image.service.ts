@@ -1,5 +1,9 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import sharp from 'sharp';
+import {
+  resolveWatermarkAnchor,
+  type ImageWatermarkPosition as SharedWatermarkPosition,
+} from '@utils-plane/validators';
 
 export interface CompressOptions {
   format?: 'jpeg' | 'webp' | 'avif' | 'png';
@@ -30,7 +34,7 @@ export interface ImageTransformOptions {
   flipVertical?: boolean;
 }
 
-export type ImageWatermarkPosition = 'center' | 'bottom-right' | 'tile';
+export type ImageWatermarkPosition = SharedWatermarkPosition;
 
 export interface WatermarkOptions {
   text: string;
@@ -40,6 +44,8 @@ export interface WatermarkOptions {
   color?: { r: number; g: number; b: number };
   rotation?: number;
   margin?: number;
+  /** 给文字描一圈反色边,浅色底图上也能读。 */
+  outline?: boolean;
   outputFormat?: 'jpeg' | 'png' | 'webp' | 'avif';
   quality?: number;
   transform?: ImageTransformOptions;
@@ -91,6 +97,13 @@ function applyMetadataPolicy(
   return preserveExif ? pipeline.withMetadata() : pipeline;
 }
 
+/** SVG 的 dominant-baseline 取值,与共享锚点的垂直对齐对应。 */
+function svgBaselineOf(vertical: 'top' | 'middle' | 'bottom'): string {
+  if (vertical === 'top') return 'hanging';
+  if (vertical === 'bottom') return 'auto';
+  return 'middle';
+}
+
 function buildWatermarkSvg(
   width: number,
   height: number,
@@ -105,11 +118,19 @@ function buildWatermarkSvg(
       | 'rotation'
       | 'margin'
     >
-  >
+  > &
+    Pick<WatermarkOptions, 'outline'>
 ): string {
   const text = escapeXml(opts.text);
   const fill = `rgb(${opts.color.r}, ${opts.color.g}, ${opts.color.b})`;
-  const common = `font-family="Arial, Helvetica, sans-serif" font-size="${opts.fontSize}" font-weight="700" fill="${fill}" fill-opacity="${opts.opacity}"`;
+  // 描边取正反色:亮字配深边、暗字配亮边,与本地 outlineColorFor 同一套判定。
+  const luma =
+    (opts.color.r * 299 + opts.color.g * 587 + opts.color.b * 114) / 1000;
+  const shade = luma > 140 ? 0 : 255;
+  const strokeAttrs = opts.outline
+    ? ` stroke="rgb(${shade}, ${shade}, ${shade})" stroke-opacity="${opts.opacity * 0.85}" stroke-width="${Math.max(1, opts.fontSize / 12)}" stroke-linejoin="round" paint-order="stroke"`
+    : '';
+  const common = `font-family="Arial, Helvetica, sans-serif" font-size="${opts.fontSize}" font-weight="700" fill="${fill}" fill-opacity="${opts.opacity}"${strokeAttrs}`;
 
   if (opts.position === 'tile') {
     const tileWidth = Math.max(180, opts.text.length * opts.fontSize * 0.7);
@@ -125,13 +146,16 @@ function buildWatermarkSvg(
 </svg>`;
   }
 
-  const x = opts.position === 'bottom-right' ? width - opts.margin : width / 2;
-  const y =
-    opts.position === 'bottom-right' ? height - opts.margin : height / 2;
-  const anchor = opts.position === 'bottom-right' ? 'end' : 'middle';
+  // 锚点走 validators 的共享解算:本地 canvas 与这里必须落在同一个坐标上。
+  const anchor = resolveWatermarkAnchor(
+    opts.position,
+    width,
+    height,
+    opts.margin
+  );
   return `
 <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-  <text x="${x}" y="${y}" text-anchor="${anchor}" dominant-baseline="middle" transform="rotate(${opts.rotation} ${x} ${y})" ${common}>${text}</text>
+  <text x="${anchor.x}" y="${anchor.y}" text-anchor="${anchor.horizontal}" dominant-baseline="${svgBaselineOf(anchor.vertical)}" transform="rotate(${opts.rotation} ${anchor.x} ${anchor.y})" ${common}>${text}</text>
 </svg>`;
 }
 
@@ -383,6 +407,7 @@ export class ImageService implements OnModuleInit {
       color: safeColor,
       rotation,
       margin,
+      outline: opts.outline,
     });
 
     let pipeline = sharp(transformedInput, { failOn: 'truncated' }).composite([

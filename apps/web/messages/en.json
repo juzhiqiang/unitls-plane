@@ -637,17 +637,36 @@
     "title": "Watermark images",
     "description": "Add visible text watermarks locally or with server processing for large batches.",
     "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB per file",
+    "kind": "Watermark type",
+    "kinds": {
+      "text": "Text",
+      "logo": "Image"
+    },
     "text": "Watermark text",
     "textPlaceholder": "Brand / account / copyright",
+    "logo": "Logo image",
+    "logoScale": "Logo width",
+    "logoLocalOnly": "Image watermarks are local-only.",
+    "logoLocalOnlyError": "Image watermarks run locally only — switch to local mode.",
+    "logoRequiredError": "Choose a logo image first.",
     "position": "Position",
     "positions": {
-      "tile": "Tile",
+      "top-left": "Top left",
+      "top-center": "Top center",
+      "top-right": "Top right",
+      "middle-left": "Middle left",
       "center": "Center",
-      "bottom-right": "Bottom right"
+      "middle-right": "Middle right",
+      "bottom-left": "Bottom left",
+      "bottom-center": "Bottom center",
+      "bottom-right": "Bottom right",
+      "tile": "Tile"
     },
     "fontSize": "Font size",
     "opacity": "Opacity",
     "rotation": "Tilt",
+    "outline": "Text outline",
+    "outlineHint": "Translucent grey text is nearly invisible on light photos; an outline keeps it readable on any background.",
     "color": "Color",
     "colors": {
       "gray": "Gray",

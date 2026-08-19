@@ -33,13 +33,19 @@ import {
   type ImageWatermarkOutputType,
   type ImageWatermarkPosition,
   type ImageWatermarkOptions,
+  type ImageWatermarkKind,
+  DEFAULT_LOGO_SCALE,
 } from '@/lib/processing/image-watermark-client';
+import { IMAGE_WATERMARK_GRID } from '@utils-plane/validators';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
 type ColorPreset = 'gray' | 'red' | 'blue' | 'white';
 
 interface WatermarkOptionsState {
+  kind: ImageWatermarkKind;
+  logoScale: number;
+  outline: boolean;
   text: string;
   position: ImageWatermarkPosition;
   fontSize: number;
@@ -71,9 +77,14 @@ const FORMAT_MAP: Record<ImageWatermarkOutputType, string> = {
 
 function toProcessingOptions(
   state: WatermarkOptionsState,
-  transform: NormalizedImageTransform
+  transform: NormalizedImageTransform,
+  logo?: Blob | null
 ): ImageWatermarkOptions {
   return {
+    kind: state.kind,
+    logo,
+    logoScale: state.logoScale,
+    outline: state.outline,
     text: state.text.trim(),
     position: state.position,
     fontSize: state.fontSize,
@@ -136,6 +147,9 @@ export default function ImageWatermarkPage() {
   const [items, setItems] = useState<FileItem[]>([]);
   const [options, setOptions] = useState<WatermarkOptionsState>({
     text: '',
+    kind: 'text',
+    logoScale: DEFAULT_LOGO_SCALE,
+    outline: false,
     position: 'tile',
     fontSize: 40,
     opacity: 0.28,
@@ -161,6 +175,9 @@ export default function ImageWatermarkPage() {
         ? 'local'
         : 'server'
       : 'local';
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  // Logo 水印是纯画面合成,服务端任务只接受文字,选了 Logo 就必须留在本地。
+  const logoNeedsLocal = options.kind === 'logo';
   const needsServerLogin = mode === 'server' && !sessionLoading && !session;
   const selectedColor = COLOR_PRESETS[options.colorKey];
 
@@ -186,6 +203,16 @@ export default function ImageWatermarkPage() {
 
   const handleProcess = async () => {
     if (items.length === 0 || !options.text.trim()) return;
+
+    if (mode === 'server' && logoNeedsLocal) {
+      setGlobalError(t('logoLocalOnlyError'));
+      return;
+    }
+
+    if (options.kind === 'logo' && !logoFile) {
+      setGlobalError(t('logoRequiredError'));
+      return;
+    }
 
     if (mode === 'server' && !sessionLoading && !session) {
       const next = encodeURIComponent('/image/watermark');
@@ -218,7 +245,7 @@ export default function ImageWatermarkPage() {
     };
     updateOverall();
 
-    const processingOptions = toProcessingOptions(options, transform);
+    const processingOptions = toProcessingOptions(options, transform, logoFile);
     const tasks = indicesToProcess.map(async i => {
       const item = items[i]!;
       updateItem(i, { status: 'processing' });
@@ -238,6 +265,7 @@ export default function ImageWatermarkPage() {
               opacity: processingOptions.opacity,
               color: processingOptions.color,
               rotation: processingOptions.rotation,
+              outline: processingOptions.outline,
               outputFormat: FORMAT_MAP[processingOptions.outputType],
               quality: processingOptions.quality,
               transform: toServerTransformConfig(transform),
@@ -340,26 +368,114 @@ export default function ImageWatermarkPage() {
 
               <div className="space-y-2">
                 <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-                  {t('position')}
+                  {t('kind')}
                 </div>
                 <div className="inline-flex border border-border rounded-md p-0.5">
-                  {(['tile', 'center', 'bottom-right'] as const).map(pos => (
+                  {(['text', 'logo'] as const).map(k => (
                     <button
-                      key={pos}
+                      key={k}
                       type="button"
                       disabled={processing}
-                      onClick={() => setOptions({ ...options, position: pos })}
+                      onClick={() => setOptions({ ...options, kind: k })}
                       className={cn(
                         'h-8 px-3 text-xs font-mono transition-colors rounded-sm',
-                        options.position === pos
+                        options.kind === k
                           ? 'bg-foreground text-background'
                           : 'text-muted-foreground hover:text-foreground'
                       )}
                     >
-                      {t(`positions.${pos}`)}
+                      {t(`kinds.${k}`)}
                     </button>
                   ))}
                 </div>
+                {logoNeedsLocal && (
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    {t('logoLocalOnly')}
+                  </p>
+                )}
+              </div>
+
+              {options.kind === 'logo' && (
+                <div className="space-y-2">
+                  <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                    {t('logo')}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/png,image/webp,image/svg+xml,image/jpeg"
+                    disabled={processing}
+                    onChange={e => setLogoFile(e.target.files?.[0] ?? null)}
+                    className="w-full text-xs font-mono file:mr-3 file:h-8 file:rounded-md file:border file:border-border file:bg-transparent file:px-3 file:text-xs file:font-mono"
+                  />
+                  <label className="space-y-2 block">
+                    <span className="flex items-center justify-between text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                      {t('logoScale')}
+                      <span className="tabular-nums text-foreground">
+                        {Math.round(options.logoScale * 100)}%
+                      </span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0.05}
+                      max={1}
+                      step={0.05}
+                      value={options.logoScale}
+                      disabled={processing}
+                      onChange={e =>
+                        setOptions({
+                          ...options,
+                          logoScale: Number(e.target.value),
+                        })
+                      }
+                      className="w-full accent-accent"
+                    />
+                  </label>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                  {t('position')}
+                </div>
+                <div className="flex flex-wrap items-start gap-3">
+                  {/* 九宫格:四角与边中点是最常见的诉求,此前只有中心与右下角 */}
+                  <div className="grid grid-cols-3 gap-1">
+                    {IMAGE_WATERMARK_GRID.map(pos => (
+                      <button
+                        key={pos}
+                        type="button"
+                        disabled={processing}
+                        title={t(`positions.${pos}`)}
+                        aria-label={t(`positions.${pos}`)}
+                        onClick={() =>
+                          setOptions({ ...options, position: pos })
+                        }
+                        className={cn(
+                          'h-7 w-7 rounded-sm border transition-colors',
+                          options.position === pos
+                            ? 'border-foreground bg-foreground'
+                            : 'border-border hover:border-foreground/40'
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => setOptions({ ...options, position: 'tile' })}
+                    className={cn(
+                      'h-8 rounded-md border px-3 text-xs font-mono transition-colors',
+                      options.position === 'tile'
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {t('positions.tile')}
+                  </button>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground">
+                  {t(`positions.${options.position}`)}
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -438,10 +554,32 @@ export default function ImageWatermarkPage() {
                 </label>
               )}
 
+              {options.kind === 'text' && (
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={options.outline}
+                    disabled={processing}
+                    onChange={e =>
+                      setOptions({ ...options, outline: e.target.checked })
+                    }
+                    className="mt-0.5 accent-accent"
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-xs font-mono">
+                      {t('outline')}
+                    </span>
+                    <span className="block text-[10px] font-mono text-muted-foreground">
+                      {t('outlineHint')}
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <div className="space-y-2">
                 <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
                   {t('color')}
-                </div>
+                </div>{' '}
                 <div className="flex flex-wrap gap-2">
                   {(Object.keys(COLOR_PRESETS) as ColorPreset[]).map(key => (
                     <button

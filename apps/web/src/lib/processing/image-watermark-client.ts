@@ -1,14 +1,23 @@
 import {
+  resolveWatermarkAnchor,
+  resolveWatermarkMargin,
+  type ImageWatermarkPosition,
+} from '@utils-plane/validators';
+import {
   transformImage,
   type ImageTransformOptions,
 } from './image-transform-client';
-import { withDecodedImage } from './image-bitmap';
+import { decodeImage, withDecodedImage } from './image-bitmap';
 
-export type ImageWatermarkPosition = 'center' | 'bottom-right' | 'tile';
+export type { ImageWatermarkPosition };
+
 export type ImageWatermarkOutputType =
   | 'image/jpeg'
   | 'image/png'
   | 'image/webp';
+
+/** 文字水印,或图片(Logo)水印。 */
+export type ImageWatermarkKind = 'text' | 'logo';
 
 export interface ImageWatermarkColor {
   r: number;
@@ -17,12 +26,24 @@ export interface ImageWatermarkColor {
 }
 
 export interface ImageWatermarkOptions {
+  kind?: ImageWatermarkKind;
   text: string;
+  /** kind === 'logo' 时必填。 */
+  logo?: Blob | null;
+  /** Logo 宽度占画面宽度的比例,0.02..1。 */
+  logoScale?: number;
   position: ImageWatermarkPosition;
   fontSize: number;
   opacity: number;
   color: ImageWatermarkColor;
   rotation: number;
+  /**
+   * 给文字描一圈反色边。
+   *
+   * 半透明灰字压在浅色照片上几乎看不见,是水印最常见的翻车方式;描边能在任何底色上
+   * 保持可读,又不至于像加阴影那样显脏。
+   */
+  outline?: boolean;
   outputType: ImageWatermarkOutputType;
   quality: number;
   transform?: ImageTransformOptions;
@@ -33,6 +54,10 @@ const OUTPUT_EXTENSIONS: Record<ImageWatermarkOutputType, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
+
+const MIN_LOGO_SCALE = 0.02;
+const MAX_LOGO_SCALE = 1;
+export const DEFAULT_LOGO_SCALE = 0.2;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -58,6 +83,36 @@ export function colorToCss(
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
+/** 描边取正反色:亮字配深边,暗字配亮边,任何底图上都能读。 */
+export function outlineColorFor(
+  color: ImageWatermarkColor,
+  opacity: number
+): string {
+  const luma = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+  const shade = luma > 140 ? 0 : 255;
+  return `rgba(${shade}, ${shade}, ${shade}, ${clamp(opacity, 0, 1) * 0.85})`;
+}
+
+export function clampLogoScale(value: number | undefined): number {
+  if (!Number.isFinite(value)) return DEFAULT_LOGO_SCALE;
+  return clamp(value as number, MIN_LOGO_SCALE, MAX_LOGO_SCALE);
+}
+
+/** Logo 按目标宽度等比缩放后的绘制尺寸。 */
+export function resolveLogoSize(
+  logoWidth: number,
+  logoHeight: number,
+  canvasWidth: number,
+  scale: number
+): { width: number; height: number } {
+  const width = Math.max(1, Math.round(canvasWidth * clampLogoScale(scale)));
+  const height = Math.max(
+    1,
+    Math.round((logoHeight / Math.max(1, logoWidth)) * width)
+  );
+  return { width, height };
+}
+
 export async function watermarkImage(
   file: File,
   options: ImageWatermarkOptions
@@ -68,35 +123,90 @@ export async function watermarkImage(
     options.outputType,
     options.quality / 100
   );
+  const kind = options.kind ?? 'text';
+  // Logo 在进入 withDecodedImage 之前解好:回调里再 await 会让底图的释放时机变复杂。
+  const logo =
+    kind === 'logo' && options.logo ? await decodeImage(options.logo) : null;
 
-  return withDecodedImage(preparedFile, img => {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
+  try {
+    return await withDecodedImage(preparedFile, img => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas is not available');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas is not available');
 
-    ctx.drawImage(img.source, 0, 0);
-    drawTextWatermark(ctx, canvas.width, canvas.height, options);
+      ctx.drawImage(img.source, 0, 0);
 
-    return new Promise<File>((resolve, reject) => {
-      canvas.toBlob(
-        blob => {
-          if (!blob) return reject(new Error('Watermark export failed'));
-          resolve(
-            new File(
-              [blob],
-              getWatermarkedImageName(file.name, options.outputType),
-              { type: options.outputType }
-            )
-          );
-        },
-        options.outputType,
-        clamp(options.quality / 100, 0.01, 1)
-      );
+      if (kind === 'logo') {
+        if (!logo) throw new Error('Watermark logo is required');
+        drawLogoWatermark(ctx, canvas.width, canvas.height, logo, options);
+      } else {
+        drawTextWatermark(ctx, canvas.width, canvas.height, options);
+      }
+
+      return new Promise<File>((resolve, reject) => {
+        canvas.toBlob(
+          blob => {
+            if (!blob) return reject(new Error('Watermark export failed'));
+            resolve(
+              new File(
+                [blob],
+                getWatermarkedImageName(file.name, options.outputType),
+                { type: options.outputType }
+              )
+            );
+          },
+          options.outputType,
+          clamp(options.quality / 100, 0.01, 1)
+        );
+      });
     });
-  });
+  } finally {
+    logo?.close();
+  }
+}
+
+function applyTextStyle(
+  ctx: CanvasRenderingContext2D,
+  options: ImageWatermarkOptions
+) {
+  ctx.font = `700 ${options.fontSize}px Arial, Helvetica, sans-serif`;
+  ctx.fillStyle = colorToCss(options.color, options.opacity);
+  ctx.textBaseline = 'middle';
+  if (options.outline) {
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.lineWidth = Math.max(1, options.fontSize / 12);
+    ctx.strokeStyle = outlineColorFor(options.color, options.opacity);
+  }
+}
+
+/** 先描边再填色,描边才不会盖住字面。 */
+function paintText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  outline: boolean | undefined
+) {
+  if (outline) ctx.strokeText(text, 0, 0);
+  ctx.fillText(text, 0, 0);
+}
+
+function canvasAlignOf(
+  horizontal: 'start' | 'middle' | 'end'
+): CanvasTextAlign {
+  if (horizontal === 'start') return 'left';
+  if (horizontal === 'end') return 'right';
+  return 'center';
+}
+
+function canvasBaselineOf(
+  vertical: 'top' | 'middle' | 'bottom'
+): CanvasTextBaseline {
+  if (vertical === 'top') return 'top';
+  if (vertical === 'bottom') return 'bottom';
+  return 'middle';
 }
 
 function drawTextWatermark(
@@ -109,21 +219,23 @@ function drawTextWatermark(
   if (!text) throw new Error('Watermark text is required');
 
   ctx.save();
-  ctx.font = `700 ${options.fontSize}px Arial, Helvetica, sans-serif`;
-  ctx.fillStyle = colorToCss(options.color, options.opacity);
-  ctx.textBaseline = 'middle';
+  applyTextStyle(ctx, options);
 
   if (options.position === 'tile') {
     drawTileWatermark(ctx, width, height, options);
   } else {
-    const margin = Math.max(16, Math.min(width, height) * 0.06);
-    const x = options.position === 'bottom-right' ? width - margin : width / 2;
-    const y =
-      options.position === 'bottom-right' ? height - margin : height / 2;
-    ctx.textAlign = options.position === 'bottom-right' ? 'right' : 'center';
-    ctx.translate(x, y);
+    const margin = resolveWatermarkMargin(width, height);
+    const anchor = resolveWatermarkAnchor(
+      options.position,
+      width,
+      height,
+      margin
+    );
+    ctx.textAlign = canvasAlignOf(anchor.horizontal);
+    ctx.textBaseline = canvasBaselineOf(anchor.vertical);
+    ctx.translate(anchor.x, anchor.y);
     ctx.rotate((options.rotation * Math.PI) / 180);
-    ctx.fillText(text, 0, 0);
+    paintText(ctx, text, options.outline);
   }
 
   ctx.restore();
@@ -142,13 +254,77 @@ function drawTileWatermark(
   const angle = (options.rotation * Math.PI) / 180;
 
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   for (let y = -tileHeight; y < height + tileHeight; y += tileHeight) {
     for (let x = -tileWidth; x < width + tileWidth; x += tileWidth) {
       ctx.save();
       ctx.translate(x + tileWidth / 2, y + tileHeight / 2);
       ctx.rotate(angle);
-      ctx.fillText(text, 0, 0);
+      paintText(ctx, text, options.outline);
       ctx.restore();
     }
   }
+}
+
+function drawLogoWatermark(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  logo: { source: CanvasImageSource; width: number; height: number },
+  options: ImageWatermarkOptions
+) {
+  const size = resolveLogoSize(
+    logo.width,
+    logo.height,
+    width,
+    options.logoScale ?? DEFAULT_LOGO_SCALE
+  );
+
+  ctx.save();
+  ctx.globalAlpha = clamp(options.opacity, 0, 1);
+
+  if (options.position === 'tile') {
+    const tileWidth = size.width * 2;
+    const tileHeight = size.height * 2;
+    const angle = (options.rotation * Math.PI) / 180;
+    for (let y = -tileHeight; y < height + tileHeight; y += tileHeight) {
+      for (let x = -tileWidth; x < width + tileWidth; x += tileWidth) {
+        ctx.save();
+        ctx.translate(x + tileWidth / 2, y + tileHeight / 2);
+        ctx.rotate(angle);
+        ctx.drawImage(
+          logo.source,
+          -size.width / 2,
+          -size.height / 2,
+          size.width,
+          size.height
+        );
+        ctx.restore();
+      }
+    }
+  } else {
+    const margin = resolveWatermarkMargin(width, height);
+    const anchor = resolveWatermarkAnchor(
+      options.position,
+      width,
+      height,
+      margin
+    );
+    // 锚点是「贴边点」,把 Logo 的对应边角对齐过去。
+    const left =
+      anchor.horizontal === 'start'
+        ? anchor.x
+        : anchor.horizontal === 'end'
+          ? anchor.x - size.width
+          : anchor.x - size.width / 2;
+    const top =
+      anchor.vertical === 'top'
+        ? anchor.y
+        : anchor.vertical === 'bottom'
+          ? anchor.y - size.height
+          : anchor.y - size.height / 2;
+    ctx.drawImage(logo.source, left, top, size.width, size.height);
+  }
+
+  ctx.restore();
 }

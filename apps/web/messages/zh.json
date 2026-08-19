@@ -637,17 +637,36 @@
     "title": "图片加水印",
     "description": "为图片添加可见文字水印，小图本地处理，大批量可切换服务端。",
     "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，单文件最大 50MB",
+    "kind": "水印类型",
+    "kinds": {
+      "text": "文字",
+      "logo": "图片"
+    },
     "text": "水印文字",
     "textPlaceholder": "品牌 / 账号 / 版权信息",
+    "logo": "Logo 图片",
+    "logoScale": "Logo 宽度",
+    "logoLocalOnly": "图片水印仅支持本地处理。",
+    "logoLocalOnlyError": "图片水印仅支持本地处理，请切换到本地模式。",
+    "logoRequiredError": "请先选择一张 Logo 图片。",
     "position": "位置",
     "positions": {
-      "tile": "平铺",
+      "top-left": "左上",
+      "top-center": "上中",
+      "top-right": "右上",
+      "middle-left": "左中",
       "center": "居中",
-      "bottom-right": "右下角"
+      "middle-right": "右中",
+      "bottom-left": "左下",
+      "bottom-center": "下中",
+      "bottom-right": "右下角",
+      "tile": "平铺"
     },
     "fontSize": "字号",
     "opacity": "透明度",
     "rotation": "倾斜角度",
+    "outline": "文字描边",
+    "outlineHint": "浅色照片上半透明灰字几乎看不见，描边能在任何底色上保持可读。",
     "color": "颜色",
     "colors": {
       "gray": "灰",

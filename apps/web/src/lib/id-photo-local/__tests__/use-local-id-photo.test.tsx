@@ -1,38 +1,59 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// @imgly/background-removal 的桩:记录调用配置,可控地发进度并回透明 PNG blob。
-// 进度序列:fetch(下载)→ compute:decode/inference/mask/encode(推理四阶段)。
+// @huggingface/transformers 的桩:记录 pipeline 配置,可控地发进度并回一个带 toCanvas 的 RawImage。
 // vi.hoisted 让 mock 函数在 vi.mock 提升执行时即存在(避免 TDZ)。
-const { removeBackgroundMock } = vi.hoisted(() => ({
-  removeBackgroundMock: vi.fn(),
+const { pipelineMock, segMock, envStub } = vi.hoisted(() => ({
+  pipelineMock: vi.fn(),
+  segMock: vi.fn(),
+  envStub: {
+    allowLocalModels: true,
+    remoteHost: '',
+    remotePathTemplate: '',
+    backends: { onnx: { wasm: { wasmPaths: '' } } },
+  },
 }));
-vi.mock('@imgly/background-removal', () => ({
-  removeBackground: (...args: unknown[]) => removeBackgroundMock(...args),
+vi.mock('@huggingface/transformers', () => ({
+  pipeline: (...args: unknown[]) => pipelineMock(...args),
+  env: envStub,
 }));
 
 import { useLocalIdPhoto } from '../use-local-id-photo';
 
 // 合成阶段用的 cutout bitmap(createImageBitmap 桩产出)
-let lastCutout: { width: number; height: number; close: ReturnType<typeof vi.fn> };
+let lastCutout: {
+  width: number;
+  height: number;
+  close: ReturnType<typeof vi.fn>;
+};
+
+/** pipeline 产出的 RawImage 桩:hook 只用 toCanvas()。 */
+const makeRawImage = () => ({ toCanvas: () => ({ width: 10, height: 10 }) });
 
 beforeEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 
-  removeBackgroundMock.mockReset();
-  removeBackgroundMock.mockImplementation(
-    async (_file: unknown, cfg: { progress?: (k: string, c: number, t: number) => void }) => {
-      const p = cfg.progress;
-      await Promise.resolve();
-      p?.('fetch:/models/isnet_fp16', 50, 100);
-      p?.('fetch:/models/isnet_fp16', 100, 100);
-      p?.('compute:decode', 0, 4);
-      p?.('compute:inference', 1, 4);
-      p?.('compute:mask', 2, 4);
-      p?.('compute:encode', 4, 4);
-      return new Blob(['png'], { type: 'image/png' });
-    },
+  envStub.allowLocalModels = true;
+  envStub.remoteHost = '';
+  envStub.remotePathTemplate = '';
+  envStub.backends.onnx.wasm.wasmPaths = '';
+
+  segMock.mockReset();
+  segMock.mockImplementation(async () => makeRawImage());
+  pipelineMock.mockReset();
+  pipelineMock.mockImplementation(
+    async (
+      _task: string,
+      _model: string,
+      cfg: { progress_callback?: (p: Record<string, unknown>) => void }
+    ) => {
+      // 模拟下载进度事件(transformers.js 的 {status:'progress', progress:0..100})
+      cfg.progress_callback?.({ status: 'progress', progress: 50, file: 'm' });
+      cfg.progress_callback?.({ status: 'progress', progress: 100, file: 'm' });
+      return segMock;
+    }
   );
 
   // compositeIdPhoto 在 jsdom 下需要 2D 上下文与 convertToBlob;最小可用桩。
@@ -43,7 +64,10 @@ beforeEach(() => {
   }
   class FakeCanvas {
     ctx: FakeCtx;
-    constructor(public width: number, public height: number) {
+    constructor(
+      public width: number,
+      public height: number
+    ) {
       this.ctx = new FakeCtx();
     }
     getContext(): FakeCtx {
@@ -58,7 +82,7 @@ beforeEach(() => {
     configurable: true,
     writable: true,
   });
-  // cutout blob → ImageBitmap(createImageBitmap 桩)
+  // cutout canvas → ImageBitmap(createImageBitmap 桩)
   Object.defineProperty(globalThis, 'createImageBitmap', {
     value: vi.fn(async () => {
       lastCutout = { width: 10, height: 10, close: vi.fn() };
@@ -83,7 +107,8 @@ const defaultOpts = {
   backgroundColor: '#438edb',
   outputType: 'image/jpeg' as const,
 };
-const makeFile = (name = 'a.jpg') => new File(['img'], name, { type: 'image/jpeg' });
+const makeFile = (name = 'a.jpg') =>
+  new File(['img'], name, { type: 'image/jpeg' });
 
 // 注入 navigator.gpu(adapter 非 null → webgpu 可用)
 function enableWebGpu() {
@@ -93,13 +118,15 @@ function enableWebGpu() {
   });
 }
 
-function lastCfg(): {
+/** 最近一次 pipeline() 调用的 (model, cfg)。 */
+function lastPipelineCall(): {
   model: string;
+  dtype: string;
   device: string;
-  publicPath: string;
 } {
-  const call = removeBackgroundMock.mock.calls.at(-1);
-  return (call?.[1] ?? {}) as ReturnType<typeof lastCfg>;
+  const call = pipelineMock.mock.calls.at(-1);
+  const cfg = (call?.[2] ?? {}) as { dtype: string; device: string };
+  return { model: String(call?.[1] ?? ''), ...cfg };
 }
 
 describe('useLocalIdPhoto', () => {
@@ -109,83 +136,90 @@ describe('useLocalIdPhoto', () => {
     expect(result.current.resultBlob).toBeNull();
   });
 
-  it('runs removeBackground and composites a result blob', async () => {
+  it('runs the pipeline and composites a result blob', async () => {
     const { result } = renderHook(() => useLocalIdPhoto());
     await act(async () => {
       await result.current.process(makeFile(), 'balanced', defaultOpts);
     });
     await waitFor(() => expect(result.current.status).toBe('done'));
     expect(result.current.resultBlob).toBeInstanceOf(Blob);
-    expect(removeBackgroundMock).toHaveBeenCalledTimes(1);
+    expect(segMock).toHaveBeenCalledTimes(1);
   });
 
-  it('passes isnet_fp16 + cpu + MinIO publicPath when no webgpu', async () => {
+  it('points transformers.js at the self-hosted MinIO assets', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      await result.current.process(makeFile(), 'balanced', defaultOpts);
+    });
+    // 离线镜像里没有公网:必须关掉本地探测并把 remoteHost / wasmPaths 指向自有对象存储
+    expect(envStub.allowLocalModels).toBe(false);
+    expect(envStub.remoteHost).toBe('http://localhost:9000/models/');
+    expect(envStub.remotePathTemplate).toBe('{model}/');
+    expect(envStub.backends.onnx.wasm.wasmPaths).toBe(
+      'http://localhost:9000/models/ort/'
+    );
+  });
+
+  it('uses fp16 + wasm when no webgpu, even if high requested', async () => {
     const { result } = renderHook(() => useLocalIdPhoto());
     await act(async () => {
       await result.current.process(makeFile(), 'high', defaultOpts);
     });
-    // ep=wasm(无 webgpu)→ 即便请求 high,tierFor 锁 balanced(isnet_fp16),device=cpu
-    expect(lastCfg().model).toBe('isnet_fp16');
-    expect(lastCfg().device).toBe('cpu');
-    expect(lastCfg().publicPath).toBe(
-      'http://localhost:9000/models/imgly/1.7.0/dist/',
-    );
+    // ep=wasm(无 webgpu)→ tierFor 把 high 锁回 balanced(fp16)
+    expect(lastPipelineCall().model).toBe('rmbg/1.4');
+    expect(lastPipelineCall().dtype).toBe('fp16');
+    expect(lastPipelineCall().device).toBe('wasm');
   });
 
-  it('passes isnet + gpu when webgpu available and high requested', async () => {
+  it('uses fp32 + webgpu when webgpu available and high requested', async () => {
     enableWebGpu();
     const { result } = renderHook(() => useLocalIdPhoto());
     await waitFor(() => expect(result.current.ep).toBe('webgpu'));
     await act(async () => {
       await result.current.process(makeFile(), 'high', defaultOpts);
     });
-    expect(lastCfg().model).toBe('isnet');
-    expect(lastCfg().device).toBe('gpu');
+    expect(lastPipelineCall().dtype).toBe('fp32');
+    expect(lastPipelineCall().device).toBe('webgpu');
   });
 
-  it('maps fetch progress to loading-model then compute to running', async () => {
-    // 用 instrumentation 断言:hook 把 progress 回调接给了 @imgly,且两个阶段(fetch 下载
-    // / compute 推理)都送达。中间 React 状态(loading-model/running)会被 done 覆盖,
-    // 难以在 act 外稳定观测,故改为校验回调接线与阶段序列。
-    const seen: string[] = [];
-    removeBackgroundMock.mockReset();
-    removeBackgroundMock.mockImplementation(
-      async (_file: unknown, cfg: { progress?: (k: string, c: number, t: number) => void }) => {
-        const p = cfg.progress;
-        const phases: Array<[string, number, number]> = [
-          ['fetch:/models/isnet_fp16', 50, 100],
-          ['fetch:/models/isnet_fp16', 100, 100],
-          ['compute:decode', 0, 4],
-          ['compute:inference', 1, 4],
-          ['compute:mask', 2, 4],
-          ['compute:encode', 4, 4],
-        ];
-        for (const [k, c, t] of phases) {
-          seen.push(k);
-          p?.(k, c, t);
-        }
-        return new Blob(['png'], { type: 'image/png' });
-      },
-    );
-
+  it('maps download progress events to loading-model', async () => {
+    // 中间 React 状态会被 done 覆盖,难以在 act 外稳定观测,故校验回调接线:
+    // hook 必须把 progress_callback 接给 pipeline,且能消费 {status,progress} 事件。
     const { result } = renderHook(() => useLocalIdPhoto());
     await act(async () => {
       await result.current.process(makeFile(), 'balanced', defaultOpts);
     });
     await waitFor(() => expect(result.current.status).toBe('done'));
-    expect(seen.filter(k => k.startsWith('fetch:')).length).toBeGreaterThan(0);
-    expect(seen.filter(k => k.startsWith('compute:')).length).toBeGreaterThan(0);
+    const cfg = pipelineMock.mock.calls.at(-1)?.[2] as {
+      progress_callback?: unknown;
+    };
+    expect(typeof cfg?.progress_callback).toBe('function');
+  });
+
+  it('reuses the pipeline for the same tier across runs', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
+    });
+    await waitFor(() => expect(result.current.status).toBe('done'));
+    await act(async () => {
+      await result.current.process(makeFile('b.jpg'), 'balanced', defaultOpts);
+    });
+    await waitFor(() => expect(result.current.status).toBe('done'));
+    // 模型很大(fp16 ~88MB),同档位必须复用,不能每次重建 pipeline
+    expect(pipelineMock).toHaveBeenCalledTimes(1);
+    expect(segMock).toHaveBeenCalledTimes(2);
   });
 
   it('guards against reentry during an in-flight process', async () => {
-    // 第一个 process 被 gate 挂起在 removeBackground;第二个在 inFlight 守卫下被丢弃。
+    // 第一个 process 被 gate 挂起在推理;第二个在 inFlight 守卫下被丢弃。
     let gate: () => void = () => {};
-    removeBackgroundMock.mockReset();
-    removeBackgroundMock.mockImplementation(
+    segMock.mockReset();
+    segMock.mockImplementation(
       () =>
-        new Promise<Blob>(resolve => {
-          gate = () => resolve(new Blob(['png'], { type: 'image/png' }));
-        }),
+        new Promise(resolve => {
+          gate = () => resolve(makeRawImage());
+        })
     );
 
     const { result } = renderHook(() => useLocalIdPhoto());
@@ -194,10 +228,9 @@ describe('useLocalIdPhoto', () => {
     await act(async () => {
       p1 = result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
       p2 = result.current.process(makeFile('b.jpg'), 'balanced', defaultOpts);
-      // 仅第一个进入 removeBackground(被 gate 挂起);第二个被 inFlight 守卫丢弃
-      await waitFor(() => expect(removeBackgroundMock).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(segMock).toHaveBeenCalledTimes(1));
     });
-    expect(removeBackgroundMock).toHaveBeenCalledTimes(1);
+    expect(segMock).toHaveBeenCalledTimes(1);
     await act(async () => {
       gate();
       await p1;
@@ -208,13 +241,13 @@ describe('useLocalIdPhoto', () => {
 
   it('drops stale results after reset', async () => {
     const { result } = renderHook(() => useLocalIdPhoto());
-    let resolveProcess: (b: Blob) => void = () => {};
-    removeBackgroundMock.mockReset();
-    removeBackgroundMock.mockImplementation(
+    let resolveProcess: () => void = () => {};
+    segMock.mockReset();
+    segMock.mockImplementation(
       () =>
-        new Promise<Blob>(resolve => {
-          resolveProcess = b => resolve(b);
-        }),
+        new Promise(resolve => {
+          resolveProcess = () => resolve(makeRawImage());
+        })
     );
     await act(async () => {
       result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
@@ -224,9 +257,9 @@ describe('useLocalIdPhoto', () => {
       result.current.reset();
     });
     expect(result.current.status).toBe('idle');
-    // 即便旧的 removeBackground 此刻 resolve,也不应改 status(已被 sid 丢弃)
+    // 即便旧的推理此刻 resolve,也不应改 status(已被 sid 丢弃)
     await act(async () => {
-      resolveProcess(new Blob(['png'], { type: 'image/png' }));
+      resolveProcess();
       await Promise.resolve();
       await Promise.resolve();
     });

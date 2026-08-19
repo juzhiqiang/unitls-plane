@@ -1,61 +1,79 @@
-# 证件照本地抠图模型预置（@imgly/ISNet）
+# 证件照本地抠图模型预置（BRIA RMBG-1.4）
 
 证件照本地处理使用
-[`@imgly/background-removal`](https://www.npmjs.com/package/@imgly/background-removal)
-的 ISNet 引擎，在浏览器内完成人像分割，产出透明 cutout 后再合成证件照底色。模型资产自托管在 MinIO/S3，离线镜像内置、启动时同步到本地 MinIO。
+[`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers) 的
+`background-removal` pipeline 运行 **BRIA
+RMBG-1.4**，在浏览器内完成人像分割，产出透明 cutout 后再合成证件照底色。模型资产自托管在 MinIO/S3，离线镜像内置、启动时同步到本地 MinIO。
+
+## ⚠️ 许可
+
+RMBG-1.4 使用 **BRIA 自有许可**（HF model card 标注 `license: other`），
+**商用需向 BRIA 申请授权**。本项目当前定位为免费受限公测，是否构成商用需自行判断。升级或替换模型前请复核
+<https://huggingface.co/briaai/RMBG-1.4> 的许可条款。
+
+## 为什么不是 ISNet / BiRefNet / MODNet
+
+上一版使用
+`@imgly/background-removal`（ISNet）。实测在「黑帽子 + 暗背景」这类低对比样张上，ISNet 会把整顶帽子判成背景，换底色后帽子染色甚至消失。同一张图的实测对比：
+
+| 模型              | 许可       | 帽子         | 衣服   | 推理耗时 | 浏览器可用性              |
+| ----------------- | ---------- | ------------ | ------ | -------- | ------------------------- |
+| ISNet（旧）       | 无顾虑     | ✗ 半透明鬼影 | ✓ 实心 | 9~12s    | 可用                      |
+| **RMBG-1.4**      | BRIA 专有  | ✓ 实心       | ✓ 实心 | **0.6s** | 可用（当前方案）          |
+| MODNet            | Apache-2.0 | ✓ 实心       | ✗ 破洞 | 1.1s     | 可用                      |
+| BiRefNet_lite     | MIT        | —            | —      | —        | ✗ OOM                     |
+| BiRefNet-portrait | MIT        | —            | —      | —        | ✗ OOM（需一次分配 490MB） |
+
+关键量化指标（同一张样张）：
+
+| 指标                | ISNet            | RMBG-1.4  |
+| ------------------- | ---------------- | --------- |
+| 半透明像素占比      | 16.13%           | **0.63%** |
+| 帽子区 alpha 中位数 | 217（44% < 102） | **249**   |
+| 衣服区 alpha p05    | —                | **255**   |
+
+RMBG-2.0（BiRefNet 架构）在 HF 上是
+**gated 仓库**，未登录无法下载（`Unauthorized access`），故未采用。
 
 ## 档位与模型
 
-| 档位   | 资源键               | 大小   | 量化 | 设备         | 说明                              |
-| ------ | -------------------- | ------ | ---- | ------------ | --------------------------------- |
-| 均衡   | `/models/isnet_fp16` | ~84MB  | fp16 | CPU / WebGPU | 默认档；无 WebGPU 时强制使用      |
-| 高精度 | `/models/isnet`      | ~168MB | fp32 | WebGPU       | 需 WebGPU；无 WebGPU 时回退均衡档 |
+| 档位   | dtype  | 文件                   | 大小   | 设备         | 说明                              |
+| ------ | ------ | ---------------------- | ------ | ------------ | --------------------------------- |
+| 均衡   | `fp16` | `onnx/model_fp16.onnx` | ~84MB  | CPU / WebGPU | 默认档；无 WebGPU 时强制使用      |
+| 高精度 | `fp32` | `onnx/model.onnx`      | ~168MB | WebGPU       | 需 WebGPU；无 WebGPU 时回退均衡档 |
 
 > 档位映射在 `apps/web/src/lib/id-photo-local/model-registry.ts`，改档位需同步此文件与下载脚本。
-> `/models/isnet_quint8`（~42MB，极速档）由 @imgly 提供，本平台不开放，下载时跳过。
 
-## 资产结构（分块）
+## 资产结构
 
-@imgly 的资产是**分块**的，不是单个模型文件：
-
-- `resources.json`：清单，列出每个资源键的 `chunks`（每个 chunk 有 `name` =
-  SHA256、`offsets`、`size`）。
-- `<chunk.name>`：以 SHA256 命名的分块文件，扁平存放在 `dist/` 下。
-
-运行时 loader 先取 `resources.json`，再按 `chunks[].name` 逐块从 publicPath 拉取，校验
-`blob.size === offsets[1]-offsets[0]`
-后拼接还原资源。所以本地只需把这些"分块文件 + 清单"原样上传到 MinIO，loader 即可按 publicPath 取用。
-
-本平台需要的 6 个资源键（跳过 `isnet_quint8`）：
-
-| 用途                  | 资源键                                              |
-| --------------------- | --------------------------------------------------- |
-| 运行时（WebGPU jsep） | `/onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm` |
-| 运行时（CPU wasm）    | `/onnxruntime-web/ort-wasm-simd-threaded.wasm`      |
-| 运行时（jsep 加载器） | `/onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs`  |
-| 运行时（wasm 加载器） | `/onnxruntime-web/ort-wasm-simd-threaded.mjs`       |
-| 均衡档模型            | `/models/isnet_fp16`                                |
-| 高精度档模型          | `/models/isnet`                                     |
-
-共 75 个分块文件 + `resources.json`（合计 76 个文件，约 285MB）。资源键与下载脚本
-`scripts/download-imgly-assets.cjs` 中的 `RESOURCES` 必须保持一致。
-
-## publicPath 映射
-
-前端 `imglyPublicPath()`（`apps/web/src/lib/id-photo-local/model-registry.ts`）：
+transformers.js 按 HF 仓库的相对路径取文件，所以 MinIO 上保持与仓库一致的目录结构即可：
 
 ```text
-${NEXT_PUBLIC_S3_PUBLIC_URL}/models/imgly/1.7.0/dist/
+models/rmbg/1.4/config.json
+models/rmbg/1.4/preprocessor_config.json
+models/rmbg/1.4/onnx/model_fp16.onnx
+models/rmbg/1.4/onnx/model.onnx
+models/ort/ort-wasm-simd-threaded.wasm
+models/ort/ort-wasm-simd-threaded.mjs
+models/ort/ort-wasm-simd-threaded.jsep.wasm     # WebGPU 用
+models/ort/ort-wasm-simd-threaded.jsep.mjs
 ```
 
-MinIO 对应 key：
+共 8 个文件（约 288MB）。相比上一版 @imgly 的 76 个 SHA256 分块，结构大幅简化。
 
-```text
-models/imgly/1.7.0/dist/resources.json
-models/imgly/1.7.0/dist/<chunk.name>   # 75 个分块
+**ort
+wasm 必须自托管**：transformers.js 默认从 jsDelivr 取 ort 运行时，离线镜像内没有公网会直接失败。
+
+## 路径映射
+
+前端 `model-registry.ts`：
+
+```ts
+env.remoteHost = `${NEXT_PUBLIC_S3_PUBLIC_URL}/models/`; // modelsBaseUrl()
+env.remotePathTemplate = '{model}/';
+env.backends.onnx.wasm.wasmPaths = `${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/`; // ortWasmPath()
+// model id = 'rmbg/1.4' → 拼出 ${base}/models/rmbg/1.4/<file>
 ```
-
-`removeBackground(file, { publicPath })` 据此拉清单和分块。
 
 ## 预置步骤（本地开发）
 
@@ -68,56 +86,33 @@ models/imgly/1.7.0/dist/<chunk.name>   # 75 个分块
    ```
 3. 执行：`./scripts/prepare-id-photo-models.sh`。
 4. 脚本会：
-   - `node scripts/download-imgly-assets.cjs all` 从 @imgly CDN 下载到
-     `docker/models/imgly/1.7.0/dist/`（幂等，已存在且尺寸正确的分块跳过）。
-   - `aws s3 sync` 把该目录同步到 `s3://models/imgly/1.7.0/dist/`，设匿名只读策略与不可变缓存。
+   - `node scripts/download-rmbg-assets.cjs all`：模型从 HF 下载到 `docker/models/rmbg/1.4/`；ort
+     wasm 从 `node_modules` **复制**到 `docker/models/ort/` （复制而非下载，保证与
+     `@huggingface/transformers`
+     实际依赖的 ort 版本严格一致 ——版本错配会导致 wasm 与 glue 导出对不上，参见 git 历史里的
+     `jsepInit`/`webgpuInit` 事故）。
+   - `aws s3 sync` 把两棵树同步到 `s3://models/`，设匿名只读策略与不可变缓存。
 
 ## 前端如何使用
 
-`apps/web/src/lib/id-photo-local/use-local-id-photo.ts` 在主线程调用
-`removeBackground(file, { model, device, output, publicPath, progress })`：
+`apps/web/src/lib/id-photo-local/use-local-id-photo.ts`：
 
 - 挂载时探测 WebGPU（`navigator.gpu.requestAdapter()`）→ `ep: 'webgpu' | 'wasm'`。
 - `tierFor(ep === 'webgpu', requestedTier)`：无 WebGPU 时把高精度请求锁回均衡档。
-- `device`：WebGPU 用 `'gpu'`（走 `onnxruntime-web/webgpu` + jsep wasm）；CPU 用 `'cpu'` （走
-  `onnxruntime-web/wasm`）。
-- 进度：`fetch:<key>` → 下载（映射为 `loading-model`）；`compute:decode|inference|mask|encode`
-  → 推理四阶段（映射为 `running`）。
-- 产出透明 PNG cutout Blob → `createImageBitmap` → `compositeIdPhoto` 合成底色与裁剪。
+- `pipeline('background-removal', 'rmbg/1.4', { dtype, device, progress_callback })`；pipeline 按档位缓存在 ref 里，同档复用（模型大，不能每次重建）。
+- 进度：transformers.js 发 `{status:'progress', progress:0..100}`，映射为 `loading-model`。
+- 产出 RawImage → `toCanvas()` → `createImageBitmap` → `compositeIdPhoto` 合成底色与裁剪。
 
-@imgly 的 `import("onnxruntime-web/webgpu")`（GPU 路径）与
-`import("onnxruntime-web")`（CPU 路径）在 Next.js 构建时有特殊处理，见 `apps/web/next.config.mjs` 的
-`webpack` 钩子注释。
-
-### onnxruntime-web 版本必须锁 1.21.0
-
-`apps/web/package.json` 里 `onnxruntime-web` 精确锁 `1.21.0`（无 `^`），不要升级。
-
-@imgly 1.7.0 的 peerDependency 是 `onnxruntime-web: 1.21.0`，且它在 `createOnnxSession` 里
-**硬编码**走 jsep 版运行时（`/onnxruntime-web/ort-wasm-simd-threaded.jsep.*`）。ort
-1.27.0 把 WebGPU 实现从 jsep 迁到了 asyncify/jspi：
-
-| ort 版本 | `ort-wasm-simd-threaded.jsep.mjs` 导出 | `ort.webgpu.bundle.min.mjs` 调用 | 结果 |
-| -------- | -------------------------------------- | -------------------------------- | ---- |
-| 1.21.0   | `jsepInit`                             | `.jsepInit`                      | 正常 |
-| 1.27.0   | `jsepInit`（无 `webgpuInit`）          | `.webgpuInit`                    | 报错 |
-
-升到 1.27.0 会在创建 session 时抛：
-
-```text
-Failed to create session: "Error: no available backend found.
-ERR: [webgpu] TypeError: z(...).webgpuInit is not a function"
-```
-
-MinIO 上托管的 jsep 加载器分块也是 @imgly 1.7.0 配套产物（导出
-`jsepInit`），所以资产侧无需改动，只要客户端 ort 保持 1.21.0 即可。
+`@huggingface/transformers` 在 Next.js 构建时有特殊处理，见 `apps/web/next.config.mjs` 的 `webpack`
+钩子注释（server
+bundle 里 stub 成空模块；client 侧对 onnxruntime-web 的预打包 .mjs 关掉 URL 改写并替换
+`import.meta.url`）。
 
 ## 对象存储
 
 - 桶：`models`（只读匿名下载，`put-bucket-policy` 允许 `s3:GetObject`）。
-- 公网 URL：`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/imgly/1.7.0/dist/<file>`。
-- 跨域：MinIO 2025 自动镜像请求 `Origin` 头并暴露 `Content-Length`，无需额外 bucket
-  CORS 配置（loader 用 `Content-Length` 校验分块大小）。
+- 公网 URL：`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/...`。
+- 跨域：MinIO 2025 自动镜像请求 `Origin` 头，无需额外 bucket CORS 配置。
 - 缓存：上传时设 `Cache-Control: public, max-age=31536000, immutable`（资产按版本不可变）。
 
 ## 离线镜像
@@ -125,8 +120,8 @@ MinIO 上托管的 jsep 加载器分块也是 @imgly 1.7.0 配套产物（导出
 - 组合镜像构建时把 `docker/models/` 树 `COPY` 进 `/app/models/id-photo/`
   （Dockerfile，`docker/models/` 已 gitignore，仅保留 `.gitkeep`）。
 - `docker/start-all.sh` 在 migrate 之后、API 启动前调用
-  `node apps/api/dist/scripts/sync-id-photo-models.js`，用
-  `@aws-sdk/client-s3`（镜像内已有依赖）递归上传 `imgly/` 前缀下的资产到本地 MinIO `models`
-  桶并设匿名只读策略。
+  `node apps/api/dist/scripts/sync-id-photo-models.js`，用 `@aws-sdk/client-s3` 递归上传 `rmbg/` 与
+  `ort/` 前缀下的资产到本地 MinIO `models` 桶并设匿名只读策略。
 - 同步脚本失败不阻塞启动（返回 0，打印 skip 日志），便于 MinIO 未就绪时下次重启重试。
-- 资产不进 Git（大），构建前放 `docker/models/imgly/1.7.0/dist/`。
+- 资产不进 Git（大），构建前先跑 `scripts/prepare-id-photo-models.sh` 或
+  `node scripts/download-rmbg-assets.cjs all`。

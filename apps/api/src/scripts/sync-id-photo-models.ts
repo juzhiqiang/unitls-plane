@@ -12,14 +12,17 @@ import * as path from 'node:path';
 const logger = new Logger('SyncIdPhotoModels');
 
 /**
- * 把镜像内置的证件照本地抠图 @imgly/ISNet 资产树同步到 MinIO/S3 models 桶(只读匿名)。
+ * 把镜像内置的证件照本地抠图资产树同步到 MinIO/S3 models 桶(只读匿名)。
  *
- * @imgly/background-removal 的资产是分块的:resources.json 清单 + 若干按 SHA256 命名的分块文件,
- * 运行时 loader 按 publicPath(`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/imgly/<版本>/dist/`)逐块拉取
- * 并拼接。本脚本递归上传 `ID_PHOTO_MODELS_DIR` 下 `imgly/<版本>/dist/` 的全部文件,保持扁平结构
- * (分块文件名即清单里的 chunk.name),使 MinIO 公网 URL 与 loader 期望一致。
+ * 资产为 BRIA RMBG-1.4 模型 + onnxruntime-web wasm 运行时,由
+ * @huggingface/transformers 在浏览器端取用(见 apps/web/src/lib/id-photo-local/model-registry.ts):
+ *   rmbg/<版本>/{config.json, preprocessor_config.json, onnx/model*.onnx}
+ *   ort/ort-wasm-simd-threaded{,.jsep}.{wasm,mjs}
+ * 本脚本递归上传 `ID_PHOTO_MODELS_DIR` 下这两个前缀的全部文件,保持相对路径作为 S3 key,
+ * 使 MinIO 公网 URL 与前端 remoteHost / wasmPaths 期望一致。
  *
- * 离线镜像启动时由 docker/start-all.sh 调用,保证无外网环境也能取到资产。
+ * 离线镜像启动时由 docker/start-all.sh 调用,保证无外网环境也能取到资产
+ * (transformers.js 默认会回落到 jsDelivr 取 ort wasm,离线环境必须自托管)。
  * 失败不抛出(返回 0),避免 MinIO 未就绪时阻塞启动;下次重启会重试。
  *
  * 环境变量(与 MinioService 同约定):
@@ -27,13 +30,14 @@ const logger = new Logger('SyncIdPhotoModels');
  *   S3_MODELS_BUCKET(默认 models)
  *   ID_PHOTO_MODELS_DIR(默认 /app/models/id-photo,镜像内资产目录)
  */
-const IMGLY_PREFIX = 'imgly/';
+const ASSET_PREFIXES = ['rmbg/', 'ort/'];
 const CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 function contentTypeFor(name: string): string {
-  if (name === 'resources.json') return 'application/json';
+  if (name.endsWith('.json')) return 'application/json';
   if (name.endsWith('.wasm')) return 'application/wasm';
   if (name.endsWith('.mjs') || name.endsWith('.js')) return 'text/javascript';
+  if (name.endsWith('.onnx')) return 'application/octet-stream';
   return 'application/octet-stream';
 }
 
@@ -102,7 +106,7 @@ async function main(): Promise<number> {
         new PutBucketPolicyCommand({
           Bucket: bucket,
           Policy: JSON.stringify(policy),
-        }),
+        })
       );
       logger.log(`Anonymous read policy set on ${bucket}`);
     } catch (err) {
@@ -110,21 +114,25 @@ async function main(): Promise<number> {
       logger.warn(`Bucket policy set skipped: ${(err as Error).message}`);
     }
 
-    // 3. 递归列出资产树,只同步 imgly/ 前缀下的文件(版本无关,便于将来升级)
+    // 3. 递归列出资产树,只同步 rmbg/ 与 ort/ 前缀下的文件(版本无关,便于将来升级)
     let all: string[];
     try {
       all = await walk(modelsDir, modelsDir);
     } catch (err) {
-      logger.warn(`Models dir ${modelsDir} not readable: ${(err as Error).message}`);
+      logger.warn(
+        `Models dir ${modelsDir} not readable: ${(err as Error).message}`
+      );
       return 0;
     }
-    const files = all.filter(f => f.startsWith(IMGLY_PREFIX));
+    const files = all.filter(f => ASSET_PREFIXES.some(p => f.startsWith(p)));
     if (files.length === 0) {
-      logger.warn(`No files under ${IMGLY_PREFIX} in ${modelsDir}, skipping upload`);
+      logger.warn(
+        `No files under ${ASSET_PREFIXES.join(' / ')} in ${modelsDir}, skipping upload`
+      );
       return 0;
     }
 
-    // 4. 逐文件上传(S3 key 即相对路径,分块文件保持扁平 SHA256 命名)
+    // 4. 逐文件上传(S3 key 即相对路径,与前端 remoteHost/wasmPaths 对齐)
     for (const rel of files) {
       const localPath = path.join(modelsDir, ...rel.split('/'));
       const body = await readFile(localPath);
@@ -136,7 +144,7 @@ async function main(): Promise<number> {
           Body: body,
           ContentType: contentTypeFor(name),
           CacheControl: CACHE_CONTROL,
-        }),
+        })
       );
       logger.log(`Synced ${rel} (${body.length} bytes) to ${bucket}`);
     }

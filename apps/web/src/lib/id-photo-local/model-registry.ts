@@ -1,22 +1,39 @@
 /**
- * 证件照本地抠图模型清单(@imgly/background-removal,ISNet)。
+ * 证件照本地抠图模型清单(BRIA RMBG-1.4,经 @huggingface/transformers 运行)。
  *
- * 资产托管在自有 MinIO `models` 桶下 `imgly/<version>/dist/`:
- * `resources.json` 清单 + 若干按 SHA256 命名的分块(运行时分块 wasm + ISNet 模型)。
- * 库运行时从 publicPath 拉 resources.json 再拼分块,详见 docs/id-photo-models.md。
+ * 为什么不是 ISNet:实测在「黑帽子 + 暗背景」这类低对比样张上,ISNet 会把整顶帽子判成背景
+ * (帽子 alpha 中位数 217 且 44% 低于 102),换底色后帽子染色甚至消失;RMBG-1.4 在同一张图上
+ * 帽子 alpha p50=249、衣服 p05=255,半透明像素占比 16.13% → 0.63%,且 WebGPU 下推理
+ * 从 9~12s 降到 0.6s。详见 docs/id-photo-models.md。
+ *
+ * 许可提醒:RMBG-1.4 是 BRIA 自有许可(HF 上标注 license: other),商用需向 BRIA 申请授权。
+ * 同架构的 MIT 替代(BiRefNet)实测在浏览器 WebGPU 下 OOM(需一次分配 490MB),
+ * Apache-2.0 的 MODNet 会在衣服上开洞,故未采用。
+ *
+ * 资产自托管在 MinIO `models` 桶(见 modelsBaseUrl),目录结构与 HF 仓库一致:
+ *   models/rmbg/1.4/config.json
+ *   models/rmbg/1.4/preprocessor_config.json
+ *   models/rmbg/1.4/onnx/model_fp16.onnx   (均衡档)
+ *   models/rmbg/1.4/onnx/model.onnx        (高精度档 fp32)
  */
 export type ModelTier = 'balanced' | 'high';
 
-/** @imgly 库版本,必须与 apps/web/package.json 的依赖一致(资产按版本分目录托管)。 */
-export const IMGLY_VERSION = '1.7.0';
+/** 模型版本,资产按版本分目录托管;改版本需同步下载脚本与 MinIO。 */
+export const RMBG_VERSION = '1.4';
+
+/**
+ * transformers.js 的 model id。与 MinIO 上 `models/` 下的相对路径一致
+ * (配合 remotePathTemplate='{model}/' 拼出资产 URL)。
+ */
+export const RMBG_MODEL_ID = `rmbg/${RMBG_VERSION}`;
 
 export interface ModelMeta {
-  /** @imgly 模型资源键(对应 resources.json 里 /models/<name>)。 */
-  model: 'isnet_fp16' | 'isnet';
+  /** transformers.js dtype,决定取 onnx/model_fp16.onnx 还是 onnx/model.onnx。 */
+  dtype: 'fp16' | 'fp32';
   /**
    * 是否必须有 WebGPU 才启用。
-   * isnet(168MB)在 CPU wasm 上过慢且易 OOM,高精度档锁 WebGPU;
-   * isnet_fp16(84MB)允许 CPU 兜底。
+   * fp32(~176MB)在 CPU wasm 上过慢且易 OOM,高精度档锁 WebGPU;
+   * fp16(~88MB)允许 CPU 兜底。
    */
   requiresWebGpu: boolean;
   /** 资产体积(文档/估算用,运行时不依赖)。 */
@@ -24,37 +41,52 @@ export interface ModelMeta {
 }
 
 export const ID_PHOTO_MODELS: Record<ModelTier, ModelMeta> = {
-  // 均衡档:ISNet fp16,默认。WebGPU 优先,CPU 兜底。
+  // 均衡档:RMBG-1.4 fp16,默认。WebGPU 优先,CPU 兜底。
   balanced: {
-    model: 'isnet_fp16',
+    dtype: 'fp16',
     requiresWebGpu: false,
-    sizeBytes: 84 * 1024 * 1024,
+    sizeBytes: 88 * 1024 * 1024,
   },
-  // 高精度档:ISNet fp32,仅 WebGPU。
+  // 高精度档:RMBG-1.4 fp32,仅 WebGPU。
   high: {
-    model: 'isnet',
+    dtype: 'fp32',
     requiresWebGpu: true,
-    sizeBytes: 168 * 1024 * 1024,
+    sizeBytes: 176 * 1024 * 1024,
   },
 };
 
-/**
- * @imgly 资产在自有对象存储的 publicPath。
- * 库会从此处拉 resources.json + 分块 wasm/模型;桶 `models` 只读匿名下载。
- */
-export function imglyPublicPath(): string {
+function s3Base(): string {
   const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
   if (!base) throw new Error('NEXT_PUBLIC_S3_PUBLIC_URL is not configured');
-  return `${base}/models/imgly/${IMGLY_VERSION}/dist/`;
+  return base;
+}
+
+/**
+ * transformers.js 的 `env.remoteHost`:模型资产根目录(必须以 / 结尾)。
+ * 配合 `env.remotePathTemplate = '{model}/'` 与 RMBG_MODEL_ID 拼出:
+ * `${base}/models/rmbg/1.4/<file>`。桶 `models` 为匿名只读。
+ */
+export function modelsBaseUrl(): string {
+  return `${s3Base()}/models/`;
+}
+
+/**
+ * onnxruntime-web 的 wasm 运行时目录(必须以 / 结尾)。
+ *
+ * transformers.js 默认从 jsDelivr 取 ort wasm;离线镜像里没有公网,必须自托管,
+ * 故显式指向 MinIO(见 scripts/download-rmbg-assets.cjs 会一并下载 ort 运行时)。
+ */
+export function ortWasmPath(): string {
+  return `${s3Base()}/models/ort/`;
 }
 
 /**
  * 给定 WebGPU 是否可用,决定实际使用哪一档。
- * 无 WebGPU 时锁均衡档(isnet_fp16),避免 isnet 在 CPU 上卡死/OOM。
+ * 无 WebGPU 时锁均衡档(fp16),避免 fp32 在 CPU 上卡死/OOM。
  */
 export function tierFor(
   webgpuAvailable: boolean,
-  requested: ModelTier,
+  requested: ModelTier
 ): ModelTier {
   return webgpuAvailable ? requested : 'balanced';
 }

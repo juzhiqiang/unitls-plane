@@ -11,6 +11,7 @@ import {
   ImageCompressOptions,
   COMPRESS_FORMATS,
   COMPRESS_EXTENSIONS,
+  canPreserveExifLocally,
   type ImageCompressOptionsState,
   type CompressFormat,
   toCompressOptions,
@@ -128,6 +129,10 @@ export default function CompressPage() {
       ? 'server'
       : 'local';
   const needsServerLogin = mode === 'server' && !sessionLoading && !session;
+  // 只要有一个文件不满足 JPEG→JPEG,本地就有文件保不住 EXIF,据此提示。
+  const localExifApplies =
+    items.length === 0 ||
+    items.every(it => canPreserveExifLocally(it.file.type, options.outputType));
 
   const handleDrop = (files: File[]) => {
     if (files.length === 0) return;
@@ -294,6 +299,7 @@ export default function CompressPage() {
             disabled={controlsDisabled}
             locallyEncodable={locallyEncodable}
             localMode={mode === 'local'}
+            localExifApplies={localExifApplies}
           />
 
           <ImageTransformOptions

@@ -3,6 +3,7 @@ import {
   COMPRESS_EXTENSIONS,
   COMPRESS_FORMATS,
   DEFAULT_IMAGE_COMPRESS_OPTIONS,
+  canPreserveExifLocally,
   MAX_TARGET_SIZE_KB,
   MIN_TARGET_SIZE_KB,
   clampTargetSizeKB,
@@ -136,5 +137,27 @@ describe('AVIF output', () => {
       ).toBeDefined();
       expect(COMPRESS_EXTENSIONS[fmt]).toBeTruthy();
     }
+  });
+});
+
+describe('EXIF metadata', () => {
+  it('strips metadata by default', () => {
+    expect(DEFAULT_IMAGE_COMPRESS_OPTIONS.preserveExif).toBe(false);
+    expect(toCompressOptions(state()).preserveExif).toBe(false);
+    expect(toServerCompressConfig(state()).preserveExif).toBe(false);
+  });
+
+  it('carries the opt-in to both local and server modes', () => {
+    const value = state({ preserveExif: true });
+    expect(toCompressOptions(value).preserveExif).toBe(true);
+    expect(toServerCompressConfig(value).preserveExif).toBe(true);
+  });
+
+  it('only applies locally for jpeg to jpeg', () => {
+    // browser-image-compression 的门槛:源是 JPEG 且输出类型与源一致,否则静默不保留。
+    expect(canPreserveExifLocally('image/jpeg', 'image/jpeg')).toBe(true);
+    expect(canPreserveExifLocally('image/jpeg', 'image/webp')).toBe(false);
+    expect(canPreserveExifLocally('image/png', 'image/jpeg')).toBe(false);
+    expect(canPreserveExifLocally('image/heic', 'image/jpeg')).toBe(false);
   });
 });

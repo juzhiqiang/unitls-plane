@@ -262,3 +262,95 @@ describe('ImageService.compress target size', () => {
     expect((await sharp(output).metadata()).width).toBeLessThanOrEqual(320);
   });
 });
+
+/** 造一张带 EXIF(含方向标签)的 JPEG。 */
+async function makeExifImage(orientation = 1): Promise<Buffer> {
+  return sharp({
+    create: {
+      width: 120,
+      height: 80,
+      channels: 3,
+      background: { r: 10, g: 120, b: 200 },
+    },
+  })
+    .jpeg()
+    .withMetadata({
+      orientation,
+      exif: { IFD0: { Make: 'TestCam', Model: 'X100' } },
+    })
+    .toBuffer();
+}
+
+async function readExifText(buffer: Buffer): Promise<string> {
+  const { exif } = await sharp(buffer).metadata();
+  return exif ? exif.toString('latin1') : '';
+}
+
+describe('ImageService.compress metadata', () => {
+  it('strips EXIF by default', async () => {
+    const service = new ImageService();
+    const output = await service.compress(await makeExifImage(), {
+      format: 'jpeg',
+      quality: 80,
+    });
+
+    expect(await readExifText(output)).not.toContain('TestCam');
+  });
+
+  it('keeps EXIF when preserveExif is set', async () => {
+    const service = new ImageService();
+    const output = await service.compress(await makeExifImage(), {
+      format: 'jpeg',
+      quality: 80,
+      preserveExif: true,
+    });
+
+    expect(await readExifText(output)).toContain('TestCam');
+  });
+
+  it('does not rotate twice when preserving EXIF on an oriented image', async () => {
+    const service = new ImageService();
+    // orientation=6 表示需顺时针转 90 度才正。自动纠正会把 120x80 变成 80x120,
+    // 若保留元数据时把 orientation=6 一起带回去,看图软件会再转一次。
+    const output = await service.compress(await makeExifImage(6), {
+      format: 'jpeg',
+      quality: 80,
+      preserveExif: true,
+      transform: {
+        autoOrient: true,
+        rotate: 0,
+        flipHorizontal: false,
+        flipVertical: false,
+      },
+    });
+
+    const metadata = await sharp(output).metadata();
+    expect(metadata.width).toBe(80);
+    expect(metadata.height).toBe(120);
+    expect(metadata.orientation).toBe(1);
+  });
+
+  it('keeps EXIF through the target-size search as well', async () => {
+    const service = new ImageService();
+    const output = await service.compress(await makeExifImage(), {
+      format: 'jpeg',
+      quality: 92,
+      maxSizeKB: 20,
+      preserveExif: true,
+    });
+
+    expect(output.length).toBeLessThanOrEqual(20 * 1024);
+    expect(await readExifText(output)).toContain('TestCam');
+  });
+
+  it('strips EXIF in target-size mode by default', async () => {
+    const service = new ImageService();
+    const output = await service.compress(await makeExifImage(), {
+      format: 'jpeg',
+      quality: 92,
+      maxSizeKB: 20,
+    });
+
+    expect(await readExifText(output)).not.toContain('TestCam');
+  });
+});

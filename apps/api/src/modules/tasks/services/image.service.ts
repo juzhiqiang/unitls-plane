@@ -8,6 +8,11 @@ export interface CompressOptions {
   maxHeight?: number;
   /** 目标体积上限(KB)。传入时按该上限迭代降质/降分辨率,不传则只按 quality 编码。 */
   maxSizeKB?: number;
+  /**
+   * 保留 EXIF/ICC/XMP 等元数据。默认 false —— sharp 不调 withMetadata 就会全部丢弃,
+   * 这也是我们希望的默认行为(不把 GPS 定位和设备信息带进产出)。
+   */
+  preserveExif?: boolean;
   transform?: ImageTransformOptions;
 }
 
@@ -70,6 +75,20 @@ function applyImageTransform(
     transformed = transformed.flip();
   }
   return transformed;
+}
+
+/**
+ * 元数据策略。
+ *
+ * sharp 默认丢弃全部元数据,只有显式 withMetadata() 才保留。保留是安全的:
+ * 实测 rotate() 自动纠正方向后再 withMetadata(),sharp 会把旋转烘进像素并把
+ * orientation 重置为 1,不会因为带回原 orientation 标签而二次旋转。
+ */
+function applyMetadataPolicy(
+  pipeline: ReturnType<typeof sharp>,
+  preserveExif?: boolean
+): ReturnType<typeof sharp> {
+  return preserveExif ? pipeline.withMetadata() : pipeline;
 }
 
 function buildWatermarkSvg(
@@ -150,6 +169,8 @@ export class ImageService implements OnModuleInit {
       });
     }
 
+    pipeline = applyMetadataPolicy(pipeline, opts.preserveExif);
+
     switch (opts.format ?? 'jpeg') {
       case 'jpeg':
         return pipeline
@@ -215,15 +236,18 @@ export class ImageService implements OnModuleInit {
       width: number,
       colors?: number
     ): Promise<Buffer> => {
-      let pipeline = applyImageTransform(
-        sharp(input, { failOn: 'truncated' }),
-        opts.transform
-      ).resize({
-        width,
-        height: opts.maxHeight,
-        fit: 'inside',
-        withoutEnlargement: true,
-      });
+      let pipeline = applyMetadataPolicy(
+        applyImageTransform(
+          sharp(input, { failOn: 'truncated' }),
+          opts.transform
+        ).resize({
+          width,
+          height: opts.maxHeight,
+          fit: 'inside',
+          withoutEnlargement: true,
+        }),
+        opts.preserveExif
+      );
 
       switch (format) {
         case 'jpeg':

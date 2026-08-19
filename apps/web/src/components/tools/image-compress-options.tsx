@@ -52,6 +52,13 @@ export interface ImageCompressOptionsState {
   customWidth: number;
   customHeight: number;
   outputType: CompressFormat;
+  /**
+   * 保留 EXIF(拍摄参数、镜头、GPS 定位等)。
+   *
+   * 默认 false:重编码本来就会丢掉元数据,把这件事变成一个明确的、默认保护隐私的
+   * 选择,而不是一个用户无从知晓的副作用。
+   */
+  preserveExif: boolean;
 }
 
 export const DEFAULT_IMAGE_COMPRESS_OPTIONS: ImageCompressOptionsState = {
@@ -62,7 +69,22 @@ export const DEFAULT_IMAGE_COMPRESS_OPTIONS: ImageCompressOptionsState = {
   customWidth: 1920,
   customHeight: 1080,
   outputType: 'image/jpeg',
+  preserveExif: false,
 };
+
+/**
+ * 本地保留 EXIF 是否会真正生效。
+ *
+ * browser-image-compression 内部的门槛是「源文件是 JPEG 且输出类型与源一致」,
+ * 不满足时它既不报错也不保留 —— 又一个静默失效。UI 必须据此明确提示,不能让用户
+ * 以为勾上就有效。服务端走 sharp,没有这个限制。
+ */
+export function canPreserveExifLocally(
+  inputType: string,
+  outputType: CompressFormat
+): boolean {
+  return inputType === 'image/jpeg' && outputType === 'image/jpeg';
+}
 
 export function clampTargetSizeKB(value: number): number {
   if (!Number.isFinite(value))
@@ -108,6 +130,7 @@ export function toCompressOptions(
     ...(width !== undefined && { maxWidth: width }),
     ...(height !== undefined && { maxHeight: height }),
     outputType: state.outputType,
+    preserveExif: state.preserveExif,
   };
 }
 
@@ -128,6 +151,7 @@ export function toServerCompressConfig(
     }),
     ...(width !== undefined && { maxWidth: width }),
     ...(height !== undefined && { maxHeight: height }),
+    preserveExif: state.preserveExif,
   };
 }
 
@@ -139,6 +163,8 @@ export interface ImageCompressOptionsProps {
   locallyEncodable?: Set<string>;
   /** 当前是否处于本地处理模式。 */
   localMode?: boolean;
+  /** 本地模式下,当前这批文件保留 EXIF 是否会真正生效(见 canPreserveExifLocally)。 */
+  localExifApplies?: boolean;
 }
 
 const FORMAT_LABELS: Record<CompressFormat, string> = {
@@ -186,6 +212,7 @@ export function ImageCompressOptions({
   disabled,
   locallyEncodable,
   localMode = false,
+  localExifApplies = true,
 }: ImageCompressOptionsProps) {
   const t = useTranslations('ImageCompress');
   const isCustom = value.sizePreset === 'custom';
@@ -195,6 +222,9 @@ export function ImageCompressOptions({
     localMode &&
     locallyEncodable !== undefined &&
     !locallyEncodable.has(value.outputType);
+  // 勾了保留但本地这条链路根本不会保留,必须说破,否则用户会以为元数据还在。
+  const exifWontApplyLocally =
+    value.preserveExif && localMode && !localExifApplies;
 
   return (
     <div className="space-y-6">
@@ -427,6 +457,33 @@ export function ImageCompressOptions({
             {t('formatNeedsServer', {
               format: FORMAT_LABELS[value.outputType],
             })}
+          </p>
+        )}
+      </div>
+
+      {/* Metadata */}
+      <div className="space-y-2">
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+          {t('metadata')}
+        </div>
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.preserveExif}
+            disabled={disabled}
+            onChange={e =>
+              onChange({ ...value, preserveExif: e.target.checked })
+            }
+            className="mt-0.5 accent-accent"
+          />
+          <span className="text-xs font-mono">{t('preserveExif')}</span>
+        </label>
+        <p className="text-[10px] font-mono text-muted-foreground">
+          {value.preserveExif ? t('preserveExifOn') : t('preserveExifOff')}
+        </p>
+        {exifWontApplyLocally && (
+          <p className="text-[10px] font-mono text-muted-foreground">
+            {t('preserveExifLocalLimit')}
           </p>
         )}
       </div>

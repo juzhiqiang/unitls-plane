@@ -53,16 +53,30 @@ models/rmbg/1.4/config.json
 models/rmbg/1.4/preprocessor_config.json
 models/rmbg/1.4/onnx/model_fp16.onnx
 models/rmbg/1.4/onnx/model.onnx
-models/ort/ort-wasm-simd-threaded.wasm
-models/ort/ort-wasm-simd-threaded.mjs
-models/ort/ort-wasm-simd-threaded.jsep.wasm     # WebGPU 用
-models/ort/ort-wasm-simd-threaded.jsep.mjs
+models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.wasm
+models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.mjs
+models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.jsep.wasm     # WebGPU 用
+models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.jsep.mjs
 ```
 
 共 8 个文件（约 288MB）。相比上一版 @imgly 的 76 个 SHA256 分块，结构大幅简化。
 
 **ort
 wasm 必须自托管**：transformers.js 默认从 jsDelivr 取 ort 运行时，离线镜像内没有公网会直接失败。
+
+### ort 路径为什么带版本
+
+ort 的 JS glue 与 `.wasm` 是**配对**的，版本错配会让 wasm 缺少 JS 期望的导出。这个坑已经踩过两次：
+
+- `webgpuInit is not a function`（ISNet 时期，ort 1.21 与 1.27 之争）
+- `_OrtGetInputOutputMetadata is not a function`（本次，误从仓库根解析到残留的 1.21.0）
+
+而资产按 `immutable` 长缓存发布，**路径不带版本的话，升级后浏览器会继续命中旧 wasm**。所以
+`ortWasmPath()` 拼上了 `ORT_VERSION`，靠路径变化破缓存。
+
+`scripts/download-rmbg-assets.cjs` 会校验 `model-registry.ts` 的 `ORT_VERSION`
+与实际解析到的 ort 包版本是否一致，不一致直接失败并提示改哪里 ——宁可构建期炸，也不要运行期错配。升级
+`@huggingface/transformers` 后若 ort 版本变了，按提示更新常量即可。
 
 ## 路径映射
 

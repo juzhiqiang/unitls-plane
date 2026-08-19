@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import {
   ID_PHOTO_MODELS,
+  ORT_VERSION,
   RMBG_MODEL_ID,
   RMBG_VERSION,
   modelsBaseUrl,
@@ -36,7 +37,12 @@ describe('model-registry', () => {
 
   it('builds the ort wasm path (自托管,避免离线镜像回落到 jsDelivr)', () => {
     process.env.NEXT_PUBLIC_S3_PUBLIC_URL = 'http://localhost:9000';
-    expect(ortWasmPath()).toBe('http://localhost:9000/models/ort/');
+    // 路径必须带 ort 版本:资产是 immutable 长缓存,升级 ort 时靠路径变化破缓存,
+    // 否则浏览器会继续用旧 wasm,与新 JS glue 错配(实测报 _OrtGetInputOutputMetadata)。
+    expect(ortWasmPath()).toBe(
+      `http://localhost:9000/models/ort/${ORT_VERSION}/`
+    );
+    expect(ortWasmPath()).toContain(ORT_VERSION);
   });
 
   it('throws when NEXT_PUBLIC_S3_PUBLIC_URL is unset', () => {

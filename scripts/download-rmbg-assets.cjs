@@ -31,7 +31,18 @@ const HF = `https://huggingface.co/${REPO}/resolve/main/`;
 const ROOT = path.join(__dirname, '..');
 // 落到 docker/models/,与 Dockerfile `COPY docker/models/ ./models/id-photo/` 对齐
 const MODEL_DIR = path.join(ROOT, 'docker', 'models', 'rmbg', VERSION);
-const ORT_DIR = path.join(ROOT, 'docker', 'models', 'ort');
+// ort 目录带版本(见 model-registry.ORT_VERSION 注释):资产按 immutable 长缓存发布,
+// 不带版本的话升级后浏览器会继续命中旧 wasm。
+const ORT_ROOT = path.join(ROOT, 'docker', 'models', 'ort');
+const REGISTRY = path.join(
+  ROOT,
+  'apps',
+  'web',
+  'src',
+  'lib',
+  'id-photo-local',
+  'model-registry.ts'
+);
 
 // 相对 HF 仓库根的文件路径(保持同名落盘,transformers.js 按同样的相对路径取)
 const MODEL_FILES = [
@@ -88,19 +99,46 @@ async function download(url, dest) {
   console.log(`${(buf.length / 1024 / 1024).toFixed(1)}MB`);
 }
 
+/** 读取解析到的 ort 包版本(用作资产路径前缀,并与前端常量对账)。 */
+function resolvedOrtVersion(distDir) {
+  // distDir 形如 .../onnxruntime-web/dist
+  const pkg = path.join(path.dirname(distDir), 'package.json');
+  return JSON.parse(fs.readFileSync(pkg, 'utf8')).version;
+}
+
+/** 从 model-registry.ts 里取 ORT_VERSION 常量(单一事实来源在前端)。 */
+function registryOrtVersion() {
+  const src = fs.readFileSync(REGISTRY, 'utf8');
+  const m = /export const ORT_VERSION = '([^']+)'/.exec(src);
+  if (!m) throw new Error(`ORT_VERSION not found in ${REGISTRY}`);
+  return m[1];
+}
+
 function copyOrt() {
   const dist = ortDistDir();
-  fs.mkdirSync(ORT_DIR, { recursive: true });
+  const actual = resolvedOrtVersion(dist);
+  const expected = registryOrtVersion();
+  if (actual !== expected) {
+    // 宁可构建期炸,也不要运行期错配:ort 的 JS glue 与 wasm 是配对的,
+    // 版本不一致会缺导出(webgpuInit / _OrtGetInputOutputMetadata),且资产是长缓存的。
+    throw new Error(
+      `ort 版本不一致:解析到 ${actual},但 model-registry.ts 的 ORT_VERSION 是 ${expected}。\n` +
+        `请把 ORT_VERSION 改为 ${actual}(路径带版本,改动会自动破掉旧资产的 immutable 缓存)。`
+    );
+  }
+  const ortDir = path.join(ORT_ROOT, actual);
+  fs.mkdirSync(ortDir, { recursive: true });
   for (const f of ORT_FILES) {
     const src = path.join(dist, f);
     if (!fs.existsSync(src)) {
       throw new Error(`ort runtime file missing: ${src}`);
     }
-    const dest = path.join(ORT_DIR, f);
+    const dest = path.join(ortDir, f);
     fs.copyFileSync(src, dest);
     const mb = (fs.statSync(dest).size / 1024 / 1024).toFixed(1);
     console.log(`copy   ${path.relative(ROOT, dest)}  ${mb}MB`);
   }
+  console.log(`ort 版本 ${actual} 与 model-registry.ORT_VERSION 一致`);
 }
 
 async function main() {

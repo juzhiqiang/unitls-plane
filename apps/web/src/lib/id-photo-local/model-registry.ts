@@ -55,6 +55,19 @@ export const ID_PHOTO_MODELS: Record<ModelTier, ModelMeta> = {
   },
 };
 
+/**
+ * onnxruntime-web 版本,必须与 @huggingface/transformers 实际依赖的那份一致。
+ *
+ * 用作 wasm 资产的路径前缀:ort 的 JS glue 与 .wasm 是配对的,版本错配会让
+ * wasm 缺少 JS 期望的导出(实测踩过两次:`webgpuInit is not a function`、
+ * `_OrtGetInputOutputMetadata is not a function`)。而资产是按 immutable 长缓存发布的,
+ * 若路径不带版本,升级后浏览器仍会命中旧 wasm —— 必须靠路径变化来破缓存。
+ *
+ * scripts/download-rmbg-assets.cjs 会校验本常量与解析到的 ort 版本是否一致,
+ * 不一致直接失败并提示改这里(宁可构建期炸,也不要运行期错配)。
+ */
+export const ORT_VERSION = '1.22.0-dev.20250409-89f8206ba4';
+
 function s3Base(): string {
   const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
   if (!base) throw new Error('NEXT_PUBLIC_S3_PUBLIC_URL is not configured');
@@ -74,10 +87,11 @@ export function modelsBaseUrl(): string {
  * onnxruntime-web 的 wasm 运行时目录(必须以 / 结尾)。
  *
  * transformers.js 默认从 jsDelivr 取 ort wasm;离线镜像里没有公网,必须自托管,
- * 故显式指向 MinIO(见 scripts/download-rmbg-assets.cjs 会一并下载 ort 运行时)。
+ * 故显式指向 MinIO(见 scripts/download-rmbg-assets.cjs 会一并复制 ort 运行时)。
+ * 路径带 ORT_VERSION:见该常量注释,用于在升级时破掉 immutable 缓存。
  */
 export function ortWasmPath(): string {
-  return `${s3Base()}/models/ort/`;
+  return `${s3Base()}/models/ort/${ORT_VERSION}/`;
 }
 
 /**

@@ -59,6 +59,8 @@ aws --endpoint-url "$S3_ENDPOINT" s3 sync "$MODEL_DIR" "s3://$BUCKET/rmbg/$VERSI
   --cache-control "public, max-age=31536000, immutable"
 
 echo "==> uploading $ORT_DIR → s3://$BUCKET/ort/"
+# ort 目录下是 <版本>/ 子目录(见 model-registry.ORT_VERSION):资产按 immutable 长缓存发布,
+# 路径带版本才能在升级 transformers/ort 时破掉浏览器里的旧 wasm。
 aws --endpoint-url "$S3_ENDPOINT" s3 sync "$ORT_DIR" "s3://$BUCKET/ort/" \
   --region "$REGION" --no-progress \
   --cache-control "public, max-age=31536000, immutable"
@@ -66,4 +68,4 @@ aws --endpoint-url "$S3_ENDPOINT" s3 sync "$ORT_DIR" "s3://$BUCKET/ort/" \
 echo
 echo "==> 证件照 RMBG-1.4 资产已就绪。"
 echo "    模型:     \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/rmbg/$VERSION/"
-echo "    ort wasm: \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/"
+echo "    ort wasm: \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/<ORT_VERSION>/"

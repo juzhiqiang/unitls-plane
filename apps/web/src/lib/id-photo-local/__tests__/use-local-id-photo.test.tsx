@@ -19,6 +19,7 @@ vi.mock('@huggingface/transformers', () => ({
 }));
 
 import { useLocalIdPhoto } from '../use-local-id-photo';
+import { ORT_VERSION } from '../model-registry';
 
 // 合成阶段用的 cutout bitmap(createImageBitmap 桩产出)
 let lastCutout: {
@@ -156,7 +157,7 @@ describe('useLocalIdPhoto', () => {
     expect(envStub.remoteHost).toBe('http://localhost:9000/models/');
     expect(envStub.remotePathTemplate).toBe('{model}/');
     expect(envStub.backends.onnx.wasm.wasmPaths).toBe(
-      'http://localhost:9000/models/ort/'
+      `http://localhost:9000/models/ort/${ORT_VERSION}/`
     );
   });
 

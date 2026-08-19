@@ -30,7 +30,7 @@ export function cropToPresetBounds(
   srcW: number,
   srcH: number,
   dstW: number,
-  dstH: number
+  dstH: number,
 ): CropBounds {
   const targetRatio = dstW / dstH;
   const srcRatio = srcW / srcH;
@@ -46,49 +46,10 @@ export function cropToPresetBounds(
 }
 
 /**
- * alpha 收敛曲线的默认阈值(归一化 0..1)。
- *
- * 取值依据(实测,黑帽子 + 暗背景样张):ISNet 在低对比场景会输出一大片"不确定"的
- * 中间 alpha —— 半透明像素占比达 16.13%,帽子实体部分 alpha 中位数只有 232 而非 255。
- * 这会同时造成两个可见缺陷:
- *   1. 底色透过帽子实体(9% 的红底叠在黑帽子上)→ 帽子整体染色;
- *   2. 边缘软过渡带保留着原图暗背景的颜色([124,104,90])→ 脖子/肩部一圈脏红雾。
- * 用 smoothstep(0.40, 0.75) 把中间 alpha 推向两端后,半透明占比降到 1.13%,
- * 两个缺陷都消失,且仍保留一条窄过渡带做抗锯齿(直接二值化会出锯齿)。
- */
-const ALPHA_LO = 0.4;
-const ALPHA_HI = 0.75;
-
-/**
- * 收敛 alpha:把 [lo,hi] 之外的中间值推向全透明/全不透明,窄带内用 smoothstep 平滑。
- *
- * 只改 alpha 通道,不动 RGB —— 边缘的颜色污染靠"把该像素判为全透明"消除,
- * 而不是去猜真实前景色(真正的 decontaminate 需要 trimap,成本不匹配)。
- */
-export function solidifyAlpha(
-  data: Uint8ClampedArray,
-  lo = ALPHA_LO,
-  hi = ALPHA_HI
-): void {
-  const loByte = lo * 255;
-  const span = (hi - lo) * 255;
-  for (let i = 3; i < data.length; i += 4) {
-    let t = (data[i]! - loByte) / span;
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    // smoothstep:3t²-2t³,两端一阶导为 0,过渡不突兀
-    data[i] = Math.round(t * t * (3 - 2 * t) * 255);
-  }
-}
-
-/**
  * 把透明抠图 cutout 叠到纯色背景上,按 preset 宽高比 contain 居中裁剪并缩放到目标像素。
  *
  * @imgly `removeBackground` 已产出含 alpha matte 的透明 RGBA 抠图,无需再用 mask 烤前景;
- * 但其 alpha 在低对比场景偏软(见 solidifyAlpha 注释),叠纯色底前需要先收敛,
- * 否则底色会透过主体、且边缘会带上原图背景色。
- *
- * 收敛在原始分辨率上做,再缩放到 preset —— 缩放本身会对 alpha 做双线性平均,
- * 顺带得到干净的抗锯齿边缘。
+ * 此处只做"叠底 + 按证件照比例居中裁剪 + 缩放到 preset 像素"。
  *
  * @param cutout removeBackground 产出的透明 ImageBitmap(自带 alpha)
  * @param backgroundColor #rrggbb
@@ -99,20 +60,11 @@ export async function compositeIdPhoto(
   backgroundColor: string,
   presetW: number,
   presetH: number,
-  outputType: 'image/jpeg' | 'image/png'
+  outputType: 'image/jpeg' | 'image/png',
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
   const srcW = cutout.width;
   const srcH = cutout.height;
-
-  // 先在原始分辨率上收敛 alpha,再参与裁剪缩放(缩放的双线性平均顺带做抗锯齿)。
-  const refined = new OffscreenCanvas(srcW, srcH);
-  const rctx = refined.getContext('2d')!;
-  rctx.drawImage(cutout, 0, 0);
-  const cut = rctx.getImageData(0, 0, srcW, srcH);
-  solidifyAlpha(cut.data);
-  rctx.putImageData(cut, 0, 0);
-
   // 裁剪区域(原图坐标,按 preset 宽高比 contain 居中)+ 缩放到 preset 像素
   const crop = cropToPresetBounds(srcW, srcH, presetW, presetH);
   const out = new OffscreenCanvas(presetW, presetH);
@@ -122,7 +74,7 @@ export async function compositeIdPhoto(
   octx.fillRect(0, 0, presetW, presetH);
   // 透明抠图叠上(source-over:前景 × alpha + 背景 × (1-alpha))
   octx.drawImage(
-    refined,
+    cutout,
     crop.x,
     crop.y,
     crop.width,
@@ -130,7 +82,7 @@ export async function compositeIdPhoto(
     0,
     0,
     presetW,
-    presetH
+    presetH,
   );
 
   const blob = await out.convertToBlob({

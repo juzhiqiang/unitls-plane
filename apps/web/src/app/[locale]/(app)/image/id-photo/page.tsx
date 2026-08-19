@@ -12,6 +12,7 @@ import {
   type IdPhotoOptionsState,
 } from '@/components/tools/id-photo-options';
 import { IdPhotoCropField } from '@/components/tools/id-photo-crop';
+import { IdPhotoSheetPanel } from '@/components/tools/id-photo-sheet-panel';
 import { idPhotoPresetSpecs } from '@utils-plane/validators';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ResultPanel } from '@/components/tools/result-panel';
@@ -160,6 +161,9 @@ export default function IdPhotoPage() {
         type: options.outputType,
       })
     : null;
+  // 两条路产出的成品照,拼版面板只关心「有没有」,不关心来自哪条
+  const finishedPhoto =
+    processingMode === 'local' ? local.resultBlob : resultFile;
 
   return (
     <ToolPageShell
@@ -304,6 +308,17 @@ export default function IdPhotoPage() {
             },
           ]}
           action={<DownloadButton file={resultFile} />}
+        />
+      )}
+
+      {/* 拼版对两条处理路是同一件事:拿到成品照后纯本地合成,不区分来源 */}
+      {finishedPhoto && (
+        <IdPhotoSheetPanel
+          photo={finishedPhoto}
+          photoWidthPx={idPhotoPresetSpecs[options.preset].widthPx}
+          photoHeightPx={idPhotoPresetSpecs[options.preset].heightPx}
+          outputType={options.outputType}
+          t={t}
         />
       )}
     </ToolPageShell>

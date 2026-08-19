@@ -680,6 +680,21 @@
     "failed": "Generation failed",
     "resultTitle": "ID photo generated",
     "resultSize": "Size",
+    "sheetTitle": "Print sheet",
+    "sheetDescription": "Tile the photo across one sheet with cut guides — print once, cut out several.",
+    "sheetSize": "Paper size",
+    "sheetCapacity": "fits {count}",
+    "sheetTooSmall": "too small for this preset",
+    "sheetCutMarks": "Show cut guides",
+    "sheetStart": "Build print sheet",
+    "sheetRendering": "Building sheet",
+    "sheetPreviewAlt": "Print sheet preview",
+    "sheets": {
+      "five_inch": "3.5×5 in",
+      "six_inch": "4×6 in",
+      "seven_inch": "5×7 in",
+      "a4": "A4"
+    },
     "previewAlt": "ID photo preview",
     "processingModeLabel": "Processing",
     "processingModes": {

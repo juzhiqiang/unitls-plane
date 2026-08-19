@@ -680,6 +680,21 @@
     "failed": "生成失败",
     "resultTitle": "证件照已生成",
     "resultSize": "大小",
+    "sheetTitle": "排版打印",
+    "sheetDescription": "把证件照拼满一张相纸，带裁切线，冲印一张即可裁出多张。",
+    "sheetSize": "相纸规格",
+    "sheetCapacity": "可排 {count} 张",
+    "sheetTooSmall": "放不下当前规格",
+    "sheetCutMarks": "显示裁切线",
+    "sheetStart": "生成排版图",
+    "sheetRendering": "正在排版",
+    "sheetPreviewAlt": "排版预览",
+    "sheets": {
+      "five_inch": "5 寸",
+      "six_inch": "6 寸",
+      "seven_inch": "7 寸",
+      "a4": "A4"
+    },
     "previewAlt": "证件照预览",
     "processingModeLabel": "处理模式",
     "processingModes": {

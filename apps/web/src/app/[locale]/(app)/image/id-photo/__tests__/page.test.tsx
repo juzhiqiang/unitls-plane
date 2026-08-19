@@ -155,6 +155,12 @@ describe('IdPhotoPage', () => {
     expect(screen.getByAltText('Crop preview')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
 
+    // 有成品照后才出现拼版面板,并按预设算出该相纸能排几张
+    expect(screen.getByText('Print sheet')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Build print sheet' })
+    ).toBeEnabled();
+
     vi.unstubAllGlobals();
   });
 
@@ -171,6 +177,18 @@ describe('IdPhotoPage', () => {
     expect(startButton).toBeInTheDocument();
     // 本地模式不显示 segmentation mode(标准/AI 精修)
     expect(screen.queryByText('Cutout mode')).not.toBeInTheDocument();
+  });
+
+  it('does not offer the print sheet before a photo exists', async () => {
+    const { container } = renderPage();
+    const input = container.querySelector(
+      'input[type=\"file\"]'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [makeFile()] } });
+    await screen.findByRole('button', { name: 'Generate ID photo' });
+
+    // 拼版依赖成品照,处理完成前不应出现
+    expect(screen.queryByText('Print sheet')).not.toBeInTheDocument();
   });
 
   it('switching to server mode shows segmentation mode options', async () => {

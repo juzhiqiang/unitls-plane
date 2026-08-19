@@ -12,6 +12,8 @@
  *    在部分浏览器上得到躺倒的照片。
  */
 
+import { decodeHeicToBitmap, isHeicBlob } from './image-heic';
+
 export interface DecodedImage {
   /** 可直接喂给 ctx.drawImage 的源。 */
   source: CanvasImageSource;
@@ -43,6 +45,15 @@ function decodeViaElement(blob: Blob): Promise<DecodedImage> {
   });
 }
 
+function wrapBitmap(bitmap: ImageBitmap): DecodedImage {
+  return {
+    source: bitmap,
+    width: bitmap.width,
+    height: bitmap.height,
+    close: () => bitmap.close?.(),
+  };
+}
+
 async function decodeViaBitmap(blob: Blob): Promise<DecodedImage> {
   let bitmap: ImageBitmap;
   try {
@@ -52,32 +63,35 @@ async function decodeViaBitmap(blob: Blob): Promise<DecodedImage> {
     bitmap = await createImageBitmap(blob);
   }
 
-  return {
-    source: bitmap,
-    width: bitmap.width,
-    height: bitmap.height,
-    close: () => bitmap.close?.(),
-  };
+  return wrapBitmap(bitmap);
 }
 
 /**
- * 解码一张图片。优先 createImageBitmap,不可用时退回 <img>。
+ * 解码一张图片。
+ *
+ * 顺序有意为之:
+ * 1. 先试 createImageBitmap —— 覆盖绝大多数图片,Safari 下连 HEIC 也一并解掉;
+ * 2. 失败后才判断是不是 HEIC,是才懒加载 3MB 的 WASM 解码器。这样非 HEIC 用户
+ *    完全不用为 HEIC 支持付出任何代价,连读魔数的那几字节都省了;
+ * 3. 再退回 <img>,两种解码器能覆盖的损坏文件不完全重合,兜一层能救回一部分。
  *
  * 解码失败一律抛 `Failed to load image`,与替换前的行为保持一致 —— 调用方和
  * 既有文案都依赖这个信息。
  */
 export async function decodeImage(blob: Blob): Promise<DecodedImage> {
-  if (typeof createImageBitmap !== 'function') {
-    return decodeViaElement(blob);
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await decodeViaBitmap(blob);
+    } catch {
+      // 落到下面的 HEIC / <img> 分支
+    }
   }
 
-  try {
-    return await decodeViaBitmap(blob);
-  } catch {
-    // createImageBitmap 对某些格式/损坏文件会抛错,<img> 反而能解(反之亦然),
-    // 兜一层能救回一部分文件。
-    return decodeViaElement(blob);
+  if (await isHeicBlob(blob)) {
+    return wrapBitmap(await decodeHeicToBitmap(blob));
   }
+
+  return decodeViaElement(blob);
 }
 
 /**

@@ -247,7 +247,17 @@ export default function ImageStitchPage() {
       stage={stage}
     >
       <FileDropzone
-        accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
+        accept={{
+          'image/*': [
+            '.jpg',
+            '.jpeg',
+            '.png',
+            '.webp',
+            '.avif',
+            '.heic',
+            '.heif',
+          ],
+        }}
         maxSize={entitlements.maxFileSize}
         multiple
         onDrop={handleDrop}

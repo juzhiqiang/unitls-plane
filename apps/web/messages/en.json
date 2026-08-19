@@ -472,7 +472,7 @@
   "ImageCompress": {
     "title": "Compress images",
     "description": "Upload in batches — multiple files are bundled into a ZIP",
-    "dropzoneHint": "JPG, PNG, WebP, or AVIF",
+    "dropzoneHint": "JPG, PNG, WebP, AVIF, or HEIC",
     "fileTooLargeForPlan": "A file exceeds your account's {size} per-file limit. Remove it and try again.",
     "mode": "Mode",
     "modes": {
@@ -510,7 +510,7 @@
   "ImageConvert": {
     "title": "Convert format",
     "description": "Convert between JPEG, PNG, WebP, and AVIF",
-    "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB",
+    "dropzoneHint": "JPG, PNG, WebP, AVIF, or HEIC — up to 50 MB",
     "selected": "Selected: {filename} ({size})",
     "targetFormat": "Target format",
     "formatNeedsServer": "This browser cannot encode {format} locally — switch to server processing.",

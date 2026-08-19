@@ -123,3 +123,55 @@ function stubImageElement(options: {
   }
   vi.stubGlobal('Image', FakeImage);
 }
+
+describe('decodeImage HEIC', () => {
+  function heicBlob(): Blob {
+    const bytes = new Uint8Array(12);
+    bytes.set([0, 0, 0, 24], 0);
+    bytes.set(
+      [...'ftyp'].map(c => c.charCodeAt(0)),
+      4
+    );
+    bytes.set(
+      [...'heic'].map(c => c.charCodeAt(0)),
+      8
+    );
+    return new Blob([bytes]);
+  }
+
+  it('uses the native decoder when it can handle HEIC (Safari)', async () => {
+    // Safari 原生就能解 HEIC,不该让这些用户白下 3MB 的 WASM。
+    const create = vi.fn(async () => ({
+      width: 4032,
+      height: 3024,
+      close: vi.fn(),
+    }));
+    vi.stubGlobal('createImageBitmap', create);
+
+    await expect(decodeImage(heicBlob())).resolves.toMatchObject({
+      width: 4032,
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the wasm decoder when the browser cannot decode HEIC', async () => {
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockRejectedValue(new Error('unsupported'))
+    );
+    const close = vi.fn();
+    vi.doMock('heic-to/next', () => ({
+      heicTo: vi.fn(async () => ({ width: 100, height: 200, close })),
+    }));
+
+    const { decodeImage: fresh } = await import('../image-bitmap');
+    const image = await fresh(heicBlob());
+
+    expect(image.width).toBe(100);
+    expect(image.height).toBe(200);
+    image.close();
+    expect(close).toHaveBeenCalled();
+
+    vi.doUnmock('heic-to/next');
+  });
+});

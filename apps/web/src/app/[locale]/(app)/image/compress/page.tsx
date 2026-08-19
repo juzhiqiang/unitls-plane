@@ -274,7 +274,17 @@ export default function CompressPage() {
       stage={stage}
     >
       <FileDropzone
-        accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
+        accept={{
+          'image/*': [
+            '.jpg',
+            '.jpeg',
+            '.png',
+            '.webp',
+            '.avif',
+            '.heic',
+            '.heif',
+          ],
+        }}
         maxSize={maxFileSize}
         multiple
         onDrop={handleDrop}

@@ -472,7 +472,7 @@
   "ImageCompress": {
     "title": "图片压缩",
     "description": "支持批量上传，多文件以 ZIP 打包下载",
-    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF / HEIC",
     "fileTooLargeForPlan": "文件超过当前账号的 {size} 单文件额度，请移除后重试。",
     "mode": "压缩模式",
     "modes": {
@@ -510,7 +510,7 @@
   "ImageConvert": {
     "title": "格式转换",
     "description": "在 JPEG / PNG / WebP / AVIF 之间相互转换",
-    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，最大 50MB",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF / HEIC，最大 50MB",
     "selected": "已选择: {filename} ({size})",
     "targetFormat": "目标格式",
     "formatNeedsServer": "当前浏览器不能本地编码 {format}，请切换到服务端处理。",

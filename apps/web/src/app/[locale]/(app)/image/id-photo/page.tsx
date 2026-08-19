@@ -176,7 +176,17 @@ export default function IdPhotoPage() {
       stage={stage}
     >
       <FileDropzone
-        accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'] }}
+        accept={{
+          'image/*': [
+            '.jpg',
+            '.jpeg',
+            '.png',
+            '.webp',
+            '.avif',
+            '.heic',
+            '.heif',
+          ],
+        }}
         maxSize={50 * 1024 * 1024}
         onDrop={handleDrop}
         disabled={isProcessing}

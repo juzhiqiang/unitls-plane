@@ -39,41 +39,10 @@ const withPwa = withPWA({
 });
 
 const analyzedConfig = withBundleAnalyzer(nextConfig);
-const pwaConfig = withPwa(withNextIntl(analyzedConfig));
-
-function isPwaBrowserEntry(entry) {
-  return (
-    typeof entry === 'string' &&
-    entry.includes('@ducanh2912') &&
-    entry.includes('next-pwa') &&
-    entry.includes('sw-entry')
-  );
-}
-
-function stripPwaBrowserEntryFromServer(config) {
-  if (typeof config.entry !== 'function') {
-    return config;
-  }
-
-  const originalEntry = config.entry;
-  config.entry = async () => {
-    const entries = await originalEntry();
-
-    for (const key of ['main.js', 'main-app']) {
-      const entry = entries[key];
-
-      if (Array.isArray(entry)) {
-        entries[key] = entry.filter(item => !isPwaBrowserEntry(item));
-      } else if (isPwaBrowserEntry(entry)) {
-        delete entries[key];
-      }
-    }
-
-    return entries;
-  };
-
-  return config;
-}
+// 拆成两层:intlConfig 不含 PWA,pwaConfig 含。webpack 钩子按 server/client 取用 ——
+// next-intl 两侧都要,next-pwa 只该管 client(见 webpack() 里的说明)。
+const intlConfig = withNextIntl(analyzedConfig);
+const pwaConfig = withPwa(intlConfig);
 
 export default {
   ...pwaConfig,
@@ -82,7 +51,16 @@ export default {
     return [...(inheritedHeaders ?? []), ...staticAssetHeaders];
   },
   webpack(config, options) {
-    const resolvedConfig = pwaConfig.webpack?.(config, options) ?? config;
+    // next-pwa 只产出 client 侧的 Service Worker,对 server 编译没有意义,却会污染
+    // server 的 chunk 图:证件照页与 /_not-found 的 prerender 报
+    // "Cannot read properties of undefined (reading 'call')",build-manifest 里也
+    // 查不到 /_error —— 实测 DISABLE_PWA=true 即可通过。
+    //
+    // 不能整体跳过 pwaConfig.webpack:它是 next-intl + PWA + analyzer 的复合体,
+    // 跳过会把 next-intl 的 server 配置一起丢掉,导致全站 prerender 失败。
+    // 故按 server/client 取用不同层级的配置,只把 PWA 挡在 server 之外。
+    const source = options.isServer ? intlConfig : pwaConfig;
+    const resolvedConfig = source.webpack?.(config, options) ?? config;
 
     // @huggingface/transformers 只在浏览器用(useLocalIdPhoto 里的 `await import(...)`,
     // SSR 期间不会执行)。server bundle 里 stub 成空模块:它会把 onnxruntime-node 拖进
@@ -146,10 +124,6 @@ export default {
           rule.oneOf.unshift(nativeEsmOrtRule);
         }
       }
-    }
-
-    if (options.isServer) {
-      return stripPwaBrowserEntryFromServer(resolvedConfig);
     }
 
     return resolvedConfig;

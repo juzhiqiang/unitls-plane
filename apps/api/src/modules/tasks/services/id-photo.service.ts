@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import {
   idPhotoPresetSpecs,
   idPhotoTaskConfigSchema,
+  resolveIdPhotoCropBox,
   type IdPhotoTaskConfig,
 } from '@utils-plane/validators';
 import {
@@ -456,8 +457,20 @@ export class IdPhotoService {
       );
     }
 
-    const base = await sharp(input)
-      .rotate()
+    // base 与 mask 必须用同一个裁剪框,否则前景与 alpha 会错位。crop 归一化到各自
+    // 尺寸,mask 已被 segment() resize 回输入尺寸,两者一致。
+    const oriented = await sharp(input).rotate().toBuffer();
+    const orientedMeta = await sharp(oriented).metadata();
+    const baseBox = resolveIdPhotoCropBox(
+      orientedMeta.width ?? metadata.width,
+      orientedMeta.height ?? metadata.height,
+      preset.widthPx,
+      preset.heightPx,
+      config.crop
+    );
+
+    const base = await sharp(oriented)
+      .extract(baseBox)
       .resize({
         width: preset.widthPx,
         height: preset.heightPx,
@@ -466,7 +479,17 @@ export class IdPhotoService {
       })
       .toBuffer();
 
+    const maskMeta = await sharp(mask.mask).metadata();
+    const maskBox = resolveIdPhotoCropBox(
+      maskMeta.width ?? metadata.width,
+      maskMeta.height ?? metadata.height,
+      preset.widthPx,
+      preset.heightPx,
+      config.crop
+    );
+
     const resizedAlpha = await sharp(mask.mask)
+      .extract(maskBox)
       .resize(preset.widthPx, preset.heightPx, { fit: 'cover' })
       .greyscale()
       .raw()

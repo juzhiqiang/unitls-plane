@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   idPhotoPresetSpecs,
+  type IdPhotoCrop,
   type IdPhotoOutputType,
   type IdPhotoPreset,
 } from '@utils-plane/validators';
@@ -42,6 +43,8 @@ export interface UseLocalIdPhoto {
       preset: IdPhotoPreset;
       backgroundColor: string;
       outputType: IdPhotoOutputType;
+      /** 归一化裁剪参数;省略即居中不放大。 */
+      crop?: IdPhotoCrop;
     }
   ) => Promise<void>;
   reset: () => void;
@@ -152,7 +155,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             opts.backgroundColor,
             spec.widthPx,
             spec.heightPx,
-            opts.outputType
+            opts.outputType,
+            opts.crop
           );
           if (sid !== sessionIdRef.current) return;
           setResultBlob(blob);

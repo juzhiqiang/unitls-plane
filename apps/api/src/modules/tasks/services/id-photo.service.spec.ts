@@ -517,3 +517,107 @@ describe('IdPhotoService', () => {
     expect([...haloPixel]).toEqual([255, 0, 0]);
   });
 });
+
+/**
+ * 造一张左右两半颜色不同的源图 + 全白 mask,这样裁剪框往哪边偏移可以直接从
+ * 输出像素的颜色看出来 —— 纯色图测不出 crop 是否真的生效。
+ */
+async function makeSplitInput(width = 600, height = 800): Promise<Buffer> {
+  const pixels = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 3;
+      const left = x < width / 2;
+      pixels[i] = left ? 255 : 0;
+      pixels[i + 1] = 0;
+      pixels[i + 2] = left ? 0 : 255;
+    }
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } })
+    .jpeg()
+    .toBuffer();
+}
+
+function fullMaskService(width: number, height: number) {
+  return new IdPhotoService({
+    segment: async () => ({
+      mask: await sharp(Buffer.alloc(width * height, 255), {
+        raw: { width, height, channels: 1 },
+      })
+        .png()
+        .toBuffer(),
+      bounds: { x: 0, y: 0, width, height },
+      faceCount: 1,
+    }),
+  } as any);
+}
+
+async function averageRed(buffer: Buffer): Promise<number> {
+  const { data, info } = await sharp(buffer)
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let sum = 0;
+  for (let i = 0; i < data.length; i += info.channels) sum += data[i] ?? 0;
+  return sum / (data.length / info.channels);
+}
+
+describe('IdPhotoService crop', () => {
+  const base = {
+    preset: 'one_inch' as const,
+    backgroundColor: '#ffffff',
+    outputType: 'image/jpeg' as const,
+    dpi: 300 as const,
+  };
+
+  it('shifts the framing toward the requested centre', async () => {
+    const input = await makeSplitInput();
+    const service = fullMaskService(600, 800);
+
+    // 源图左半红右半蓝;把裁剪中心推到左侧应显著提高输出的平均红色分量。
+    const left = await service.render(input, {
+      ...base,
+      crop: { x: 0.2, y: 0.5, scale: 2 },
+    });
+    const right = await service.render(input, {
+      ...base,
+      crop: { x: 0.8, y: 0.5, scale: 2 },
+    });
+
+    expect(await averageRed(left.buffer)).toBeGreaterThan(
+      await averageRed(right.buffer)
+    );
+  });
+
+  it('keeps the preset output size regardless of crop', async () => {
+    const input = await makeSplitInput();
+    const service = fullMaskService(600, 800);
+
+    for (const crop of [
+      { x: 0.5, y: 0.5, scale: 1 },
+      { x: 0, y: 0, scale: 3 },
+      { x: 1, y: 1, scale: 2.5 },
+    ]) {
+      const output = await service.render(input, { ...base, crop });
+      const metadata = await sharp(output.buffer).metadata();
+      expect(metadata.width).toBe(295);
+      expect(metadata.height).toBe(413);
+    }
+  });
+
+  it('matches the previous centred behaviour when crop is omitted', async () => {
+    const input = await makeSplitInput();
+    const service = fullMaskService(600, 800);
+
+    const withoutCrop = await service.render(input, base);
+    const withDefaultCrop = await service.render(input, {
+      ...base,
+      crop: { x: 0.5, y: 0.5, scale: 1 },
+    });
+
+    expect(await averageRed(withoutCrop.buffer)).toBeCloseTo(
+      await averageRed(withDefaultCrop.buffer),
+      0
+    );
+  });
+});

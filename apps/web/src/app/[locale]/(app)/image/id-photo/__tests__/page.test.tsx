@@ -102,7 +102,8 @@ describe('IdPhotoPage', () => {
     ) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [makeFile()] } });
 
-    const img = await screen.findByAltText('ID photo preview');
+    // 上传的原图现在渲染在裁剪框里,alt 与结果预览区分开。
+    const img = await screen.findByAltText('Crop preview');
     expect(img).toBeInTheDocument();
     expect(img.getAttribute('src')).toBe('blob:preview-url');
   });
@@ -118,8 +119,7 @@ describe('IdPhotoPage', () => {
     mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
 
     const fetchMock = vi.fn().mockResolvedValue({
-      blob: () =>
-        Promise.resolve(new Blob(['result'], { type: 'image/jpeg' })),
+      blob: () => Promise.resolve(new Blob(['result'], { type: 'image/jpeg' })),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -150,9 +150,9 @@ describe('IdPhotoPage', () => {
       await mocks.onCompleted('output-file-1');
     });
 
-    // 完成后上传预览 + 结果预览都使用同一 alt,应至少两张
-    const previews = await screen.findAllByAltText('ID photo preview');
-    expect(previews.length).toBeGreaterThanOrEqual(2);
+    // 裁剪预览与结果预览各有一张,alt 已区分
+    expect(await screen.findByAltText('ID photo preview')).toBeInTheDocument();
+    expect(screen.getByAltText('Crop preview')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
 
     vi.unstubAllGlobals();

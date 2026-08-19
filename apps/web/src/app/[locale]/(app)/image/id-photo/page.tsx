@@ -11,6 +11,8 @@ import {
   IdPhotoOptions,
   type IdPhotoOptionsState,
 } from '@/components/tools/id-photo-options';
+import { IdPhotoCropField } from '@/components/tools/id-photo-crop';
+import { idPhotoPresetSpecs } from '@utils-plane/validators';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ResultPanel } from '@/components/tools/result-panel';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
@@ -86,15 +88,12 @@ export default function IdPhotoPage() {
   const handleProcess = async () => {
     if (processingMode === 'local') {
       if (!file) return;
-      await local.process(
-        file,
-        highPrecision ? 'high' : 'balanced',
-        {
-          preset: options.preset,
-          backgroundColor: options.backgroundColor,
-          outputType: options.outputType,
-        },
-      );
+      await local.process(file, highPrecision ? 'high' : 'balanced', {
+        preset: options.preset,
+        backgroundColor: options.backgroundColor,
+        outputType: options.outputType,
+        crop: options.crop,
+      });
       return;
     }
     // —— 以下为服务端逻辑,保持不变 ——
@@ -184,11 +183,14 @@ export default function IdPhotoPage() {
       {file && (
         <div className="space-y-6">
           {sourceUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={sourceUrl}
-              alt={t('previewAlt')}
-              className="mx-auto max-h-64 w-auto object-contain rounded-md border border-border"
+            <IdPhotoCropField
+              imageUrl={sourceUrl}
+              presetWidth={idPhotoPresetSpecs[options.preset].widthPx}
+              presetHeight={idPhotoPresetSpecs[options.preset].heightPx}
+              value={options.crop}
+              onChange={crop => setOptions(o => ({ ...o, crop }))}
+              disabled={isProcessing}
+              t={t}
             />
           )}
 

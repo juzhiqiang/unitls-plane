@@ -168,7 +168,7 @@
       },
       "imageConvert": {
         "title": "Image conversion",
-        "description": "Convert JPEG, PNG, WebP, and AVIF in the browser."
+        "description": "JPEG, PNG, and WebP convert locally. AVIF output runs locally where the browser supports it, otherwise on the server."
       },
       "imageStitch": {
         "title": "Long image stitch",
@@ -488,6 +488,8 @@
     "heightPx": "Height (px)",
     "originalHint": "No resizing — keep the original dimensions",
     "outputFormat": "Output format",
+    "formatNeedsServer": "This browser cannot encode {format} locally — switch to server processing.",
+    "formatNeedsServerError": "This browser cannot encode the selected format locally. Switch to server processing, or choose JPEG or PNG.",
     "start": "Compress",
     "startWithCount": "Compress {count} images",
     "processing": "Processing…",
@@ -502,10 +504,12 @@
   },
   "ImageConvert": {
     "title": "Convert format",
-    "description": "Convert between JPEG, PNG, and WebP",
+    "description": "Convert between JPEG, PNG, WebP, and AVIF",
     "dropzoneHint": "JPG, PNG, WebP, or AVIF — up to 50 MB",
     "selected": "Selected: {filename} ({size})",
     "targetFormat": "Target format",
+    "formatNeedsServer": "This browser cannot encode {format} locally — switch to server processing.",
+    "formatNeedsServerError": "This browser cannot encode the selected format locally. Switch to server processing, or choose JPEG or PNG.",
     "quality": "Quality",
     "start": "Convert",
     "processing": "Processing…"

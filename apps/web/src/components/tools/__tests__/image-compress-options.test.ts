@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMPRESS_EXTENSIONS,
+  COMPRESS_FORMATS,
   DEFAULT_IMAGE_COMPRESS_OPTIONS,
   MAX_TARGET_SIZE_KB,
   MIN_TARGET_SIZE_KB,
@@ -108,5 +110,31 @@ describe('toServerCompressConfig', () => {
     const server = toServerCompressConfig(value);
 
     expect((server.maxSizeKB as number) / 1024).toBe(local.maxSizeMB);
+  });
+});
+
+describe('AVIF output', () => {
+  it('offers avif as a compress output format', () => {
+    expect(COMPRESS_FORMATS).toContain('image/avif');
+  });
+
+  it('maps avif to the server format name', () => {
+    expect(
+      toServerCompressConfig(state({ outputType: 'image/avif' })).format
+    ).toBe('avif');
+  });
+
+  it('uses the avif extension', () => {
+    expect(COMPRESS_EXTENSIONS['image/avif']).toBe('avif');
+  });
+
+  it('maps every supported format without falling back', () => {
+    // 回归:convert 页曾用 `formatMap[fmt] ?? 'webp'`,选 AVIF 会静默变成 WebP。
+    for (const fmt of COMPRESS_FORMATS) {
+      expect(
+        toServerCompressConfig(state({ outputType: fmt })).format
+      ).toBeDefined();
+      expect(COMPRESS_EXTENSIONS[fmt]).toBeTruthy();
+    }
   });
 });

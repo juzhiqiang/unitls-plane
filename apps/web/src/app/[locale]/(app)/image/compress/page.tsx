@@ -9,6 +9,8 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   DEFAULT_IMAGE_COMPRESS_OPTIONS,
   ImageCompressOptions,
+  COMPRESS_FORMATS,
+  COMPRESS_EXTENSIONS,
   type ImageCompressOptionsState,
   type CompressFormat,
   toCompressOptions,
@@ -35,16 +37,13 @@ import { toServerTransformConfig } from '@/lib/processing/image-transform-client
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
+import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
 import {
   getImageCompressionIndices,
   getImageCompressionMaxFileSize,
 } from './image-compress-utils';
 
-const SUPPORTED_OUTPUT_TYPES = new Set<CompressFormat>([
-  'image/jpeg',
-  'image/webp',
-  'image/png',
-]);
+const SUPPORTED_OUTPUT_TYPES = new Set<CompressFormat>(COMPRESS_FORMATS);
 
 function detectOutputType(file: File): CompressFormat | null {
   const t = file.type as CompressFormat;
@@ -54,12 +53,7 @@ function detectOutputType(file: File): CompressFormat | null {
 }
 
 function compressedName(file: File, outputType: CompressFormat): string {
-  const extMap: Record<CompressFormat, string> = {
-    'image/jpeg': 'jpg',
-    'image/webp': 'webp',
-    'image/png': 'png',
-  };
-  const ext = extMap[outputType];
+  const ext = COMPRESS_EXTENSIONS[outputType];
   const dot = file.name.lastIndexOf('.');
   const base = dot > 0 ? file.name.slice(0, dot) : file.name;
   return `compressed-${base}.${ext}`;
@@ -124,12 +118,14 @@ export default function CompressPage() {
   const createTask = useCreateTask();
   const maxFileSize = getImageCompressionMaxFileSize(session);
   const controlsDisabled = processing || sessionLoading;
+  const locallyEncodable = useImageEncodingSupport(COMPRESS_FORMATS);
+  // 本地编码不了目标格式时(典型是 AVIF),必须走服务端,否则 canvas 会静默产出 PNG。
+  const formatNeedsServer = !locallyEncodable.has(options.outputType);
 
   const recommendation: ProcessMode =
-    items.length > 0
-      ? items.every(it => shouldProcessLocally(it.file))
-        ? 'local'
-        : 'server'
+    formatNeedsServer ||
+    (items.length > 0 && !items.every(it => shouldProcessLocally(it.file)))
+      ? 'server'
       : 'local';
   const needsServerLogin = mode === 'server' && !sessionLoading && !session;
 
@@ -175,6 +171,11 @@ export default function CompressPage() {
           size: `${Math.round(maxFileSize / (1024 * 1024))} MB`,
         })
       );
+      return;
+    }
+
+    if (mode === 'local' && formatNeedsServer) {
+      setGlobalError(t('formatNeedsServerError'));
       return;
     }
 
@@ -291,6 +292,8 @@ export default function CompressPage() {
             value={options}
             onChange={setOptions}
             disabled={controlsDisabled}
+            locallyEncodable={locallyEncodable}
+            localMode={mode === 'local'}
           />
 
           <ImageTransformOptions

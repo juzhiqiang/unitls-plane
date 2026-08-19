@@ -3,6 +3,10 @@ import {
   transformImage,
   type ImageTransformOptions,
 } from './image-transform-client';
+import {
+  canEncodeImageType,
+  type EncodableImageType,
+} from './image-encoding-support';
 
 export interface CompressOptions {
   /**
@@ -16,7 +20,7 @@ export interface CompressOptions {
   maxWidth?: number;
   maxHeight?: number;
   quality?: number;
-  outputType?: 'image/jpeg' | 'image/webp' | 'image/png';
+  outputType?: EncodableImageType;
   transform?: ImageTransformOptions;
   /** 保留 EXIF(拍摄参数、GPS 等)。默认 false,即重编码时抹除。 */
   preserveExif?: boolean;
@@ -36,6 +40,12 @@ export async function compressImage(
   file: File,
   options: CompressOptions = {}
 ): Promise<File> {
+  // browser-image-compression 内部也走 canvas.toBlob,对不支持的格式会静默回退成
+  // PNG。先拦一次,免得用户拿到扩展名与内容不符的文件。
+  if (options.outputType && !(await canEncodeImageType(options.outputType))) {
+    throw new Error(`Browser cannot encode ${options.outputType}`);
+  }
+
   const preparedFile = await transformImage(
     file,
     options.transform ?? {},

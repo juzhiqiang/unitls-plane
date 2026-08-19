@@ -2,8 +2,37 @@ import {
   transformImage,
   type ImageTransformOptions,
 } from './image-transform-client';
+import { assertEncodedAs } from './image-encoding-support';
 
-export type ImageOutputType = 'image/jpeg' | 'image/webp' | 'image/png';
+export type ImageOutputType =
+  | 'image/jpeg'
+  | 'image/webp'
+  | 'image/png'
+  | 'image/avif';
+
+const OUTPUT_EXTENSIONS: Record<ImageOutputType, string> = {
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/png': 'png',
+  'image/avif': 'avif',
+};
+
+/** 转换目标格式对应的服务端 format 值。 */
+export const SERVER_CONVERT_FORMATS: Record<ImageOutputType, string> = {
+  'image/jpeg': 'jpeg',
+  'image/webp': 'webp',
+  'image/png': 'png',
+  'image/avif': 'avif',
+};
+
+export function getConvertedImageName(
+  filename: string,
+  toType: ImageOutputType
+): string {
+  const dot = filename.lastIndexOf('.');
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  return `${base}.${OUTPUT_EXTENSIONS[toType]}`;
+}
 
 export async function convertImageFormat(
   file: File,
@@ -16,16 +45,26 @@ export async function convertImageFormat(
   const canvas = document.createElement('canvas');
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is not available');
   ctx.drawImage(img, 0, 0);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       blob => {
         if (!blob) return reject(new Error('Conversion failed'));
-        const ext = toType.split('/')[1];
-        const newName = file.name.replace(/\.[^.]+$/, `.${ext}`);
-        resolve(new File([blob], newName, { type: toType }));
+        try {
+          // toBlob 对不支持的格式会静默回退成 PNG,这里拦住,避免产出
+          // 扩展名与内容不符的文件。
+          assertEncodedAs(blob, toType);
+        } catch (error) {
+          return reject(error);
+        }
+        resolve(
+          new File([blob], getConvertedImageName(file.name, toType), {
+            type: toType,
+          })
+        );
       },
       toType,
       quality

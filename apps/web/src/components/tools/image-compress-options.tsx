@@ -2,8 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import type { CompressOptions } from '@/lib/processing/image-client';
+import type { EncodableImageType } from '@/lib/processing/image-encoding-support';
 
-export type CompressFormat = 'image/jpeg' | 'image/webp' | 'image/png';
+export type CompressFormat = EncodableImageType;
 
 /**
  * 压缩模式。
@@ -115,14 +116,9 @@ export function toServerCompressConfig(
   state: ImageCompressOptionsState
 ): Record<string, unknown> {
   const { width, height } = resolveSize(state);
-  const formatMap: Record<CompressFormat, string> = {
-    'image/jpeg': 'jpeg',
-    'image/webp': 'webp',
-    'image/png': 'png',
-  };
 
   return {
-    format: formatMap[state.outputType],
+    format: SERVER_COMPRESS_FORMATS[state.outputType],
     quality:
       state.mode === 'targetSize'
         ? Math.round(TARGET_SIZE_INITIAL_QUALITY * 100)
@@ -139,12 +135,34 @@ export interface ImageCompressOptionsProps {
   value: ImageCompressOptionsState;
   onChange: (value: ImageCompressOptionsState) => void;
   disabled?: boolean;
+  /** 本地可编码的格式;不在其中的会标注为「需服务端」。 */
+  locallyEncodable?: Set<string>;
+  /** 当前是否处于本地处理模式。 */
+  localMode?: boolean;
 }
 
 const FORMAT_LABELS: Record<CompressFormat, string> = {
   'image/jpeg': 'JPEG',
   'image/webp': 'WebP',
   'image/png': 'PNG',
+  'image/avif': 'AVIF',
+};
+
+export const COMPRESS_FORMATS = Object.keys(FORMAT_LABELS) as CompressFormat[];
+
+export const SERVER_COMPRESS_FORMATS: Record<CompressFormat, string> = {
+  'image/jpeg': 'jpeg',
+  'image/webp': 'webp',
+  'image/png': 'png',
+  'image/avif': 'avif',
+};
+
+/** 压缩输出的扩展名。 */
+export const COMPRESS_EXTENSIONS: Record<CompressFormat, string> = {
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/png': 'png',
+  'image/avif': 'avif',
 };
 
 const PRESET_ORDER: SizePreset[] = [
@@ -166,11 +184,17 @@ export function ImageCompressOptions({
   value,
   onChange,
   disabled,
+  locallyEncodable,
+  localMode = false,
 }: ImageCompressOptionsProps) {
   const t = useTranslations('ImageCompress');
   const isCustom = value.sizePreset === 'custom';
   const isOriginal = value.sizePreset === 'original';
   const isTargetSize = value.mode === 'targetSize';
+  const formatNeedsServer =
+    localMode &&
+    locallyEncodable !== undefined &&
+    !locallyEncodable.has(value.outputType);
 
   return (
     <div className="space-y-6">
@@ -382,7 +406,7 @@ export function ImageCompressOptions({
           {t('outputFormat')}
         </div>
         <div className="inline-flex border border-border rounded-md p-0.5">
-          {(Object.keys(FORMAT_LABELS) as CompressFormat[]).map(fmt => (
+          {COMPRESS_FORMATS.map(fmt => (
             <button
               key={fmt}
               type="button"
@@ -398,6 +422,13 @@ export function ImageCompressOptions({
             </button>
           ))}
         </div>
+        {formatNeedsServer && (
+          <p className="text-[10px] font-mono text-muted-foreground pt-1">
+            {t('formatNeedsServer', {
+              format: FORMAT_LABELS[value.outputType],
+            })}
+          </p>
+        )}
       </div>
     </div>
   );

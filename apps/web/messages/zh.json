@@ -168,7 +168,7 @@
       },
       "imageConvert": {
         "title": "图片转换",
-        "description": "在浏览器中转换 JPEG、PNG、WebP 和 AVIF。"
+        "description": "JPEG、PNG、WebP 本地转换；AVIF 输出在支持的浏览器本地完成，否则走服务端。"
       },
       "imageStitch": {
         "title": "长图拼接",
@@ -488,6 +488,8 @@
     "heightPx": "高 (px)",
     "originalHint": "不缩放，保持图片原始宽高",
     "outputFormat": "输出格式",
+    "formatNeedsServer": "当前浏览器不能本地编码 {format}，请切换到服务端处理。",
+    "formatNeedsServerError": "当前浏览器不能本地编码所选格式，请切换到服务端处理，或改用 JPEG / PNG。",
     "start": "开始压缩",
     "startWithCount": "开始压缩 ({count} 张)",
     "processing": "处理中...",
@@ -502,10 +504,12 @@
   },
   "ImageConvert": {
     "title": "格式转换",
-    "description": "在 JPEG / PNG / WebP 之间相互转换",
+    "description": "在 JPEG / PNG / WebP / AVIF 之间相互转换",
     "dropzoneHint": "支持 JPG / PNG / WebP / AVIF，最大 50MB",
     "selected": "已选择: {filename} ({size})",
     "targetFormat": "目标格式",
+    "formatNeedsServer": "当前浏览器不能本地编码 {format}，请切换到服务端处理。",
+    "formatNeedsServerError": "当前浏览器不能本地编码所选格式，请切换到服务端处理，或改用 JPEG / PNG。",
     "quality": "质量",
     "start": "开始转换",
     "processing": "处理中..."

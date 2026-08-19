@@ -12,22 +12,37 @@ export interface ImageConvertOptionsProps {
   value: ImageConvertOptionsState;
   onChange: (value: ImageConvertOptionsState) => void;
   disabled?: boolean;
+  /** 本地可编码的格式;不在其中的会标注为「需服务端」。 */
+  locallyEncodable?: Set<string>;
+  /** 当前是否处于本地处理模式。 */
+  localMode?: boolean;
 }
 
 const FORMAT_LABELS: Record<ImageOutputType, string> = {
   'image/jpeg': 'JPEG',
   'image/webp': 'WebP',
   'image/png': 'PNG',
+  'image/avif': 'AVIF',
 };
+
+export const CONVERT_FORMATS = Object.keys(FORMAT_LABELS) as ImageOutputType[];
+
+/** PNG 无损,质量参数无意义。 */
+export function formatSupportsQuality(format: ImageOutputType): boolean {
+  return format !== 'image/png';
+}
 
 export function ImageConvertOptions({
   value,
   onChange,
   disabled,
+  locallyEncodable,
+  localMode = false,
 }: ImageConvertOptionsProps) {
   const t = useTranslations('ImageConvert');
-  const supportsQuality =
-    value.toFormat === 'image/jpeg' || value.toFormat === 'image/webp';
+  const supportsQuality = formatSupportsQuality(value.toFormat);
+  const needsServer = (fmt: ImageOutputType) =>
+    localMode && locallyEncodable !== undefined && !locallyEncodable.has(fmt);
 
   return (
     <div className="space-y-6">
@@ -36,7 +51,7 @@ export function ImageConvertOptions({
           {t('targetFormat')}
         </div>
         <div className="inline-flex border border-border rounded-md p-0.5">
-          {(Object.keys(FORMAT_LABELS) as ImageOutputType[]).map((fmt) => (
+          {CONVERT_FORMATS.map(fmt => (
             <button
               key={fmt}
               type="button"
@@ -52,6 +67,11 @@ export function ImageConvertOptions({
             </button>
           ))}
         </div>
+        {needsServer(value.toFormat) && (
+          <p className="text-[10px] font-mono text-muted-foreground pt-1">
+            {t('formatNeedsServer', { format: FORMAT_LABELS[value.toFormat] })}
+          </p>
+        )}
       </div>
 
       {supportsQuality && (
@@ -74,7 +94,7 @@ export function ImageConvertOptions({
             max={100}
             value={value.quality}
             disabled={disabled}
-            onChange={(e) =>
+            onChange={e =>
               onChange({ ...value, quality: Number(e.target.value) })
             }
             className="w-full accent-accent"

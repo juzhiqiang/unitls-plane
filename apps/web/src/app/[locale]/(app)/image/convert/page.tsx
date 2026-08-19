@@ -8,6 +8,7 @@ import { formatBytes } from '@/lib/format';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   ImageConvertOptions,
+  CONVERT_FORMATS,
   type ImageConvertOptionsState,
 } from '@/components/tools/image-convert-options';
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
@@ -23,6 +24,8 @@ import {
 } from '@/components/tools/image-transform-options';
 import {
   convertImageFormat,
+  getConvertedImageName,
+  SERVER_CONVERT_FORMATS,
   type ImageOutputType,
 } from '@/lib/processing/image-convert-client';
 import { shouldProcessLocally } from '@/lib/processing/image-client';
@@ -31,6 +34,7 @@ import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
 
 export default function ConvertPage() {
   const t = useTranslations('ImageConvert');
@@ -64,9 +68,10 @@ export default function ConvertPage() {
         { credentials: 'include' }
       );
       const blob = await response.blob();
-      const ext = options.toFormat.split('/')[1];
-      const newName =
-        originalFile?.name.replace(/\.[^.]+$/, `.${ext}`) ?? `converted.${ext}`;
+      const newName = getConvertedImageName(
+        originalFile?.name ?? 'converted',
+        options.toFormat
+      );
       const file = new File([blob], newName, { type: blob.type });
       setResultFile(file);
       setProcessing(false);
@@ -79,11 +84,13 @@ export default function ConvertPage() {
     },
   });
 
-  const recommendation: ProcessMode = originalFile
-    ? shouldProcessLocally(originalFile)
-      ? 'local'
-      : 'server'
-    : 'local';
+  const locallyEncodable = useImageEncodingSupport(CONVERT_FORMATS);
+  // 本地编码不了目标格式时(典型是 AVIF),必须走服务端,否则 canvas 会静默产出 PNG。
+  const formatNeedsServer = !locallyEncodable.has(options.toFormat);
+  const recommendation: ProcessMode =
+    formatNeedsServer || (originalFile && !shouldProcessLocally(originalFile))
+      ? 'server'
+      : 'local';
   const needsServerLogin = mode === 'server' && !sessionLoading && !session;
 
   const handleDrop = (files: File[]) => {
@@ -97,6 +104,11 @@ export default function ConvertPage() {
 
   const handleProcess = async () => {
     if (!originalFile) return;
+
+    if (mode === 'local' && formatNeedsServer) {
+      setError(t('formatNeedsServerError'));
+      return;
+    }
 
     if (mode === 'server' && !sessionLoading && !session) {
       const next = encodeURIComponent('/image/convert');
@@ -123,16 +135,11 @@ export default function ConvertPage() {
         setProcessing(false);
       } else {
         const uploaded = await uploadFile.mutateAsync(originalFile);
-        const formatMap: Record<string, string> = {
-          'image/jpeg': 'jpeg',
-          'image/webp': 'webp',
-          'image/png': 'png',
-        };
         const task = await createTask.mutateAsync({
           type: 'convert',
           inputFileIds: [(uploaded as any).id],
           inputConfig: {
-            toFormat: formatMap[options.toFormat] ?? 'webp',
+            toFormat: SERVER_CONVERT_FORMATS[options.toFormat],
             quality: options.quality,
             transform: toServerTransformConfig(transform),
           },
@@ -189,6 +196,8 @@ export default function ConvertPage() {
             value={options}
             onChange={setOptions}
             disabled={processing}
+            locallyEncodable={locallyEncodable}
+            localMode={mode === 'local'}
           />
 
           <ImageTransformOptions

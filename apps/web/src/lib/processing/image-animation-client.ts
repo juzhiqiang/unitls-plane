@@ -8,6 +8,7 @@ import {
   getEntitlementUserFromSession,
   type EntitlementSession,
 } from '@/lib/entitlement-session';
+import { withDecodedImage } from './image-bitmap';
 
 export type AnimationOutputFormat = 'gif' | 'apng';
 export type AnimationFitMode = 'contain' | 'cover';
@@ -398,23 +399,6 @@ export function patchApngRepeatCount(
   return patched;
 }
 
-function loadImageFromFile(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    const url = URL.createObjectURL(file);
-
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(image);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error(`Unable to load animation frame: ${file.name}`));
-    };
-    image.src = url;
-  });
-}
-
 function renderFrameToImageData(
   image: CanvasImageSource,
   source: AnimationSourceSize,
@@ -736,11 +720,12 @@ export async function createAnimationFromImages(
     const delays: number[] = [];
 
     for (const file of files) {
-      const image = await loadImageFromFile(file);
-      const frameData = renderFrameToImageData(
-        image,
-        { width: image.naturalWidth, height: image.naturalHeight },
-        normalized
+      const frameData = await withDecodedImage(file, image =>
+        renderFrameToImageData(
+          image.source,
+          { width: image.width, height: image.height },
+          normalized
+        )
       );
 
       buffers.push(getImageDataBuffer(frameData));
@@ -766,11 +751,12 @@ export async function createAnimationFromImages(
   });
 
   for (const file of files) {
-    const image = await loadImageFromFile(file);
-    const frameData = renderFrameToImageData(
-      image,
-      { width: image.naturalWidth, height: image.naturalHeight },
-      normalized
+    const frameData = await withDecodedImage(file, image =>
+      renderFrameToImageData(
+        image.source,
+        { width: image.width, height: image.height },
+        normalized
+      )
     );
 
     gif.writeFrame(frameData.data, normalized.frameDelayMs);

@@ -7,6 +7,7 @@ import {
   canEncodeImageType,
   type EncodableImageType,
 } from './image-encoding-support';
+import { withDecodedImage } from './image-bitmap';
 
 export interface CompressOptions {
   /**
@@ -80,21 +81,10 @@ export interface ImageMeta {
 }
 
 export async function getImageMeta(file: File): Promise<ImageMeta> {
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = url;
-    });
-    return {
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      size: file.size,
-      type: file.type,
-    };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  return withDecodedImage(file, image => ({
+    width: image.width,
+    height: image.height,
+    size: file.size,
+    type: file.type,
+  }));
 }

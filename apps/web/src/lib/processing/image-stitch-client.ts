@@ -3,6 +3,7 @@ import {
   getEntitlementUserFromSession,
   type EntitlementSession,
 } from '@/lib/entitlement-session';
+import { decodeImage } from './image-bitmap';
 
 export type ImageStitchOutputType = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -145,66 +146,49 @@ export async function stitchImages(
 ): Promise<File> {
   validateImageStitchInputs(files, limits);
 
-  const images = await Promise.all(files.map(loadImage));
-  const layout = buildImageStitchLayout(
-    images.map(image => ({
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-    })),
-    options
-  );
-  validateImageStitchLayout(layout, limits);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = layout.width;
-  canvas.height = layout.height;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas is not available');
-
-  if (layout.background !== 'transparent') {
-    ctx.fillStyle = layout.background;
-    ctx.fillRect(0, 0, layout.width, layout.height);
-  }
-
-  layout.items.forEach(item => {
-    const image = images[item.sourceIndex]!;
-    ctx.drawImage(image, item.x, item.y, item.width, item.height);
-  });
-
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      result => {
-        if (!result) return reject(new Error('Image stitch export failed'));
-        resolve(result);
-      },
-      options.outputType,
-      options.outputType === 'image/png' ? undefined : options.quality
+  const images = await Promise.all(files.map(decodeImage));
+  try {
+    const layout = buildImageStitchLayout(
+      images.map(image => ({ width: image.width, height: image.height })),
+      options
     );
-  });
+    validateImageStitchLayout(layout, limits);
 
-  return new File(
-    [blob],
-    getStitchOutputName(options.filename, options.outputType),
-    {
-      type: blob.type || options.outputType,
+    const canvas = document.createElement('canvas');
+    canvas.width = layout.width;
+    canvas.height = layout.height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas is not available');
+
+    if (layout.background !== 'transparent') {
+      ctx.fillStyle = layout.background;
+      ctx.fillRect(0, 0, layout.width, layout.height);
     }
-  );
-}
 
-function loadImage(file: File): Promise<HTMLImageElement> {
-  const image = new Image();
-  const url = URL.createObjectURL(file);
+    layout.items.forEach(item => {
+      const image = images[item.sourceIndex]!;
+      ctx.drawImage(image.source, item.x, item.y, item.width, item.height);
+    });
 
-  return new Promise((resolve, reject) => {
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(image);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
-    image.src = url;
-  });
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        result => {
+          if (!result) return reject(new Error('Image stitch export failed'));
+          resolve(result);
+        },
+        options.outputType,
+        options.outputType === 'image/png' ? undefined : options.quality
+      );
+    });
+
+    return new File(
+      [blob],
+      getStitchOutputName(options.filename, options.outputType),
+      { type: blob.type || options.outputType }
+    );
+  } finally {
+    // 长图往往一次解十几张,不显式释放会把解码后的位图全堆在内存里。
+    images.forEach(image => image.close());
+  }
 }

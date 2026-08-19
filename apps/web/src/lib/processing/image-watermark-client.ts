@@ -1,3 +1,9 @@
+import {
+  transformImage,
+  type ImageTransformOptions,
+} from './image-transform-client';
+import { withDecodedImage } from './image-bitmap';
+
 export type ImageWatermarkPosition = 'center' | 'bottom-right' | 'tile';
 export type ImageWatermarkOutputType =
   | 'image/jpeg'
@@ -62,32 +68,34 @@ export async function watermarkImage(
     options.outputType,
     options.quality / 100
   );
-  const img = await loadImage(preparedFile);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
 
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas is not available');
+  return withDecodedImage(preparedFile, img => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
 
-  ctx.drawImage(img, 0, 0);
-  drawTextWatermark(ctx, canvas.width, canvas.height, options);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas is not available');
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      blob => {
-        if (!blob) return reject(new Error('Watermark export failed'));
-        resolve(
-          new File(
-            [blob],
-            getWatermarkedImageName(file.name, options.outputType),
-            { type: options.outputType }
-          )
-        );
-      },
-      options.outputType,
-      clamp(options.quality / 100, 0.01, 1)
-    );
+    ctx.drawImage(img.source, 0, 0);
+    drawTextWatermark(ctx, canvas.width, canvas.height, options);
+
+    return new Promise<File>((resolve, reject) => {
+      canvas.toBlob(
+        blob => {
+          if (!blob) return reject(new Error('Watermark export failed'));
+          resolve(
+            new File(
+              [blob],
+              getWatermarkedImageName(file.name, options.outputType),
+              { type: options.outputType }
+            )
+          );
+        },
+        options.outputType,
+        clamp(options.quality / 100, 0.01, 1)
+      );
+    });
   });
 }
 
@@ -144,23 +152,3 @@ function drawTileWatermark(
     }
   }
 }
-
-function loadImage(file: File): Promise<HTMLImageElement> {
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  return new Promise((resolve, reject) => {
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
-    img.src = url;
-  });
-}
-import {
-  transformImage,
-  type ImageTransformOptions,
-} from './image-transform-client';

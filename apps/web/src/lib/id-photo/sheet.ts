@@ -1,11 +1,13 @@
 /**
  * 证件照相纸拼版。
  *
- * 冲印店按「张」收费,一张 6 寸相纸能排 8 张一寸照 —— 拿单张证件照去冲印是纯浪费。
+ * 冲印店按「张」收费,一张 6 寸相纸能排 12 张一寸照 —— 拿单张证件照去冲印是纯浪费。
  * 这里把成品照按目标相纸尺寸拼成一张,带裁切线,直接拿去冲印或打印。
  *
  * 纯本地 canvas 合成:输入已经是成品照,不需要再上传或跑模型。
  */
+
+import { withDecodedImage } from '@/lib/processing/image-bitmap';
 
 export type SheetKey = 'five_inch' | 'six_inch' | 'seven_inch' | 'a4';
 
@@ -189,9 +191,8 @@ export async function renderIdPhotoSheet(
   options: RenderSheetOptions = {}
 ): Promise<Blob> {
   const outputType = options.outputType ?? 'image/jpeg';
-  const bitmap = await createImageBitmap(photo);
 
-  try {
+  return withDecodedImage(photo, async image => {
     const canvas = document.createElement('canvas');
     canvas.width = layout.widthPx;
     canvas.height = layout.heightPx;
@@ -204,7 +205,7 @@ export async function renderIdPhotoSheet(
 
     for (const cell of layout.cells) {
       ctx.drawImage(
-        bitmap,
+        image.source,
         cell.x,
         cell.y,
         layout.cellWidth,
@@ -236,7 +237,5 @@ export async function renderIdPhotoSheet(
         outputType === 'image/jpeg' ? (options.quality ?? 0.95) : undefined
       );
     });
-  } finally {
-    bitmap.close?.();
-  }
+  });
 }

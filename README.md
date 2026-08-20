@@ -519,6 +519,8 @@ bunx drizzle-kit migrate
 - [AGENTS.md](./AGENTS.md) - Codex 与 Claude 共用的公共协作规则入口
 - [CLAUDE.md](./CLAUDE.md) - Claude Code 专属入口和快速开发导航
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
+- [docs/build-verification.md](./docs/build-verification.md) - 构建验证说明（Windows 开发机 vs
+  Linux）
 - [task/](./task/) - phase1-phase8 任务文档
 
 ## 当前版本与更新日志

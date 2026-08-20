@@ -8,6 +8,7 @@ import {
   type ImageTransformOptions,
 } from './image-transform-client';
 import { decodeImage, withDecodedImage } from './image-bitmap';
+import { createSurface } from './canvas-surface';
 
 export type { ImageWatermarkPosition };
 
@@ -129,39 +130,28 @@ export async function watermarkImage(
     kind === 'logo' && options.logo ? await decodeImage(options.logo) : null;
 
   try {
-    return await withDecodedImage(preparedFile, img => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas is not available');
+    return await withDecodedImage(preparedFile, async img => {
+      const surface = createSurface(img.width, img.height);
+      const ctx = surface.ctx as CanvasRenderingContext2D;
 
       ctx.drawImage(img.source, 0, 0);
 
       if (kind === 'logo') {
         if (!logo) throw new Error('Watermark logo is required');
-        drawLogoWatermark(ctx, canvas.width, canvas.height, logo, options);
+        drawLogoWatermark(ctx, surface.width, surface.height, logo, options);
       } else {
-        drawTextWatermark(ctx, canvas.width, canvas.height, options);
+        drawTextWatermark(ctx, surface.width, surface.height, options);
       }
 
-      return new Promise<File>((resolve, reject) => {
-        canvas.toBlob(
-          blob => {
-            if (!blob) return reject(new Error('Watermark export failed'));
-            resolve(
-              new File(
-                [blob],
-                getWatermarkedImageName(file.name, options.outputType),
-                { type: options.outputType }
-              )
-            );
-          },
-          options.outputType,
-          clamp(options.quality / 100, 0.01, 1)
-        );
-      });
+      const blob = await surface.toBlob(
+        options.outputType,
+        clamp(options.quality / 100, 0.01, 1)
+      );
+      return new File(
+        [blob],
+        getWatermarkedImageName(file.name, options.outputType),
+        { type: options.outputType }
+      );
     });
   } finally {
     logo?.close();

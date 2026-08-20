@@ -4,6 +4,8 @@ import {
 } from './image-transform-client';
 import { assertEncodedAs } from './image-encoding-support';
 import { withDecodedImage } from './image-bitmap';
+import { createSurface } from './canvas-surface';
+import { runInImageWorker } from './image-worker-client';
 
 export type ImageOutputType =
   | 'image/jpeg'
@@ -42,35 +44,33 @@ export async function convertImageFormat(
   transform: ImageTransformOptions = {}
 ): Promise<File> {
   const preparedFile = await transformImage(file, transform, toType, quality);
+  const blob = await runInImageWorker(
+    { op: 'convert', blob: preparedFile, toType, quality },
+    () => renderConvert(preparedFile, toType, quality)
+  );
+  return new File([blob], getConvertedImageName(file.name, toType), {
+    type: toType,
+  });
+}
 
-  return withDecodedImage(preparedFile, img => {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas is not available');
-    ctx.drawImage(img.source, 0, 0);
+/**
+ * 只做「解码 → 画上去 → 编码」,不碰 File/文件名。
+ *
+ * 拆出来是为了让同一份实现既能在主线程调用,也能被 Worker 直接复用 —— 命名与
+ * File 构造属于调用方的事,Worker 里只需要 Blob 进 Blob 出。
+ */
+export async function renderConvert(
+  source: Blob,
+  toType: ImageOutputType,
+  quality: number
+): Promise<Blob> {
+  return withDecodedImage(source, async img => {
+    const surface = createSurface(img.width, img.height);
+    surface.ctx.drawImage(img.source, 0, 0);
 
-    return new Promise<File>((resolve, reject) => {
-      canvas.toBlob(
-        blob => {
-          if (!blob) return reject(new Error('Conversion failed'));
-          try {
-            // toBlob 对不支持的格式会静默回退成 PNG,这里拦住,避免产出
-            // 扩展名与内容不符的文件。
-            assertEncodedAs(blob, toType);
-          } catch (error) {
-            return reject(error);
-          }
-          resolve(
-            new File([blob], getConvertedImageName(file.name, toType), {
-              type: toType,
-            })
-          );
-        },
-        toType,
-        quality
-      );
-    });
+    const blob = await surface.toBlob(toType, quality);
+    // toBlob 对不支持的格式会静默回退成 PNG,这里拦住,避免产出扩展名与内容不符的文件。
+    assertEncodedAs(blob, toType);
+    return blob;
   });
 }

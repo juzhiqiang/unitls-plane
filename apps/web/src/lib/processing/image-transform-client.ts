@@ -1,4 +1,5 @@
 import { withDecodedImage } from './image-bitmap';
+import { createSurface } from './canvas-surface';
 
 export type ImageRotation = 0 | 90 | 180 | 270;
 
@@ -71,12 +72,8 @@ export async function transformImage(
 
   return withDecodedImage(file, async img => {
     const size = getTransformedSize(img.width, img.height, normalized);
-    const canvas = document.createElement('canvas');
-    canvas.width = size.width;
-    canvas.height = size.height;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas is not available');
+    const surface = createSurface(size.width, size.height);
+    const { ctx } = surface;
 
     ctx.translate(size.width / 2, size.height / 2);
     ctx.rotate((normalized.rotate * Math.PI) / 180);
@@ -86,16 +83,8 @@ export async function transformImage(
     );
     ctx.drawImage(img.source, -img.width / 2, -img.height / 2);
 
-    return new Promise<File>((resolve, reject) => {
-      canvas.toBlob(
-        blob => {
-          if (!blob) return reject(new Error('Transform export failed'));
-          resolve(new File([blob], file.name, { type: outputType }));
-        },
-        outputType,
-        quality
-      );
-    });
+    const blob = await surface.toBlob(outputType, quality);
+    return new File([blob], file.name, { type: outputType });
   });
 }
 

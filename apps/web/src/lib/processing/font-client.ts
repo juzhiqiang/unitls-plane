@@ -57,7 +57,7 @@ export async function loadFontAsCSS(file: File): Promise<string> {
 }
 
 export function unloadFont(fontFamily: string) {
-  document.fonts.forEach((f) => {
+  document.fonts.forEach(f => {
     if (f.family === fontFamily) document.fonts.delete(f);
   });
 }

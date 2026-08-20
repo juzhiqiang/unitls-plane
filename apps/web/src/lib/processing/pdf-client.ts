@@ -9,7 +9,7 @@ async function getPdfJs(): Promise<PdfJs> {
     throw new Error('PDF rendering is only available in the browser.');
   }
 
-  pdfjsPromise ??= import('pdfjs-dist').then((pdfjsLib) => {
+  pdfjsPromise ??= import('pdfjs-dist').then(pdfjsLib => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
     return pdfjsLib;
   });
@@ -17,9 +17,7 @@ async function getPdfJs(): Promise<PdfJs> {
   return pdfjsPromise;
 }
 
-export async function loadPdf(
-  file: File | Blob
-): Promise<PDFDocumentProxy> {
+export async function loadPdf(file: File | Blob): Promise<PDFDocumentProxy> {
   const pdfjsLib = await getPdfJs();
   const arrayBuffer = await file.arrayBuffer();
   return pdfjsLib.getDocument({ data: arrayBuffer }).promise;

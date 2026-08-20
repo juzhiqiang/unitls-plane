@@ -253,6 +253,10 @@
       "imageCrop": {
         "title": "Image crop",
         "description": "Crop freely or to a ratio, and resize the output."
+      },
+      "imageMosaic": {
+        "title": "Image redaction",
+        "description": "Mask selected areas to hide IDs and faces."
       }
     }
   },
@@ -839,6 +843,31 @@
     "resultTitle": "Cropped",
     "resultSize": "Size",
     "resultAlt": "Cropped preview"
+  },
+  "ImageMosaic": {
+    "title": "Redact image",
+    "description": "Drag to select areas and mask them — hide ID numbers, faces, or addresses. Runs entirely in your browser.",
+    "dropzoneHint": "JPG, PNG, WebP, AVIF, or HEIC",
+    "processingLabel": "Runs locally — nothing is uploaded",
+    "selected": "{filename} · {size}",
+    "regionPreviewAlt": "Redaction area preview",
+    "regionHint": "Drag on the image to select an area to mask. You can add several.",
+    "regionCount": "{count} selected — click a box to remove it.",
+    "removeRegion": "Remove this area",
+    "clearRegions": "Clear all",
+    "mode": "Mask style",
+    "modes": {
+      "pixelate": "Pixelate",
+      "blur": "Blur",
+      "solid": "Solid"
+    },
+    "strength": "Strength",
+    "outputFormat": "Output format",
+    "start": "Mask and export",
+    "processing": "Processing…",
+    "resultTitle": "Redacted",
+    "resultSize": "Size",
+    "resultAlt": "Redacted preview"
   },
   "PdfTool": {
     "title": "PDF Tools",

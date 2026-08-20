@@ -43,7 +43,7 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(10);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(11);
   });
 
   it('registers the id photo generator as a local-first image tool with account-file retention', () => {

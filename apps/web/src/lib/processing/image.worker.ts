@@ -10,6 +10,7 @@
 
 import { renderConvert } from './image-convert-client';
 import { renderStitchLayout } from './image-stitch-client';
+import { renderWatermark } from './image-watermark-client';
 import type {
   ImageWorkerRequest,
   ImageWorkerResponse,
@@ -21,6 +22,8 @@ async function run(request: ImageWorkerRequest): Promise<Blob> {
   switch (job.op) {
     case 'convert':
       return renderConvert(job.blob, job.toType, job.quality);
+    case 'watermark':
+      return renderWatermark(job.blob, job.logo, job.options);
     case 'stitch':
       return renderStitchLayout(
         job.blobs,

@@ -253,6 +253,10 @@
       "imageCrop": {
         "title": "图片裁剪",
         "description": "自由或定比例裁剪，并可调整输出尺寸。"
+      },
+      "imageMosaic": {
+        "title": "图片打码",
+        "description": "框选区域打码，遮住证件号与人脸。"
       }
     }
   },
@@ -839,6 +843,31 @@
     "resultTitle": "裁剪完成",
     "resultSize": "大小",
     "resultAlt": "裁剪结果预览"
+  },
+  "ImageMosaic": {
+    "title": "图片打码",
+    "description": "在图片上框选区域并打码，遮住证件号、人脸或地址。全程本地处理，图片不上传。",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF / HEIC",
+    "processingLabel": "本地处理，图片不上传",
+    "selected": "{filename} · {size}",
+    "regionPreviewAlt": "打码选区预览",
+    "regionHint": "在图片上拖动框选要遮住的区域，可框选多处。",
+    "regionCount": "已选 {count} 处，点击方框可移除。",
+    "removeRegion": "移除该选区",
+    "clearRegions": "清空选区",
+    "mode": "打码方式",
+    "modes": {
+      "pixelate": "马赛克",
+      "blur": "模糊",
+      "solid": "纯色遮盖"
+    },
+    "strength": "强度",
+    "outputFormat": "输出格式",
+    "start": "打码并导出",
+    "processing": "处理中...",
+    "resultTitle": "打码完成",
+    "resultSize": "大小",
+    "resultAlt": "打码结果预览"
   },
   "PdfTool": {
     "title": "PDF 工具",

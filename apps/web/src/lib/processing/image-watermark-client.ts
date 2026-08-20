@@ -9,6 +9,7 @@ import {
 } from './image-transform-client';
 import { decodeImage, withDecodedImage } from './image-bitmap';
 import { createSurface } from './canvas-surface';
+import { runInImageWorker } from './image-worker-client';
 
 export type { ImageWatermarkPosition };
 
@@ -124,13 +125,55 @@ export async function watermarkImage(
     options.outputType,
     options.quality / 100
   );
+  // transform 已经在上面落地,不必再随任务传进 Worker。
+  const { transform: _transform, logo, ...rest } = options;
+  const renderOptions: RenderWatermarkOptions = rest;
+
+  const blob = await runInImageWorker(
+    {
+      op: 'watermark',
+      blob: preparedFile,
+      logo: logo ?? null,
+      options: renderOptions,
+    },
+    () => renderWatermark(preparedFile, logo ?? null, renderOptions)
+  );
+
+  return new File(
+    [blob],
+    getWatermarkedImageName(file.name, options.outputType),
+    { type: options.outputType }
+  );
+}
+
+/** watermarkImage 去掉 transform 与 logo 之后的部分,可结构化克隆。 */
+export type RenderWatermarkOptions = Omit<
+  ImageWatermarkOptions,
+  'transform' | 'logo'
+>;
+
+/**
+ * 只做「解码 → 画水印 → 编码」,不碰 File/文件名。
+ *
+ * 与 renderConvert / renderStitchLayout 同一模式,供 Worker 与主线程共用同一份实现。
+ *
+ * 字体说明:字体栈固定为系统字体(Arial/Helvetica/sans-serif)。Worker 里没有
+ * document.fonts,自定义 Web 字体加载不进来;用系统字体两边渲染结果一致。若将来要
+ * 支持用户自选字体,必须先在 Worker 里 FontFace.load,否则回落路径与 Worker 路径会
+ * 画出不同的字。
+ */
+export async function renderWatermark(
+  source: Blob,
+  logoSource: Blob | null,
+  options: RenderWatermarkOptions
+): Promise<Blob> {
   const kind = options.kind ?? 'text';
   // Logo 在进入 withDecodedImage 之前解好:回调里再 await 会让底图的释放时机变复杂。
   const logo =
-    kind === 'logo' && options.logo ? await decodeImage(options.logo) : null;
+    kind === 'logo' && logoSource ? await decodeImage(logoSource) : null;
 
   try {
-    return await withDecodedImage(preparedFile, async img => {
+    return await withDecodedImage(source, async img => {
       const surface = createSurface(img.width, img.height);
       const ctx = surface.ctx as CanvasRenderingContext2D;
 
@@ -143,14 +186,9 @@ export async function watermarkImage(
         drawTextWatermark(ctx, surface.width, surface.height, options);
       }
 
-      const blob = await surface.toBlob(
+      return surface.toBlob(
         options.outputType,
         clamp(options.quality / 100, 0.01, 1)
-      );
-      return new File(
-        [blob],
-        getWatermarkedImageName(file.name, options.outputType),
-        { type: options.outputType }
       );
     });
   } finally {
@@ -160,7 +198,7 @@ export async function watermarkImage(
 
 function applyTextStyle(
   ctx: CanvasRenderingContext2D,
-  options: ImageWatermarkOptions
+  options: RenderWatermarkOptions
 ) {
   ctx.font = `700 ${options.fontSize}px Arial, Helvetica, sans-serif`;
   ctx.fillStyle = colorToCss(options.color, options.opacity);
@@ -203,7 +241,7 @@ function drawTextWatermark(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  options: ImageWatermarkOptions
+  options: RenderWatermarkOptions
 ) {
   const text = options.text.trim();
   if (!text) throw new Error('Watermark text is required');
@@ -235,7 +273,7 @@ function drawTileWatermark(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  options: ImageWatermarkOptions
+  options: RenderWatermarkOptions
 ) {
   const text = options.text.trim();
   const metrics = ctx.measureText(text);
@@ -261,7 +299,7 @@ function drawLogoWatermark(
   width: number,
   height: number,
   logo: { source: CanvasImageSource; width: number; height: number },
-  options: ImageWatermarkOptions
+  options: RenderWatermarkOptions
 ) {
   const size = resolveLogoSize(
     logo.width,

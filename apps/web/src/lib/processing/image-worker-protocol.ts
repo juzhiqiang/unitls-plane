@@ -8,6 +8,7 @@
 
 import type { EncodableImageType } from './image-encoding-support';
 import type { ImageStitchLayout } from './image-stitch-client';
+import type { RenderWatermarkOptions } from './image-watermark-client';
 
 export type ImageWorkerJob =
   | {
@@ -15,6 +16,12 @@ export type ImageWorkerJob =
       blob: Blob;
       toType: EncodableImageType;
       quality: number;
+    }
+  | {
+      op: 'watermark';
+      blob: Blob;
+      logo: Blob | null;
+      options: RenderWatermarkOptions;
     }
   | {
       op: 'stitch';

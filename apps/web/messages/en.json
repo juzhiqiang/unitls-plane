@@ -1478,6 +1478,39 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.2.0",
+          "date": "2026-08-20",
+          "title": "More local image tools and smoother editing",
+          "summary": "More image work now runs locally in the browser, with new crop, mosaic, and AI cutout tools and local-first ID photo generation.",
+          "groups": [
+            {
+              "title": "New",
+              "items": [
+                "Added image crop/resize, region mosaic, and AI cutout-and-rebackground tool pages.",
+                "Watermark supports logo images, a 3×3 position grid, and text outlines; format conversion supports batch output.",
+                "Image compression accepts HEIC / HEIF input and can target a specific file size.",
+                "ID photo now uses local segmentation by default and supports crop composition and photo-sheet printing."
+              ]
+            },
+            {
+              "title": "Improved",
+              "items": [
+                "Animation, watermark, canvas, and encoding work moved into Web Workers, so large images no longer block the page; animations show real frame-by-frame progress.",
+                "Image output adds AVIF with unified decoding plus canvas and file-size guardrails.",
+                "Image compression now handles EXIF metadata and shows a privacy note."
+              ]
+            },
+            {
+              "title": "Fixed",
+              "items": [
+                "Fixed compression being hard-capped at 1 MB and a production prerender failure.",
+                "Fixed ID photo local segmentation engine, high-accuracy switch, and model-cache issues.",
+                "Fixed the signed-out navigation CTA pointing to the wrong page."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.1.0",
           "date": "2026-08-14",
           "title": "First public beta release",

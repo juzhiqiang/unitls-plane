@@ -25,12 +25,12 @@ describe('public changelog page', () => {
   it.each([
     ['zh', zh],
     ['en', en],
-  ])('provides a curated v0.1.0 release entry in %s', (_, messages) => {
+  ])('provides a curated v0.2.0 release entry in %s', (_, messages) => {
     const changelog = messages.PublicSite.changelog;
     const entry = changelog.entries[0];
 
     expect(entry.version).toBe(APP_VERSION_LABEL);
-    expect(entry.date).toBe('2026-08-14');
+    expect(entry.date).toBe('2026-08-20');
     expect(entry.groups).toHaveLength(3);
     expect(entry.groups.every(group => group.items.length > 0)).toBe(true);
   });

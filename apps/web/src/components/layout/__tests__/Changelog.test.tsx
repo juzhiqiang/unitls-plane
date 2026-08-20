@@ -5,8 +5,8 @@ import { Changelog, type ChangelogEntry } from '../Changelog';
 
 const entries: ChangelogEntry[] = [
   {
-    version: 'v0.1.0',
-    date: '2026-08-14',
+    version: 'v0.2.0',
+    date: '2026-08-20',
     title: 'Public beta foundation',
     summary: 'The first public release of Utils Plane.',
     groups: [
@@ -36,7 +36,7 @@ describe('Changelog', () => {
     expect(
       screen.getByRole('article', { name: 'Public beta foundation' })
     ).toBeInTheDocument();
-    expect(screen.getByText('2026-08-14')).toBeInTheDocument();
+    expect(screen.getByText('2026-08-20')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { level: 3, name: 'New' })
     ).toBeInTheDocument();

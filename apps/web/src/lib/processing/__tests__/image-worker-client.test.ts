@@ -64,7 +64,9 @@ afterEach(() => {
 describe('runInImageWorker', () => {
   it('returns the worker result without touching the fallback', async () => {
     const expected = new Blob(['from-worker']);
-    stubWorker({ reply: id => ({ id, ok: true, blob: expected }) });
+    stubWorker({
+      reply: id => ({ id, type: 'done' as const, blob: expected }),
+    });
     const fallback = vi.fn();
 
     await expect(runInImageWorker(JOB, fallback)).resolves.toBe(expected);
@@ -91,7 +93,9 @@ describe('runInImageWorker', () => {
   });
 
   it('falls back when the worker reports an error', async () => {
-    stubWorker({ reply: id => ({ id, ok: false, error: 'boom' }) });
+    stubWorker({
+      reply: id => ({ id, type: 'error' as const, error: 'boom' }),
+    });
     const expected = new Blob(['main-thread']);
 
     // 搬进 Worker 是性能优化,不该变成新的失败来源。
@@ -111,7 +115,11 @@ describe('runInImageWorker', () => {
 
   it('reuses one worker across jobs', async () => {
     const instances = stubWorker({
-      reply: id => ({ id, ok: true, blob: new Blob([String(id)]) }),
+      reply: id => ({
+        id,
+        type: 'done' as const,
+        blob: new Blob([String(id)]),
+      }),
     });
 
     await runInImageWorker(JOB, async () => new Blob());
@@ -140,7 +148,7 @@ describe('runInImageWorker', () => {
 
   it('routes concurrent jobs back to their own callers', async () => {
     stubWorker({
-      reply: id => ({ id, ok: true, blob: new Blob([`r${id}`]) }),
+      reply: id => ({ id, type: 'done' as const, blob: new Blob([`r${id}`]) }),
     });
 
     const [a, b] = await Promise.all([
@@ -150,5 +158,44 @@ describe('runInImageWorker', () => {
 
     await expect(a.text()).resolves.toBe('r1');
     await expect(b.text()).resolves.toBe('r2');
+  });
+});
+
+describe('runInImageWorker progress', () => {
+  it('forwards progress messages without ending the request', async () => {
+    const expected = new Blob(['done']);
+    let post: ((data: unknown) => void) | null = null;
+
+    class ProgressWorker {
+      private listeners: Array<(e: unknown) => void> = [];
+      terminate = vi.fn();
+      addEventListener(type: string, fn: (e: unknown) => void) {
+        if (type === 'message') this.listeners.push(fn);
+      }
+      postMessage(request: { id: number }) {
+        post = (data: unknown) => {
+          for (const fn of this.listeners) fn({ data } as unknown);
+        };
+        queueMicrotask(() => {
+          post!({ id: request.id, type: 'progress', value: 0.25 });
+          post!({ id: request.id, type: 'progress', value: 0.75 });
+          post!({ id: request.id, type: 'done', blob: expected });
+        });
+      }
+    }
+    vi.stubGlobal('Worker', ProgressWorker);
+    vi.stubGlobal('OffscreenCanvas', function OffscreenCanvas() {});
+
+    const seen: number[] = [];
+    await expect(
+      runInImageWorker(
+        JOB,
+        async () => new Blob(['fallback']),
+        v => seen.push(v)
+      )
+    ).resolves.toBe(expected);
+
+    // 进度消息不能提前 resolve 这次请求,否则动图会在第一帧就"完成"。
+    expect(seen).toEqual([0.25, 0.75]);
   });
 });

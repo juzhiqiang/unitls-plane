@@ -9,6 +9,7 @@ import {
   type EntitlementSession,
 } from '@/lib/entitlement-session';
 import { withDecodedImage } from './image-bitmap';
+import { runInImageWorker } from './image-worker-client';
 
 export type AnimationOutputFormat = 'gif' | 'apng';
 export type AnimationFitMode = 'contain' | 'cover';
@@ -704,23 +705,55 @@ function applyPreviousGifDisposal(
 export async function createAnimationFromImages(
   files: File[],
   options: AnimationCreateOptions,
-  limits: AnimationPlanLimits
+  limits: AnimationPlanLimits,
+  onProgress?: (value: number) => void
 ): Promise<File> {
   validateAnimationInputs(files, options, limits);
 
   const normalized = normalizeAnimationCreateOptions(options);
-  const transparent = isTransparentBackground(normalized.background);
   const outputName = getAnimationOutputName(
     normalized.filename,
     normalized.outputFormat
   );
 
+  const blob = await runInImageWorker(
+    { op: 'animate', blobs: files, options: normalized },
+    () => renderAnimation(files, normalized, onProgress),
+    onProgress
+  );
+
+  return new File([blob], outputName, {
+    type: normalized.outputFormat === 'apng' ? 'image/apng' : 'image/gif',
+  });
+}
+
+/**
+ * 只做「逐帧解码 → 编码」,不校验额度、不碰 File。
+ *
+ * 与 renderConvert / renderStitchLayout / renderWatermark 同一模式,供 Worker 与
+ * 主线程共用。动图是本地处理里最重的一档(几十帧量化+编码要跑好几秒),因此这里
+ * 逐帧上报进度 —— 此前页面只有 8% → 100% 两段跳,长时间不动很像卡死。
+ */
+export async function renderAnimation(
+  sources: Blob[],
+  options: AnimationCreateOptions,
+  onProgress?: (value: number) => void
+): Promise<Blob> {
+  const normalized = normalizeAnimationCreateOptions(options);
+  const transparent = isTransparentBackground(normalized.background);
+  // 编码本身也要花时间,给它留出最后一段,避免进度条早早停在 100%。
+  const encodeShare = 0.15;
+  const report = (done: number) => {
+    onProgress?.((done / Math.max(1, sources.length)) * (1 - encodeShare));
+  };
+
   if (normalized.outputFormat === 'apng') {
     const buffers: ArrayBuffer[] = [];
     const delays: number[] = [];
 
-    for (const file of files) {
-      const frameData = await withDecodedImage(file, image =>
+    for (let index = 0; index < sources.length; index += 1) {
+      const source = sources[index]!;
+      const frameData = await withDecodedImage(source, image =>
         renderFrameToImageData(
           image.source,
           { width: image.width, height: image.height },
@@ -730,6 +763,7 @@ export async function createAnimationFromImages(
 
       buffers.push(getImageDataBuffer(frameData));
       delays.push(normalized.frameDelayMs);
+      report(index + 1);
     }
 
     const encoded = UPNG.encode(
@@ -740,8 +774,9 @@ export async function createAnimationFromImages(
       delays
     );
     const apng = patchApngRepeatCount(encoded, normalized.repeat);
+    onProgress?.(1);
 
-    return new File([toArrayBuffer(apng)], outputName, { type: 'image/apng' });
+    return new Blob([toArrayBuffer(apng)], { type: 'image/apng' });
   }
 
   const gif = createGifWriter(normalized.width, normalized.height, {
@@ -750,8 +785,9 @@ export async function createAnimationFromImages(
     transparent,
   });
 
-  for (const file of files) {
-    const frameData = await withDecodedImage(file, image =>
+  for (let index = 0; index < sources.length; index += 1) {
+    const source = sources[index]!;
+    const frameData = await withDecodedImage(source, image =>
       renderFrameToImageData(
         image.source,
         { width: image.width, height: image.height },
@@ -760,25 +796,62 @@ export async function createAnimationFromImages(
     );
 
     gif.writeFrame(frameData.data, normalized.frameDelayMs);
+    report(index + 1);
   }
 
   const encoded = gif.finish();
+  onProgress?.(1);
 
-  return new File([toArrayBuffer(encoded)], outputName, { type: 'image/gif' });
+  return new Blob([toArrayBuffer(encoded)], { type: 'image/gif' });
 }
 
 export async function compressGif(
   file: File,
   options: AnimationCompressOptions,
-  limits: AnimationPlanLimits
+  limits: AnimationPlanLimits,
+  onProgress?: (value: number) => void
 ): Promise<File> {
+  // 额度门槛留在主线程:该失败要快,不值得为它启动 Worker。
   if (file.size > limits.maxFileSize) {
     throw new Error('File is too large for the current plan');
   }
 
   const normalized = normalizeAnimationCompressOptions(options);
+  const blob = await runInImageWorker(
+    { op: 'animate-compress', blob: file, options: normalized, limits },
+    () => renderCompressedAnimation(file, normalized, limits, onProgress),
+    onProgress
+  );
+
+  return new File(
+    [blob],
+    getAnimationOutputName(
+      normalized.filename,
+      blob.type === 'image/apng' ? 'apng' : 'gif'
+    ),
+    { type: blob.type }
+  );
+}
+
+/**
+ * 只做「解码 → 重编码」,供 Worker 与主线程共用。
+ *
+ * 压缩方案(帧数、目标尺寸)必须先解码才能算,所以额度也要传进来 —— 拆到主线程
+ * 就等于白解一遍。客户端额度本就是建议性的,真正的强制在服务端。
+ */
+export async function renderCompressedAnimation(
+  file: Blob,
+  options: AnimationCompressOptions,
+  limits: AnimationPlanLimits,
+  onProgress?: (value: number) => void
+): Promise<Blob> {
+  const normalized = normalizeAnimationCompressOptions(options);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const format = getAnimationFileFormatFromBytes(bytes, file.name, file.type);
+  const format = getAnimationFileFormatFromBytes(
+    bytes,
+    (file as File).name ?? '',
+    file.type
+  );
 
   if (format === 'apng') {
     return compressApng(bytes, normalized, limits);
@@ -859,20 +932,14 @@ export async function compressGif(
 
   const encoded = gif.finish();
 
-  return new File(
-    [toArrayBuffer(encoded)],
-    getAnimationOutputName(normalized.filename, 'gif'),
-    {
-      type: 'image/gif',
-    }
-  );
+  return new Blob([toArrayBuffer(encoded)], { type: 'image/gif' });
 }
 
 function compressApng(
   bytes: Uint8Array,
   options: AnimationCompressOptions,
   limits: AnimationPlanLimits
-): File {
+): Blob {
   const decoded = UPNG.decode(toArrayBuffer(bytes));
   const frameCount = decoded.frames.length;
 
@@ -942,9 +1009,5 @@ function compressApng(
   );
   const apng = patchApngRepeatCount(encoded, decoded.tabs.acTL.num_plays);
 
-  return new File(
-    [toArrayBuffer(apng)],
-    getAnimationOutputName(options.filename, 'apng'),
-    { type: 'image/apng' }
-  );
+  return new Blob([toArrayBuffer(apng)], { type: 'image/apng' });
 }

@@ -260,7 +260,8 @@ export default function ImageAnimationPage() {
       const generated = await createAnimationFromImages(
         frames.map(frame => frame.file),
         createOptions,
-        entitlements
+        entitlements,
+        value => setProgress(Math.max(8, Math.round(value * 100)))
       );
       setResult(generated);
       setResultKind('create');
@@ -290,7 +291,8 @@ export default function ImageAnimationPage() {
       const compressed = await compressGif(
         gifFile,
         compressOptions,
-        entitlements
+        entitlements,
+        value => setProgress(Math.max(8, Math.round(value * 100)))
       );
       setResult(compressed);
       setResultKind('compress');

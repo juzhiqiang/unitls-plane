@@ -23,6 +23,7 @@ import type {
 interface Pending {
   resolve: (blob: Blob) => void;
   reject: (error: Error) => void;
+  onProgress?: (value: number) => void;
 }
 
 let worker: Worker | null = null;
@@ -59,8 +60,15 @@ function getWorker(): Worker | null {
       const response = event.data;
       const entry = pending.get(response.id);
       if (!entry) return;
+
+      // 进度消息不结束这次请求,只转发给调用方。
+      if (response.type === 'progress') {
+        entry.onProgress?.(response.value);
+        return;
+      }
+
       pending.delete(response.id);
-      if (response.ok) entry.resolve(response.blob);
+      if (response.type === 'done') entry.resolve(response.blob);
       else entry.reject(new Error(response.error));
     }
   );
@@ -76,12 +84,16 @@ function getWorker(): Worker | null {
   return worker;
 }
 
-function postJob(instance: Worker, job: ImageWorkerJob): Promise<Blob> {
+function postJob(
+  instance: Worker,
+  job: ImageWorkerJob,
+  onProgress?: (value: number) => void
+): Promise<Blob> {
   const id = nextId++;
   const request: ImageWorkerRequest = { id, job };
 
   return new Promise<Blob>((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    pending.set(id, { resolve, reject, onProgress });
     try {
       instance.postMessage(request);
     } catch (error) {
@@ -98,13 +110,14 @@ function postJob(instance: Worker, job: ImageWorkerJob): Promise<Blob> {
  */
 export async function runInImageWorker(
   job: ImageWorkerJob,
-  fallback: () => Promise<Blob>
+  fallback: () => Promise<Blob>,
+  onProgress?: (value: number) => void
 ): Promise<Blob> {
   const instance = getWorker();
   if (!instance) return fallback();
 
   try {
-    return await postJob(instance, job);
+    return await postJob(instance, job, onProgress);
   } catch {
     return fallback();
   }

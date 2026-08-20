@@ -9,6 +9,11 @@
 import type { EncodableImageType } from './image-encoding-support';
 import type { ImageStitchLayout } from './image-stitch-client';
 import type { RenderWatermarkOptions } from './image-watermark-client';
+import type {
+  AnimationCompressOptions,
+  AnimationCreateOptions,
+  AnimationPlanLimits,
+} from './image-animation-client';
 
 export type ImageWorkerJob =
   | {
@@ -29,6 +34,23 @@ export type ImageWorkerJob =
       layout: ImageStitchLayout;
       outputType: string;
       quality?: number;
+    }
+  | {
+      op: 'animate';
+      blobs: Blob[];
+      /** 已在主线程 normalize + 校验过。 */
+      options: AnimationCreateOptions;
+    }
+  | {
+      op: 'animate-compress';
+      blob: Blob;
+      options: AnimationCompressOptions;
+      /**
+       * 压缩方案要先解码才能算(帧数、原始尺寸),拆到主线程就等于白解一遍,
+       * 所以把额度一起传进来在 Worker 里算。客户端额度本就是建议性的,
+       * 真正的强制在服务端。
+       */
+      limits: AnimationPlanLimits;
     };
 
 export interface ImageWorkerRequest {
@@ -36,6 +58,11 @@ export interface ImageWorkerRequest {
   job: ImageWorkerJob;
 }
 
+/**
+ * 响应用 type 区分而不是布尔 ok:加进度消息后,「成功/失败」两态已经不够用了。
+ * 动图编码几十帧要跑好几秒,没有进度的话进度条会长时间不动,用户以为卡死。
+ */
 export type ImageWorkerResponse =
-  | { id: number; ok: true; blob: Blob }
-  | { id: number; ok: false; error: string };
+  | { id: number; type: 'done'; blob: Blob }
+  | { id: number; type: 'error'; error: string }
+  | { id: number; type: 'progress'; value: number };

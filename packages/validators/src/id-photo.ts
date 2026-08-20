@@ -167,3 +167,35 @@ export function clampIdPhotoCrop(
     scale: Math.min(3, Math.max(1, crop.scale)),
   };
 }
+
+/**
+ * 由像素裁剪框反推归一化 crop —— resolveIdPhotoCropBox 的逆运算。
+ *
+ * 通用裁剪组件用的是「源图像素矩形」模型,而证件照的服务端契约用的是
+ * {中心 + 相对基准框的放大倍数}。两个模型描述的是同一个框,有了这对互逆函数,
+ * 证件照就能直接复用通用裁剪组件,不必再维护第二套裁剪交互。
+ */
+export function idPhotoCropFromBox(
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number,
+  box: IdPhotoCropBox
+): IdPhotoCrop {
+  const targetRatio = targetWidth / targetHeight;
+  const sourceRatio = sourceWidth / sourceHeight;
+  const baseWidth =
+    sourceRatio > targetRatio ? sourceHeight * targetRatio : sourceWidth;
+
+  return clampIdPhotoCrop(
+    sourceWidth,
+    sourceHeight,
+    targetWidth,
+    targetHeight,
+    {
+      x: (box.left + box.width / 2) / sourceWidth,
+      y: (box.top + box.height / 2) / sourceHeight,
+      scale: baseWidth / Math.max(1, box.width),
+    }
+  );
+}

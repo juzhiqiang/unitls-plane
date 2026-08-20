@@ -162,7 +162,10 @@ export default function CropPage() {
           <ImageCropField
             imageUrl={sourceUrl}
             natural={natural}
-            onNatural={setNatural}
+            onNatural={size => {
+              setNatural(size);
+              setRect(centeredCropRect(size, aspect));
+            }}
             value={rect}
             onChange={setRect}
             aspect={aspect}

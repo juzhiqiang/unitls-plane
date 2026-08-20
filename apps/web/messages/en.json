@@ -758,6 +758,17 @@
         "label": "AI refine",
         "description": "Uses OpenAI-compatible AI"
       }
+    },
+    "handles": {
+      "nw": "Top left corner",
+      "n": "Top edge",
+      "ne": "Top right corner",
+      "e": "Right edge",
+      "se": "Bottom right corner",
+      "s": "Bottom edge",
+      "sw": "Bottom left corner",
+      "w": "Left edge",
+      "move": "Move crop area"
     }
   },
   "ImageCutout": {

@@ -11,9 +11,13 @@ import {
   IdPhotoOptions,
   type IdPhotoOptionsState,
 } from '@/components/tools/id-photo-options';
-import { IdPhotoCropField } from '@/components/tools/id-photo-crop';
+import { ImageCropField } from '@/components/tools/image-crop-field';
 import { IdPhotoSheetPanel } from '@/components/tools/id-photo-sheet-panel';
-import { idPhotoPresetSpecs } from '@utils-plane/validators';
+import {
+  idPhotoCropFromBox,
+  idPhotoPresetSpecs,
+  resolveIdPhotoCropBox,
+} from '@utils-plane/validators';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ResultPanel } from '@/components/tools/result-panel';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
@@ -54,7 +58,31 @@ export default function IdPhotoPage() {
   const [error, setError] = useState<string | null>(null);
   const [processingMode, setProcessingMode] = useState<ProcessMode>('local');
   const [highPrecision, setHighPrecision] = useState(false);
+  const [natural, setNatural] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
+  const preset = idPhotoPresetSpecs[options.preset];
+  // 两个模型描述同一个框,只是字段名不同(服务端契约用 left/top,裁剪组件用 x/y)。
+  // 显式换算而不是类型断言:字段顺序写反了断言是不会报错的。
+  const cropRect = natural
+    ? (() => {
+        const box = resolveIdPhotoCropBox(
+          natural.width,
+          natural.height,
+          preset.widthPx,
+          preset.heightPx,
+          options.crop
+        );
+        return {
+          x: box.left,
+          y: box.top,
+          width: box.width,
+          height: box.height,
+        };
+      })()
+    : null;
   const sourceUrl = useObjectUrl(file);
   const resultUrl = useObjectUrl(resultFile);
   const local = useLocalIdPhoto();
@@ -82,6 +110,7 @@ export default function IdPhotoPage() {
   const handleDrop = (files: File[]) => {
     if (!files[0]) return;
     setFile(files[0]);
+    setNatural(null);
     setResultFile(null);
     setError(null);
   };
@@ -197,12 +226,30 @@ export default function IdPhotoPage() {
       {file && (
         <div className="space-y-6">
           {sourceUrl && (
-            <IdPhotoCropField
+            <ImageCropField
               imageUrl={sourceUrl}
-              presetWidth={idPhotoPresetSpecs[options.preset].widthPx}
-              presetHeight={idPhotoPresetSpecs[options.preset].heightPx}
-              value={options.crop}
-              onChange={crop => setOptions(o => ({ ...o, crop }))}
+              natural={natural}
+              onNatural={setNatural}
+              value={cropRect}
+              onChange={box => {
+                if (!natural) return;
+                setOptions(o => ({
+                  ...o,
+                  crop: idPhotoCropFromBox(
+                    natural.width,
+                    natural.height,
+                    preset.widthPx,
+                    preset.heightPx,
+                    {
+                      left: box.x,
+                      top: box.y,
+                      width: box.width,
+                      height: box.height,
+                    }
+                  ),
+                }));
+              }}
+              aspect={preset.widthPx / preset.heightPx}
               disabled={isProcessing}
               t={t}
             />

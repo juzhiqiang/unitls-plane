@@ -3,6 +3,8 @@ import {
   idPhotoTaskConfigSchema,
   idPhotoPresetEnum,
   normalizeHexColor,
+  idPhotoCropFromBox,
+  idPhotoCropSchema,
   resolveIdPhotoCropBox,
 } from './id-photo';
 
@@ -157,5 +159,46 @@ describe('resolveIdPhotoCropBox', () => {
         crop: { x: 0.5, y: 0.5, scale: 0.9 },
       })
     ).toThrow();
+  });
+});
+
+describe('idPhotoCropFromBox', () => {
+  const W = 1000;
+  const H = 1500;
+  const TW = 295;
+  const TH = 413;
+
+  it('是 resolveIdPhotoCropBox 的逆运算', () => {
+    for (const crop of [
+      { x: 0.5, y: 0.5, scale: 1 },
+      { x: 0.35, y: 0.4, scale: 1.6 },
+      { x: 0.7, y: 0.65, scale: 2.4 },
+    ]) {
+      const box = resolveIdPhotoCropBox(W, H, TW, TH, crop);
+      const back = idPhotoCropFromBox(W, H, TW, TH, box);
+      const again = resolveIdPhotoCropBox(W, H, TW, TH, back);
+
+      // 往返后必须落回同一个框(允许取整带来的 1px 误差)
+      expect(Math.abs(again.left - box.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(again.top - box.top)).toBeLessThanOrEqual(1);
+      expect(Math.abs(again.width - box.width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(again.height - box.height)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('产出的 crop 始终通过 schema 校验', () => {
+    const box = resolveIdPhotoCropBox(W, H, TW, TH, {
+      x: 0.1,
+      y: 0.9,
+      scale: 3,
+    });
+    const crop = idPhotoCropFromBox(W, H, TW, TH, box);
+
+    expect(() => idPhotoCropSchema.parse(crop)).not.toThrow();
+  });
+
+  it('整框对应 scale=1', () => {
+    const box = resolveIdPhotoCropBox(W, H, TW, TH);
+    expect(idPhotoCropFromBox(W, H, TW, TH, box).scale).toBeCloseTo(1, 1);
   });
 });

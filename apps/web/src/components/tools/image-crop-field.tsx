@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  centeredCropRect,
   resizeCropRect,
   type CropHandle,
   type CropRect,
@@ -57,8 +56,14 @@ const HANDLES: { key: CropHandle; style: string; cursor: string }[] = [
 
 export interface ImageCropFieldProps {
   imageUrl: string;
-  /** 源图像素尺寸;未知时组件按 onReady 回填。 */
+  /** 源图像素尺寸;未知时组件在图片 onLoad 后经 onNatural 回填。 */
   natural: { width: number; height: number } | null;
+  /**
+   * 拿到源图尺寸时回调。
+   *
+   * 初始裁剪框由父组件决定并通过 value 传入 —— 通用裁剪要「整图/居中定比例」,
+   * 证件照要「由已存的 crop 参数还原」,组件自己猜只会两边都不对。
+   */
   onNatural: (size: { width: number; height: number }) => void;
   value: CropRect | null;
   onChange: (rect: CropRect) => void;
@@ -177,14 +182,12 @@ export function ImageCropField({
           src={imageUrl}
           alt={t('cropPreviewAlt')}
           draggable={false}
-          onLoad={event => {
-            const size = {
+          onLoad={event =>
+            onNatural({
               width: event.currentTarget.naturalWidth,
               height: event.currentTarget.naturalHeight,
-            };
-            onNatural(size);
-            if (!value) onChange(centeredCropRect(size, aspect));
-          }}
+            })
+          }
           className="block h-full w-full object-contain"
         />
 

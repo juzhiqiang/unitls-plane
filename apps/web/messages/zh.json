@@ -758,6 +758,17 @@
         "label": "AI 精修",
         "description": "使用 OpenAI 兼容 AI"
       }
+    },
+    "handles": {
+      "nw": "左上角",
+      "n": "上边",
+      "ne": "右上角",
+      "e": "右边",
+      "se": "右下角",
+      "s": "下边",
+      "sw": "左下角",
+      "w": "左边",
+      "move": "移动裁剪框"
     }
   },
   "ImageCutout": {

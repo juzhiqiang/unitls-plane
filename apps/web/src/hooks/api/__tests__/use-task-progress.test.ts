@@ -54,7 +54,7 @@ describe('useTaskProgress', () => {
 
     const callCount = mockGet.mock.calls.length;
     // Wait to confirm no more polling
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 300));
     expect(mockGet.mock.calls.length).toBe(callCount);
   });
 
@@ -79,7 +79,12 @@ describe('useTaskProgress', () => {
   it('calls onFailed when task fails', async () => {
     const onFailed = vi.fn();
     mockGet.mockResolvedValue({
-      data: { status: 'failed', progress: 0, errorCode: 'ERR_01', errorMessage: 'Out of memory' },
+      data: {
+        status: 'failed',
+        progress: 0,
+        errorCode: 'ERR_01',
+        errorMessage: 'Out of memory',
+      },
       error: undefined,
     } as any);
 
@@ -89,7 +94,11 @@ describe('useTaskProgress', () => {
     );
 
     await waitFor(
-      () => expect(onFailed).toHaveBeenCalledWith({ code: 'ERR_01', message: 'Out of memory' }),
+      () =>
+        expect(onFailed).toHaveBeenCalledWith({
+          code: 'ERR_01',
+          message: 'Out of memory',
+        }),
       { timeout: 3000 }
     );
     expect(onFailed).toHaveBeenCalledTimes(1);
@@ -111,7 +120,7 @@ describe('useTaskProgress', () => {
     });
 
     const callCount = mockGet.mock.calls.length;
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 300));
     expect(mockGet.mock.calls.length).toBe(callCount);
   });
 });

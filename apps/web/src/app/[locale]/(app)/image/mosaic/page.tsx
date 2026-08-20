@@ -7,12 +7,12 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
-import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { DownloadButton } from '@/components/tools/download-button';
 import { MosaicRegionField } from '@/components/tools/mosaic-region-field';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { LOCAL_IMAGE_MAX_FILE_SIZE } from '@/lib/tools/image-limits';
 import { useObjectUrl } from '@/hooks/use-object-url';
+import { useSingleFileTool } from '@/hooks/use-single-file-tool';
 import {
   DEFAULT_STRENGTH,
   getMosaicFileName,
@@ -44,61 +44,36 @@ export default function MosaicPage() {
   const locale = useLocale();
   const tool = getToolByHref('/image/mosaic')!;
 
-  const [file, setFile] = useState<File | null>(null);
-  const [natural, setNatural] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
+  const tool_ = useSingleFileTool<File>();
+  const { file, natural, result, processing, error } = tool_;
   const [regions, setRegions] = useState<MosaicRegion[]>([]);
   const [mode, setMode] = useState<MosaicMode>('pixelate');
   const [strength, setStrength] = useState(DEFAULT_STRENGTH);
   const [outputType, setOutputType] = useState<MosaicOutputType>('image/png');
-  const [result, setResult] = useState<File | null>(null);
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const sourceUrl = useObjectUrl(file);
   const resultUrl = useObjectUrl(result);
 
   const handleDrop = (files: File[]) => {
     if (!files[0]) return;
-    setFile(files[0]);
-    setNatural(null);
+    tool_.selectFile(files[0]);
     setRegions([]);
-    setResult(null);
-    setError(null);
   };
 
   const handleProcess = async () => {
     if (!file || regions.length === 0) return;
-    setProcessing(true);
-    setError(null);
-    try {
+    await tool_.run(async () => {
       const blob = await renderMosaic(file, {
         regions,
         mode,
         strength,
         outputType,
       });
-      setResult(
-        new File([blob], getMosaicFileName(file.name, outputType), {
-          type: outputType,
-        })
-      );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setProcessing(false);
-    }
+      return new File([blob], getMosaicFileName(file.name, outputType), {
+        type: outputType,
+      });
+    });
   };
-
-  const stage: ToolStage = result
-    ? 'result'
-    : processing
-      ? 'processing'
-      : file
-        ? 'configure'
-        : 'upload';
 
   return (
     <ToolPageShell
@@ -108,7 +83,7 @@ export default function MosaicPage() {
       retention={tool.retention}
       requiresLogin={tool.requiresLogin}
       recovery={tShell('catalogRecovery')}
-      stage={stage}
+      stage={tool_.stage}
     >
       <FileDropzone
         accept={{
@@ -134,7 +109,7 @@ export default function MosaicPage() {
           <MosaicRegionField
             imageUrl={sourceUrl}
             natural={natural}
-            onNatural={setNatural}
+            onNatural={tool_.setNatural}
             regions={regions}
             onChange={setRegions}
             disabled={processing}
@@ -242,10 +217,8 @@ export default function MosaicPage() {
           message={error}
           onRetry={handleProcess}
           onReset={() => {
-            setFile(null);
+            tool_.reset();
             setRegions([]);
-            setResult(null);
-            setError(null);
           }}
         />
       )}

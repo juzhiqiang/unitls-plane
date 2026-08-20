@@ -28,7 +28,7 @@ export function useTaskProgress(
       return data as TaskStatusDto;
     },
     enabled: !!taskId,
-    refetchInterval: (q) => {
+    refetchInterval: q => {
       const status = q.state.data?.status;
       if (status === 'completed' || status === 'failed') return false;
       return interval;

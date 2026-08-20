@@ -13,6 +13,7 @@ import { DownloadButton } from '@/components/tools/download-button';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { LOCAL_IMAGE_MAX_FILE_SIZE } from '@/lib/tools/image-limits';
 import { useObjectUrl } from '@/hooks/use-object-url';
+import { resolveToolStage } from '@/hooks/use-single-file-tool';
 import { useLocalCutout } from '@/lib/cutout/use-local-cutout';
 import {
   cutoutSelectionIsValid,
@@ -90,13 +91,11 @@ export default function CutoutPage() {
       )
     : null;
 
-  const stage: ToolStage = resultFile
-    ? 'result'
-    : processing
-      ? 'processing'
-      : file
-        ? 'configure'
-        : 'upload';
+  const stage = resolveToolStage({
+    hasFile: Boolean(file),
+    processing,
+    hasResult: Boolean(resultFile),
+  });
 
   const stageLabel =
     local.status === 'loading-model'

@@ -7,13 +7,13 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
-import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { DownloadButton } from '@/components/tools/download-button';
 import { ImageCropField } from '@/components/tools/image-crop-field';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { LOCAL_IMAGE_MAX_FILE_SIZE } from '@/lib/tools/image-limits';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
+import { useSingleFileTool } from '@/hooks/use-single-file-tool';
 import {
   centeredCropRect,
   CROP_ASPECTS,
@@ -47,20 +47,14 @@ export default function CropPage() {
   const locale = useLocale();
   const tool = getToolByHref('/image/crop')!;
 
-  const [file, setFile] = useState<File | null>(null);
-  const [natural, setNatural] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
+  const tool_ = useSingleFileTool<File>();
+  const { file, natural, result, processing, error } = tool_;
   const [rect, setRect] = useState<CropRect | null>(null);
   const [aspectKey, setAspectKey] = useState('free');
   const [outputType, setOutputType] = useState<CropOutputType>('image/jpeg');
   const [quality, setQuality] = useState(92);
   const [resizeEnabled, setResizeEnabled] = useState(false);
   const [resizeWidth, setResizeWidth] = useState(1920);
-  const [result, setResult] = useState<File | null>(null);
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const sourceUrl = useObjectUrl(file);
   const resultUrl = useObjectUrl(result);
@@ -77,11 +71,8 @@ export default function CropPage() {
 
   const handleDrop = (files: File[]) => {
     if (!files[0]) return;
-    setFile(files[0]);
-    setNatural(null);
+    tool_.selectFile(files[0]);
     setRect(null);
-    setResult(null);
-    setError(null);
   };
 
   const applyAspect = (key: string) => {
@@ -93,13 +84,13 @@ export default function CropPage() {
   const handleProcess = async () => {
     if (!file || !rect) return;
     if (formatUnavailable) {
-      setError(t('formatUnavailable', { format: FORMAT_LABELS[outputType] }));
+      tool_.setError(
+        t('formatUnavailable', { format: FORMAT_LABELS[outputType] })
+      );
       return;
     }
 
-    setProcessing(true);
-    setError(null);
-    try {
+    await tool_.run(async () => {
       const blob = await renderCrop(file, {
         rect,
         outputType,
@@ -109,25 +100,11 @@ export default function CropPage() {
             ? { width: resizeWidth, height: outputHeight }
             : null,
       });
-      setResult(
-        new File([blob], getCropFileName(file.name, outputType), {
-          type: outputType,
-        })
-      );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setProcessing(false);
-    }
+      return new File([blob], getCropFileName(file.name, outputType), {
+        type: outputType,
+      });
+    });
   };
-
-  const stage: ToolStage = result
-    ? 'result'
-    : processing
-      ? 'processing'
-      : file
-        ? 'configure'
-        : 'upload';
 
   return (
     <ToolPageShell
@@ -137,7 +114,7 @@ export default function CropPage() {
       retention={tool.retention}
       requiresLogin={tool.requiresLogin}
       recovery={tShell('catalogRecovery')}
-      stage={stage}
+      stage={tool_.stage}
     >
       <FileDropzone
         accept={{
@@ -164,7 +141,7 @@ export default function CropPage() {
             imageUrl={sourceUrl}
             natural={natural}
             onNatural={size => {
-              setNatural(size);
+              tool_.setNatural(size);
               setRect(centeredCropRect(size, aspect));
             }}
             value={rect}
@@ -299,10 +276,8 @@ export default function CropPage() {
           message={error}
           onRetry={handleProcess}
           onReset={() => {
-            setFile(null);
+            tool_.reset();
             setRect(null);
-            setResult(null);
-            setError(null);
           }}
         />
       )}

@@ -29,6 +29,7 @@ import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
 import { useObjectUrl } from '@/hooks/use-object-url';
+import { resolveToolStage } from '@/hooks/use-single-file-tool';
 import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 
@@ -169,13 +170,11 @@ export default function IdPhotoPage() {
     processingMode === 'local' ? localProcessing : processing;
   const hasResult =
     processingMode === 'local' ? !!local.resultBlob : !!resultFile;
-  const stage: ToolStage = hasResult
-    ? 'result'
-    : isProcessing
-      ? 'processing'
-      : file
-        ? 'configure'
-        : 'upload';
+  const stage = resolveToolStage({
+    hasFile: Boolean(file),
+    processing: isProcessing,
+    hasResult,
+  });
   const localStageKey =
     local.status === 'loading-model'
       ? 'loadingModel'

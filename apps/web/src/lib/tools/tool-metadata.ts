@@ -3,6 +3,7 @@ import type { FeatureKey, LimitKey } from '@utils-plane/utils';
 import {
   ArrowUpDown,
   BadgeCheck,
+  Crop,
   Film,
   FileText,
   ImageDown,
@@ -141,6 +142,18 @@ export const imageTools: ToolMeta[] = [
     requiresLogin: false,
     recommended: true,
     tags: ['id-photo', 'background', 'crop'],
+  },
+  {
+    key: 'imageCrop',
+    href: '/image/crop',
+    icon: Crop,
+    titleKey: 'ToolCatalog.tools.imageCrop.title',
+    descriptionKey: 'ToolCatalog.tools.imageCrop.description',
+    categoryKey: 'ToolCatalog.categories.imageConvert',
+    processing: 'local',
+    retention: 'browser-session',
+    requiresLogin: false,
+    tags: ['crop', 'resize', 'aspect'],
   },
   {
     key: 'imageCutout',

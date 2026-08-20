@@ -249,6 +249,10 @@
       "imageCutout": {
         "title": "AI 抠图",
         "description": "本地去背景，导出透明 PNG 或换纯色底。"
+      },
+      "imageCrop": {
+        "title": "图片裁剪",
+        "description": "自由或定比例裁剪，并可调整输出尺寸。"
       }
     }
   },
@@ -787,6 +791,43 @@
     "resultSize": "大小",
     "sourceAlt": "原图预览",
     "resultAlt": "抠图结果预览"
+  },
+  "ImageCrop": {
+    "title": "图片裁剪",
+    "description": "自由裁剪或按固定比例裁剪，可同时调整输出尺寸。全程本地处理。",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF / HEIC",
+    "processingLabel": "本地处理，图片不上传",
+    "selected": "{filename} · {size}",
+    "cropPreviewAlt": "裁剪预览",
+    "aspect": "裁剪比例",
+    "aspects": {
+      "free": "自由",
+      "square": "1:1",
+      "photo43": "4:3",
+      "photo34": "3:4",
+      "wide169": "16:9",
+      "story916": "9:16"
+    },
+    "handles": {
+      "nw": "左上角",
+      "n": "上边",
+      "ne": "右上角",
+      "e": "右边",
+      "se": "右下角",
+      "s": "下边",
+      "sw": "左下角",
+      "w": "左边",
+      "move": "移动裁剪框"
+    },
+    "resize": "调整输出尺寸",
+    "outputFormat": "输出格式",
+    "formatUnavailable": "当前浏览器不能本地编码 {format}，请改选其它格式。",
+    "quality": "质量",
+    "start": "裁剪并导出",
+    "processing": "处理中...",
+    "resultTitle": "裁剪完成",
+    "resultSize": "大小",
+    "resultAlt": "裁剪结果预览"
   },
   "PdfTool": {
     "title": "PDF 工具",

@@ -249,6 +249,10 @@
       "imageCutout": {
         "title": "AI cutout",
         "description": "Remove backgrounds locally; export transparent PNG or a solid colour."
+      },
+      "imageCrop": {
+        "title": "Image crop",
+        "description": "Crop freely or to a ratio, and resize the output."
       }
     }
   },
@@ -787,6 +791,43 @@
     "resultSize": "Size",
     "sourceAlt": "Source preview",
     "resultAlt": "Cutout preview"
+  },
+  "ImageCrop": {
+    "title": "Crop image",
+    "description": "Crop freely or to a fixed ratio, and resize the output — all in your browser.",
+    "dropzoneHint": "JPG, PNG, WebP, AVIF, or HEIC",
+    "processingLabel": "Runs locally — nothing is uploaded",
+    "selected": "{filename} · {size}",
+    "cropPreviewAlt": "Crop preview",
+    "aspect": "Aspect ratio",
+    "aspects": {
+      "free": "Free",
+      "square": "1:1",
+      "photo43": "4:3",
+      "photo34": "3:4",
+      "wide169": "16:9",
+      "story916": "9:16"
+    },
+    "handles": {
+      "nw": "Top left corner",
+      "n": "Top edge",
+      "ne": "Top right corner",
+      "e": "Right edge",
+      "se": "Bottom right corner",
+      "s": "Bottom edge",
+      "sw": "Bottom left corner",
+      "w": "Left edge",
+      "move": "Move crop area"
+    },
+    "resize": "Resize output",
+    "outputFormat": "Output format",
+    "formatUnavailable": "This browser cannot encode {format} locally — choose another format.",
+    "quality": "Quality",
+    "start": "Crop and export",
+    "processing": "Processing…",
+    "resultTitle": "Cropped",
+    "resultSize": "Size",
+    "resultAlt": "Cropped preview"
   },
   "PdfTool": {
     "title": "PDF Tools",

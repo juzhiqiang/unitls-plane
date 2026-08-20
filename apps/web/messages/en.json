@@ -574,7 +574,8 @@
       "maxFileSize": "Some images exceed the current plan file size limit.",
       "needAtLeastTwo": "Upload at least 2 images to generate a long image.",
       "invalidWidth": "Enter a valid output width.",
-      "invalidBatchWidths": "Enter valid batch widths separated by commas."
+      "invalidBatchWidths": "Enter valid batch widths separated by commas.",
+      "browserCanvas": "This browser (Safari, and every browser on iOS) caps a single canvas at about {pixels}M pixels — beyond that you would get a blank image. Reduce the output width, or use another browser. This is not an account limit; signing in will not raise it."
     },
     "presets": {
       "750": "E-commerce 750",

@@ -6,6 +6,7 @@ import {
 import { decodeImage } from './image-bitmap';
 import { createSurface } from './canvas-surface';
 import { runInImageWorker } from './image-worker-client';
+import { resolveCanvasPixelLimit } from './canvas-limits';
 
 export type ImageStitchOutputType = 'image/png' | 'image/jpeg' | 'image/webp';
 

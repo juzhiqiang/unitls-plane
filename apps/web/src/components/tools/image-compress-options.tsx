@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import type { CompressOptions } from '@/lib/processing/image-client';
+import { idPhotoPresetSpecs } from '@utils-plane/validators';
 import type { EncodableImageType } from '@/lib/processing/image-encoding-support';
 
 export type CompressFormat = EncodableImageType;
@@ -39,8 +40,15 @@ export const SIZE_PRESETS: Record<SizePreset, PresetMeta> = {
   original: {},
   desktop: { width: 1920, height: 1080 },
   mobile: { width: 750, height: 480 },
-  id1: { width: 295, height: 413 },
-  id2: { width: 413, height: 579 },
+  // 证件照尺寸只有一处事实源:此前这里写死 413×579,与 two_inch 的 413×626 对不上。
+  id1: {
+    width: idPhotoPresetSpecs.one_inch.widthPx,
+    height: idPhotoPresetSpecs.one_inch.heightPx,
+  },
+  id2: {
+    width: idPhotoPresetSpecs.two_inch.widthPx,
+    height: idPhotoPresetSpecs.two_inch.heightPx,
+  },
   custom: {},
 };
 

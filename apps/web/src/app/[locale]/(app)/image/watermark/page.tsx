@@ -38,6 +38,7 @@ import {
 } from '@/lib/processing/image-watermark-client';
 import { IMAGE_WATERMARK_GRID } from '@utils-plane/validators';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import { cn } from '@/lib/utils';
 
 type ColorPreset = 'gray' | 'red' | 'blue' | 'white';
@@ -166,6 +167,8 @@ export default function ImageWatermarkPage() {
 
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
+  // 这三个工具可能把图片发到服务端,因此受账号额度约束(纯本地工具不受)。
+  const maxFileSize = getImageUploadMaxFileSize(session);
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -326,7 +329,7 @@ export default function ImageWatermarkPage() {
             '.heif',
           ],
         }}
-        maxSize={50 * 1024 * 1024}
+        maxSize={maxFileSize}
         multiple
         onDrop={handleDrop}
         disabled={processing}

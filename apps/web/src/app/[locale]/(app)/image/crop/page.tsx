@@ -11,6 +11,7 @@ import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { DownloadButton } from '@/components/tools/download-button';
 import { ImageCropField } from '@/components/tools/image-crop-field';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { LOCAL_IMAGE_MAX_FILE_SIZE } from '@/lib/tools/image-limits';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
 import {
@@ -150,7 +151,7 @@ export default function CropPage() {
             '.heif',
           ],
         }}
-        maxSize={50 * 1024 * 1024}
+        maxSize={LOCAL_IMAGE_MAX_FILE_SIZE}
         onDrop={handleDrop}
         disabled={processing}
         hint={t('dropzoneHint')}

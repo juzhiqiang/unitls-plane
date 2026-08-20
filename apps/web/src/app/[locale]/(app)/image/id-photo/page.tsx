@@ -24,6 +24,7 @@ import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { DownloadButton } from '@/components/tools/download-button';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
@@ -47,6 +48,8 @@ export default function IdPhotoPage() {
   const tool = getToolByHref('/image/id-photo')!;
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
+  // 这三个工具可能把图片发到服务端,因此受账号额度约束(纯本地工具不受)。
+  const maxFileSize = getImageUploadMaxFileSize(session);
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -216,7 +219,7 @@ export default function IdPhotoPage() {
             '.heif',
           ],
         }}
-        maxSize={50 * 1024 * 1024}
+        maxSize={maxFileSize}
         onDrop={handleDrop}
         disabled={isProcessing}
         hint={t('dropzoneHint')}

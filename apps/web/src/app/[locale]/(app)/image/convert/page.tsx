@@ -34,6 +34,7 @@ import { shouldProcessLocally } from '@/lib/processing/image-client';
 import { runImageTask } from '@/lib/processing/run-image-task';
 import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
@@ -58,6 +59,8 @@ export default function ConvertPage() {
 
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
+  // 这三个工具可能把图片发到服务端,因此受账号额度约束(纯本地工具不受)。
+  const maxFileSize = getImageUploadMaxFileSize(session);
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -209,7 +212,7 @@ export default function ConvertPage() {
             '.heif',
           ],
         }}
-        maxSize={50 * 1024 * 1024}
+        maxSize={maxFileSize}
         multiple
         onDrop={handleDrop}
         disabled={controlsDisabled}

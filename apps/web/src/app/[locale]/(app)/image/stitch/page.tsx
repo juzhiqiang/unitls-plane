@@ -22,6 +22,7 @@ import {
 } from '@/lib/processing/image-stitch-client';
 import { createBrowserId } from '@/lib/browser-id';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { WEBKIT_MAX_CANVAS_PIXELS } from '@/lib/processing/canvas-limits';
 import { cn } from '@/lib/utils';
 
 type WidthPreset = '750' | '1080' | '1242' | 'custom';
@@ -230,7 +231,15 @@ export default function ImageStitchPage() {
       }
       setResults(generated);
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      // 浏览器面积上限不是账号限制,必须说清楚 —— 否则用户会以为登录就能解决。
+      setError(
+        message.includes('browser')
+          ? t('limits.browserCanvas', {
+              pixels: Math.round(WEBKIT_MAX_CANVAS_PIXELS / 1_000_000),
+            })
+          : message
+      );
     } finally {
       setProcessing(false);
     }

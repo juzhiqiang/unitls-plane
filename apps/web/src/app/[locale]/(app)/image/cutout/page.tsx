@@ -11,6 +11,7 @@ import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { DownloadButton } from '@/components/tools/download-button';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { LOCAL_IMAGE_MAX_FILE_SIZE } from '@/lib/tools/image-limits';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { useLocalCutout } from '@/lib/cutout/use-local-cutout';
 import {
@@ -126,7 +127,7 @@ export default function CutoutPage() {
             '.heif',
           ],
         }}
-        maxSize={50 * 1024 * 1024}
+        maxSize={LOCAL_IMAGE_MAX_FILE_SIZE}
         onDrop={handleDrop}
         disabled={processing}
         hint={t('dropzoneHint')}

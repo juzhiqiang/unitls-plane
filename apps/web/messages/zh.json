@@ -574,7 +574,8 @@
       "maxFileSize": "部分图片超过当前版本的单文件大小限制。",
       "needAtLeastTwo": "至少上传 2 张图片后才能生成长图。",
       "invalidWidth": "请输入有效的输出宽度。",
-      "invalidBatchWidths": "请输入用英文逗号分隔的有效批量宽度。"
+      "invalidBatchWidths": "请输入用英文逗号分隔的有效批量宽度。",
+      "browserCanvas": "当前浏览器（Safari 及 iOS 上的所有浏览器）对单张画布有约 {pixels}M 像素的上限，超出后会得到空白图。请调小输出宽度，或换用其它浏览器。这不是账号限制，登录也不会放宽。"
     },
     "presets": {
       "750": "电商 750",

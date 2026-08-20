@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { idPhotoPresetSpecs } from '@utils-plane/validators';
 import {
   COMPRESS_EXTENSIONS,
   COMPRESS_FORMATS,
   DEFAULT_IMAGE_COMPRESS_OPTIONS,
+  SIZE_PRESETS,
   canPreserveExifLocally,
   MAX_TARGET_SIZE_KB,
   MIN_TARGET_SIZE_KB,
@@ -159,5 +161,20 @@ describe('EXIF metadata', () => {
     expect(canPreserveExifLocally('image/jpeg', 'image/webp')).toBe(false);
     expect(canPreserveExifLocally('image/png', 'image/jpeg')).toBe(false);
     expect(canPreserveExifLocally('image/heic', 'image/jpeg')).toBe(false);
+  });
+});
+
+describe('size presets', () => {
+  it('id photo presets come from the shared spec', () => {
+    // 此前压缩页写死 413×579,与 idPhotoPresetSpecs.two_inch(413×626)对不上,
+    // 用户按「二寸」压出来的图放不进证件照流程。
+    expect(SIZE_PRESETS.id1).toEqual({
+      width: idPhotoPresetSpecs.one_inch.widthPx,
+      height: idPhotoPresetSpecs.one_inch.heightPx,
+    });
+    expect(SIZE_PRESETS.id2).toEqual({
+      width: idPhotoPresetSpecs.two_inch.widthPx,
+      height: idPhotoPresetSpecs.two_inch.heightPx,
+    });
   });
 });

@@ -169,7 +169,7 @@ API 模块：
 
 - `/` - 营销首页和推荐工具入口
 - `/dashboard` - 最近文件、任务、失败恢复和快捷工具
-- `/image`、`/image/compress`、`/image/convert`、`/image/animation`、`/image/stitch`、`/image/watermark`、`/image/id-photo`
+- `/image`、`/image/compress`、`/image/convert`、`/image/animation`、`/image/stitch`、`/image/watermark`、`/image/id-photo`、`/image/cutout`
 - `/pdf`、`/pdf/merge`、`/pdf/split`、`/pdf/rearrange`、`/pdf/rotate`、`/pdf/from-image`、`/pdf/from-document`、`/pdf/to-image`、`/pdf/to-text`、`/pdf/metadata`、`/pdf/encrypt`、`/pdf/watermark`、`/pdf/compress`
 - `/font`
 - `/files`、`/files/trash`
@@ -180,6 +180,7 @@ API 模块：
 当前工具处理边界：
 
 - 图片压缩、格式转换、长图拼接、GIF/APNG 制作优先走浏览器本地处理。
+- AI 抠图（/image/cutout）全程本地推理，图片不上传；模型资产自托管在 MinIO。
 - GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
 - Markdown /

@@ -245,6 +245,10 @@
       "fontConvert": {
         "title": "Font conversion",
         "description": "Convert TTF, OTF, WOFF, and WOFF2 after sign-in."
+      },
+      "imageCutout": {
+        "title": "AI cutout",
+        "description": "Remove backgrounds locally; export transparent PNG or a solid colour."
       }
     }
   },
@@ -751,6 +755,38 @@
         "description": "Uses OpenAI-compatible AI"
       }
     }
+  },
+  "ImageCutout": {
+    "title": "AI background removal",
+    "description": "Detect the subject and remove the background locally — export a transparent PNG or swap in a solid colour.",
+    "dropzoneHint": "JPG, PNG, WebP, AVIF, or HEIC",
+    "processingLabel": "Runs locally — nothing is uploaded",
+    "selected": "{filename} · {size}",
+    "background": "Background",
+    "backgrounds": {
+      "transparent": "Transparent",
+      "white": "White",
+      "black": "Black",
+      "blue": "Blue",
+      "red": "Red",
+      "green": "Green"
+    },
+    "outputFormat": "Output format",
+    "formatNoAlpha": "{format} has no alpha channel — choose PNG or WebP to keep transparency.",
+    "transparentNeedsAlpha": "This format cannot keep transparency. Choose PNG or WebP, or pick a solid colour.",
+    "highPrecision": "High precision",
+    "highPrecisionLocked": "High precision needs WebGPU; falling back to the balanced model.",
+    "start": "Remove background",
+    "failed": "Local processing failed — retry or try another image.",
+    "stages": {
+      "loadingModel": "Loading model",
+      "running": "Removing background",
+      "compositing": "Compositing"
+    },
+    "resultTitle": "Background removed",
+    "resultSize": "Size",
+    "sourceAlt": "Source preview",
+    "resultAlt": "Cutout preview"
   },
   "PdfTool": {
     "title": "PDF Tools",

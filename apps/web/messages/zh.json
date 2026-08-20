@@ -245,6 +245,10 @@
       "fontConvert": {
         "title": "字体转换",
         "description": "登录后转换 TTF、OTF、WOFF 和 WOFF2。"
+      },
+      "imageCutout": {
+        "title": "AI 抠图",
+        "description": "本地去背景，导出透明 PNG 或换纯色底。"
       }
     }
   },
@@ -751,6 +755,38 @@
         "description": "使用 OpenAI 兼容 AI"
       }
     }
+  },
+  "ImageCutout": {
+    "title": "AI 抠图换背景",
+    "description": "本地识别主体并去除背景，可导出透明 PNG 或换成纯色底。",
+    "dropzoneHint": "支持 JPG / PNG / WebP / AVIF / HEIC",
+    "processingLabel": "本地处理，图片不上传",
+    "selected": "{filename} · {size}",
+    "background": "背景",
+    "backgrounds": {
+      "transparent": "透明",
+      "white": "白色",
+      "black": "黑色",
+      "blue": "蓝色",
+      "red": "红色",
+      "green": "绿色"
+    },
+    "outputFormat": "输出格式",
+    "formatNoAlpha": "{format} 不支持透明通道，需要透明背景请选 PNG 或 WebP。",
+    "transparentNeedsAlpha": "当前格式不支持透明背景，请改选 PNG / WebP，或选一种纯色底。",
+    "highPrecision": "高精度",
+    "highPrecisionLocked": "高精度需要 WebGPU，当前环境使用均衡档。",
+    "start": "开始抠图",
+    "failed": "本地处理失败，可重试或换一张图片。",
+    "stages": {
+      "loadingModel": "正在加载模型",
+      "running": "正在抠图",
+      "compositing": "正在合成"
+    },
+    "resultTitle": "抠图完成",
+    "resultSize": "大小",
+    "sourceAlt": "原图预览",
+    "resultAlt": "抠图结果预览"
   },
   "PdfTool": {
     "title": "PDF 工具",

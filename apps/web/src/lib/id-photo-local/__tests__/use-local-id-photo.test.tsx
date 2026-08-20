@@ -18,6 +18,7 @@ vi.mock('@huggingface/transformers', () => ({
   env: envStub,
 }));
 
+import { resetSegmentationCacheForTests } from '../segmentation';
 import { useLocalIdPhoto } from '../use-local-id-photo';
 import { ORT_VERSION } from '../model-registry';
 
@@ -32,6 +33,10 @@ let lastCutout: {
 const makeRawImage = () => ({ toCanvas: () => ({ width: 10, height: 10 }) });
 
 beforeEach(() => {
+  // pipeline 缓存现在在模块作用域(模型是进程级单例,跨页面共享),
+  // 每个用例必须清掉,否则上一例建好的 pipeline 会让本例跳过构建。
+  resetSegmentationCacheForTests();
+
   (
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;

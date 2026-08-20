@@ -6,17 +6,15 @@ import {
   type IdPhotoPreset,
 } from '@utils-plane/validators';
 import { compositeIdPhoto } from './composite';
+import { type ModelTier } from './model-registry';
 import {
-  ID_PHOTO_MODELS,
-  modelsBaseUrl,
-  ortWasmPath,
-  RMBG_MODEL_ID,
-  tierFor,
-  type ModelTier,
-} from './model-registry';
+  detectLocalEp,
+  isStaleSegmentation,
+  segmentToCutout,
+  type LocalEp,
+} from './segmentation';
 
-/** 本地执行后端(WebGPU 可用性),用于高精度开关门控与 device 选择。 */
-export type LocalEp = 'webgpu' | 'wasm';
+export type { LocalEp };
 
 // 在模块作用域取值:hook 内的 `process` 回调会遮蔽全局 process,不能在其中写 process.env。
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -68,11 +66,6 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
   const inFlightRef = useRef(false);
   // 递增会话 id,reset/新 process 时自增;进度回调和结果按 sid 丢弃过期消息。
   const sessionIdRef = useRef(0);
-  // pipeline 按「档位」缓存:同档复用,换档重建(transformers.js 自身也有模型缓存)。
-  const pipelineRef = useRef<{
-    tier: ModelTier;
-    seg: (input: string | Blob) => Promise<unknown>;
-  } | null>(null);
 
   const process = useCallback<UseLocalIdPhoto['process']>(
     async (file, tier, opts) => {
@@ -83,70 +76,19 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
       setProgress(0);
       setError(null);
       setResultBlob(null);
+      const isStale = () => sid !== sessionIdRef.current;
       try {
-        // 懒加载 transformers.js:仅在用户点击处理时按需加载(代码分割,SSR 不评估该库)。
-        const tf = await import('@huggingface/transformers');
-        if (sid !== sessionIdRef.current) return;
-
-        const webgpu = ep === 'webgpu';
-        const effectiveTier = tierFor(webgpu, tier);
-        const meta = ID_PHOTO_MODELS[effectiveTier];
-        if (!meta) throw new Error(`unknown model tier: ${effectiveTier}`);
-
-        // 资产全部自托管在 MinIO:关掉本地路径探测,把 remoteHost 指向自有对象存储,
-        // 并显式设置 ort wasm 目录(否则 transformers.js 会去 jsDelivr 取,离线镜像里拿不到)。
-        tf.env.allowLocalModels = false;
-        tf.env.remoteHost = modelsBaseUrl();
-        tf.env.remotePathTemplate = '{model}/';
-        const ortWasm = tf.env.backends?.onnx?.wasm;
-        if (ortWasm) ortWasm.wasmPaths = ortWasmPath();
-
-        // 进度回调:transformers.js 发 {status,file,progress}(progress 为 0..100)。
-        // 下载阶段映射 loading-model;推理无细粒度进度,进入 running 后置 0。
-        const onProgress = (p: {
-          status?: string;
-          progress?: number;
-          file?: string;
-        }) => {
-          if (sid !== sessionIdRef.current) return;
-          if (p.status === 'progress' && typeof p.progress === 'number') {
-            setProgress(Math.max(0, Math.min(1, p.progress / 100)));
+        const cutoutBitmap = await segmentToCutout(file, tier, ep ?? 'wasm', {
+          onDownloadProgress: ratio => {
+            if (isStale()) return;
+            setProgress(ratio);
             setStatus('loading-model');
-          }
-        };
-
-        // 同档位复用已建好的 pipeline,避免每次重新拉模型
-        let seg =
-          pipelineRef.current?.tier === effectiveTier
-            ? pipelineRef.current.seg
-            : null;
-        if (!seg) {
-          seg = (await tf.pipeline('background-removal', RMBG_MODEL_ID, {
-            dtype: meta.dtype,
-            device: webgpu ? 'webgpu' : 'wasm',
-            progress_callback: onProgress,
-          })) as unknown as (input: string | Blob) => Promise<unknown>;
-          if (sid !== sessionIdRef.current) return;
-          pipelineRef.current = { tier: effectiveTier, seg };
-        }
-
-        setStatus('running');
-        setProgress(0);
-        const out = await seg(file);
-        if (sid !== sessionIdRef.current) return;
-
-        // pipeline 返回 RawImage(或其数组),toCanvas() 给出带 alpha 的抠图
-        const raw = (Array.isArray(out) ? out[0] : out) as {
-          toCanvas?: () => HTMLCanvasElement | OffscreenCanvas;
-        };
-        if (!raw?.toCanvas) throw new Error('unexpected pipeline output');
-        const cutoutCanvas = raw.toCanvas();
+          },
+          isStale,
+        });
+        if (isStale()) return;
 
         setStatus('compositing');
-        // 抠图已是透明 RGBA;转成 ImageBitmap 供合成按原尺寸裁剪缩放。
-        const cutoutBitmap = await createImageBitmap(
-          cutoutCanvas as unknown as CanvasImageSource
-        );
         try {
           const spec = idPhotoPresetSpecs[opts.preset];
           if (!spec) throw new Error(`unknown preset: ${opts.preset}`);
@@ -158,14 +100,14 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             opts.outputType,
             opts.crop
           );
-          if (sid !== sessionIdRef.current) return;
+          if (isStale()) return;
           setResultBlob(blob);
           setStatus('done');
         } finally {
           cutoutBitmap.close?.();
         }
       } catch (err) {
-        if (sid !== sessionIdRef.current) return;
+        if (isStale() || isStaleSegmentation(err)) return;
         // UI 只展示「本地处理失败」这类兜底文案,真实错误(ort 后端/资产加载)必须能看到,
         // 否则排查只能靠猜。仅开发态打印,生产不噪音。
         if (IS_DEV) {
@@ -203,26 +145,9 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
   // 挂载时探测 WebGPU,使高精度开关在首次处理前就可交互。
   useEffect(() => {
     let cancelled = false;
-    const gpu =
-      typeof navigator !== 'undefined'
-        ? (
-            navigator as unknown as {
-              gpu?: { requestAdapter?: () => Promise<unknown> };
-            }
-          ).gpu
-        : undefined;
-    if (!gpu?.requestAdapter) {
-      setEp('wasm');
-      return;
-    }
-    gpu
-      .requestAdapter()
-      .then(adapter => {
-        if (!cancelled) setEp(adapter ? 'webgpu' : 'wasm');
-      })
-      .catch(() => {
-        if (!cancelled) setEp('wasm');
-      });
+    detectLocalEp().then(detected => {
+      if (!cancelled) setEp(detected);
+    });
     return () => {
       cancelled = true;
     };

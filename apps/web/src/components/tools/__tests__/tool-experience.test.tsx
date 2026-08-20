@@ -73,12 +73,12 @@ describe('tool experience components', () => {
     { count: 1, twoColumnCount: 1, threeColumnCount: 2 },
     { count: 2, twoColumnCount: 0, threeColumnCount: 1 },
     { count: 3, twoColumnCount: 1, threeColumnCount: 0 },
-    { count: 10, twoColumnCount: 0, threeColumnCount: 2 },
+    { count: 11, twoColumnCount: 1, threeColumnCount: 1 },
   ])(
     'fills responsive grid rows for $count tools without adding links',
     ({ count, twoColumnCount, threeColumnCount }) => {
       const tools =
-        count === 10 ? recommendedTools : imageTools.slice(0, count);
+        count === 11 ? recommendedTools : imageTools.slice(0, count);
       const { container } = renderWithIntl(
         <ToolCatalogGrid
           groups={[

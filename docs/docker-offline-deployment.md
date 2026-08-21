@@ -153,6 +153,10 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
   `--force-recreate api web`，否则旧容器可能继续运行旧镜像。
 - 只重建 `api` 和 `web`，不会删除 PostgreSQL、Redis、MinIO 的 volume。
 - API 容器启动时会执行 `node apps/api/dist/scripts/migrate.js`，用于增量数据库迁移。
+- 如果使用已有 MinIO 实例，需要在 `.env.prod` 中设置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、
+  `S3_SECRET_KEY` 指向该实例（内部网络可达地址或 `http://minio:9000`）。组合镜像 API 启动时会执行
+  `node apps/api/dist/scripts/sync-id-photo-models.js`，把镜像内置的证件照模型同步到
+  `models` 桶并设置匿名只读策略；桶名可通过 `S3_MODELS_BUCKET` 调整。同步失败不阻塞启动，可重启 api 重试。
 
 ## 更新环境变量字段
 

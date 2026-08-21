@@ -73,7 +73,7 @@ await run('docker', [
   '--build-arg',
   'NEXT_PUBLIC_API_URL=http://202.104.149.204:5006',
   '--build-arg',
-  'NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5010',
+  'NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009',
   '--build-arg',
   'NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true',
   '--build-arg',

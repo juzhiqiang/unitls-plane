@@ -45,6 +45,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_API_CORS_ALLOW_ORIGIN: http://202.104.149.204:5005
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -64,6 +65,8 @@ services:
       mc alias set local http://minio:9000 minioadmin minioadmin;
       mc mb local/uploads --ignore-existing;
       mc anonymous set download local/uploads;
+      mc mb local/models --ignore-existing;
+      mc anonymous set download local/models;
       exit 0;
       "
 
@@ -122,7 +125,7 @@ services:
         condition: service_started
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://202.104.149.204:5006}
-      NEXT_PUBLIC_S3_PUBLIC_URL: ${NEXT_PUBLIC_S3_PUBLIC_URL:-http://202.104.149.204:5010}
+      NEXT_PUBLIC_S3_PUBLIC_URL: ${NEXT_PUBLIC_S3_PUBLIC_URL:-http://202.104.149.204:5009}
       NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION: ${NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION:-true}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}

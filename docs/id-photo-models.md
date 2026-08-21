@@ -126,7 +126,9 @@ bundle 里 stub 成空模块；client 侧对 onnxruntime-web 的预打包 .mjs �
 
 - 桶：`models`（只读匿名下载，`put-bucket-policy` 允许 `s3:GetObject`）。
 - 公网 URL：`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/...`。
-- 跨域：MinIO 2025 自动镜像请求 `Origin` 头，无需额外 bucket CORS 配置。
+- 跨域：同步脚本会通过 `PutBucketCorsCommand` 给 `models` 桶设置 CORS 规则
+  （`AllowedOrigins: ['*']`、`GET/HEAD`），确保浏览器跨域拉取模型资产时收到
+  `Access-Control-Allow-Origin`。
 - 缓存：上传时设 `Cache-Control: public, max-age=31536000, immutable`（资产按版本不可变）。
 
 ## 离线镜像

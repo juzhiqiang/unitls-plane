@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import {
   S3Client,
   CreateBucketCommand,
+  PutBucketCorsCommand,
   PutBucketPolicyCommand,
   PutObjectCommand,
   HeadBucketCommand,
@@ -112,6 +113,37 @@ async function main(): Promise<number> {
     } catch (err) {
       // 非 MinIO 后端可能不支持匿名策略,不阻塞
       logger.warn(`Bucket policy set skipped: ${(err as Error).message}`);
+    }
+
+    // 2b. CORS 配置(浏览器跨域拉取模型资产必须)
+    // 前端从 NEXT_PUBLIC_S3_PUBLIC_URL 直接 fetch 模型文件,
+    // 与 Web 页面不同源时 MinIO 需返回 Access-Control-Allow-Origin。
+    const corsRules = {
+      CORSRules: [
+        {
+          AllowedOrigins: ['*'],
+          AllowedMethods: ['GET', 'HEAD'],
+          AllowedHeaders: ['*'],
+          ExposeHeaders: [
+            'Content-Length',
+            'Content-Type',
+            'ETag',
+            'Cache-Control',
+          ],
+          MaxAgeSeconds: 86400,
+        },
+      ],
+    };
+    try {
+      await client.send(
+        new PutBucketCorsCommand({
+          Bucket: bucket,
+          CORSConfiguration: corsRules,
+        })
+      );
+      logger.log(`CORS rules set on ${bucket}`);
+    } catch (err) {
+      logger.warn(`CORS config set skipped: ${(err as Error).message}`);
     }
 
     // 3. 递归列出资产树,只同步 rmbg/ 与 ort/ 前缀下的文件(版本无关,便于将来升级)

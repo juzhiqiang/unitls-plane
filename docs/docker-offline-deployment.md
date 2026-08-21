@@ -63,7 +63,7 @@ BUILD_TIME=<UTC ISO 8601 timestamp>
 | API           | 5006     | 3001     |
 | PostgreSQL    | 5007     | 5432     |
 | Redis         | 5008     | 6379     |
-| MinIO API     | 5009     | 9000     |
+| MinIO API     | 5010     | 9000     |
 | MinIO Console | 5010     | 9001     |
 
 ## 本地打包

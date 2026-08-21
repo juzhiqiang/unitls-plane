@@ -285,7 +285,7 @@ bun run docker:package:offline
 - API：`5006 -> 3001`
 - PostgreSQL：`5007 -> 5432`
 - Redis：`5008 -> 6379`
-- MinIO API：`5009 -> 9000`
+- MinIO API：`5010 -> 9000`
 - MinIO Console：`5010 -> 9001`
 
 ### 上传到服务器
@@ -303,7 +303,7 @@ BETTER_AUTH_SECRET=<openssl rand -base64 32>
 BETTER_AUTH_URL=http://202.104.149.204:5006
 CORS_ORIGIN=http://202.104.149.204:5005
 NEXT_PUBLIC_API_URL=http://202.104.149.204:5006
-NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009
+NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5010
 REQUIRE_EMAIL_VERIFICATION=true
 NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true
 EMAIL_VERIFICATION_CALLBACK_URL=http://202.104.149.204:5005/zh/login?verified=1
@@ -374,7 +374,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 - API：`http://202.104.149.204:5006`
 - PostgreSQL：`202.104.149.204:5007`
 - Redis：`202.104.149.204:5008`
-- MinIO API：`http://202.104.149.204:5009`
+- MinIO API：`http://202.104.149.204:5010`
 - MinIO Console：`http://202.104.149.204:5010`
 
 查看服务状态和日志：

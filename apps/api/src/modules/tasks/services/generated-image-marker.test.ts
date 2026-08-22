@@ -36,17 +36,29 @@ describe('markGeneratedImage', () => {
     expect(exif).toContain('Utils-Plane');
     expect(exif).toContain('gpt-image-1');
     expect(exif).toContain('2026-08-22');
+    // 标记只写来源事实,不含 prompt。真正的守卫是 GeneratedImageMarkerOptions
+    // 的类型签名(它没有 prompt 字段),这里只是把契约钉在测试里。
+    expect(exif).not.toContain('prompt');
   });
 
-  it('never embeds the prompt', async () => {
-    const tagged = await markGeneratedImage(await solidPng(), {
+  it('re-encodes any input format to png', async () => {
+    const jpegInput = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: '#336699' },
+    })
+      .jpeg()
+      .toBuffer();
+    expect((await sharp(jpegInput).metadata()).format).toBe('jpeg');
+
+    const tagged = await markGeneratedImage(jpegInput, {
       model: 'gpt-image-1',
       generatedAt: new Date('2026-08-22T10:00:00.000Z'),
     });
 
-    const exif =
-      (await sharp(tagged).metadata()).exif?.toString('latin1') ?? '';
-    expect(exif).not.toContain('prompt');
+    // 强制 png 是 ImageGenerationService 硬编码 mimeType/extension 的前提,
+    // 即使 provider 返回 JPEG/WebP 也必须落成 png。
+    const metadata = await sharp(tagged).metadata();
+    expect(metadata.format).toBe('png');
+    expect(metadata.exif?.toString('latin1') ?? '').toContain('Utils-Plane');
   });
 
   it('strips upstream metadata that could carry the prompt', async () => {

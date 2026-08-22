@@ -12,6 +12,11 @@ import {
 /** provider 与生成标识共用同一个默认模型,避免 EXIF 记的模型与实际请求不一致。 */
 export const DEFAULT_AI_IMAGE_MODEL = 'gpt-image-1';
 
+/** 模型解析收在一处:用 || 而不是 ?? ,env "设了但为空" 也要回退默认值。 */
+export function resolveAiImageModel(): string {
+  return process.env.AI_IMAGE_MODEL || DEFAULT_AI_IMAGE_MODEL;
+}
+
 /** 上游报错里出现这些标记时判定为内容策略拒绝。 */
 const CONTENT_REJECTION_MARKERS = [
   'content_policy',
@@ -78,8 +83,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
   constructor({
     baseUrl = process.env.AI_IMAGE_BASE_URL,
     apiKey = process.env.AI_IMAGE_API_KEY,
-    // 用 || 而不是 ?? :env "设了但为空" 不是 nullish,必须一并回退默认值。
-    model = process.env.AI_IMAGE_MODEL || DEFAULT_AI_IMAGE_MODEL,
+    model = resolveAiImageModel(),
     responseFormat = process.env.AI_IMAGE_RESPONSE_FORMAT || 'b64_json',
     fetch: fetchImpl = fetch,
   }: OpenAiCompatibleImageGenerationProviderOptions = {}) {

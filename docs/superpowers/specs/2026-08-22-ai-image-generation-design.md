@@ -112,8 +112,8 @@ WHERE user_id = $1
 
 改动点：
 
-- `apps/api/src/config/bull.config.ts` 注册队列
-- `apps/api/src/modules/tasks/tasks.module.ts` `registerQueue`
+- `apps/api/src/modules/tasks/tasks.module.ts` 的 `BullModule.registerQueue`（队列在此注册，`bull.config.ts` 只做 `forRootAsync` 连接与默认 job 选项，不列队列名）
+- `apps/api/src/modules/health/health.module.ts:16-21` 的 `queueNames` 数组，以及 `HEALTH_CHECKS` useFactory 的位置参数列表（`:44-51`）——它按 `queueNames` 顺序做位置注入，新增队列必须同步加第 6 个 `Queue` 参数并纳入 `queues` 数组，否则 `/health/ready` 的 queues 检查会漏掉新队列
 - `TasksService` 构造注入（`tasks.service.ts:41-48`）与 `getQueue`（`:309-318`）
 - `getTaskQueueName`（`apps/api/src/modules/tasks/task-queue.ts:5-28`）新增 `'ai-queue'` 联合成员与分支
 

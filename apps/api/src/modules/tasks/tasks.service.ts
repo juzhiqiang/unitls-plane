@@ -29,6 +29,7 @@ import {
 import { FilesService } from '../files/files.service';
 import { CleanupObligationService } from '../files/cleanup-obligation.service';
 import { getTaskQueueName } from './task-queue';
+import { countTasksCreatedToday } from './daily-task-quota';
 import {
   TaskJobReconciler,
   type TaskJobIdentity,
@@ -84,6 +85,7 @@ export class TasksService {
     identity: TaskJobIdentity
   ): Promise<Task> {
     await this.assertCanAccessInputFiles(input, user, database);
+    await this.assertWithinDailyQuota(input.type, user, database);
 
     const [task] = await database
       .insert(tasks)
@@ -258,6 +260,32 @@ export class TasksService {
           message: `File size exceeds limit of ${maxFileSize / 1024 / 1024}MB`,
         });
       }
+    }
+  }
+
+  /**
+   * 生图有真实外部计费,必须限每日张数。
+   *
+   * 放在事务内,借 withActiveUserTransaction 已持有的 user 行锁保证并发不超发。
+   */
+  private async assertWithinDailyQuota(
+    type: TaskType,
+    user: Pick<User, 'id' | 'plan' | 'role'> | null,
+    database: ActiveUserTransaction
+  ): Promise<void> {
+    if (type !== 'image_generate' || !user) return;
+
+    const limit = getLimit(
+      { userId: user.id, plan: user.plan, role: user.role },
+      'image.generate.dailyCount'
+    );
+    const used = await countTasksCreatedToday(database, user.id, type);
+
+    if (used >= limit) {
+      throw new ForbiddenException({
+        code: ErrorCodes.AI_IMAGE_DAILY_LIMIT_EXCEEDED,
+        message: `Daily image generation limit of ${limit} reached`,
+      });
     }
   }
 

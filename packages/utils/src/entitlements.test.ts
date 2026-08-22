@@ -18,6 +18,7 @@ const limitKeys: LimitKey[] = [
   'image.stitch.maxFiles',
   'image.stitch.maxFileSize',
   'image.stitch.maxCanvasPixels',
+  'image.generate.dailyCount',
 ];
 
 describe('entitlements', () => {

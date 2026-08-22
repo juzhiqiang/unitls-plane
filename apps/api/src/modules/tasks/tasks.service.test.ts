@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -97,6 +97,8 @@ mock.module('../../common/database/active-user-transaction', () => ({
   withActiveUserTransaction,
   withProducerTransaction,
 }));
+const countTasksCreatedToday = vi.fn(async () => 0);
+mock.module('./daily-task-quota', () => ({ countTasksCreatedToday }));
 const { TasksService } = await import('./tasks.service');
 
 function queue(name: string) {
@@ -173,6 +175,7 @@ beforeEach(() => {
   insertedTask = null;
   events.length = 0;
   vi.clearAllMocks();
+  countTasksCreatedToday.mockResolvedValue(0);
 });
 
 describe('TasksService task creation', () => {
@@ -318,6 +321,7 @@ describe('TasksService task creation', () => {
     expect(task.userId).toBe('user-1');
     expect(globalInsert).not.toHaveBeenCalled();
     expect(transactionInsert).toHaveBeenCalledTimes(1);
+    expect(countTasksCreatedToday).not.toHaveBeenCalled();
     expect(cleanupObligationService.recordTaskJob).toHaveBeenCalledWith(
       TASK_ID,
       'pdf-queue',
@@ -474,5 +478,51 @@ describe('TasksService task creation', () => {
 
     expect(transactionInsert).not.toHaveBeenCalled();
     expect(pdfQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('allows an image generation task while under the daily quota', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(9);
+
+    await expect(
+      service.create(
+        {
+          type: 'image_generate',
+          inputFileIds: [],
+          inputConfig: { mode: 'text_to_image', prompt: 'x' },
+        },
+        { id: 'user-1', plan: 'signed_in', role: 'user' } as never
+      )
+    ).resolves.toMatchObject({ type: 'image_generate' });
+  });
+
+  it('rejects an image generation task once the daily quota is reached', async () => {
+    const { service, aiQueue } = createService();
+    countTasksCreatedToday.mockResolvedValue(10);
+
+    const error = await service
+      .create(
+        {
+          type: 'image_generate',
+          inputFileIds: [],
+          inputConfig: { mode: 'text_to_image', prompt: 'x' },
+        },
+        { id: 'user-1', plan: 'signed_in', role: 'user' } as never
+      )
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    if (!(error instanceof ForbiddenException)) {
+      throw new Error('Expected a ForbiddenException');
+    }
+    expect(error.getStatus()).toBe(403);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.AI_IMAGE_DAILY_LIMIT_EXCEEDED,
+      message: 'Daily image generation limit of 10 reached',
+    });
+
+    expect(transactionInsert).not.toHaveBeenCalled();
+    expect(aiQueue.add).not.toHaveBeenCalled();
+    expect(events).toContain('rollback');
   });
 });

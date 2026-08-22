@@ -36,7 +36,8 @@ export type LimitKey =
   | 'image.animation.maxOutputWidth'
   | 'image.stitch.maxFiles'
   | 'image.stitch.maxFileSize'
-  | 'image.stitch.maxCanvasPixels';
+  | 'image.stitch.maxCanvasPixels'
+  | 'image.generate.dailyCount';
 
 const PLAN_RANK: Record<EntitlementPlan, number> = {
   free: 0,
@@ -142,6 +143,14 @@ export const LIMITS: Record<LimitKey, Record<EntitlementPlan, number>> = {
     pro: 140_000_000,
     team: 180_000_000,
     private: 240_000_000,
+  },
+  'image.generate.dailyCount': {
+    free: 0,
+    signed_in: 10,
+    pro_preview: 100,
+    pro: 50,
+    team: 80,
+    private: 100,
   },
 };
 

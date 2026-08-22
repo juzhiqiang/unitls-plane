@@ -3335,7 +3335,9 @@ AI_IMAGE_MODEL=gpt-image-1
 AI_IMAGE_RESPONSE_FORMAT=b64_json
 ```
 
-（不含 `AI_IMAGE_SIZE` / `AI_IMAGE_QUALITY`：Task 6 的 provider 不读这两个 env——尺寸与质量是 per-request 的用户选择，由前端表单传入、`imageGenerateTaskConfigSchema` 提供默认。列成 env 会是无人读取的 dead config。）
+（不含 `AI_IMAGE_SIZE` / `AI_IMAGE_QUALITY`：Task
+6 的 provider 不读这两个 env——尺寸与质量是 per-request 的用户选择，由前端表单传入、`imageGenerateTaskConfigSchema`
+提供默认。列成 env 会是无人读取的 dead config。）
 
 - [ ] **Step 2: 生产 compose 透传环境变量**
 
@@ -3389,7 +3391,8 @@ AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 抠图互不影�
 - `AI_IMAGE_BASE_URL`：OpenAI 兼容网关地址，未设置时 `/image/generate` 入口隐藏。
 - `AI_IMAGE_API_KEY`：网关鉴权 key。
 - `AI_IMAGE_MODEL`：模型名，默认 `gpt-image-1`。
-- `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认 `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
+- `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认
+  `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
 
 当前只实现文生图，走 `POST /v1/images/generations`。图生图与局部重绘尚未实现。每日生成张数上限在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
@@ -3498,13 +3501,36 @@ git commit -m "chore(ai-image): release:verify 产物同步"
 
 ---
 
-## 已知缺陷（待修，Task 7 遗留）
+## 已知缺陷（Task 7 遗留，已修复）
 
-**`daily-task-quota.test.ts` 的测试隔离问题**：`countTasksCreatedToday > scopes the count...` 用例单跑绿（`bun test src/modules/tasks/daily-task-quota.test.ts` → 4 pass），但全量跑（`bun test src`）失败，报 `sql2.toQuery is not a function`。根因是全量运行时别处的 `mock.module('@utils-plane/db')` 泄漏进程级 mock，使 drizzle 的 `sql` 被换成残缺桩，PgDialect 序列化那条断言拿不到真实 `sql`。
+**`daily-task-quota.test.ts`
+的测试隔离问题（已修复）**：`countTasksCreatedToday > scopes the count...`
+用例单跑绿（`bun test src/modules/tasks/daily-task-quota.test.ts` → 4
+pass），但全量跑（`bun test src`）失败，报
+`sql2.toQuery is not a function`。根因是全量运行时别处的进程级 `mock.module`
+泄漏，使该断言拿不到真实的 drizzle `sql` 对象，PgDialect 序列化崩掉。
 
-- 发现于 Task 8 阶段；对比确认 Task 7 提交（42dfb45）全量即已 348 pass / 2 fail，Task 8（e493949）355 pass / 2 fail，同样两条，故非 Task 8 引入。
+- 发现于 Task 8 阶段；对比确认 Task 7 提交（42dfb45）全量即已 348 pass / 2 fail，Task
+  8（e493949）355 pass / 2 fail，同样两条，故非 Task 8 引入。
 - 另一条 `dockerfile-assets.test.ts` 失败是 main 分支既有基线，与本功能无关。
-- 修复方向：让该 SQL 序列化断言不依赖全局 drizzle `sql`（测试内 import 真实 `sql`/`PgDialect` 做文件级隔离，或改用不经 `mock.module('@utils-plane/db')` 的序列化方式），使其在全量下也稳定。
-- release:verify 跑全量测试，此问题不修会红，必须在 Task 16 发布前解决。
+- 根因补正：真正的污染源是
+  `mock.module('drizzle-orm', ...)`（`files.service.test.ts`、`account.repository.test.ts`、`cleanup-obligation.service.test.ts`、`active-user-transaction.test.ts`），它把
+  `and`/`gte`/`sql` 换成桩；`mock.module('@utils-plane/db')` 把 `tasks` 换成 `{}`
+  只是次要因素。实测这种替换会**写穿到底层 export 绑定**：`import('drizzle-orm/sql')`
+  子路径、带 query 的重新 import 都拿不回真实实现，重新注册 `mock.module`
+  也只能改已存在的导出名、无法在同进程内恢复被污染的实现。
+- 修复方式：把这条 SQL 谓词断言改为在**干净子进程**里跑（`spawnSync(process.execPath, ['--eval', ...])`
+  加载真实 `daily-task-quota.ts` + 真实 `PgDialect`，把序列化后的 `{ sql, params }`
+  以 JSON 回传父进程断言）。断言内容一字未减，与任何 `mock.module` 执行顺序无关，单跑 /
+  `src/modules/tasks` / 全量三种方式都绿。只改了
+  `apps/api/src/modules/tasks/daily-task-quota.test.ts`，`daily-task-quota.ts`
+  实现未动。修复提交见下文 commit。
+- 变异验证：临时删掉 `ne(tasks.status, 'failed')` 后，该用例在单跑（3 pass / 1 fail）与全量（356
+  pass / 2 fail）下都变红，报
+  `Expected substring or pattern: /"tasks"\."status"\s*<>\s*\$\d+/`，说明保护力未削弱；随后已还原实现。
+- 全量基线：修复后 `bun test src` 为 357 pass / 1 fail，唯一失败仍是 `dockerfile-assets.test.ts`
+  那条既有基线。
 
-教训：涉及 mock.module 的任务，spec/质量审查必须包含一次全量 bun test src，不能只跑子目录——进程级 mock 泄漏只在合跑时暴露。
+教训（保留）：涉及 mock.module 的任务，spec/质量审查必须包含一次全量 bun test
+src，不能只跑子目录——进程级 mock 泄漏只在合跑时暴露。补充一条：`mock.module` 对像 `drizzle-orm`
+这类被广泛 import 的库是**全进程不可逆**的污染，需要真实实现的断言只能靠子进程隔离。

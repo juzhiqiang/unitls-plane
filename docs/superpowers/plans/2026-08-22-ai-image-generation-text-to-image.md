@@ -1646,18 +1646,22 @@ export interface GeneratedImageMarkerOptions {
  *
  * 只写不可争议的来源事实,绝不写 prompt —— 产物文件可能被用户分享出去。
  * 不加可见水印。
+ *
+ * 必须用 withExif(替换语义),不能用 withMetadata(合并语义)。
+ * withMetadata 会把上游图片自带的元数据透传进产物:PNG 的 tEXt chunk
+ * (keyword=parameters,正是 SD 与多数 OpenAI 兼容网关写 prompt 的位置)
+ * 以及我们没覆盖的 EXIF 标签(如 Artist)都会保留下来,等于把 prompt
+ * 泄露到可被分享的文件里。别改回 withMetadata。
  */
 export async function markGeneratedImage(
   input: Buffer,
   { model, generatedAt }: GeneratedImageMarkerOptions
 ): Promise<Buffer> {
   return sharp(input)
-    .withMetadata({
-      exif: {
-        IFD0: {
-          Software: 'Utils-Plane AI Image Generation',
-          ImageDescription: `AI-generated image; model=${model}; generatedAt=${generatedAt.toISOString()}`,
-        },
+    .withExif({
+      IFD0: {
+        Software: 'Utils-Plane AI Image Generation',
+        ImageDescription: `AI-generated image; model=${model}; generatedAt=${generatedAt.toISOString()}`,
       },
     })
     .png()

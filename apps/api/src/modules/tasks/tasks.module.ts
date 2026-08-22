@@ -13,6 +13,7 @@ import { IdPhotoService } from './services/id-photo.service';
 import { PdfService } from './services/pdf.service';
 import { FontService } from './services/font.service';
 import { PortraitSegmentationService } from './services/portrait-segmentation.service';
+import { ImageGenerationService } from './services/image-generation.service';
 import { FilesModule } from '../files/files.module';
 import { TaskJobReconciler } from './task-job-reconciler.service';
 import { TaskJobStateRepository } from './task-job-state.repository';
@@ -36,6 +37,7 @@ import { TaskJobStateRepository } from './task-job-state.repository';
     ImageService,
     IdPhotoService,
     PortraitSegmentationService,
+    ImageGenerationService,
     PdfService,
     FontService,
     ImageProcessor,

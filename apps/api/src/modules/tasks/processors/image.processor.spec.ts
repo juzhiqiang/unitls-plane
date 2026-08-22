@@ -83,6 +83,7 @@ it('uses shared task output owner lookup instead of fabricating free users', () 
     'image.processor.ts',
     'pdf.processor.ts',
     'font.processor.ts',
+    'ai-image.processor.ts',
   ]) {
     const source = readFileSync(join(import.meta.dir, processor), 'utf8');
 

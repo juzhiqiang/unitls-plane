@@ -6,6 +6,7 @@ import { TasksService } from './tasks.service';
 import { ImageProcessor } from './processors/image.processor';
 import { PdfProcessor } from './processors/pdf.processor';
 import { FontProcessor } from './processors/font.processor';
+import { AiImageProcessor } from './processors/ai-image.processor';
 import { CleanupProcessor } from './processors/cleanup.processor';
 import { CleanupScheduler } from './processors/cleanup.scheduler';
 import { ImageService } from './services/image.service';
@@ -43,6 +44,7 @@ import { TaskJobStateRepository } from './task-job-state.repository';
     ImageProcessor,
     PdfProcessor,
     FontProcessor,
+    AiImageProcessor,
     CleanupProcessor,
     CleanupScheduler,
   ],

@@ -2636,10 +2636,11 @@ bun --cwd apps/web test src/components/tools/__tests__/image-generate-options.te
 'use client';
 
 import { useTranslations } from 'next-intl';
-import type {
-  ImageGenerateQuality,
-  ImageGenerateSize,
-  ImageGenerateStyle,
+import {
+  IMAGE_GENERATE_PROMPT_MAX_LENGTH,
+  type ImageGenerateQuality,
+  type ImageGenerateSize,
+  type ImageGenerateStyle,
 } from '@utils-plane/validators';
 
 export interface ImageGenerateDraft {
@@ -2662,7 +2663,8 @@ const STYLES: ImageGenerateStyle[] = [
 ];
 const COUNTS = [1, 2, 4];
 
-export const IMAGE_GENERATE_PROMPT_MAX_LENGTH = 2000;
+// IMAGE_GENERATE_PROMPT_MAX_LENGTH 由 @utils-plane/validators 导出（Task 4 落地），
+// 这里直接复用，避免跨包重复魔数。
 
 interface ImageGenerateOptionsProps {
   value: ImageGenerateDraft;

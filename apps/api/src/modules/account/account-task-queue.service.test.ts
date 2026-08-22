@@ -90,6 +90,7 @@ function scanRepository() {
 let imageQueue = queue('image-queue');
 let pdfQueue = queue('pdf-queue');
 let fontQueue = queue('font-queue');
+let aiQueue = queue('ai-queue');
 let repository = scanRepository();
 
 function service() {
@@ -97,6 +98,7 @@ function service() {
     imageQueue as any,
     pdfQueue as any,
     fontQueue as any,
+    aiQueue as any,
     repository as any
   );
 }
@@ -105,6 +107,7 @@ beforeEach(() => {
   imageQueue = queue('image-queue');
   pdfQueue = queue('pdf-queue');
   fontQueue = queue('font-queue');
+  aiQueue = queue('ai-queue');
   repository = scanRepository();
 });
 

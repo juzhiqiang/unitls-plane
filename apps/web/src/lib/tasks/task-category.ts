@@ -8,6 +8,7 @@ export function getTaskTypeCategory(type: TaskType): TaskTypeCategory {
     case 'convert':
     case 'image_watermark':
     case 'image_id_photo':
+    case 'image_generate':
       return 'image';
     case 'pdf_merge':
     case 'pdf_split':

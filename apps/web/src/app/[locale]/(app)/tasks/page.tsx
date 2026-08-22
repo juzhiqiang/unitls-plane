@@ -102,6 +102,7 @@ function TypeLabel({ type }: { type: TaskType }) {
     convert: t('typeConvert'),
     image_watermark: t('typeImageWatermark'),
     image_id_photo: t('typeImageIdPhoto'),
+    image_generate: t('typeImageGenerate'),
     pdf_merge: t('typePdfMerge'),
     pdf_split: t('typePdfSplit'),
     pdf_to_image: t('typePdfToImage'),

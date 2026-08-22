@@ -106,6 +106,13 @@
       "when": 1784133393558,
       "tag": "0014_lazy_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787395098800,
+      "tag": "0015_wise_korvac",
+      "breakpoints": true
     }
   ]
 }

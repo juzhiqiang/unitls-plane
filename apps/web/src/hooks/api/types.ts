@@ -15,7 +15,8 @@ export type TaskTypeValue =
   | 'pdf_compress'
   | 'pdf_metadata'
   | 'pdf_rearrange'
-  | 'pdf_from_document';
+  | 'pdf_from_document'
+  | 'image_generate';
 
 export interface CreateTaskDto {
   type: TaskTypeValue;

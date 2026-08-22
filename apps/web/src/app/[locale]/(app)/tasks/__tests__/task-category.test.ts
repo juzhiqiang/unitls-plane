@@ -9,4 +9,8 @@ describe('task category labels', () => {
   it('classifies document-to-PDF as a PDF task', () => {
     expect(getTaskTypeCategory('pdf_from_document')).toBe('pdf');
   });
+
+  it('classifies AI image generation as an image task', () => {
+    expect(getTaskTypeCategory('image_generate')).toBe('image');
+  });
 });

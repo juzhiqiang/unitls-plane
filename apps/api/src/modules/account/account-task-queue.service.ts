@@ -31,6 +31,7 @@ export class AccountTaskQueueService {
     @InjectQueue('image-queue') private readonly imageQueue: Queue,
     @InjectQueue('pdf-queue') private readonly pdfQueue: Queue,
     @InjectQueue('font-queue') private readonly fontQueue: Queue,
+    @InjectQueue('ai-queue') private readonly aiQueue: Queue,
     private readonly repository: AccountRepository
   ) {}
 
@@ -243,6 +244,8 @@ export class AccountTaskQueueService {
         return this.pdfQueue;
       case 'font-queue':
         return this.fontQueue;
+      case 'ai-queue':
+        return this.aiQueue;
     }
   }
 }

@@ -1,6 +1,10 @@
 import type { TaskType } from '@utils-plane/validators';
 
-export type TaskQueueName = 'image-queue' | 'pdf-queue' | 'font-queue';
+export type TaskQueueName =
+  | 'image-queue'
+  | 'pdf-queue'
+  | 'font-queue'
+  | 'ai-queue';
 
 export function getTaskQueueName(type: TaskType): TaskQueueName {
   switch (type) {
@@ -24,5 +28,7 @@ export function getTaskQueueName(type: TaskType): TaskQueueName {
       return 'pdf-queue';
     case 'font_convert':
       return 'font-queue';
+    case 'image_generate':
+      return 'ai-queue';
   }
 }

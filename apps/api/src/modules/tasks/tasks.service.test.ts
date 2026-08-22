@@ -123,6 +123,7 @@ function createService(
   const imageQueue = queue('image-queue');
   const pdfQueue = queue('pdf-queue');
   const fontQueue = queue('font-queue');
+  const aiQueue = queue('ai-queue');
   const taskJobReconciler = {
     reconcile: vi.fn(
       async (identity: {
@@ -135,7 +136,9 @@ function createService(
             ? imageQueue
             : identity.queueName === 'pdf-queue'
               ? pdfQueue
-              : fontQueue;
+              : identity.queueName === 'ai-queue'
+                ? aiQueue
+                : fontQueue;
         const queuedJob = await targetQueue.add(
           String(insertedTask?.type),
           { taskId: identity.resourceId },
@@ -152,6 +155,7 @@ function createService(
       imageQueue as any,
       pdfQueue as any,
       fontQueue as any,
+      aiQueue as any,
       filesService as any,
       cleanupObligationService as any,
       taskJobReconciler as any
@@ -160,6 +164,7 @@ function createService(
     imageQueue,
     pdfQueue,
     fontQueue,
+    aiQueue,
     taskJobReconciler,
   };
 }
@@ -194,6 +199,26 @@ describe('TasksService task creation', () => {
     expect(filesService.getById).not.toHaveBeenCalled();
     expect(globalInsert).not.toHaveBeenCalled();
     expect(pdfQueue.add).not.toHaveBeenCalled();
+    expect(withActiveUserTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects anonymous AI image generation before inserting or queueing', async () => {
+    const { service, filesService, aiQueue } = createService();
+
+    await expect(
+      service.create(
+        {
+          type: 'image_generate',
+          inputFileIds: [],
+          inputConfig: { mode: 'text_to_image', prompt: 'x' },
+        },
+        null
+      )
+    ).rejects.toThrow('Sign in is required for server processing tasks');
+
+    expect(filesService.getById).not.toHaveBeenCalled();
+    expect(globalInsert).not.toHaveBeenCalled();
+    expect(aiQueue.add).not.toHaveBeenCalled();
     expect(withActiveUserTransaction).not.toHaveBeenCalled();
   });
 

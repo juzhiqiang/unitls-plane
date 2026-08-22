@@ -42,6 +42,7 @@ export class TasksService {
     @InjectQueue('image-queue') private imageQueue: Queue,
     @InjectQueue('pdf-queue') private pdfQueue: Queue,
     @InjectQueue('font-queue') private fontQueue: Queue,
+    @InjectQueue('ai-queue') private aiQueue: Queue,
     private readonly filesService: FilesService,
     private readonly cleanupObligationService: CleanupObligationService,
     private readonly taskJobReconciler: TaskJobReconciler
@@ -289,6 +290,7 @@ export class TasksService {
       case 'image_watermark':
         return false;
       case 'image_id_photo':
+      case 'image_generate':
       case 'pdf_merge':
       case 'pdf_split':
       case 'pdf_to_image':
@@ -314,6 +316,8 @@ export class TasksService {
         return this.pdfQueue;
       case 'font-queue':
         return this.fontQueue;
+      case 'ai-queue':
+        return this.aiQueue;
     }
   }
 }

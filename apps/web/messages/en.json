@@ -464,7 +464,8 @@
       "pdf_metadata": "PDF metadata",
       "pdf_rearrange": "PDF rearrange",
       "pdf_from_document": "Document to PDF",
-      "font_convert": "Font conversion"
+      "font_convert": "Font conversion",
+      "image_generate": "AI image generation"
     }
   },
   "ImageTool": {
@@ -1210,6 +1211,7 @@
     "typeConvert": "Convert",
     "typeImageWatermark": "Watermark",
     "typeImageIdPhoto": "ID photo",
+    "typeImageGenerate": "AI image generation",
     "typePdfMerge": "PDF Merge",
     "typePdfSplit": "PDF Split",
     "typePdfToImage": "PDF → Image",

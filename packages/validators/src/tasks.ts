@@ -18,6 +18,7 @@ export const taskTypeEnum = z.enum([
   'pdf_metadata',
   'pdf_rearrange',
   'pdf_from_document',
+  'image_generate',
 ]);
 
 export const createTaskSchema = z.object({

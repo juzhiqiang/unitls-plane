@@ -11,18 +11,29 @@ function queue(name: string) {
 }
 
 describe('TasksService queue routing', () => {
-  it('routes image_id_photo tasks to image queue', () => {
-    const service = new TasksService(
+  function createService() {
+    return new TasksService(
       queue('image-queue') as any,
       queue('pdf-queue') as any,
       queue('font-queue') as any,
+      queue('ai-queue') as any,
       { getById: vi.fn() } as any,
       { recordTaskJob: vi.fn(), clear: vi.fn(), release: vi.fn() } as any,
       { reconcile: vi.fn() } as any
     );
+  }
+
+  it('routes image_id_photo tasks to image queue', () => {
+    const service = createService();
 
     expect((service as any).getQueue('image_id_photo').name).toBe(
       'image-queue'
     );
+  });
+
+  it('routes image_generate tasks to ai queue', () => {
+    const service = createService();
+
+    expect((service as any).getQueue('image_generate').name).toBe('ai-queue');
   });
 });

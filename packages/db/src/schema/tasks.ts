@@ -28,6 +28,7 @@ export const taskTypeEnum = pgEnum('task_type', [
   'pdf_metadata',
   'pdf_rearrange',
   'pdf_from_document',
+  'image_generate',
 ]);
 
 export const taskStatusEnum = pgEnum('task_status', [

@@ -464,7 +464,8 @@
       "pdf_metadata": "PDF 元数据",
       "pdf_rearrange": "PDF 重排",
       "pdf_from_document": "文档转 PDF",
-      "font_convert": "字体转换"
+      "font_convert": "字体转换",
+      "image_generate": "AI 生图"
     }
   },
   "ImageTool": {
@@ -1210,6 +1211,7 @@
     "typeConvert": "转换",
     "typeImageWatermark": "水印",
     "typeImageIdPhoto": "证件照",
+    "typeImageGenerate": "AI 生图",
     "typePdfMerge": "PDF 合并",
     "typePdfSplit": "PDF 拆分",
     "typePdfToImage": "PDF 转图片",

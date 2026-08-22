@@ -35,4 +35,13 @@ describe('TaskQueryDto', () => {
 
     expect(source).toContain("'pdf_from_document'");
   });
+
+  it('includes the AI image generation task type in the API boundary', () => {
+    const source = readFileSync(
+      join(import.meta.dir, 'tasks.dto.ts'),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
+
+    expect(source).toContain("'image_generate'");
+  });
 });

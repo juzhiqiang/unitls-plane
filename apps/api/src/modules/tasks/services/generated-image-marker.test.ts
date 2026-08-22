@@ -10,6 +10,19 @@ async function solidPng(): Promise<Buffer> {
     .toBuffer();
 }
 
+/**
+ * 模拟上游 provider 在返回图里夹带元数据的情况。
+ * 用 Artist —— 这是我们的标记不覆盖的字段,只有替换语义才能剥掉它。
+ */
+async function upstreamPngWithMetadata(payload: string): Promise<Buffer> {
+  return sharp({
+    create: { width: 8, height: 8, channels: 3, background: '#336699' },
+  })
+    .withExif({ IFD0: { Artist: payload } })
+    .png()
+    .toBuffer();
+}
+
 describe('markGeneratedImage', () => {
   it('embeds the generator and model as readable EXIF metadata', async () => {
     const tagged = await markGeneratedImage(await solidPng(), {
@@ -34,6 +47,23 @@ describe('markGeneratedImage', () => {
     const exif =
       (await sharp(tagged).metadata()).exif?.toString('latin1') ?? '';
     expect(exif).not.toContain('prompt');
+  });
+
+  it('strips upstream metadata that could carry the prompt', async () => {
+    const upstream = await upstreamPngWithMetadata('SECRET-PROMPT-CANARY');
+    // 前提检查:载荷确实进了输入,否则这条断言是空转的。
+    expect(upstream.toString('latin1')).toContain('SECRET-PROMPT-CANARY');
+
+    const tagged = await markGeneratedImage(upstream, {
+      model: 'gpt-image-1',
+      generatedAt: new Date('2026-08-22T10:00:00.000Z'),
+    });
+
+    expect(tagged.toString('latin1')).not.toContain('SECRET-PROMPT-CANARY');
+    const exif =
+      (await sharp(tagged).metadata()).exif?.toString('latin1') ?? '';
+    expect(exif).toContain('Utils-Plane');
+    expect(exif).toContain('model=');
   });
 
   it('keeps the output decodable as a valid image', async () => {

@@ -9,7 +9,8 @@ import {
   normalizeOpenAiCompatibleImageGenerationUrl,
 } from './openai-compatible-image';
 
-const DEFAULT_AI_IMAGE_MODEL = 'gpt-image-1';
+/** provider 与生成标识共用同一个默认模型,避免 EXIF 记的模型与实际请求不一致。 */
+export const DEFAULT_AI_IMAGE_MODEL = 'gpt-image-1';
 
 /** 上游报错里出现这些标记时判定为内容策略拒绝。 */
 const CONTENT_REJECTION_MARKERS = [

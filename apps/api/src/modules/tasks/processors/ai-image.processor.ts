@@ -6,6 +6,7 @@ import { ErrorCodes } from '../../../common/errors/error-codes';
 import { FilesService } from '../../files/files.service';
 import { markGeneratedImage } from '../services/generated-image-marker';
 import {
+  DEFAULT_AI_IMAGE_MODEL,
   ImageGenerationError,
   ImageGenerationService,
 } from '../services/image-generation.service';
@@ -113,7 +114,9 @@ export class AiImageProcessor extends WorkerHost {
     await this.reportProgress(task.id, job, 80);
 
     const marked = await markGeneratedImage(generated.buffer, {
-      model: process.env.AI_IMAGE_MODEL ?? 'unknown',
+      // 与 provider 的取值表达式逐字一致(用 || ,空串也要回退),
+      // 否则 EXIF 记的模型会和实际请求的模型不一致。
+      model: process.env.AI_IMAGE_MODEL || DEFAULT_AI_IMAGE_MODEL,
       generatedAt: new Date(),
     });
 

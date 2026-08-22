@@ -3491,3 +3491,16 @@ git commit -m "chore(ai-image): release:verify 产物同步"
    调用路径与页面上传入口。`normalizeOpenAiCompatibleImageEditUrl` 已在共享模块里就位。
 2. **局部重绘**（`inpaint`）：在图生图之上加 `mask` 参数与蒙版画笔组件，参考 `/image/mosaic`
    的 canvas 逻辑。这是三个模式里唯一没有现成参照的部件。
+
+---
+
+## 已知缺陷（待修，Task 7 遗留）
+
+**`daily-task-quota.test.ts` 的测试隔离问题**：`countTasksCreatedToday > scopes the count...` 用例单跑绿（`bun test src/modules/tasks/daily-task-quota.test.ts` → 4 pass），但全量跑（`bun test src`）失败，报 `sql2.toQuery is not a function`。根因是全量运行时别处的 `mock.module('@utils-plane/db')` 泄漏进程级 mock，使 drizzle 的 `sql` 被换成残缺桩，PgDialect 序列化那条断言拿不到真实 `sql`。
+
+- 发现于 Task 8 阶段；对比确认 Task 7 提交（42dfb45）全量即已 348 pass / 2 fail，Task 8（e493949）355 pass / 2 fail，同样两条，故非 Task 8 引入。
+- 另一条 `dockerfile-assets.test.ts` 失败是 main 分支既有基线，与本功能无关。
+- 修复方向：让该 SQL 序列化断言不依赖全局 drizzle `sql`（测试内 import 真实 `sql`/`PgDialect` 做文件级隔离，或改用不经 `mock.module('@utils-plane/db')` 的序列化方式），使其在全量下也稳定。
+- release:verify 跑全量测试，此问题不修会红，必须在 Task 16 发布前解决。
+
+教训：涉及 mock.module 的任务，spec/质量审查必须包含一次全量 bun test src，不能只跑子目录——进程级 mock 泄漏只在合跑时暴露。

@@ -96,7 +96,7 @@ WHERE user_id = $1
 
 并发超发无需额外处理：`create` 对登录用户走 `withActiveUserTransaction`（`tasks.service.ts:66`），该函数已对 user 行执行 `SELECT ... FOR UPDATE`（`apps/api/src/common/database/active-user-transaction.ts:45-50`），同一用户的建任务请求天然串行。前端一次提交 N 张会发 N 个并发 `POST /tasks`，它们在这把行锁上排队，每次 COUNT 都读到已提交的最新值。
 
-配额值写进 `packages/utils/src/entitlements.ts` 的 `LIMITS`，新增 `LimitKey`（如 `aiImage.dailyCount`），与现有体积/张数/像素类上限并列。`signed_in` 给保守值；`free` 档因功能本身要求登录而永远读不到，按结构补齐即可。
+配额值写进 `packages/utils/src/entitlements.ts` 的 `LIMITS`，新增 `LimitKey`（如 `image.generate.dailyCount`），与现有体积/张数/像素类上限并列。`signed_in` 给保守值；`free` 档因功能本身要求登录而永远读不到，按结构补齐即可。
 
 一次提交 N 张时的部分超额行为：N 个 `POST /tasks` 逐个经过配额判定，超出的那几个返回 403 + `AI_IMAGE_DAILY_LIMIT_EXCEEDED`。前端把成功建出的任务正常展示，被拒的位置显示「今日额度已用完」，不整批回滚。不预先查询剩余额度，也不新增查询额度的接口。
 

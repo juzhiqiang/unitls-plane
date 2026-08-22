@@ -1305,7 +1305,7 @@ drizzle 的 select 链。
 `packages/utils/src/entitlements.ts`，`LimitKey` 联合末尾加：
 
 ```ts
-  | 'aiImage.dailyCount';
+  | 'image.generate.dailyCount';
 ```
 
 （把原来 `| 'image.stitch.maxCanvasPixels';` 的分号移到新行末尾。）
@@ -1313,7 +1313,7 @@ drizzle 的 select 链。
 `LIMITS` 对象末尾加一项。`free` 档永远读不到——功能要求登录——按结构补 0 即可：
 
 ```ts
-  'aiImage.dailyCount': {
+  'image.generate.dailyCount': {
     free: 0,
     signed_in: 10,
     pro_preview: 100,
@@ -1515,7 +1515,7 @@ import { countTasksCreatedToday } from './daily-task-quota';
 
     const limit = getLimit(
       { userId: user.id, plan: user.plan, role: user.role },
-      'aiImage.dailyCount'
+      'image.generate.dailyCount'
     );
     const used = await countTasksCreatedToday(database, user.id, type);
 
@@ -2139,7 +2139,7 @@ bun --cwd apps/web test src/components/tools/__tests__/tool-metadata.test.ts
     processing: 'server',
     retention: 'account-files',
     requiresLogin: true,
-    limitKeys: ['aiImage.dailyCount'],
+    limitKeys: ['image.generate.dailyCount'],
     tags: ['ai', 'generate', 'prompt'],
   },
 ```
@@ -3388,7 +3388,7 @@ AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 抠图互不影�
 - `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认 `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
 
 当前只实现文生图，走 `POST /v1/images/generations`。图生图与局部重绘尚未实现。每日生成张数上限在
-`packages/utils/src/entitlements.ts` 的 `LIMITS['aiImage.dailyCount']` 中按 plan 配置。
+`packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
 ```
 
 - [ ] **Step 6: 格式检查**
@@ -3440,7 +3440,7 @@ cd apps/web && bun run dev
 2. 登录后填提示词、选 2 张、生成 → 任务列表 `/zh/tasks` 出现两条「AI 生图」记录
 3. 两张图逐张出现（不是等全部完成才一起出）
 4. 产物出现在 `/zh/files`，归属当前账号
-5. 把 `aiImage.dailyCount` 的 `signed_in`
+5. 把 `image.generate.dailyCount` 的 `signed_in`
    临时改成 1，再生成 2 张 → 第一张成功、第二张报「今日额度已用完」，改回去
 6. 故意填一个会被 provider 拒的提示词 → 页面显示内容策略文案，且 `/tasks/:id/status` 返回的
    `errorMessage` 里**没有**原 prompt

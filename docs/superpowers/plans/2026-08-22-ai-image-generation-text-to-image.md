@@ -243,14 +243,26 @@ git commit -m "feat(tasks): 注册 image_generate 任务类型并路由到 ai-qu
 
 ---
 
-## Task 2: 注册 ai-queue 队列
+## Task 2: 注册并接线 ai-queue 队列
 
-队列在 `tasks.module.ts` 注册（`bull.config.ts` 只配连接与默认 job 选项，不列队列名）。`health.module.ts` 另有一份独立的 `queueNames`，用**位置注入**把队列传进 `HEALTH_CHECKS` 工厂——漏改会让 `/health/ready` 检查不到新队列。
+Task 1 给 `TasksService`、`AccountTaskQueueService` 注入了 `@InjectQueue('ai-queue')`，但队列本身还没在任何模块注册，且两处运行时派发路径还不认识 `ai-queue`。本任务把 `ai-queue` 真正接进系统，做完 API 才能启动、生图任务才能派发。
+
+`BullModule.registerQueue` 的 provider 是**模块作用域**的：`TasksModule` 注册不会传导到 `AccountModule`，两个模块各自注册自己注入的队列。
+
+四处必须同步（前两处是 Task 1 spec 审查发现的计划盲区）：
+1. `tasks.module.ts` 注册队列（供 `TasksService` 和 `TaskJobReconciler` 解析）
+2. `health.module.ts` 的独立 `queueNames` + 位置注入工厂
+3. `account.module.ts` 注册队列（供 `AccountTaskQueueService` 解析，否则 Nest 启动即依赖无法解析）
+4. `task-job-reconciler.service.ts` 的 `getQueue` —— 它有 `default` 分支骗过了编译器，但真实派发走 `reconcile → getQueue`，缺 `ai-queue` 分支会在建生图任务时运行时抛 `Unsupported task queue ai-queue`
 
 **Files:**
 - Modify: `apps/api/src/modules/tasks/tasks.module.ts:23-28`
 - Modify: `apps/api/src/modules/health/health.module.ts:16-21,44-51`
+- Modify: `apps/api/src/modules/account/account.module.ts:13-17`
+- Modify: `apps/api/src/modules/tasks/task-job-reconciler.service.ts:28-33,125-136`
 - Test: `apps/api/src/modules/health/health.module.test.ts:17-22,104,154,181`
+- Test: `apps/api/src/modules/account/account.module.test.ts:11`
+- Test: `apps/api/src/modules/tasks/task-job-reconciler.service.test.ts:47-66`
 
 - [ ] **Step 1: 改测试期望——健康检查覆盖 5 个队列**
 
@@ -268,15 +280,43 @@ const queueTokens = [
 
 把三处 `Array.from({ length: 4 }, () => ({` 全部改成 `Array.from({ length: 5 }, () => ({`（分别在 `HEALTH_CHECKS factory` 的三个用例里）。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [ ] **Step 2: 改测试期望——account.module 与 reconciler**
 
-```bash
-bun --cwd apps/api test src/modules/health/health.module.test.ts
+`apps/api/src/modules/account/account.module.test.ts:11`，队列名数组加 `'ai-queue'`：
+
+```ts
+  for (const queue of ['image-queue', 'pdf-queue', 'font-queue', 'ai-queue']) {
 ```
 
-预期：FAIL。`exportedTokens` 与 `inject` 的断言都因为实际只有 4 个 token 而不相等。
+`apps/api/src/modules/tasks/task-job-reconciler.service.test.ts` 的 `createReconciler`（约 :47-66），在 `fontQueue` 之后加一个 aiQueue，并作为第 4 个实参传入构造：
 
-- [ ] **Step 3: tasks.module 注册队列**
+```ts
+  const imageQueue = queue('image-queue', events);
+  const pdfQueue = queue('pdf-queue', events);
+  const fontQueue = queue('font-queue', events);
+  const aiQueue = queue('ai-queue', events);
+```
+
+```ts
+  const reconciler = new TaskJobReconciler(
+    imageQueue as any,
+    pdfQueue as any,
+    fontQueue as any,
+    aiQueue as any,
+    cleanupObligations as any,
+    stateRepository as any
+  );
+```
+
+- [ ] **Step 3: 运行测试确认失败**
+
+```bash
+bun --cwd apps/api test src/modules/health/health.module.test.ts src/modules/account/account.module.test.ts src/modules/tasks/task-job-reconciler.service.test.ts
+```
+
+预期：health 与 account 的 module 测试 FAIL（token/队列名数组不相等）；reconciler 测试因构造函数还只接 5 个参数、第 4 个实参 `aiQueue` 挤掉了 `cleanupObligations`，会以运行时错误或断言失败告终。
+
+- [ ] **Step 4: tasks.module 注册队列**
 
 `apps/api/src/modules/tasks/tasks.module.ts`，`BullModule.registerQueue` 加一项：
 
@@ -290,7 +330,7 @@ bun --cwd apps/api test src/modules/health/health.module.test.ts
     ),
 ```
 
-- [ ] **Step 4: health.module 同步队列清单与位置注入**
+- [ ] **Step 5: health.module 同步队列清单与位置注入**
 
 `apps/api/src/modules/health/health.module.ts`，`queueNames` 加一项：
 
@@ -324,15 +364,52 @@ const queueNames = [
         ];
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [ ] **Step 6: account.module 注册队列**
 
-```bash
-bun --cwd apps/api test src/modules/health/health.module.test.ts
+`apps/api/src/modules/account/account.module.ts`，`BullModule.registerQueue` 加 `ai-queue`：
+
+```ts
+    BullModule.registerQueue(
+      { name: 'image-queue' },
+      { name: 'pdf-queue' },
+      { name: 'font-queue' },
+      { name: 'ai-queue' }
+    ),
 ```
 
-预期：PASS。
+- [ ] **Step 7: reconciler 注入并路由 ai-queue**
 
-- [ ] **Step 6: 验证 API 能启动且健康检查就绪**
+`apps/api/src/modules/tasks/task-job-reconciler.service.ts`，构造函数在 `fontQueue` 之后加注入：
+
+```ts
+    @InjectQueue('image-queue') private readonly imageQueue: Queue,
+    @InjectQueue('pdf-queue') private readonly pdfQueue: Queue,
+    @InjectQueue('font-queue') private readonly fontQueue: Queue,
+    @InjectQueue('ai-queue') private readonly aiQueue: Queue,
+    private readonly cleanupObligationService: CleanupObligationService,
+    private readonly stateRepository: TaskJobStateRepository
+```
+
+`getQueue` 的 switch（约 :126）在 `font-queue` 之后加分支：
+
+```ts
+      case 'font-queue':
+        return this.fontQueue;
+      case 'ai-queue':
+        return this.aiQueue;
+```
+
+`TaskJobReconciler` 是 `TasksModule` 的 provider，Step 4 注册后这里的 `@InjectQueue('ai-queue')` 即可解析，不需要额外 registerQueue。
+
+- [ ] **Step 8: 运行测试确认通过**
+
+```bash
+bun --cwd apps/api test src/modules/health/health.module.test.ts src/modules/account/account.module.test.ts src/modules/tasks/task-job-reconciler.service.test.ts
+```
+
+预期：全部 PASS。
+
+- [ ] **Step 9: 验证 API 能启动、健康检查就绪、且能派发生图任务**
 
 ```bash
 cd apps/api && bun run dev
@@ -344,13 +421,15 @@ cd apps/api && bun run dev
 curl -s http://localhost:3001/health/ready
 ```
 
-预期：HTTP 200，`checks.queues` 为通过状态（LibreOffice 缺失时整体返回 `degraded` + 200 属正常）。确认后停掉 dev server。
+预期：HTTP 200，`checks.queues` 通过（LibreOffice 缺失时整体 `degraded` + 200 属正常）。API 能正常启动即证明 `AccountTaskQueueService` 的 `ai-queue` 依赖已解析。确认后停掉 dev server。
 
-- [ ] **Step 7: 提交**
+（真正建一个 `image_generate` 任务验证 reconciler 路由不再抛 `Unsupported task queue` 要等 provider 就位，留到 Task 16 端到端验证。本步只需 API 启动成功 + 健康检查绿。）
+
+- [ ] **Step 10: 提交**
 
 ```bash
-git add apps/api/src/modules/tasks/tasks.module.ts apps/api/src/modules/health
-git commit -m "feat(tasks): 新增独立 ai-queue 队列并纳入健康检查"
+git add apps/api/src/modules/tasks apps/api/src/modules/health apps/api/src/modules/account
+git commit -m "feat(tasks): 注册并接线 ai-queue 至队列、健康检查、账号清理与派发对账"
 ```
 
 ---

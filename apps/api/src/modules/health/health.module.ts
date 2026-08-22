@@ -18,6 +18,7 @@ const queueNames = [
   'pdf-queue',
   'font-queue',
   'cleanup-queue',
+  'ai-queue',
 ] as const;
 
 function assertRedisReady(
@@ -46,9 +47,10 @@ function assertRedisReady(
         imageQueue: Queue,
         pdfQueue: Queue,
         fontQueue: Queue,
-        cleanupQueue: Queue
+        cleanupQueue: Queue,
+        aiQueue: Queue
       ): HealthChecks => {
-        const queues = [imageQueue, pdfQueue, fontQueue, cleanupQueue];
+        const queues = [imageQueue, pdfQueue, fontQueue, cleanupQueue, aiQueue];
 
         return {
           database: async signal => {

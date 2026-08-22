@@ -8,7 +8,7 @@ it('registers all task queues and provides account task cleanup', () => {
     'utf8'
   );
 
-  for (const queue of ['image-queue', 'pdf-queue', 'font-queue']) {
+  for (const queue of ['image-queue', 'pdf-queue', 'font-queue', 'ai-queue']) {
     expect(source).toContain(`{ name: '${queue}' }`);
   }
   expect(source).toContain('AccountTaskQueueService');

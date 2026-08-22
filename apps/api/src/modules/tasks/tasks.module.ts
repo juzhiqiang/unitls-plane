@@ -24,7 +24,8 @@ import { TaskJobStateRepository } from './task-job-state.repository';
       { name: 'image-queue' },
       { name: 'pdf-queue' },
       { name: 'font-queue' },
-      { name: 'cleanup-queue' }
+      { name: 'cleanup-queue' },
+      { name: 'ai-queue' }
     ),
   ],
   controllers: [TasksController, FontsController],

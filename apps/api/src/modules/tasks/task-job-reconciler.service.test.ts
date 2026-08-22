@@ -47,6 +47,7 @@ function createReconciler(states: Array<Record<string, unknown> | null>) {
   const imageQueue = queue('image-queue', events);
   const pdfQueue = queue('pdf-queue', events);
   const fontQueue = queue('font-queue', events);
+  const aiQueue = queue('ai-queue', events);
   const cleanupObligations = {
     clear: vi.fn(async () => {
       events.push('obligation-clear');
@@ -61,6 +62,7 @@ function createReconciler(states: Array<Record<string, unknown> | null>) {
     imageQueue as any,
     pdfQueue as any,
     fontQueue as any,
+    aiQueue as any,
     cleanupObligations as any,
     stateRepository as any
   );

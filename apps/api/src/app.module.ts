@@ -33,7 +33,8 @@ import { BasicAuthMiddleware } from './common/middleware/basic-auth.middleware';
       { name: 'image-queue', adapter: BullMQAdapter },
       { name: 'pdf-queue', adapter: BullMQAdapter },
       { name: 'font-queue', adapter: BullMQAdapter },
-      { name: 'cleanup-queue', adapter: BullMQAdapter }
+      { name: 'cleanup-queue', adapter: BullMQAdapter },
+      { name: 'ai-queue', adapter: BullMQAdapter }
     ),
   ],
   providers: [

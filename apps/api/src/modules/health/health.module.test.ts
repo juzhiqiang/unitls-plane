@@ -19,6 +19,7 @@ const queueTokens = [
   getQueueToken('pdf-queue'),
   getQueueToken('font-queue'),
   getQueueToken('cleanup-queue'),
+  getQueueToken('ai-queue'),
 ];
 
 interface HealthFactoryProvider {
@@ -101,7 +102,7 @@ describe('HEALTH_CHECKS factory', () => {
     database.transaction = transaction;
     const ping = vi.fn(async () => 'PONG');
     const minio = { checkBucket: vi.fn(async () => undefined) };
-    const queues = Array.from({ length: 4 }, () => ({
+    const queues = Array.from({ length: 5 }, () => ({
       client: Promise.resolve({ status: 'ready', ping }),
       getJobCounts: vi.fn(async () => ({})),
     }));
@@ -151,7 +152,7 @@ describe('HEALTH_CHECKS factory', () => {
 
   it('fails fast without queueing Redis commands when clients are not ready', async () => {
     const ping = vi.fn(async () => 'PONG');
-    const queues = Array.from({ length: 4 }, () => ({
+    const queues = Array.from({ length: 5 }, () => ({
       client: Promise.resolve({ status: 'connecting', ping }),
       getJobCounts: vi.fn(async () => ({})),
     }));
@@ -178,7 +179,7 @@ describe('HEALTH_CHECKS factory', () => {
 
   it('does not queue Redis commands after the health signal is aborted', async () => {
     const ping = vi.fn(async () => 'PONG');
-    const queues = Array.from({ length: 4 }, () => ({
+    const queues = Array.from({ length: 5 }, () => ({
       client: Promise.resolve({ status: 'ready', ping }),
       getJobCounts: vi.fn(async () => ({})),
     }));

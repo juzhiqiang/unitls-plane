@@ -13,7 +13,8 @@ import { AccountTaskQueueService } from './account-task-queue.service';
     BullModule.registerQueue(
       { name: 'image-queue' },
       { name: 'pdf-queue' },
-      { name: 'font-queue' }
+      { name: 'font-queue' },
+      { name: 'ai-queue' }
     ),
   ],
   controllers: [AccountController],

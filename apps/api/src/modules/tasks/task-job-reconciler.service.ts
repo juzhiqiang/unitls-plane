@@ -28,6 +28,7 @@ export class TaskJobReconciler {
     @InjectQueue('image-queue') private readonly imageQueue: Queue,
     @InjectQueue('pdf-queue') private readonly pdfQueue: Queue,
     @InjectQueue('font-queue') private readonly fontQueue: Queue,
+    @InjectQueue('ai-queue') private readonly aiQueue: Queue,
     private readonly cleanupObligationService: CleanupObligationService,
     private readonly stateRepository: TaskJobStateRepository
   ) {}
@@ -130,6 +131,8 @@ export class TaskJobReconciler {
         return this.pdfQueue;
       case 'font-queue':
         return this.fontQueue;
+      case 'ai-queue':
+        return this.aiQueue;
       default:
         throw new Error(`Unsupported task queue ${name}`);
     }

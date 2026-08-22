@@ -3328,10 +3328,10 @@ git commit -m "test(web): 新增中英文文案 key 一致性校验"
 AI_IMAGE_BASE_URL=
 AI_IMAGE_API_KEY=
 AI_IMAGE_MODEL=gpt-image-1
-AI_IMAGE_SIZE=1024x1024
-AI_IMAGE_QUALITY=high
 AI_IMAGE_RESPONSE_FORMAT=b64_json
 ```
+
+（不含 `AI_IMAGE_SIZE` / `AI_IMAGE_QUALITY`：Task 6 的 provider 不读这两个 env——尺寸与质量是 per-request 的用户选择，由前端表单传入、`imageGenerateTaskConfigSchema` 提供默认。列成 env 会是无人读取的 dead config。）
 
 - [ ] **Step 2: 生产 compose 透传环境变量**
 
@@ -3345,8 +3345,6 @@ AI_IMAGE_RESPONSE_FORMAT=b64_json
 - AI_IMAGE_BASE_URL=${AI_IMAGE_BASE_URL:-}
 - AI_IMAGE_API_KEY=${AI_IMAGE_API_KEY:-}
 - AI_IMAGE_MODEL=${AI_IMAGE_MODEL:-gpt-image-1}
-- AI_IMAGE_SIZE=${AI_IMAGE_SIZE:-1024x1024}
-- AI_IMAGE_QUALITY=${AI_IMAGE_QUALITY:-high}
 - AI_IMAGE_RESPONSE_FORMAT=${AI_IMAGE_RESPONSE_FORMAT:-b64_json}
 ```
 
@@ -3387,7 +3385,7 @@ AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 抠图互不影�
 - `AI_IMAGE_BASE_URL`：OpenAI 兼容网关地址，未设置时 `/image/generate` 入口隐藏。
 - `AI_IMAGE_API_KEY`：网关鉴权 key。
 - `AI_IMAGE_MODEL`：模型名，默认 `gpt-image-1`。
-- `AI_IMAGE_SIZE`、`AI_IMAGE_QUALITY`、`AI_IMAGE_RESPONSE_FORMAT`：默认生成参数。
+- `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认 `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
 
 当前只实现文生图，走 `POST /v1/images/generations`。图生图与局部重绘尚未实现。每日生成张数上限在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['aiImage.dailyCount']` 中按 plan 配置。

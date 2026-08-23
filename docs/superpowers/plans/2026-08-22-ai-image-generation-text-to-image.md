@@ -36,6 +36,21 @@ App Router + React 18、TanStack Query、next-intl、bun:test
 bun run services:up
 ```
 
+## 通用约定（每个任务都适用）
+
+**格式化**：本文档里的代码片段是按 ~100 列排版的，而仓库 Prettier 配置是
+`printWidth: 80`。**照抄后必须对新增/修改的文件跑 `bunx prettier --write`**，并用
+`bun run format:check:changed` 确认干净——`release:verify`
+第 1 步就是增量格式检查，不做这步会红。（Task 11 曾因此被打回。）
+
+**提交**：一律用普通 `git commit`
+新提交。只有在「当前 HEAD 正是你自己刚才那个提交、且中间没有其它提交」时才可以 `--amend`。
+
+**测试隔离**：`bun test` 的 `mock.module` 是**进程级**的，会污染同批运行的其它测试文件。任何用到
+`mock.module`
+的任务，验证时必须跑一次全量（`cd apps/api && bun test src`）而不只是子目录，否则泄漏只在合跑时暴露。（Task
+7 曾因此漏掉一个缺陷。）
+
 ---
 
 ## Task 1: 注册 image_generate 任务类型
@@ -2828,6 +2843,20 @@ git commit -m "feat(web): 新增 AI 生图参数表单组件"
 - Create: `apps/web/src/app/[locale]/(app)/image/generate/layout.tsx`
 - Create: `apps/web/src/app/[locale]/(app)/image/generate/page.tsx`
 - Create: `apps/web/src/app/[locale]/(app)/image/generate/__tests__/page.test.tsx`
+
+**Task 11 审查发现的约束（必须遵守）：**
+
+`useTaskGroupProgress` 的 `queryFn` 用 `Promise.all`
+并发取 N 个状态，任一请求失败会让整个 query 进 error。审查者实测了各种情形：
+
+- 瞬时失败会自行恢复（error 后仍继续轮询），最终 `settled=true`、回调正常，只是短暂空窗。
+- 但**某项永久失败**（例如该 taskId 返回 404）会导致无限轮询、`settled`
+  永不为 true、其余任务的回调永不触发。
+
+所以页面**必须消费 `query.isError`**（hook 已把整个 `query`
+返回），在错误态下渲染失败提示而不是让进度条永远转。否则永久失败表现为「进度条转到底也不结束」。本任务的
+`page.test.tsx` 应包含一条对应用例：mock 让状态请求持续失败，断言页面渲染出错误提示（复用
+`FailureRecoveryPanel` 与 `ImageGenerate.failed` 文案）而非停留在 processing。
 
 - [ ] **Step 1: 建 layout**
 

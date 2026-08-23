@@ -1,0 +1,254 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
+import { authClient } from '@/lib/auth-client';
+import { useCreateTask } from '@/hooks/api/use-tasks';
+import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
+import {
+  ImageGenerateOptions,
+  type ImageGenerateDraft,
+} from '@/components/tools/image-generate-options';
+import { ProcessingProgress } from '@/components/tools/processing-progress';
+import { ResultPanel } from '@/components/tools/result-panel';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import type { ToolStage } from '@/components/tools/tool-step-rail';
+
+const TOOL_HREF = '/image/generate';
+
+const ERROR_MESSAGE_KEY: Record<string, string> = {
+  AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
+  AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
+  AI_IMAGE_NOT_CONFIGURED: 'notConfigured',
+};
+
+const INITIAL_DRAFT: ImageGenerateDraft = {
+  prompt: '',
+  size: '1024x1024',
+  quality: 'high',
+  count: 1,
+};
+
+function errorCodeOf(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : 'AI_IMAGE_GENERATION_FAILED';
+}
+
+export default function ImageGeneratePage() {
+  const t = useTranslations('ImageGenerate');
+  const tShared = useTranslations('ToolsShared');
+  const router = useRouter();
+  const { data: session } = authClient.useSession();
+  const createTask = useCreateTask();
+
+  const [draft, setDraft] = useState<ImageGenerateDraft>(INITIAL_DRAFT);
+  const [taskIds, setTaskIds] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+
+  const loadPreview = useCallback(async (taskId: string, fileId: string) => {
+    if (!fileId) return;
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/files/${fileId}/download`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) return;
+      const url = URL.createObjectURL(await response.blob());
+      setPreviews(current => ({ ...current, [taskId]: url }));
+    } catch {
+      // fetch 本身抛出的网络错误在此静默忽略,否则会在完成回调里变成 unhandled rejection。
+    }
+  }, []);
+
+  const { items, settled, query } = useTaskGroupProgress(taskIds, {
+    onItemCompleted: loadPreview,
+  });
+
+  // useTaskGroupProgress 的 queryFn 用 Promise.all 并发取 N 个状态,任一任务永久失败
+  // (例如 taskId 返回 404)会让整个 query 进 error、settled 永不为 true、其余回调永不
+  // 触发。必须消费 query.isError,否则永久失败会表现为「进度条转到底也不结束」。
+  const groupErrored =
+    taskIds.length > 0 && !settled && Boolean(query?.isError);
+  const inFlight = taskIds.length > 0 && !settled && !groupErrored;
+
+  // previewsRef 跟随最新 previews,供 reset 与卸载清理读取当前值。
+  const previewsRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    previewsRef.current = previews;
+  }, [previews]);
+
+  // 只在卸载时统一回收 blob URL。不能把 cleanup 挂在 [previews] 上:每有一张图完成、
+  // previews 更新时,React 会先跑上一轮 cleanup(闭包捕获的是旧 previews),把仍在展示
+  // 的前一张 URL 提前 revoke 掉,导致其下载链接指向失效 blob。
+  useEffect(
+    () => () => {
+      for (const url of Object.values(previewsRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+    },
+    []
+  );
+
+  const reset = () => {
+    // 重新提交时显式回收上一批 URL,避免累积泄漏。
+    for (const url of Object.values(previewsRef.current)) {
+      URL.revokeObjectURL(url);
+    }
+    setTaskIds([]);
+    setErrorCode(null);
+    setPreviews({});
+  };
+
+  const submit = async () => {
+    if (!session) {
+      router.push(`/login?next=${encodeURIComponent(TOOL_HREF)}`);
+      return;
+    }
+
+    reset();
+    setSubmitting(true);
+
+    const created: string[] = [];
+    let failureCode: string | null = null;
+
+    // 串行(而非 Promise.all)创建:createTask 只是入队(廉价 insert),真正生成在
+    // worker 并发跑,N 张只多几次入队往返。串行才能让配额判定确定——每次都看到前一次扣减
+    // 后的计数,第一个 AI_IMAGE_DAILY_LIMIT_EXCEEDED 能干净地 break。Promise.all 无法
+    // break 且会与配额记账竞态,切勿"优化"成并发。
+    for (let index = 0; index < draft.count; index += 1) {
+      try {
+        const task = await createTask.mutateAsync({
+          type: 'image_generate',
+          inputFileIds: [],
+          inputConfig: {
+            mode: 'text_to_image',
+            prompt: draft.prompt.trim(),
+            size: draft.size,
+            quality: draft.quality,
+            ...(draft.style ? { style: draft.style } : {}),
+          },
+        });
+        created.push(task.id);
+      } catch (error) {
+        // 部分超额不整批回滚:已建出的任务继续跑,剩下的报错。
+        failureCode = errorCodeOf(error);
+        break;
+      }
+    }
+
+    setTaskIds(created);
+    setErrorCode(failureCode);
+    setSubmitting(false);
+  };
+
+  const stage: ToolStage = submitting
+    ? 'processing'
+    : taskIds.length === 0
+      ? 'configure'
+      : settled || groupErrored
+        ? 'result'
+        : 'processing';
+
+  const averageProgress =
+    items.length > 0
+      ? items.reduce((sum, item) => sum + (item.progress ?? 0), 0) /
+        items.length
+      : 0;
+
+  const errorMessageKey = errorCode
+    ? (ERROR_MESSAGE_KEY[errorCode] ?? 'failed')
+    : null;
+
+  return (
+    <ToolPageShell
+      title={t('title')}
+      description={t('description')}
+      processing="server"
+      retention="account-files"
+      requiresLogin
+      recovery={t('failed')}
+      stage={stage}
+    >
+      <div className="rounded-md border border-border p-4">
+        <ImageGenerateOptions
+          value={draft}
+          onChange={setDraft}
+          disabled={submitting || inFlight}
+        />
+      </div>
+
+      <button
+        type="button"
+        className="rounded-md border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={draft.prompt.trim().length === 0 || submitting || inFlight}
+        onClick={submit}
+      >
+        {submitting || inFlight ? t('generating') : t('submit')}
+      </button>
+
+      {errorMessageKey && (
+        <FailureRecoveryPanel
+          message={t(errorMessageKey)}
+          errorCode={errorCode ?? undefined}
+          onRetry={submit}
+        />
+      )}
+
+      {groupErrored && (
+        <FailureRecoveryPanel message={t('failed')} onRetry={submit} />
+      )}
+
+      {inFlight && (
+        <ProcessingProgress progress={averageProgress} stage="generating" />
+      )}
+
+      {items.map((item, index) => {
+        if (item.status === 'failed') {
+          return (
+            <FailureRecoveryPanel
+              key={item.taskId}
+              message={t(ERROR_MESSAGE_KEY[item.errorCode ?? ''] ?? 'failed')}
+              errorCode={item.errorCode}
+              onRetry={submit}
+            />
+          );
+        }
+        if (item.status !== 'completed') return null;
+
+        const previewUrl = previews[item.taskId];
+        return (
+          <ResultPanel
+            key={item.taskId}
+            title={t('resultTitle')}
+            description={t('resultMeta', { index: index + 1 })}
+            preview={
+              previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewUrl}
+                  alt={t('resultMeta', { index: index + 1 })}
+                  className="max-h-96 w-auto rounded-md"
+                />
+              ) : undefined
+            }
+            action={
+              previewUrl ? (
+                <a
+                  href={previewUrl}
+                  download={`ai-image-${index + 1}.png`}
+                  className="rounded-md border px-3 py-1.5 text-sm"
+                >
+                  {tShared('download')}
+                </a>
+              ) : null
+            }
+          />
+        );
+      })}
+    </ToolPageShell>
+  );
+}

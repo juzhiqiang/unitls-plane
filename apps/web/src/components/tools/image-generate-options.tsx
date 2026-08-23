@@ -61,7 +61,7 @@ function RadioRow<T extends string | number>({
         {options.map(option => (
           <label
             key={String(option.value)}
-            className="cursor-pointer rounded-md border px-3 py-1.5 text-sm has-[:checked]:border-foreground has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+            className="cursor-pointer rounded-md border px-3 py-1.5 text-sm has-[:checked]:border-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
           >
             <input
               type="radio"

@@ -3,9 +3,11 @@ import type {
   ImageGenerateStyle,
   ImageGenerateTaskConfig,
 } from '@utils-plane/validators';
+import sharp from 'sharp';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import {
   bufferFromGeneratedImagePayload,
+  normalizeOpenAiCompatibleImageEditUrl,
   normalizeOpenAiCompatibleImageGenerationUrl,
 } from './openai-compatible-image';
 
@@ -52,7 +54,11 @@ export class ImageGenerationError extends Error {
 }
 
 export interface ImageGenerationProvider {
-  generate(config: ImageGenerateTaskConfig): Promise<Buffer>;
+  /** reference 只在 image_to_image 下有意义:文生图传了也会被忽略。 */
+  generate(
+    config: ImageGenerateTaskConfig,
+    reference?: Buffer
+  ): Promise<Buffer>;
 }
 
 export interface OpenAiCompatibleImageGenerationProviderOptions {
@@ -75,6 +81,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     OpenAiCompatibleImageGenerationProvider.name
   );
   private readonly generationUrl: string;
+  private readonly editUrl: string;
   private readonly apiKey?: string;
   private readonly model: string;
   private readonly responseFormat: string;
@@ -91,28 +98,21 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       throw new Error('AI_IMAGE_BASE_URL is not configured');
     }
     this.generationUrl = normalizeOpenAiCompatibleImageGenerationUrl(baseUrl);
+    this.editUrl = normalizeOpenAiCompatibleImageEditUrl(baseUrl);
     this.apiKey = apiKey;
     this.model = model;
     this.responseFormat = responseFormat;
     this.fetchImpl = fetchImpl;
   }
 
-  async generate(config: ImageGenerateTaskConfig): Promise<Buffer> {
-    const response = await this.fetchImpl(this.generationUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model: this.model,
-        prompt: buildImageGenerationPrompt(config),
-        size: config.size,
-        quality: config.quality,
-        response_format: this.responseFormat,
-        n: 1,
-      }),
-    });
+  async generate(
+    config: ImageGenerateTaskConfig,
+    reference?: Buffer
+  ): Promise<Buffer> {
+    const response =
+      config.mode === 'image_to_image'
+        ? await this.postEdit(config, reference)
+        : await this.postGeneration(config);
 
     if (!response.ok) {
       throw this.toSanitizedError(
@@ -135,6 +135,70 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
         'Image generation failed'
       );
     }
+  }
+
+  private async postGeneration(
+    config: ImageGenerateTaskConfig
+  ): Promise<Response> {
+    return this.fetchImpl(this.generationUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: this.model,
+        prompt: buildImageGenerationPrompt(config),
+        size: config.size,
+        quality: config.quality,
+        response_format: this.responseFormat,
+        n: 1,
+      }),
+    });
+  }
+
+  /**
+   * 图生图走 OpenAI 兼容的 /v1/images/edits,multipart 上传参考图。
+   *
+   * 不要手写 Content-Type:multipart 的 boundary 只有 FormData 自己知道。
+   * 参考图先过 sharp:统一转 PNG(上游只认少数格式)、按 EXIF 方向摆正,
+   * 并顺带丢掉原图元数据(sharp 默认不透传),不把用户照片里的 GPS 发给 provider。
+   */
+  private async postEdit(
+    config: ImageGenerateTaskConfig,
+    reference?: Buffer
+  ): Promise<Response> {
+    if (!reference?.length) {
+      this.logger.warn(
+        'AI image edit requested without a reference image; refusing to call upstream'
+      );
+      throw new ImageGenerationError(
+        ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+        'Image generation failed'
+      );
+    }
+
+    const normalized = await sharp(reference).rotate().png().toBuffer();
+    const form = new FormData();
+    form.set('model', this.model);
+    form.set(
+      'image',
+      new Blob([new Uint8Array(normalized)], { type: 'image/png' }),
+      'source.png'
+    );
+    form.set('prompt', buildImageGenerationPrompt(config));
+    form.set('size', config.size);
+    form.set('quality', config.quality);
+    form.set('response_format', this.responseFormat);
+    form.set('n', '1');
+
+    return this.fetchImpl(this.editUrl, {
+      method: 'POST',
+      headers: {
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+      },
+      body: form,
+    });
   }
 
   private async readBody(response: Response): Promise<string> {
@@ -200,7 +264,10 @@ export class ImageGenerationService {
     return this.provider !== null;
   }
 
-  async generate(config: ImageGenerateTaskConfig): Promise<GeneratedImage> {
+  async generate(
+    config: ImageGenerateTaskConfig,
+    reference?: Buffer
+  ): Promise<GeneratedImage> {
     if (!this.provider) {
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_NOT_CONFIGURED,
@@ -208,7 +275,7 @@ export class ImageGenerationService {
       );
     }
 
-    const buffer = await this.provider.generate(config);
+    const buffer = await this.provider.generate(config, reference);
     return { buffer, mimeType: 'image/png', extension: 'png' };
   }
 }

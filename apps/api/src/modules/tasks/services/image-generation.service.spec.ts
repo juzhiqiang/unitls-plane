@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'bun:test';
+import sharp from 'sharp';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import {
   buildImageGenerationPrompt,
@@ -6,6 +7,15 @@ import {
   ImageGenerationService,
   OpenAiCompatibleImageGenerationProvider,
 } from './image-generation.service';
+
+/** 参考图必须是能被 sharp 解码的真实图片:provider 会先转 PNG 再上传。 */
+async function referencePng(): Promise<Buffer> {
+  return sharp({
+    create: { width: 8, height: 8, channels: 3, background: '#336699' },
+  })
+    .png()
+    .toBuffer();
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -200,6 +210,97 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
     expect(error.message).toBe('Image generation failed');
   });
+
+  const editConfig = {
+    ...config,
+    mode: 'image_to_image' as const,
+    prompt: '把背景换成海边',
+    inputFileCount: 1,
+  };
+
+  it('posts the reference image as multipart form data to the edits endpoint', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      apiKey: 'sk-test',
+      model: 'gpt-image-1',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const buffer = await provider.generate(editConfig, await referencePng());
+
+    expect(buffer.toString('utf8')).toBe('hello');
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/images/edits');
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer sk-test');
+    // multipart 的 boundary 由 FormData 自己生成,手写 Content-Type 会让上游解析失败。
+    expect(headers).not.toHaveProperty('Content-Type');
+    const form = init.body as FormData;
+    expect(form.get('model')).toBe('gpt-image-1');
+    expect(String(form.get('prompt'))).toContain('把背景换成海边');
+    expect(form.get('size')).toBe('1024x1024');
+    expect(form.get('quality')).toBe('high');
+    expect(form.get('n')).toBe('1');
+    const image = form.get('image') as Blob;
+    expect(image).toBeInstanceOf(Blob);
+    // 上传的是 sharp 转出来的 PNG,不是原始字节。
+    expect(image.type).toBe('image/png');
+  });
+
+  it('maps an undecodable reference image to a generic sanitized error', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(editConfig, Buffer.from('not-an-image'))
+      .catch(caught => caught)) as Error;
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(error.message).not.toContain('把背景换成海边');
+  });
+
+  it('refuses image_to_image without a reference image and stays generic', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(editConfig)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error).toBeInstanceOf(ImageGenerationError);
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+    expect(error.message).toBe('Image generation failed');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('ignores a reference image for text_to_image and still posts JSON', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(config, Buffer.from('source-bytes'));
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/images/generations');
+    expect(typeof init.body).toBe('string');
+  });
 });
 
 describe('ImageGenerationService', () => {
@@ -221,9 +322,26 @@ describe('ImageGenerationService', () => {
 
     const result = await service.generate(config);
 
-    expect(generate).toHaveBeenCalledWith(config);
+    expect(generate).toHaveBeenCalledWith(config, undefined);
     expect(result.mimeType).toBe('image/png');
     expect(result.extension).toBe('png');
     expect(result.buffer.toString('utf8')).toBe('hello');
+  });
+
+  it('passes the reference image through to the provider', async () => {
+    const generate = vi.fn(async () => Buffer.from('hello'));
+    const service = new ImageGenerationService({
+      externalProvider: { generate },
+    });
+
+    await service.generate(
+      { ...config, mode: 'image_to_image', inputFileCount: 1 },
+      Buffer.from('source-bytes')
+    );
+
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'image_to_image' }),
+      Buffer.from('source-bytes')
+    );
   });
 });

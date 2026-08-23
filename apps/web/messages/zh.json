@@ -883,6 +883,17 @@
     "promptLabel": "提示词",
     "promptPlaceholder": "描述你想要的画面，越具体越好",
     "promptHint": "最多 {max} 字",
+    "modeLabel": "模式",
+    "modes": {
+      "text_to_image": "文生图",
+      "image_to_image": "图生图"
+    },
+    "sourceLabel": "参考图",
+    "sourceHint": "PNG / JPG / WEBP",
+    "sourcePreviewAlt": "参考图预览",
+    "sourceReplace": "换一张",
+    "sourceRequired": "请先上传参考图。",
+    "uploadFailed": "参考图上传失败，请重试。",
     "sizeLabel": "尺寸",
     "sizes": {
       "1024x1024": "正方形 1:1",

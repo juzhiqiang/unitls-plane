@@ -86,7 +86,8 @@ it('generates an image and stores it against the task owner', async () => {
       size: '1024x1024',
       quality: 'high',
       inputFileCount: 0,
-    })
+    }),
+    undefined
   );
   expect(getTaskOutputOwner).toHaveBeenCalledWith('user-1');
   // 标记是本 processor 的安全承诺:产物必须先过 marker 再上传。
@@ -152,10 +153,73 @@ it('does not leak an unexpected error message into the task record', async () =>
   expect(message).not.toContain('boom');
 });
 
+it('sends the uploaded reference image for image_to_image', async () => {
+  const filesService = {
+    getById: vi.fn().mockResolvedValue({
+      id: 'file-1',
+      storageKey: 'user-1/file-1/source.png',
+      filename: 'source.png',
+    }),
+    download: vi.fn().mockResolvedValue(Buffer.from('source-bytes')),
+    upload: vi.fn().mockResolvedValue({ id: 'output-2' }),
+  };
+  const tasksService = createTasksService({
+    inputConfig: { mode: 'image_to_image', prompt: '把背景换成海边' },
+    inputFileIds: ['file-1'],
+  });
+  const imageGenerationService = {
+    generate: vi.fn().mockResolvedValue({
+      buffer: Buffer.from('edited-bytes'),
+      mimeType: 'image/png',
+      extension: 'png',
+    }),
+  };
+
+  const processor = new AiImageProcessor(
+    filesService as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  await processor.process(createJob());
+
+  // 输入文件的归属校验必须带上 task.userId,否则等于允许跨账号引用别人的文件。
+  expect(filesService.getById).toHaveBeenCalledWith('file-1', 'user-1');
+  expect(filesService.download).toHaveBeenCalledWith(
+    'user-1/file-1/source.png'
+  );
+  expect(imageGenerationService.generate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mode: 'image_to_image',
+      prompt: '把背景换成海边',
+      inputFileCount: 1,
+    }),
+    Buffer.from('source-bytes')
+  );
+  expect(tasksService.markCompleted).toHaveBeenCalledWith('task-1', 'output-2');
+});
+
+it('fails image_to_image without leaking why when the input file is missing', async () => {
+  const tasksService = createTasksService({
+    inputConfig: { mode: 'image_to_image', prompt: '把背景换成海边' },
+    inputFileIds: [],
+  });
+
+  const processor = new AiImageProcessor(
+    { upload: vi.fn() } as never,
+    tasksService as never,
+    { generate: vi.fn() } as never
+  );
+
+  await expect(processor.process(createJob())).rejects.toThrow();
+  const [, code] = tasksService.markFailed.mock.calls[0] as string[];
+  expect(code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+});
+
 it('rejects a mode this processor does not implement yet', async () => {
   const tasksService = createTasksService({
-    inputConfig: { mode: 'image_to_image', prompt: 'x' },
-    inputFileIds: ['file-1'],
+    inputConfig: { mode: 'inpaint', prompt: 'x' },
+    inputFileIds: ['file-1', 'mask-1'],
   });
 
   const processor = new AiImageProcessor(

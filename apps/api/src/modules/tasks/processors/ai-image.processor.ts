@@ -1,6 +1,9 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { imageGenerateTaskConfigSchema } from '@utils-plane/validators';
+import {
+  imageGenerateTaskConfigSchema,
+  type ImageGenerateTaskConfig,
+} from '@utils-plane/validators';
 import { Job } from 'bullmq';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import { FilesService } from '../../files/files.service';
@@ -100,7 +103,11 @@ export class AiImageProcessor extends WorkerHost {
       ...(task.inputConfig as Record<string, unknown>),
       inputFileCount: task.inputFileIds?.length ?? 0,
     });
-    if (config.mode !== 'text_to_image') {
+    if (config.mode === 'inpaint') {
+      // 局部重绘还没实现:蒙版通道与画笔组件都不存在,先明确拒绝而不是把蒙版当参考图发出去。
+      this.logger.warn(
+        `AI image task ${task.id} requested unsupported inpaint`
+      );
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
         'Image generation failed'
@@ -108,7 +115,11 @@ export class AiImageProcessor extends WorkerHost {
     }
     await this.reportProgress(task.id, job, 30);
 
-    const generated = await this.imageGenerationService.generate(config);
+    const reference = await this.loadReference(task, config.mode);
+    const generated = await this.imageGenerationService.generate(
+      config,
+      reference
+    );
     await this.reportProgress(task.id, job, 80);
 
     const marked = await markGeneratedImage(generated.buffer, {
@@ -131,6 +142,34 @@ export class AiImageProcessor extends WorkerHost {
     await this.tasksService.markCompleted(task.id, outputFile.id);
     await job.updateProgress(100);
     return { outputFileId: outputFile.id };
+  }
+
+  /**
+   * 图生图的参考图。
+   *
+   * getById 必须带 task.userId:它是文件归属校验,少了这个参数等于允许任务引用
+   * 别人账号里的文件。schema 已保证 image_to_image 恰好一个输入文件,这里的兜底
+   * 只为在数据异常时给出与其它失败一致的通用文案。
+   */
+  private async loadReference(
+    task: AiImageTask,
+    mode: ImageGenerateTaskConfig['mode']
+  ): Promise<Buffer | undefined> {
+    if (mode !== 'image_to_image') return undefined;
+
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) {
+      throw new ImageGenerationError(
+        ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+        'Image generation failed'
+      );
+    }
+
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
+    return this.filesService.download(inputFile.storageKey);
   }
 
   @OnWorkerEvent('failed')

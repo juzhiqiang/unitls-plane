@@ -14,6 +14,7 @@ import ImageGeneratePage from '../page';
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
   createTask: vi.fn(),
+  uploadFile: vi.fn(),
   push: vi.fn(),
   groupProgress: vi.fn(),
   onItemCompleted: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock('@/lib/auth-client', () => ({
 
 vi.mock('@/hooks/api/use-tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mocks.createTask }),
+}));
+
+vi.mock('@/hooks/api/use-files', () => ({
+  useUploadFile: () => ({ mutateAsync: mocks.uploadFile }),
 }));
 
 vi.mock('@/hooks/api/use-task-group-progress', () => ({
@@ -55,6 +60,26 @@ function renderPage() {
   );
 }
 
+function referenceFile() {
+  return new File(['pixel-data'], 'source.png', { type: 'image/png' });
+}
+
+/**
+ * 切到图生图并选一张参考图。
+ *
+ * react-dropzone 的 onDrop 是异步的(它自己 await fromEvent 解析 DataTransfer),
+ * 所以必须等预览出现再继续 —— 否则后面点「Generate」时 sourceFile 还是 null,
+ * 按钮仍处于 disabled,点击被静默丢掉。
+ */
+async function chooseReference(container: HTMLElement) {
+  fireEvent.click(screen.getByRole('radio', { name: 'Image to image' }));
+  const input = container.querySelector(
+    'input[type="file"]'
+  ) as HTMLInputElement;
+  fireEvent.change(input, { target: { files: [referenceFile()] } });
+  await screen.findByAltText('Reference image preview');
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.useSession.mockReturnValue({ data: { user: { id: 'user-1' } } });
@@ -66,6 +91,7 @@ beforeEach(() => {
     query: { isError: false },
   });
   mocks.createTask.mockImplementation(async () => ({ id: 'task-1' }));
+  mocks.uploadFile.mockImplementation(async () => ({ id: 'file-9' }));
   Object.defineProperty(URL, 'createObjectURL', {
     value: vi.fn(() => 'blob:preview-url'),
     configurable: true,
@@ -284,5 +310,89 @@ describe('ImageGeneratePage', () => {
         inputConfig: expect.objectContaining({ style: 'photographic' }),
       })
     );
+  });
+
+  it('offers no upload target while text-to-image is selected', () => {
+    const { container } = renderPage();
+
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+  });
+
+  it('previews the reference image after it is selected', async () => {
+    const { container } = renderPage();
+
+    await chooseReference(container);
+
+    const preview = await screen.findByAltText('Reference image preview');
+    expect(preview.getAttribute('src')).toBe('blob:preview-url');
+  });
+
+  it('keeps submit disabled for image-to-image until a reference image is chosen', () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Image to image' }));
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'turn the background into a beach' },
+    });
+
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled();
+  });
+
+  it('uploads the reference once and reuses its file id for every image', async () => {
+    const { container } = renderPage();
+
+    await chooseReference(container);
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'turn the background into a beach' },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: '2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
+    // 一张参考图只上传一次,N 个任务共用同一个 fileId。
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(1);
+    expect(mocks.createTask).toHaveBeenCalledWith({
+      type: 'image_generate',
+      inputFileIds: ['file-9'],
+      inputConfig: {
+        mode: 'image_to_image',
+        prompt: 'turn the background into a beach',
+        size: '1024x1024',
+        quality: 'high',
+      },
+    });
+  });
+
+  it('surfaces an upload failure without creating tasks', async () => {
+    mocks.uploadFile.mockRejectedValue(new Error('network down'));
+    const { container } = renderPage();
+
+    await chooseReference(container);
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'turn the background into a beach' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Uploading the reference image failed. Please try again.'
+        )
+      ).toBeInTheDocument()
+    );
+    expect(mocks.createTask).not.toHaveBeenCalled();
+  });
+
+  it('drops the reference image when switching back to text-to-image', async () => {
+    const { container } = renderPage();
+
+    await chooseReference(container);
+    await screen.findByAltText('Reference image preview');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Text to image' }));
+
+    expect(
+      screen.queryByAltText('Reference image preview')
+    ).not.toBeInTheDocument();
   });
 });

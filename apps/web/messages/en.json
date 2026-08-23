@@ -883,6 +883,17 @@
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe the image you want — the more specific, the better",
     "promptHint": "Up to {max} characters",
+    "modeLabel": "Mode",
+    "modes": {
+      "text_to_image": "Text to image",
+      "image_to_image": "Image to image"
+    },
+    "sourceLabel": "Reference image",
+    "sourceHint": "PNG / JPG / WEBP",
+    "sourcePreviewAlt": "Reference image preview",
+    "sourceReplace": "Replace image",
+    "sourceRequired": "Upload a reference image first.",
+    "uploadFailed": "Uploading the reference image failed. Please try again.",
     "sizeLabel": "Size",
     "sizes": {
       "1024x1024": "Square 1:1",

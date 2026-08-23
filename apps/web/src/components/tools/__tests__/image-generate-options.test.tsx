@@ -9,6 +9,7 @@ import {
 } from '../image-generate-options';
 
 const draft: ImageGenerateDraft = {
+  mode: 'text_to_image',
   prompt: '',
   size: '1024x1024',
   quality: 'high',
@@ -71,6 +72,26 @@ describe('ImageGenerateOptions', () => {
     expect(
       screen.getByText(`Up to ${IMAGE_GENERATE_PROMPT_MAX_LENGTH} characters`)
     ).toBeInTheDocument();
+  });
+
+  it('renders the mode switch with text-to-image selected by default', () => {
+    renderOptions();
+
+    expect(screen.getByRole('radio', { name: 'Text to image' })).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: 'Image to image' })
+    ).not.toBeChecked();
+  });
+
+  it('reports the selected mode', () => {
+    const { onChange } = renderOptions();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Image to image' }));
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...draft,
+      mode: 'image_to_image',
+    });
   });
 
   it('reports the selected size', () => {

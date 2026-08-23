@@ -3,12 +3,14 @@
 import { useTranslations } from 'next-intl';
 import {
   IMAGE_GENERATE_PROMPT_MAX_LENGTH,
+  type ImageGenerateMode,
   type ImageGenerateQuality,
   type ImageGenerateSize,
   type ImageGenerateStyle,
 } from '@utils-plane/validators';
 
 export interface ImageGenerateDraft {
+  mode: ImageGenerateMode;
   prompt: string;
   size: ImageGenerateSize;
   quality: ImageGenerateQuality;
@@ -16,6 +18,10 @@ export interface ImageGenerateDraft {
   count: number;
 }
 
+/** inpaint 还没实现,不在页面上暴露。 */
+const MODES: Array<
+  Extract<ImageGenerateMode, 'text_to_image' | 'image_to_image'>
+> = ['text_to_image', 'image_to_image'];
 const SIZES: ImageGenerateSize[] = ['1024x1024', '1024x1536', '1536x1024'];
 const QUALITIES: ImageGenerateQuality[] = ['standard', 'high'];
 const STYLES: ImageGenerateStyle[] = [
@@ -89,6 +95,18 @@ export function ImageGenerateOptions({
 
   return (
     <div className="space-y-5">
+      <RadioRow
+        name="image-generate-mode"
+        legend={t('modeLabel')}
+        selected={value.mode}
+        disabled={disabled}
+        options={MODES.map(mode => ({
+          value: mode,
+          label: t(`modes.${mode}`),
+        }))}
+        onSelect={mode => onChange({ ...value, mode })}
+      />
+
       <div className="space-y-2">
         <label htmlFor="image-generate-prompt" className="text-sm font-medium">
           {t('promptLabel')}

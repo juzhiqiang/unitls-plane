@@ -12,7 +12,7 @@
 `ImageGenerationService`，OpenAI 兼容的 URL 归一化与响应解析抽成共享模块
 `openai-compatible-image.ts` 供抠图与生图复用。强制登录复用既有 `isServerTask` +
 `task.serverProcessing` entitlement，每日配额直接 COUNT `tasks` 表、依赖 `withActiveUserTransaction`
-已有的用户行锁保证并发安全。前端一张图对应一个任务，多张拆成多个并发任务，由新 hook
+已有的用户行锁保证并发安全。前端一张图对应一个任务，多张拆成多个任务(串行创建、worker 并发执行)，由新 hook
 `useTaskGroupProgress` 聚合轮询。
 
 **Tech Stack:** NestJS 11 + Bun、BullMQ + Redis、Drizzle ORM + PostgreSQL 16、Zod、sharp、Next.js 14
@@ -3084,27 +3084,45 @@ export default function ImageGeneratePage() {
 
   const loadPreview = useCallback(async (taskId: string, fileId: string) => {
     if (!fileId) return;
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/files/${fileId}/download`,
-      { credentials: 'include' }
-    );
-    if (!response.ok) return;
-    const url = URL.createObjectURL(await response.blob());
-    setPreviews(current => ({ ...current, [taskId]: url }));
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/files/${fileId}/download`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) return;
+      const url = URL.createObjectURL(await response.blob());
+      setPreviews(current => ({ ...current, [taskId]: url }));
+    } catch {
+      // fetch 抛出(网络错误)不能变成完成回调里的 unhandled rejection
+    }
   }, []);
 
-  const { items, settled } = useTaskGroupProgress(taskIds, {
+  const { items, settled, query } = useTaskGroupProgress(taskIds, {
     onItemCompleted: loadPreview,
   });
 
+  // 用 ref 跟随最新 previews,配合空依赖的卸载清理。
+  // 绝不要把 cleanup 挂在 [previews] 上:previews 每次更新时 React 会先跑上一次的
+  // cleanup,而那个闭包里是旧的 previews,会 revoke 掉仍在页面上显示的 URL
+  // (N 张时除最后一张外全部失效,下载链接指向失效 blob)。
+  const previewsRef = useRef(previews);
+  useEffect(() => {
+    previewsRef.current = previews;
+  }, [previews]);
   useEffect(
     () => () => {
-      for (const url of Object.values(previews)) URL.revokeObjectURL(url);
+      for (const url of Object.values(previewsRef.current)) {
+        URL.revokeObjectURL(url);
+      }
     },
-    [previews]
+    []
   );
 
   const reset = () => {
+    // 重新提交时显式释放上一批,避免累积
+    for (const url of Object.values(previewsRef.current)) {
+      URL.revokeObjectURL(url);
+    }
     setTaskIds([]);
     setErrorCode(null);
     setPreviews({});

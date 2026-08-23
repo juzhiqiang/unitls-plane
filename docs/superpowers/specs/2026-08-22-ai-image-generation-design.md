@@ -128,7 +128,7 @@ WHERE user_id = $1
 
 并发超发无需额外处理：`create` 对登录用户走
 `withActiveUserTransaction`（`tasks.service.ts:66`），该函数已对 user 行执行
-`SELECT ... FOR UPDATE`（`apps/api/src/common/database/active-user-transaction.ts:45-50`），同一用户的建任务请求天然串行。前端一次提交 N 张会发 N 个并发
+`SELECT ... FOR UPDATE`（`apps/api/src/common/database/active-user-transaction.ts:45-50`），同一用户的建任务请求天然串行。前端一次提交 N 张会串行发 N 个
 `POST /tasks`，它们在这把行锁上排队，每次 COUNT 都读到已提交的最新值。
 
 配额值写进 `packages/utils/src/entitlements.ts` 的 `LIMITS`，新增 `LimitKey`（如
@@ -259,7 +259,7 @@ AI_IMAGE_RESPONSE_FORMAT=b64_json
    `/image/mosaic` 的 canvas 逻辑，画笔涂抹出重绘区域，导出 PNG（透明=保留原图，不透明=重绘），再经
    `useUploadFile` 作为第二个输入文件上传。
 
-提交流程：上传所需输入文件（0/1/2 个）→ 按张数并发 `createTask` N 次 → 收集 N 个 taskId 交给
+提交流程：上传所需输入文件（0/1/2 个）→ 按张数**串行** `createTask` N 次 → 收集 N 个 taskId 交给
 `useTaskGroupProgress` → 逐张完成即逐张展示，不等全部完成。
 
 输入文件只上传一次，N 个任务共用同一组 `inputFileIds`。图生图选 4 张不应产生 4 次上传。

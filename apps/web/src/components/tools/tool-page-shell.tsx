@@ -12,6 +12,8 @@ interface ToolPageShellProps {
   requiresLogin: boolean;
   recovery: string;
   stage: ToolStage;
+  /** 透传给步骤条:工具没有上传环节时可以传更短的步骤集。 */
+  stages?: readonly ToolStage[];
   children: ReactNode;
   aside?: ReactNode;
   maxWidth?: 'default' | 'wide';
@@ -25,6 +27,7 @@ export function ToolPageShell({
   requiresLogin,
   recovery,
   stage,
+  stages,
   children,
   aside,
   maxWidth = 'default',
@@ -44,7 +47,7 @@ export function ToolPageShell({
             {description}
           </p>
         </div>
-        <ToolStepRail current={stage} />
+        <ToolStepRail current={stage} stages={stages} />
       </div>
       <ToolTrustStrip
         processing={processing}

@@ -882,7 +882,7 @@
     "description": "Generate images from a text prompt. Processed on the server, sign-in required, results saved to your account files.",
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe the image you want — the more specific, the better",
-    "promptHint": "Up to {max} characters",
+    "promptCounter": "{count} / {max}",
     "modeLabel": "Mode",
     "modes": {
       "text_to_image": "Text to image",
@@ -891,7 +891,6 @@
     "sourceLabel": "Reference image",
     "sourceHint": "PNG / JPG / WEBP",
     "sourcePreviewAlt": "Reference image preview",
-    "sourceReplace": "Replace image",
     "sourceRequired": "Upload a reference image first.",
     "uploadFailed": "Uploading the reference image failed. Please try again.",
     "sizeLabel": "Size",
@@ -923,7 +922,10 @@
     "quotaExceeded": "You have used today's quota. Try again tomorrow.",
     "contentRejected": "The prompt was rejected by the content policy. Try rephrasing it.",
     "notConfigured": "AI image generation is not configured. Contact the administrator.",
-    "failed": "Generation failed. Please try again."
+    "failed": "Generation failed. Please try again.",
+    "paramsSummary": "More options",
+    "recoveryHint": "Retry anytime — failed generations do not use up your daily quota.",
+    "compareTitle": "Before / after"
   },
   "PdfTool": {
     "title": "PDF Tools",

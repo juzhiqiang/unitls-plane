@@ -7,18 +7,44 @@ export type ToolStage = 'upload' | 'configure' | 'processing' | 'result';
 
 interface ToolStepRailProps {
   current: ToolStage;
+  /**
+   * 要展示的步骤集,默认四步。
+   *
+   * 不是每个工具都有「上传」:文生图从零生成,给它挂一个永远不会发生的上传步骤,
+   * 只会让步骤条在第一格显示已完成的假状态。
+   */
+  stages?: readonly ToolStage[];
   className?: string;
 }
 
-const stages: ToolStage[] = ['upload', 'configure', 'processing', 'result'];
+const DEFAULT_STAGES: readonly ToolStage[] = [
+  'upload',
+  'configure',
+  'processing',
+  'result',
+];
 
-export function ToolStepRail({ current, className }: ToolStepRailProps) {
+/** Tailwind 需要静态类名,不能拼 `md:grid-cols-${n}`。 */
+const COLUMN_CLASS: Record<number, string> = {
+  1: 'md:grid-cols-1',
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4',
+};
+
+export function ToolStepRail({
+  current,
+  stages = DEFAULT_STAGES,
+  className,
+}: ToolStepRailProps) {
   const t = useTranslations('ToolShell.steps');
   const currentIndex = stages.indexOf(current);
 
   return (
     <ol
-      className={`grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-4 ${className ?? ''}`}
+      className={`grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border ${
+        COLUMN_CLASS[stages.length] ?? 'md:grid-cols-4'
+      } ${className ?? ''}`}
     >
       {stages.map((stage, index) => {
         const done = index < currentIndex;

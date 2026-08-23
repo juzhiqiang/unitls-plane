@@ -882,7 +882,7 @@
     "description": "用文字描述生成图片。服务端处理，需要登录，产物保存到账号文件。",
     "promptLabel": "提示词",
     "promptPlaceholder": "描述你想要的画面，越具体越好",
-    "promptHint": "最多 {max} 字",
+    "promptCounter": "{count} / {max}",
     "modeLabel": "模式",
     "modes": {
       "text_to_image": "文生图",
@@ -891,7 +891,6 @@
     "sourceLabel": "参考图",
     "sourceHint": "PNG / JPG / WEBP",
     "sourcePreviewAlt": "参考图预览",
-    "sourceReplace": "换一张",
     "sourceRequired": "请先上传参考图。",
     "uploadFailed": "参考图上传失败，请重试。",
     "sizeLabel": "尺寸",
@@ -923,7 +922,10 @@
     "quotaExceeded": "今日额度已用完，明天再来。",
     "contentRejected": "提示词被内容策略拒绝，换个说法再试。",
     "notConfigured": "AI 生图尚未配置，请联系管理员。",
-    "failed": "生成失败，请重试。"
+    "failed": "生成失败，请重试。",
+    "paramsSummary": "更多参数",
+    "recoveryHint": "可随时重试，失败的生成不占用当日额度。",
+    "compareTitle": "改动对比"
   },
   "PdfTool": {
     "title": "PDF 工具",

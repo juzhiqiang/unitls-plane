@@ -395,4 +395,96 @@ describe('ImageGeneratePage', () => {
       screen.queryByAltText('Reference image preview')
     ).not.toBeInTheDocument();
   });
+
+  // 文生图没有上传环节,步骤条不该给它挂一个永远走不到的第一步。
+  it('hides the upload step for text-to-image and shows it for image-to-image', async () => {
+    const { container } = renderPage();
+
+    expect(screen.queryByText('Upload')).not.toBeInTheDocument();
+    expect(screen.getByText('Configure')).toBeInTheDocument();
+
+    await chooseReference(container);
+
+    expect(screen.getByText('Upload')).toBeInTheDocument();
+  });
+
+  // 信任条第四格是「恢复方式」,常态显示「生成失败」会被当成当前状态。
+  it('describes recovery neutrally instead of announcing a failure', () => {
+    renderPage();
+
+    expect(
+      screen.getByText(/failed generations do not use up your daily quota/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Generation failed. Please try again.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('compares the reference against the result for image-to-image', async () => {
+    mocks.groupProgress.mockReturnValue({
+      items: [
+        {
+          taskId: 't1',
+          status: 'completed',
+          progress: 100,
+          outputFileId: 'f1',
+        },
+      ],
+      completedCount: 1,
+      failedCount: 0,
+      settled: true,
+      query: { isError: false },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['img'], { type: 'image/png' })),
+      })
+    );
+    const { container } = renderPage();
+
+    await chooseReference(container);
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'turn the background into a beach' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
+    await act(async () => {
+      await mocks.onItemCompleted('t1', 'f1');
+    });
+
+    // 前后对比取代了单张结果图。
+    expect(screen.getByText('Before')).toBeInTheDocument();
+    expect(screen.getByText('After')).toBeInTheDocument();
+    expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('lays multiple results out in two columns', () => {
+    mocks.groupProgress.mockReturnValue({
+      items: [
+        {
+          taskId: 't1',
+          status: 'completed',
+          progress: 100,
+          outputFileId: 'f1',
+        },
+        {
+          taskId: 't2',
+          status: 'completed',
+          progress: 100,
+          outputFileId: 'f2',
+        },
+      ],
+      completedCount: 2,
+      failedCount: 0,
+      settled: true,
+      query: { isError: false },
+    });
+    const { container } = renderPage();
+
+    expect(container.querySelector('.sm\\:grid-cols-2')).not.toBeNull();
+  });
 });

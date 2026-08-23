@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { IMAGE_GENERATE_PROMPT_MAX_LENGTH } from '@utils-plane/validators';
 import en from '../../../../messages/en.json';
 import {
-  ImageGenerateOptions,
+  ImageGenerateModeField,
+  ImageGenerateParamsFields,
+  ImageGeneratePromptField,
   type ImageGenerateDraft,
 } from '../image-generate-options';
 
@@ -20,6 +22,8 @@ const draft: ImageGenerateDraft = {
 // 测试统一用 fireEvent,这里保持一致:受控组件下 change/click 与真实交互等价。
 // en.json 的真实结构与 next-intl 的 AbstractIntlMessages 索引签名不完全兼容
 // (存在嵌套数组),用 as never 绕过类型校验;运行时只读取 ImageGenerate 段。
+//
+// 三个字段组件按页面里的真实顺序一起渲染:它们共享同一个 draft,断言的是整组行为。
 function renderOptions(
   value: ImageGenerateDraft = draft,
   onChange = vi.fn(),
@@ -27,7 +31,17 @@ function renderOptions(
 ) {
   render(
     <NextIntlClientProvider locale="en" messages={en as never}>
-      <ImageGenerateOptions
+      <ImageGenerateModeField
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <ImageGeneratePromptField
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <ImageGenerateParamsFields
         value={value}
         onChange={onChange}
         disabled={disabled}
@@ -64,14 +78,32 @@ describe('ImageGenerateOptions', () => {
     );
   });
 
-  // 提示文案里的字数必须由同一个常量插值,不能在 messages 里写死数字,
+  // 计数必须由同一个常量插值,不能在 messages 里写死数字,
   // 否则改上限时中英文文案会静默过期。
-  it('states the shared limit in the prompt hint', () => {
-    renderOptions();
+  it('counts the typed prompt against the shared limit', () => {
+    renderOptions({ ...draft, prompt: 'abcde' });
 
     expect(
-      screen.getByText(`Up to ${IMAGE_GENERATE_PROMPT_MAX_LENGTH} characters`)
+      screen.getByText(`5 / ${IMAGE_GENERATE_PROMPT_MAX_LENGTH}`)
     ).toBeInTheDocument();
+  });
+
+  it('links the counter to the textarea for assistive tech', () => {
+    renderOptions();
+
+    const counter = screen.getByText(`0 / ${IMAGE_GENERATE_PROMPT_MAX_LENGTH}`);
+    expect(screen.getByLabelText('Prompt')).toHaveAttribute(
+      'aria-describedby',
+      counter.id
+    );
+  });
+
+  // textarea 是 inline-block:限宽后若 label 不是 block,两者会共用一个 line box、
+  // 按基线对齐,标签就跑到输入框底部去了(实测出现过)。
+  it('keeps the prompt label on its own line above the textarea', () => {
+    renderOptions();
+
+    expect(screen.getByText('Prompt')).toHaveClass('block');
   });
 
   it('renders the mode switch with text-to-image selected by default', () => {

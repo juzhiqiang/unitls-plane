@@ -48,6 +48,23 @@ describe('tool experience components', () => {
     expect(screen.getByText('Result')).toBeInTheDocument();
   });
 
+  // 不是每个工具都有上传环节(例如文生图),步骤集要能收窄。
+  it('renders only the requested stages and numbers them from one', () => {
+    renderWithIntl(
+      <ToolStepRail
+        current="configure"
+        stages={['configure', 'processing', 'result']}
+      />
+    );
+
+    expect(screen.queryByText('Upload')).not.toBeInTheDocument();
+    expect(screen.getByText('Configure')).toHaveAttribute(
+      'aria-current',
+      'step'
+    );
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
   it('renders grouped catalog links with recommended flags', () => {
     renderWithIntl(
       <ToolCatalogGrid

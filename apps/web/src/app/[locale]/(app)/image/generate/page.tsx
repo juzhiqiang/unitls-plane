@@ -8,9 +8,12 @@ import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
 import {
-  ImageGenerateOptions,
+  ImageGenerateModeField,
+  ImageGenerateParamsFields,
+  ImageGeneratePromptField,
   type ImageGenerateDraft,
 } from '@/components/tools/image-generate-options';
+import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ResultPanel } from '@/components/tools/result-panel';
@@ -25,6 +28,19 @@ const TOOL_HREF = '/image/generate';
 const REFERENCE_ACCEPT = {
   'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'],
 };
+
+/** 文生图没有上传环节,步骤条不该给它挂一个永远不会发生的第一步。 */
+const TEXT_TO_IMAGE_STAGES: readonly ToolStage[] = [
+  'configure',
+  'processing',
+  'result',
+];
+const IMAGE_TO_IMAGE_STAGES: readonly ToolStage[] = [
+  'upload',
+  'configure',
+  'processing',
+  'result',
+];
 
 const ERROR_MESSAGE_KEY: Record<string, string> = {
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
@@ -61,18 +77,24 @@ export default function ImageGeneratePage() {
 
   const [draft, setDraft] = useState<ImageGenerateDraft>(INITIAL_DRAFT);
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  // 提交那一刻用到的参考图,单独存一份:用户在看结果时换图不该悄悄改掉对比的「前」。
+  const [comparedFile, setComparedFile] = useState<File | null>(null);
   const [taskIds, setTaskIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
   const sourceUrl = useObjectUrl(sourceFile);
+  const comparedUrl = useObjectUrl(comparedFile);
   const maxFileSize = getImageUploadMaxFileSize(session);
 
   // 切回文生图时丢掉参考图:留着它会让「模式=文生图 却带着 inputFileIds」这种
   // schema 会直接拒的组合有机会被提交。
   const changeDraft = (next: ImageGenerateDraft) => {
-    if (next.mode !== 'image_to_image') setSourceFile(null);
+    if (next.mode !== 'image_to_image') {
+      setSourceFile(null);
+      setComparedFile(null);
+    }
     setDraft(next);
   };
 
@@ -152,11 +174,14 @@ export default function ImageGeneratePage() {
           id: string;
         };
         inputFileIds = [uploaded.id];
+        setComparedFile(sourceFile);
       } catch {
         setFailure({ key: 'uploadFailed' });
         setSubmitting(false);
         return;
       }
+    } else {
+      setComparedFile(null);
     }
 
     const created: string[] = [];
@@ -198,6 +223,7 @@ export default function ImageGeneratePage() {
 
   const needsReference = draft.mode === 'image_to_image';
   const referenceMissing = needsReference && !sourceFile;
+  const busy = submitting || inFlight;
 
   const stage: ToolStage = submitting
     ? 'processing'
@@ -222,54 +248,64 @@ export default function ImageGeneratePage() {
       processing="server"
       retention="account-files"
       requiresLogin
-      recovery={t('failed')}
+      recovery={t('recoveryHint')}
       stage={stage}
+      stages={needsReference ? IMAGE_TO_IMAGE_STAGES : TEXT_TO_IMAGE_STAGES}
     >
-      <div className="rounded-md border border-border p-4">
-        <ImageGenerateOptions
+      {/* 主输入块:模式 →(图生图)参考图 → 提示词。顺序与步骤条一致。 */}
+      <div className="space-y-5 rounded-md border border-border p-4">
+        <ImageGenerateModeField
           value={draft}
           onChange={changeDraft}
-          disabled={submitting || inFlight}
+          disabled={busy}
+        />
+
+        {needsReference && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">{t('sourceLabel')}</p>
+            <FileDropzone
+              accept={REFERENCE_ACCEPT}
+              maxSize={maxFileSize}
+              density="compact"
+              disabled={busy}
+              hint={t('sourceHint')}
+              onDrop={files => {
+                const [next] = files;
+                if (next) setSourceFile(next);
+              }}
+            />
+            {sourceUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={sourceUrl}
+                alt={t('sourcePreviewAlt')}
+                className="max-h-64 w-auto rounded-md border border-border"
+              />
+            )}
+          </div>
+        )}
+
+        <ImageGeneratePromptField
+          value={draft}
+          onChange={changeDraft}
+          disabled={busy}
         />
       </div>
 
-      {needsReference && (
-        <div className="space-y-3 rounded-md border border-border p-4">
-          <p className="text-sm font-medium">{t('sourceLabel')}</p>
-          <FileDropzone
-            accept={REFERENCE_ACCEPT}
-            maxSize={maxFileSize}
-            density="compact"
-            disabled={submitting || inFlight}
-            hint={t('sourceHint')}
-            onDrop={files => {
-              const [next] = files;
-              if (next) setSourceFile(next);
-            }}
-          />
-          {sourceUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={sourceUrl}
-              alt={t('sourcePreviewAlt')}
-              className="max-h-64 w-auto rounded-md border border-border"
-            />
-          )}
-        </div>
-      )}
+      <ImageGenerateParamsFields
+        value={draft}
+        onChange={changeDraft}
+        disabled={busy}
+      />
 
+      {/* 主操作与其它图片工具页保持一致:整宽填充按钮。 */}
       <button
         type="button"
-        className="rounded-md border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={
-          draft.prompt.trim().length === 0 ||
-          referenceMissing ||
-          submitting ||
-          inFlight
-        }
+        className="h-10 w-full rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={draft.prompt.trim().length === 0 || referenceMissing || busy}
         onClick={submit}
       >
-        {submitting || inFlight ? t('generating') : t('submit')}
+        {busy ? t('generating') : t('submit')}
       </button>
 
       {failure && (
@@ -288,49 +324,64 @@ export default function ImageGeneratePage() {
         <ProcessingProgress progress={averageProgress} stage="generating" />
       )}
 
-      {items.map((item, index) => {
-        if (item.status === 'failed') {
+      {/* 多张结果排成两列:整宽堆叠时 4 张要滚很久,也没法互相比较。 */}
+      <div
+        className={items.length > 1 ? 'grid gap-6 sm:grid-cols-2' : 'space-y-6'}
+      >
+        {items.map((item, index) => {
+          if (item.status === 'failed') {
+            return (
+              <FailureRecoveryPanel
+                key={item.taskId}
+                message={t(ERROR_MESSAGE_KEY[item.errorCode ?? ''] ?? 'failed')}
+                errorCode={item.errorCode}
+                onRetry={submit}
+              />
+            );
+          }
+          if (item.status !== 'completed') return null;
+
+          const previewUrl = previews[item.taskId];
+          const alt = t('resultMeta', { index: index + 1 });
+          // 图生图给滑动对比:参考图和结果分处页面两端时,看不出到底改了什么。
+          const showCompare = Boolean(comparedUrl && previewUrl);
+
           return (
-            <FailureRecoveryPanel
+            <ResultPanel
               key={item.taskId}
-              message={t(ERROR_MESSAGE_KEY[item.errorCode ?? ''] ?? 'failed')}
-              errorCode={item.errorCode}
-              onRetry={submit}
+              title={t('resultTitle')}
+              description={alt}
+              preview={
+                showCompare && comparedUrl && previewUrl ? (
+                  <ImageGenerateCompare
+                    beforeUrl={comparedUrl}
+                    afterUrl={previewUrl}
+                    title={t('compareTitle')}
+                  />
+                ) : previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt={alt}
+                    className="max-h-96 w-auto rounded-md"
+                  />
+                ) : undefined
+              }
+              action={
+                previewUrl ? (
+                  <a
+                    href={previewUrl}
+                    download={`ai-image-${index + 1}.png`}
+                    className="rounded-md border px-3 py-1.5 text-sm"
+                  >
+                    {tShared('download')}
+                  </a>
+                ) : null
+              }
             />
           );
-        }
-        if (item.status !== 'completed') return null;
-
-        const previewUrl = previews[item.taskId];
-        return (
-          <ResultPanel
-            key={item.taskId}
-            title={t('resultTitle')}
-            description={t('resultMeta', { index: index + 1 })}
-            preview={
-              previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={previewUrl}
-                  alt={t('resultMeta', { index: index + 1 })}
-                  className="max-h-96 w-auto rounded-md"
-                />
-              ) : undefined
-            }
-            action={
-              previewUrl ? (
-                <a
-                  href={previewUrl}
-                  download={`ai-image-${index + 1}.png`}
-                  className="rounded-md border px-3 py-1.5 text-sm"
-                >
-                  {tShared('download')}
-                </a>
-              ) : null
-            }
-          />
-        );
-      })}
+        })}
+      </div>
     </ToolPageShell>
   );
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import sharp from 'sharp';
 import {
   createModNetInputTensor,
@@ -178,6 +178,37 @@ describe('PortraitSegmentationService.segment', () => {
 });
 
 describe('OpenAiCompatiblePortraitSegmentationProvider', () => {
+  // provider 通道与 images/edits 的 size/quality/background/response_format
+  // 默认都读 process.env。从仓库根跑测试(release:verify 就是这样)会加载
+  // .env.local,本机把 PROVIDER 配成 image_result 时下面第一条用例会假红。
+  // 这里清空这几项,让用例只针对代码默认值与显式入参断言,用例后还原。
+  const ENV_KEYS = [
+    'ID_PHOTO_AI_SEGMENTATION_PROVIDER',
+    'ID_PHOTO_AI_IMAGE_SIZE',
+    'ID_PHOTO_AI_IMAGE_QUALITY',
+    'ID_PHOTO_AI_IMAGE_BACKGROUND',
+    'ID_PHOTO_AI_RESPONSE_FORMAT',
+  ] as const;
+  const savedEnv = new Map<string, string | undefined>();
+
+  beforeEach(() => {
+    for (const key of ENV_KEYS) {
+      savedEnv.set(key, process.env[key]);
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      const original = savedEnv.get(key);
+      if (original === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = original;
+      }
+    }
+  });
+
   it('posts an OpenAI-compatible chat completion request and parses a base64 mask', async () => {
     const mask = await sharp(Buffer.from([0, 255, 255, 0]), {
       raw: { width: 2, height: 2, channels: 1 },
@@ -189,6 +220,9 @@ describe('OpenAiCompatiblePortraitSegmentationProvider', () => {
       baseUrl: 'https://ai.example.com/v1',
       apiKey: 'secret',
       model: 'vision-segmentation',
+      // 必须显式指定通道：不传会落回 process.env.ID_PHOTO_AI_SEGMENTATION_PROVIDER,
+      // 本机 .env.local 配成 image_result 时 segment() 直接抛错,这条用例会假红。
+      provider: 'chat_mask',
       fetch: async (url, init) => {
         calls.push({ url: String(url), init: init as RequestInit });
         return new Response(

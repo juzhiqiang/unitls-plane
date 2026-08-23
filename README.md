@@ -59,6 +59,7 @@ Codex 会直接读取 `AGENTS.md`；Claude Code 通过 `CLAUDE.md` 中的 `@AGEN
 - 图片加水印
 - 图片旋转、水平/垂直翻转、自动方向校正
 - 证件照生成与背景处理
+- AI 生图（/image/generate）：文字描述生成图片，需要登录，每日限张数。
 - 批量处理与 zip 下载
 - 压缩前后对比
 
@@ -172,6 +173,25 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
   `{"mask":"data:image/png;base64,..."}`。
 - `image_result`：调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
   兼容格式上传参考图并返回最终证件照结果图。
+
+AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响：
+
+```env
+AI_IMAGE_BASE_URL=https://example.com/v1
+AI_IMAGE_API_KEY=<api key>
+AI_IMAGE_MODEL=gpt-image-1
+AI_IMAGE_RESPONSE_FORMAT=b64_json
+```
+
+- `AI_IMAGE_BASE_URL`：OpenAI 兼容网关地址。未配置时 `/image/generate` 入口仍然可见，生图任务会以
+  `AI_IMAGE_NOT_CONFIGURED` 失败，页面提示未配置。
+- `AI_IMAGE_API_KEY`：网关鉴权 key。
+- `AI_IMAGE_MODEL`：模型名，默认 `gpt-image-1`。
+- `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认
+  `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
+
+当前只实现文生图，走 `POST /v1/images/generations`；图生图与局部重绘尚未实现。每日生成张数上限在
+`packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
 
 ### 启动前端开发服务
 
@@ -481,6 +501,8 @@ PostgreSQL + Redis + MinIO
 - Markdown 转 PDF 默认支持本地编辑、预览和浏览器导出；登录后也可选择服务端导出。
 - Word/DOCX 转 PDF 走服务端任务队列；Docker 生产镜像内置 LibreOffice，服务端仍保留 PDF fallback。
 - PDF 和字体的重型处理主要走服务端任务队列。
+- AI 生图走服务端任务队列（独立
+  `ai-queue`），必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式
   `pro_preview` 账号使用与 Private 相同的顶额权益，普通 `plan: free` 登录账号仍为 50MB。

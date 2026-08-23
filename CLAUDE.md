@@ -107,6 +107,11 @@ ID_PHOTO_AI_IMAGE_QUALITY=high
 ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
 ID_PHOTO_AI_RESPONSE_FORMAT=url
 
+AI_IMAGE_BASE_URL=
+AI_IMAGE_API_KEY=
+AI_IMAGE_MODEL=gpt-image-1
+AI_IMAGE_RESPONSE_FORMAT=b64_json
+
 PORT=3001
 CORS_ORIGIN=http://localhost:3000
 NODE_ENV=development
@@ -169,7 +174,7 @@ API 模块：
 
 - `/` - 营销首页和推荐工具入口
 - `/dashboard` - 最近文件、任务、失败恢复和快捷工具
-- `/image`、`/image/compress`、`/image/convert`、`/image/animation`、`/image/stitch`、`/image/watermark`、`/image/id-photo`、`/image/cutout`、`/image/crop`、`/image/mosaic`
+- `/image`、`/image/compress`、`/image/convert`、`/image/animation`、`/image/stitch`、`/image/watermark`、`/image/id-photo`、`/image/cutout`、`/image/crop`、`/image/mosaic`、`/image/generate`
 - `/pdf`、`/pdf/merge`、`/pdf/split`、`/pdf/rearrange`、`/pdf/rotate`、`/pdf/from-image`、`/pdf/from-document`、`/pdf/to-image`、`/pdf/to-text`、`/pdf/metadata`、`/pdf/encrypt`、`/pdf/watermark`、`/pdf/compress`
 - `/font`
 - `/files`、`/files/trash`
@@ -184,12 +189,13 @@ API 模块：
 - 图片裁剪（/image/crop）与打码（/image/mosaic）纯浏览器 canvas 处理，图片不上传。
 - GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
+- AI 生图（/image/generate）走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；当前只支持文生图。
 - Markdown /
   Word 转 PDF 页面免费进入。Markdown 支持在线编辑、实时预览和本地导出；登录后可选择服务端导出。DOCX 走服务端任务。
 - 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；Docker 组合镜像已安装 `libreoffice-writer`
   和 CJK 字体，本地宿主机运行 API 时可安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。
 - 当前任务类型包含
-  `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`。
+  `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`。
 
 ## 参考文档
 

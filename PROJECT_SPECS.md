@@ -152,6 +152,13 @@ ID_PHOTO_AI_IMAGE_SIZE=1024x1024
 ID_PHOTO_AI_IMAGE_QUALITY=high
 ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
 ID_PHOTO_AI_RESPONSE_FORMAT=url
+
+# AI image generation (optional, OpenAI-compatible, text-to-image)
+# 尺寸与质量是 per-request 的用户选择，由前端表单传入、zod schema 提供默认，不走 env
+AI_IMAGE_BASE_URL=
+AI_IMAGE_API_KEY=
+AI_IMAGE_MODEL=gpt-image-1
+AI_IMAGE_RESPONSE_FORMAT=b64_json
 ```
 
 访问队列后台 `/admin/queues` 还需要：
@@ -177,6 +184,22 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 `ID_PHOTO_AI_SEGMENTATION_PROVIDER=chat_mask` 时调用 `/v1/chat/completions`，适合能返回 JSON
 mask 的视觉模型；`image_result` 时调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
 兼容格式上传参考图并返回最终证件照。
+
+AI 生图使用一组独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响：
+
+```env
+AI_IMAGE_BASE_URL=https://example.com/v1
+AI_IMAGE_API_KEY=<api key>
+AI_IMAGE_MODEL=gpt-image-1
+AI_IMAGE_RESPONSE_FORMAT=b64_json
+```
+
+- 当前只实现文生图，调用 `POST /v1/images/generations`，`n=1`，一张图对应一个任务。
+- `AI_IMAGE_BASE_URL` 未配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
+  失败，页面提示未配置。
+- 尺寸与质量不走 env，由前端表单传入、`imageGenerateTaskConfigSchema` 提供默认值。
+- 每日生成张数上限在 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']`
+  中按 plan 配置。
 
 ## 本地服务
 
@@ -281,7 +304,7 @@ cd packages/api-client && bun run generate
 
 ### Task 类型
 
-`compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`。
+`compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`。
 
 ## API 服务
 
@@ -320,7 +343,7 @@ cd packages/api-client && bun run generate
 
 工具清单：
 
-- 图片：压缩、格式转换、水印、长图拼接、GIF/APNG 制作与压缩、证件照生成、批量处理、压缩前后对比。
+- 图片：压缩、格式转换、水印、长图拼接、GIF/APNG 制作与压缩、证件照生成、AI 生图、批量处理、压缩前后对比。
 - PDF：合并、拆分、重排、旋转、图片转 PDF、Markdown /
   Word 转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
 - 字体：TTF/OTF/WOFF/WOFF2 转换。

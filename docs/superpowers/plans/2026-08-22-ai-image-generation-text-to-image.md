@@ -51,6 +51,11 @@ bun run services:up
 的任务，验证时必须跑一次全量（`cd apps/api && bun test src`）而不只是子目录，否则泄漏只在合跑时暴露。（Task
 7 曾因此漏掉一个缺陷。）
 
+**前端交互测试**：仓库**没有安装** `@testing-library/user-event`，既有交互测试一律用
+`@testing-library/react` 的 `fireEvent`。本文档后续代码片段里若出现 `userEvent`，改用 `fireEvent`
+等价写法（受控组件下每次交互只触发一次 onChange，断言不变），**不要**擅自 `bun add` 引入依赖。（Task
+12 段的 `userEvent` 片段属此列。）
+
 ---
 
 ## Task 1: 注册 image_generate 任务类型
@@ -2857,6 +2862,17 @@ git commit -m "feat(web): 新增 AI 生图参数表单组件"
 返回），在错误态下渲染失败提示而不是让进度条永远转。否则永久失败表现为「进度条转到底也不结束」。本任务的
 `page.test.tsx` 应包含一条对应用例：mock 让状态请求持续失败，断言页面渲染出错误提示（复用
 `FailureRecoveryPanel` 与 `ImageGenerate.failed` 文案）而非停留在 processing。
+
+**Task 12 审查发现的视觉/a11y 项（页面层负责）：**
+
+`ImageGenerateOptions` 组件本身没有面板外框、选中态只有 `border-foreground`，且它的单选 chip 用
+`sr-only` radio + label，缺 `has-[:focus-visible]` 焦点环——键盘聚焦时看不到指示（WCAG
+2.4.7）。组件层这些都留给页面处理：
+
+- 页面把 `ImageGenerateOptions` 放进 `rounded-md border border-border p-4` 之类的面板外框里（对齐
+  `id-photo-options` 的呈现方式）。
+- 给单选 chip 的 label 补 `has-[:focus-visible]`
+  的可见焦点环（键盘可达性）。这是唯一的 a11y 缺口，视觉打磨时一行补上。
 
 - [ ] **Step 1: 建 layout**
 

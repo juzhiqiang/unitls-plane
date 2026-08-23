@@ -59,7 +59,7 @@ Codex 会直接读取 `AGENTS.md`；Claude Code 通过 `CLAUDE.md` 中的 `@AGEN
 - 图片加水印
 - 图片旋转、水平/垂直翻转、自动方向校正
 - 证件照生成与背景处理
-- AI 生图（/image/generate）：文字描述生成图片，需要登录，每日限张数。
+- AI 生图（/image/generate）：文字描述生成图片，或上传参考图做图生图，需要登录，每日限张数。
 - 批量处理与 zip 下载
 - 压缩前后对比
 
@@ -190,7 +190,7 @@ AI_IMAGE_RESPONSE_FORMAT=b64_json
 - `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认
   `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
 
-当前只实现文生图，走 `POST /v1/images/generations`；图生图与局部重绘尚未实现。每日生成张数上限在
+当前支持文生图（`POST /v1/images/generations`）与图生图（`POST /v1/images/edits`，页面上传一张参考图并可预览）；局部重绘尚未实现。每日生成张数上限在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
 
 ### 启动前端开发服务

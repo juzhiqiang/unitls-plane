@@ -153,7 +153,7 @@ ID_PHOTO_AI_IMAGE_QUALITY=high
 ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
 ID_PHOTO_AI_RESPONSE_FORMAT=url
 
-# AI image generation (optional, OpenAI-compatible, text-to-image)
+# AI image generation (optional, OpenAI-compatible, text-to-image + image-to-image)
 # 尺寸与质量是 per-request 的用户选择，由前端表单传入、zod schema 提供默认，不走 env
 AI_IMAGE_BASE_URL=
 AI_IMAGE_API_KEY=
@@ -194,7 +194,9 @@ AI_IMAGE_MODEL=gpt-image-1
 AI_IMAGE_RESPONSE_FORMAT=b64_json
 ```
 
-- 当前只实现文生图，调用 `POST /v1/images/generations`，`n=1`，一张图对应一个任务。
+- 文生图调用 `POST /v1/images/generations`（JSON），图生图调用 `POST /v1/images/edits`
+  （multipart 上传参考图，参考图先经 sharp 转 PNG 并剥掉原图元数据）；两者都是
+  `n=1`，一张图对应一个任务。局部重绘尚未实现。
 - `AI_IMAGE_BASE_URL` 未配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
   失败，页面提示未配置。
 - 尺寸与质量不走 env，由前端表单传入、`imageGenerateTaskConfigSchema` 提供默认值。

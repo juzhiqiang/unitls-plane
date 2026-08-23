@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { imageGenerateTaskConfigSchema } from './image-generate';
+import {
+  IMAGE_GENERATE_PROMPT_MAX_LENGTH,
+  imageGenerateTaskConfigSchema,
+} from './image-generate';
 
 const base = {
   mode: 'text_to_image' as const,
@@ -28,11 +31,27 @@ describe('imageGenerateTaskConfigSchema', () => {
     ).toThrow();
   });
 
-  it('rejects a prompt longer than 2000 characters', () => {
+  // 产品决定：提示词上限 5000 字。这里钉住数值本身,
+  // 其余断言一律从常量推导,改上限时只需要动这一处期望。
+  it('caps the prompt at 5000 characters', () => {
+    expect(IMAGE_GENERATE_PROMPT_MAX_LENGTH).toBe(5000);
+  });
+
+  it('accepts a prompt exactly at the length limit', () => {
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      prompt: 'a'.repeat(IMAGE_GENERATE_PROMPT_MAX_LENGTH),
+      inputFileCount: 0,
+    });
+
+    expect(parsed.prompt).toHaveLength(IMAGE_GENERATE_PROMPT_MAX_LENGTH);
+  });
+
+  it('rejects a prompt one character over the limit', () => {
     expect(() =>
       imageGenerateTaskConfigSchema.parse({
         ...base,
-        prompt: 'a'.repeat(2001),
+        prompt: 'a'.repeat(IMAGE_GENERATE_PROMPT_MAX_LENGTH + 1),
         inputFileCount: 0,
       })
     ).toThrow();

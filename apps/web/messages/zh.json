@@ -882,7 +882,7 @@
     "description": "用文字描述生成图片。服务端处理，需要登录，产物保存到账号文件。",
     "promptLabel": "提示词",
     "promptPlaceholder": "描述你想要的画面，越具体越好",
-    "promptHint": "最多 2000 字",
+    "promptHint": "最多 {max} 字",
     "sizeLabel": "尺寸",
     "sizes": {
       "1024x1024": "正方形 1:1",

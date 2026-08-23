@@ -102,7 +102,12 @@ export function ImageGenerateOptions({
           disabled={disabled}
           onChange={event => onChange({ ...value, prompt: event.target.value })}
         />
-        <p className="text-xs text-muted-foreground">{t('promptHint')}</p>
+        <p className="text-xs text-muted-foreground">
+          {/* 传字符串而不是数字:数字参数会被 Intl.NumberFormat 加千位分隔符。 */}
+          {t('promptHint', {
+            max: String(IMAGE_GENERATE_PROMPT_MAX_LENGTH),
+          })}
+        </p>
       </div>
 
       <RadioRow

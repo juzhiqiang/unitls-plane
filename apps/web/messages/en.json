@@ -882,7 +882,7 @@
     "description": "Generate images from a text prompt. Processed on the server, sign-in required, results saved to your account files.",
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe the image you want — the more specific, the better",
-    "promptHint": "Up to 2000 characters",
+    "promptHint": "Up to {max} characters",
     "sizeLabel": "Size",
     "sizes": {
       "1024x1024": "Square 1:1",

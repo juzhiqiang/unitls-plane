@@ -24,7 +24,7 @@ export const imageGenerateStyleEnum = z.enum([
 ]);
 
 /** prompt 最大长度,前后端共用,避免跨包重复魔数。 */
-export const IMAGE_GENERATE_PROMPT_MAX_LENGTH = 2000;
+export const IMAGE_GENERATE_PROMPT_MAX_LENGTH = 5000;
 
 /** 每个 mode 要求的输入文件数量,用于把模式契约收在一处。 */
 export const IMAGE_GENERATE_INPUT_FILE_COUNT: Record<

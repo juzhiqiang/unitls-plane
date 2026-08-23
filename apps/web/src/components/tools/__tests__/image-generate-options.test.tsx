@@ -63,6 +63,16 @@ describe('ImageGenerateOptions', () => {
     );
   });
 
+  // 提示文案里的字数必须由同一个常量插值,不能在 messages 里写死数字,
+  // 否则改上限时中英文文案会静默过期。
+  it('states the shared limit in the prompt hint', () => {
+    renderOptions();
+
+    expect(
+      screen.getByText(`Up to ${IMAGE_GENERATE_PROMPT_MAX_LENGTH} characters`)
+    ).toBeInTheDocument();
+  });
+
   it('reports the selected size', () => {
     const { onChange } = renderOptions();
 

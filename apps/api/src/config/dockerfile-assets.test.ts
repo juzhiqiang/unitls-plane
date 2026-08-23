@@ -66,8 +66,11 @@ describe('Dockerfile runtime assets', () => {
       'node apps/api/dist/scripts/migrate.js'
     );
     expect(combinedEntrypoint).toContain('node apps/api/dist/main.js &');
-    expect(productionCompose).toContain(
-      'node apps/api/dist/scripts/migrate.js && node apps/api/dist/main.js'
+    // 生产 compose 允许在 migrate 与 main 之间插入其它 node 启动脚本
+    // (当前是 sync-id-photo-models),但顺序必须是 migrate 最先、main 最后,
+    // 且全部走 node 而不是 bun。
+    expect(productionCompose).toMatch(
+      /node apps\/api\/dist\/scripts\/migrate\.js( && node apps\/api\/dist\/scripts\/[\w-]+\.js)* && node apps\/api\/dist\/main\.js/
     );
     expect(accountExportService).not.toContain(
       "import { Database } from 'bun:sqlite'"

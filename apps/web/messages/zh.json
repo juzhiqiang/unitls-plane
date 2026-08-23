@@ -150,6 +150,8 @@
       "imageBatchDescription": "一次处理多张图片，并打包下载结果。",
       "imagePreview": "预览",
       "imagePreviewDescription": "保存前对比原图和处理结果。",
+      "imageGenerate": "AI 生图",
+      "imageGenerateDescription": "用文字描述生成图片，产物直接进账号文件。",
       "pdfOrganize": "整理",
       "pdfOrganizeDescription": "合并、拆分、重排和旋转页面。",
       "pdfConvert": "转换",
@@ -257,6 +259,10 @@
       "imageMosaic": {
         "title": "图片打码",
         "description": "框选区域打码，遮住证件号与人脸。"
+      },
+      "imageGenerate": {
+        "title": "AI 生图",
+        "description": "输入提示词生成图片，需要登录，每日有张数上限。"
       }
     }
   },
@@ -870,6 +876,43 @@
     "resultTitle": "打码完成",
     "resultSize": "大小",
     "resultAlt": "打码结果预览"
+  },
+  "ImageGenerate": {
+    "title": "AI 生图",
+    "description": "用文字描述生成图片。服务端处理，需要登录，产物保存到账号文件。",
+    "promptLabel": "提示词",
+    "promptPlaceholder": "描述你想要的画面，越具体越好",
+    "promptHint": "最多 2000 字",
+    "sizeLabel": "尺寸",
+    "sizes": {
+      "1024x1024": "正方形 1:1",
+      "1024x1536": "竖版 2:3",
+      "1536x1024": "横版 3:2"
+    },
+    "qualityLabel": "质量",
+    "qualities": {
+      "standard": "标准",
+      "high": "高"
+    },
+    "styleLabel": "风格",
+    "styles": {
+      "none": "不指定",
+      "photographic": "写实摄影",
+      "illustration": "插画",
+      "anime": "动漫",
+      "three_d": "3D 渲染",
+      "watercolor": "水彩",
+      "line_art": "线稿"
+    },
+    "countLabel": "生成数量",
+    "submit": "开始生成",
+    "generating": "生成中",
+    "resultTitle": "生成结果",
+    "resultMeta": "第 {index} 张",
+    "quotaExceeded": "今日额度已用完，明天再来。",
+    "contentRejected": "提示词被内容策略拒绝，换个说法再试。",
+    "notConfigured": "AI 生图尚未配置，请联系管理员。",
+    "failed": "生成失败，请重试。"
   },
   "PdfTool": {
     "title": "PDF 工具",

@@ -17,6 +17,7 @@ import {
   RefreshCw,
   RotateCw,
   Scissors,
+  Sparkles,
   Stamp,
   Type,
 } from 'lucide-react';
@@ -204,6 +205,19 @@ export const imageTools: ToolMeta[] = [
     retention: 'browser-session',
     requiresLogin: false,
     tags: ['preview', 'quality'],
+  },
+  {
+    key: 'imageGenerate',
+    href: '/image/generate',
+    icon: Sparkles,
+    titleKey: 'ToolCatalog.tools.imageGenerate.title',
+    descriptionKey: 'ToolCatalog.tools.imageGenerate.description',
+    categoryKey: 'ToolCatalog.categories.imageGenerate',
+    processing: 'server',
+    retention: 'account-files',
+    requiresLogin: true,
+    limitKeys: ['image.generate.dailyCount'],
+    tags: ['ai', 'generate', 'prompt'],
   },
 ];
 

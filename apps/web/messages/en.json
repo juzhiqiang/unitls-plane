@@ -150,6 +150,8 @@
       "imageBatchDescription": "Process multiple images and package the result as one download.",
       "imagePreview": "Preview",
       "imagePreviewDescription": "Compare original and result before saving.",
+      "imageGenerate": "AI image generation",
+      "imageGenerateDescription": "Generate images from a text prompt, saved straight to your account files.",
       "pdfOrganize": "Organize",
       "pdfOrganizeDescription": "Merge, split, reorder, and rotate pages.",
       "pdfConvert": "Convert",
@@ -257,6 +259,10 @@
       "imageMosaic": {
         "title": "Image redaction",
         "description": "Mask selected areas to hide IDs and faces."
+      },
+      "imageGenerate": {
+        "title": "AI image generation",
+        "description": "Generate images from a prompt. Sign-in required, with a daily image cap."
       }
     }
   },
@@ -870,6 +876,43 @@
     "resultTitle": "Redacted",
     "resultSize": "Size",
     "resultAlt": "Redacted preview"
+  },
+  "ImageGenerate": {
+    "title": "AI image generation",
+    "description": "Generate images from a text prompt. Processed on the server, sign-in required, results saved to your account files.",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe the image you want — the more specific, the better",
+    "promptHint": "Up to 2000 characters",
+    "sizeLabel": "Size",
+    "sizes": {
+      "1024x1024": "Square 1:1",
+      "1024x1536": "Portrait 2:3",
+      "1536x1024": "Landscape 3:2"
+    },
+    "qualityLabel": "Quality",
+    "qualities": {
+      "standard": "Standard",
+      "high": "High"
+    },
+    "styleLabel": "Style",
+    "styles": {
+      "none": "Unspecified",
+      "photographic": "Photographic",
+      "illustration": "Illustration",
+      "anime": "Anime",
+      "three_d": "3D render",
+      "watercolor": "Watercolor",
+      "line_art": "Line art"
+    },
+    "countLabel": "Number of images",
+    "submit": "Generate",
+    "generating": "Generating",
+    "resultTitle": "Results",
+    "resultMeta": "Image {index}",
+    "quotaExceeded": "You have used today's quota. Try again tomorrow.",
+    "contentRejected": "The prompt was rejected by the content policy. Try rephrasing it.",
+    "notConfigured": "AI image generation is not configured. Contact the administrator.",
+    "failed": "Generation failed. Please try again."
   },
   "PdfTool": {
     "title": "PDF Tools",

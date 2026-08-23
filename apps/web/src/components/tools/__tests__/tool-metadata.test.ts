@@ -43,7 +43,16 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(11);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(12);
+  });
+
+  it('registers the AI image generator as a login-gated server tool', () => {
+    const tool = getToolByHref('/image/generate');
+
+    expect(tool?.key).toBe('imageGenerate');
+    expect(tool?.processing).toBe('server');
+    expect(tool?.requiresLogin).toBe(true);
+    expect(tool?.retention).toBe('account-files');
   });
 
   it('registers the id photo generator as a local-first image tool with account-file retention', () => {

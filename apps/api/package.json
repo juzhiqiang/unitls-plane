@@ -1,6 +1,6 @@
 {
   "name": "@utils-plane/api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "nodemon --signal SIGTERM --watch src --ext ts --exec 'bun src/main.ts'",

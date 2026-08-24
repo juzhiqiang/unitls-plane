@@ -1536,6 +1536,38 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.3.0",
+          "date": "2026-08-24",
+          "title": "New AI image generation tool",
+          "summary": "A new AI image generation page lets signed-in users create images from a text prompt or a reference image, with size, quality, and style options, available under a per-account daily quota.",
+          "groups": [
+            {
+              "title": "New",
+              "items": [
+                "Added an AI image generation page with text-to-image and image-to-image modes; image-to-image uploads a reference image with preview.",
+                "Generation parameters cover 3 sizes, 2 quality levels, and 6 styles, with multiple images generated per run.",
+                "Generation runs as a signed-in server task on the queue, with a per-account daily image limit.",
+                "Results are exported as PNG with only implicit provenance metadata such as generator and model; no visible watermark is added."
+              ]
+            },
+            {
+              "title": "Improved",
+              "items": [
+                "Multiple results generate concurrently with unified progress; a single failure does not block the rest.",
+                "Image-to-image results support a sliding before/after comparison between the reference and the generated image.",
+                "Prompts accept up to 5,000 characters, with a live character counter in the input."
+              ]
+            },
+            {
+              "title": "Privacy & security",
+              "items": [
+                "Generated images strip upstream service metadata so prompts are not leaked with the file.",
+                "Reference images uploaded for image-to-image have location and other metadata removed server-side before the model is called."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.2.0",
           "date": "2026-08-20",
           "title": "More local image tools and smoother editing",

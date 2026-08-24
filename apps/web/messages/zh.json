@@ -1635,15 +1635,17 @@
     "plans": {
       "metadata": {
         "title": "套餐与额度 | Utils Plane",
-        "description": "查看 Utils Plane 各套餐的单文件上传额度与定位说明。"
+        "description": "查看 Utils Plane 各套餐的单文件上传额度、AI 生图每日额度与定位说明。"
       },
       "eyebrow": "套餐与额度",
       "title": "套餐与额度",
-      "intro": "公测期间所有套餐免费。以下额度适用于本地和服务端处理的单文件大小限制。",
-      "betaNote": "公测期间所有套餐免费。Pro Preview 账号使用与 Private 相同的顶额权益；普通免费登录账号为 50MB。",
+      "intro": "公测期间所有套餐免费。以下额度适用于本地和服务端处理的单文件大小限制，以及 AI 生图每个账号每日可生成张数。",
+      "betaNote": "公测期间所有套餐免费。Pro Preview 账号使用与 Private 相同的顶额权益；普通免费登录账号单文件 50MB、每日可生成 10 张 AI 生图。",
       "columns": {
         "plan": "套餐",
         "uploadLimit": "单文件上限",
+        "imageGenerate": "AI 生图每日额度",
+        "unavailable": "不可用",
         "notes": "说明"
       },
       "planLabels": {

@@ -28,6 +28,18 @@ describe('plan display limits', () => {
     expect(byPlan.private.uploadMaxFileSize).toBe(250 * 1024 * 1024);
   });
 
+  it('exposes the AI image generation daily quota for each plan', () => {
+    const plans = getPlanDisplayLimits();
+    const byPlan = Object.fromEntries(plans.map(p => [p.plan, p]));
+
+    expect(byPlan.free.imageGenerateDailyCount).toBe(0);
+    expect(byPlan.signed_in.imageGenerateDailyCount).toBe(10);
+    expect(byPlan.pro_preview.imageGenerateDailyCount).toBe(100);
+    expect(byPlan.pro.imageGenerateDailyCount).toBe(50);
+    expect(byPlan.team.imageGenerateDailyCount).toBe(80);
+    expect(byPlan.private.imageGenerateDailyCount).toBe(100);
+  });
+
   it('marks the public beta top-tier plan for highlight', () => {
     const plans = getPlanDisplayLimits();
     const preview = plans.find(p => p.plan === 'pro_preview');

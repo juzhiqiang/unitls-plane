@@ -58,6 +58,8 @@ export default async function PlansPage({
       labels={{
         plan: t('columns.plan'),
         uploadLimit: t('columns.uploadLimit'),
+        imageGenerate: t('columns.imageGenerate'),
+        unavailable: t('columns.unavailable'),
         notes: t('columns.notes'),
       }}
       planLabels={t.raw('planLabels') as Record<string, string>}

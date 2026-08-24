@@ -37,6 +37,8 @@ describe('public plans page', () => {
     expect(Object.keys(plans.planNotes)).toHaveLength(6);
     expect(plans.columns.plan).toBeTruthy();
     expect(plans.columns.uploadLimit).toBeTruthy();
+    expect(plans.columns.imageGenerate).toBeTruthy();
+    expect(plans.columns.unavailable).toBeTruthy();
     expect(plans.columns.notes).toBeTruthy();
   });
 });

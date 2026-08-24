@@ -1637,15 +1637,17 @@
     "plans": {
       "metadata": {
         "title": "Plans & limits | Utils Plane",
-        "description": "View the per-file upload limits and descriptions for each Utils Plane plan."
+        "description": "View the per-file upload limits, AI image generation daily quota, and descriptions for each Utils Plane plan."
       },
       "eyebrow": "Plans & limits",
       "title": "Plans & limits",
-      "intro": "All plans are free during the public beta. These limits apply to the maximum single-file size for both local and server processing.",
-      "betaNote": "All plans are free during the public beta. Pro Preview accounts use the same top-tier allowance as Private; regular free signed-in accounts are limited to 50 MB.",
+      "intro": "All plans are free during the public beta. These limits apply to the maximum single-file size for both local and server processing, and the daily AI image generation count per account.",
+      "betaNote": "All plans are free during the public beta. Pro Preview accounts use the same top-tier allowance as Private; regular free signed-in accounts are limited to 50 MB and 10 AI images per day.",
       "columns": {
         "plan": "Plan",
         "uploadLimit": "Upload limit",
+        "imageGenerate": "AI image / day",
+        "unavailable": "Not available",
         "notes": "Notes"
       },
       "planLabels": {

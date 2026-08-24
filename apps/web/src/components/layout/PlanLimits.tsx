@@ -8,6 +8,7 @@ interface PlanLimitsProps {
   labels: {
     plan: string;
     uploadLimit: string;
+    imageGenerate: string;
     notes: string;
   };
   planLabels: Record<string, string>;
@@ -18,6 +19,10 @@ interface PlanLimitsProps {
 function formatFileSize(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   return `${mb} MB`;
+}
+
+function formatDailyCount(count: number, unavailableLabel: string): string {
+  return count > 0 ? String(count) : unavailableLabel;
 }
 
 export function PlanLimits({
@@ -54,29 +59,37 @@ export function PlanLimits({
               <th className="py-3 pr-4 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                 {labels.uploadLimit}
               </th>
+              <th className="py-3 pr-4 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                {labels.imageGenerate}
+              </th>
               <th className="py-3 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                 {labels.notes}
               </th>
             </tr>
           </thead>
           <tbody>
-            {plans.map(({ plan, uploadMaxFileSize, isPublicBetaTopTier }) => (
-              <tr
-                key={plan}
-                data-highlight={isPublicBetaTopTier || undefined}
-                className="border-b border-border/50"
-              >
-                <td className="py-3 pr-4 font-medium text-foreground">
-                  {planLabels[plan]}
-                </td>
-                <td className="py-3 pr-4 font-mono text-muted-foreground">
-                  {formatFileSize(uploadMaxFileSize)}
-                </td>
-                <td className="py-3 text-muted-foreground">
-                  {planNotes[plan]}
-                </td>
-              </tr>
-            ))}
+            {plans.map(
+              ({ plan, uploadMaxFileSize, imageGenerateDailyCount, isPublicBetaTopTier }) => (
+                <tr
+                  key={plan}
+                  data-highlight={isPublicBetaTopTier || undefined}
+                  className="border-b border-border/50"
+                >
+                  <td className="py-3 pr-4 font-medium text-foreground">
+                    {planLabels[plan]}
+                  </td>
+                  <td className="py-3 pr-4 font-mono text-muted-foreground">
+                    {formatFileSize(uploadMaxFileSize)}
+                  </td>
+                  <td className="py-3 pr-4 font-mono text-muted-foreground">
+                    {formatDailyCount(imageGenerateDailyCount, labels.unavailable)}
+                  </td>
+                  <td className="py-3 text-muted-foreground">
+                    {planNotes[plan]}
+                  </td>
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       </div>

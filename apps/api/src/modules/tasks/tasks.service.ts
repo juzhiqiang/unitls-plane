@@ -138,6 +138,24 @@ export class TasksService {
     return task;
   }
 
+  /**
+   * 返回当前账号今日生图的额度快照（limit / used / remaining）。
+   *
+   * 只读查询,用全局 db 直接 count,不进事务、不持有 user 行锁:
+   * 这是给前端展示用的最终一致性快照,真正的超额拦截仍由 create() 内
+   * assertWithinDailyQuota 在事务里完成。匿名用户没有额度（free = 0）。
+   */
+  async getImageGenerateQuota(
+    user: Pick<User, 'id' | 'plan' | 'role'>
+  ): Promise<{ limit: number; used: number; remaining: number }> {
+    const limit = getLimit(
+      { userId: user.id, plan: user.plan, role: user.role },
+      'image.generate.dailyCount'
+    );
+    const used = await countTasksCreatedToday(db, user.id, 'image_generate');
+    return { limit, used, remaining: Math.max(0, limit - used) };
+  }
+
   async listByUser(
     userId: string,
     query: { page: number; limit: number; status?: TaskStatus; type?: TaskType }

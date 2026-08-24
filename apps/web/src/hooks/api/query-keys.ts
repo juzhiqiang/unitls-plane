@@ -4,3 +4,9 @@ export const accountQueryKeys = {
   summary: (userId?: string) =>
     [...accountQueryKeys.summaries(), userId] as const,
 };
+
+export const taskQueryKeys = {
+  all: ['tasks'] as const,
+  imageGenerateQuota: () =>
+    [...taskQueryKeys.all, 'image-generate', 'quota'] as const,
+};

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/api-client';
 import type {
   CreateTaskDto,
@@ -6,7 +7,7 @@ import type {
   TaskStatusDto,
   TaskTypeValue,
 } from './types';
-import { accountQueryKeys } from './query-keys';
+import { accountQueryKeys, taskQueryKeys } from './query-keys';
 
 export type TaskType = TaskTypeValue;
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -22,6 +23,9 @@ function refreshTaskQueries(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ['tasks'] });
   queryClient.invalidateQueries({
     queryKey: accountQueryKeys.summaries(),
+  });
+  queryClient.invalidateQueries({
+    queryKey: taskQueryKeys.imageGenerateQuota(),
   });
 }
 
@@ -115,5 +119,20 @@ export function useRetryTask() {
     onSuccess: () => {
       refreshTaskQueries(queryClient);
     },
+  });
+}
+
+export function useImageGenerateQuota() {
+  const { data: session, isPending: sessionPending } = useSession();
+  const userId = session?.user.id;
+
+  return useQuery({
+    queryKey: taskQueryKeys.imageGenerateQuota(),
+    queryFn: async () => {
+      const { data, error } = await api.GET('/tasks/image-generate/quota');
+      if (error) throw error;
+      return data as { limit: number; used: number; remaining: number };
+    },
+    enabled: !sessionPending && !!userId,
   });
 }

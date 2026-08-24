@@ -117,6 +117,36 @@
         ]
       }
     },
+    "/tasks/image-generate/quota": {
+      "get": {
+        "operationId": "TasksController_getImageGenerateQuota",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Today image generation quota",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageGenerateQuotaDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the daily image generation quota snapshot",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/tasks/{id}": {
       "get": {
         "operationId": "TasksController_getOne",
@@ -1008,6 +1038,28 @@
           "inputFileIds",
           "progress",
           "createdAt"
+        ]
+      },
+      "ImageGenerateQuotaDto": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "description": "当日生图张数上限"
+          },
+          "used": {
+            "type": "number",
+            "description": "今日已用张数（失败的生成不计数）"
+          },
+          "remaining": {
+            "type": "number",
+            "description": "今日剩余张数"
+          }
+        },
+        "required": [
+          "limit",
+          "used",
+          "remaining"
         ]
       },
       "TaskStatusDto": {

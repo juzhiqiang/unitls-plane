@@ -22,6 +22,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/image-generate/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the daily image generation quota snapshot */
+        get: operations["TasksController_getImageGenerateQuota"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}": {
         parameters: {
             query?: never;
@@ -424,6 +441,14 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
+        ImageGenerateQuotaDto: {
+            /** @description 当日生图张数上限 */
+            limit: number;
+            /** @description 今日已用张数（失败的生成不计数） */
+            used: number;
+            /** @description 今日剩余张数 */
+            remaining: number;
+        };
         TaskStatusDto: {
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
@@ -543,6 +568,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskResponseDto"];
                 };
+            };
+        };
+    };
+    TasksController_getImageGenerateQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Today image generation quota */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerateQuotaDto"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

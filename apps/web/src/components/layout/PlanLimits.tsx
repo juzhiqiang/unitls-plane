@@ -9,6 +9,7 @@ interface PlanLimitsProps {
     plan: string;
     uploadLimit: string;
     imageGenerate: string;
+    unavailable: string;
     notes: string;
   };
   planLabels: Record<string, string>;

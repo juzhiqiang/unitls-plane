@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { authClient } from '@/lib/auth-client';
-import { useCreateTask } from '@/hooks/api/use-tasks';
+import { useCreateTask, useImageGenerateQuota } from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
 import {
@@ -73,6 +73,7 @@ export default function ImageGeneratePage() {
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const createTask = useCreateTask();
+  const quota = useImageGenerateQuota();
   const uploadFile = useUploadFile();
 
   const [draft, setDraft] = useState<ImageGenerateDraft>(INITIAL_DRAFT);
@@ -170,7 +171,10 @@ export default function ImageGeneratePage() {
     let inputFileIds: string[] = [];
     if (needsReference && sourceFile) {
       try {
-        const uploaded = (await uploadFile.mutateAsync(sourceFile)) as {
+        // upload 走 multipart,OpenAPI 里 201 没有 JSON content schema,openapi-fetch
+        // 把返回类型推成 undefined,这里先转 unknown 再断言,与 use-files 里
+        // `data as unknown as FileListResponse` 同一处理方式。
+        const uploaded = (await uploadFile.mutateAsync(sourceFile)) as unknown as {
           id: string;
         };
         inputFileIds = [uploaded.id];
@@ -297,6 +301,16 @@ export default function ImageGeneratePage() {
         onChange={changeDraft}
         disabled={busy}
       />
+
+      {/* 已登录才展示当日额度:free = 0,匿名走登录跳转,没必要显示一行 0。 */}
+      {session && quota.data && (
+        <p className="font-mono text-xs tabular-nums text-muted-foreground">
+          {t('quotaRemaining', {
+            remaining: String(quota.data.remaining),
+            limit: String(quota.data.limit),
+          })}
+        </p>
+      )}
 
       {/* 主操作与其它图片工具页保持一致:整宽填充按钮。 */}
       <button

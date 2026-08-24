@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   groupProgress: vi.fn(),
   onItemCompleted: vi.fn(),
+  imageGenerateQuota: vi.fn(),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -32,6 +33,7 @@ vi.mock('@/lib/auth-client', () => ({
 
 vi.mock('@/hooks/api/use-tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mocks.createTask }),
+  useImageGenerateQuota: () => mocks.imageGenerateQuota(),
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
@@ -92,6 +94,9 @@ beforeEach(() => {
   });
   mocks.createTask.mockImplementation(async () => ({ id: 'task-1' }));
   mocks.uploadFile.mockImplementation(async () => ({ id: 'file-9' }));
+  mocks.imageGenerateQuota.mockReturnValue({
+    data: { limit: 10, used: 3, remaining: 7 },
+  });
   Object.defineProperty(URL, 'createObjectURL', {
     value: vi.fn(() => 'blob:preview-url'),
     configurable: true,
@@ -417,6 +422,21 @@ describe('ImageGeneratePage', () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText('Generation failed. Please try again.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the remaining daily quota for a signed-in user', () => {
+    renderPage();
+
+    expect(screen.getByText('7 / 10 remaining today')).toBeInTheDocument();
+  });
+
+  it('hides the remaining quota line for an anonymous visitor', () => {
+    mocks.useSession.mockReturnValue({ data: null });
+    renderPage();
+
+    expect(
+      screen.queryByText(/remaining today/i)
     ).not.toBeInTheDocument();
   });
 

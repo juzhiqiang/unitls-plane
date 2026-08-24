@@ -526,3 +526,106 @@ describe('TasksService task creation', () => {
     expect(events).toContain('rollback');
   });
 });
+
+describe('TasksService image generation quota snapshot', () => {
+  // getImageGenerateQuota 是只读快照:用全局 db 直接 count,既不进事务,也不持有 user 行锁。
+  // 这里只验证 limit/used/remaining 三个数字算对了,真正的并发超额拦截仍由 create() 在事务里兜底。
+  it('returns limit/used/remaining for a signed-in user under quota', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(3);
+
+    const quota = await service.getImageGenerateQuota({
+      id: 'user-1',
+      plan: 'signed_in',
+      role: 'user',
+    });
+
+    expect(quota).toEqual({ limit: 10, used: 3, remaining: 7 });
+  });
+
+  it('clamps remaining to zero once the daily quota is used up', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(10);
+
+    const quota = await service.getImageGenerateQuota({
+      id: 'user-1',
+      plan: 'signed_in',
+      role: 'user',
+    });
+
+    expect(quota).toEqual({ limit: 10, used: 10, remaining: 0 });
+  });
+
+  it('keeps remaining at zero when usage exceeds the limit', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(42);
+
+    const quota = await service.getImageGenerateQuota({
+      id: 'user-1',
+      plan: 'signed_in',
+      role: 'user',
+    });
+
+    expect(quota).toEqual({ limit: 10, used: 42, remaining: 0 });
+  });
+
+  it('reflects higher limits for higher plans', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(0);
+
+    const quota = await service.getImageGenerateQuota({
+      id: 'user-1',
+      plan: 'pro_preview',
+      role: 'user',
+    });
+
+    expect(quota).toEqual({ limit: 100, used: 0, remaining: 100 });
+  });
+
+  it('counts only image_generate tasks for the given user', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(5);
+
+    await service.getImageGenerateQuota({
+      id: 'user-1',
+      plan: 'signed_in',
+      role: 'user',
+    });
+
+    expect(countTasksCreatedToday).toHaveBeenCalledWith(
+      // 第一个参数是 db(只读查询用全局 db,不进事务)
+      expect.objectContaining({ insert: globalInsert }),
+      'user-1',
+      'image_generate'
+    );
+  });
+
+  // resolveEntitlementPlan:有 userId 但 plan='free' 时回退到 signed_in(=10),
+  // 只有完全匿名(无 userId)才会落到 free=0。匿名用户在控制器就被 401 拦下,
+  // 服务方法不会收到无 id 的 user,所以这里只验证登录态 free 用户拿到 signed_in 额度。
+  it('falls back to the signed-in limit for a logged-in free user', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(2);
+
+    const quota = await service.getImageGenerateQuota({
+      id: 'user-1',
+      plan: 'free',
+      role: 'user',
+    });
+
+    expect(quota).toEqual({ limit: 10, used: 2, remaining: 8 });
+  });
+
+  it('maps admins to the pro plan limit', async () => {
+    const { service } = createService();
+    countTasksCreatedToday.mockResolvedValue(0);
+
+    const quota = await service.getImageGenerateQuota({
+      id: 'admin-1',
+      plan: 'signed_in',
+      role: 'admin',
+    });
+
+    expect(quota).toEqual({ limit: 50, used: 0, remaining: 50 });
+  });
+});

@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,8 +22,10 @@ import {
   TaskQueryDto,
   TaskResponseDto,
   TaskStatusDto,
+  ImageGenerateQuotaDto,
 } from './dto/tasks.dto';
 import { Public } from '../../common/decorators';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { User } from '@utils-plane/db';
 import type { Request } from 'express';
 
@@ -54,6 +57,20 @@ export class TasksController {
       },
       user ?? null
     );
+  }
+
+  @Get('image-generate/quota')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get the daily image generation quota snapshot' })
+  @ApiResponse({
+    status: 200,
+    description: 'Today image generation quota',
+    type: ImageGenerateQuotaDto,
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  async getImageGenerateQuota(@CurrentUser() currentUser?: User) {
+    if (!currentUser) throw new UnauthorizedException();
+    return this.tasksService.getImageGenerateQuota(currentUser);
   }
 
   @Get(':id')

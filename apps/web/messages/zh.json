@@ -925,7 +925,8 @@
     "failed": "生成失败，请重试。",
     "paramsSummary": "更多参数",
     "recoveryHint": "可随时重试，失败的生成不占用当日额度。",
-    "compareTitle": "改动对比"
+    "compareTitle": "改动对比",
+    "quotaRemaining": "今日剩余 {remaining} / {limit} 张"
   },
   "PdfTool": {
     "title": "PDF 工具",

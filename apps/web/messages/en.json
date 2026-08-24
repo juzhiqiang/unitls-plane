@@ -925,7 +925,8 @@
     "failed": "Generation failed. Please try again.",
     "paramsSummary": "More options",
     "recoveryHint": "Retry anytime — failed generations do not use up your daily quota.",
-    "compareTitle": "Before / after"
+    "compareTitle": "Before / after",
+    "quotaRemaining": "{remaining} / {limit} remaining today"
   },
   "PdfTool": {
     "title": "PDF Tools",

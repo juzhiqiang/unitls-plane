@@ -154,3 +154,20 @@ export class TaskStatusDto {
   @ApiPropertyOptional({ type: String })
   errorMessage?: string;
 }
+
+export class ImageGenerateQuotaDto {
+  @ApiProperty({
+    description: '当日生图张数上限',
+  })
+  limit!: number;
+
+  @ApiProperty({
+    description: '今日已用张数（失败的生成不计数）',
+  })
+  used!: number;
+
+  @ApiProperty({
+    description: '今日剩余张数',
+  })
+  remaining!: number;
+}

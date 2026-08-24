@@ -345,3 +345,242 @@ describe('ImageGenerationService', () => {
     );
   });
 });
+
+describe('OpenAiCompatibleImageGenerationProvider (generations_ref transport)', () => {
+  const editConfig = {
+    ...config,
+    mode: 'image_to_image' as const,
+    prompt: '把背景换成雪山',
+    inputFileCount: 1,
+  };
+
+  /** kmage 一类网关没有 /v1/images/edits:图生图也打 generations,参考图进 JSON 数组。 */
+  it('posts the reference image as a data URL inside the generations body', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      id: 'kmage',
+      baseUrl: 'https://image.dddd.zone',
+      apiKey: 'kmage_key',
+      model: 'gpt-image-2',
+      editTransport: 'generations_ref',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const buffer = await provider.generate(editConfig, await referencePng());
+
+    expect(buffer.toString('utf8')).toBe('hello');
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe('https://image.dddd.zone/v1/images/generations');
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      'Bearer kmage_key'
+    );
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({
+      model: 'gpt-image-2',
+      size: '1024x1024',
+      quality: 'high',
+      n: 1,
+    });
+    expect(body.prompt).toContain('把背景换成雪山');
+    expect(body.reference_images).toHaveLength(1);
+    // 参考图统一转 PNG 再编码,原图元数据(含 GPS)不会外发。
+    expect(body.reference_images[0]).toStartWith('data:image/png;base64,');
+  });
+
+  it('sends bare base64 when the provider asks for it', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://image.dddd.zone',
+      editTransport: 'generations_ref',
+      refImageEncoding: 'base64',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(editConfig, await referencePng());
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.reference_images[0]).not.toContain('data:');
+    expect(body.reference_images[0]).toStartWith('iVBOR');
+  });
+
+  it('honours a custom reference images field name', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://image.dddd.zone',
+      editTransport: 'generations_ref',
+      refImagesField: 'image_urls',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(editConfig, await referencePng());
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.image_urls).toHaveLength(1);
+    expect(body).not.toHaveProperty('reference_images');
+  });
+
+  it('still refuses image_to_image without a reference image', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://image.dddd.zone',
+      editTransport: 'generations_ref',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(editConfig)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps text_to_image on the plain generations body', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://image.dddd.zone',
+      editTransport: 'generations_ref',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(config);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(init.body as string)).not.toHaveProperty(
+      'reference_images'
+    );
+  });
+});
+
+describe('ImageGenerationService (multi provider registry)', () => {
+  function stub(
+    id: string,
+    capabilities: Array<'generate' | 'edit'> = ['generate', 'edit'],
+    model = 'gpt-image-1'
+  ) {
+    return {
+      generate: vi.fn(async () => Buffer.from(id)),
+      descriptor: { id, label: `${id} label`, capabilities },
+      model,
+    };
+  }
+
+  it('routes to the provider named by providerId', async () => {
+    const first = stub('alpha');
+    const second = stub('kmage', ['generate', 'edit'], 'gpt-image-2');
+    const service = new ImageGenerationService({
+      providers: [first, second],
+    });
+
+    const result = await service.generate({ ...config, providerId: 'kmage' });
+
+    expect(second.generate).toHaveBeenCalled();
+    expect(first.generate).not.toHaveBeenCalled();
+    expect(result.providerId).toBe('kmage');
+    // EXIF 写的是实际出图来源的模型,不是第一个来源的。
+    expect(result.model).toBe('gpt-image-2');
+  });
+
+  it('matches providerId case-insensitively', async () => {
+    const provider = stub('kmage');
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    await service.generate({ ...config, providerId: 'KMage' });
+
+    expect(provider.generate).toHaveBeenCalled();
+  });
+
+  it('falls back to the first configured provider when none is requested', async () => {
+    const first = stub('alpha');
+    const second = stub('beta');
+    const service = new ImageGenerationService({
+      providers: [first, second],
+    });
+
+    const result = await service.generate(config);
+
+    expect(first.generate).toHaveBeenCalled();
+    expect(second.generate).not.toHaveBeenCalled();
+    expect(result.providerId).toBe('alpha');
+  });
+
+  it('fails instead of silently switching when the provider is unknown', async () => {
+    const provider = stub('alpha');
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    const error = (await service
+      .generate({ ...config, providerId: 'ghost' })
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE);
+    expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  it('rejects image_to_image on a generate-only provider', async () => {
+    const provider = stub('textonly', ['generate']);
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    const error = (await service
+      .generate({
+        ...config,
+        mode: 'image_to_image',
+        inputFileCount: 1,
+        providerId: 'textonly',
+      })
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE);
+    expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  it('lists providers in configuration order and leaks no credentials', () => {
+    const service = new ImageGenerationService({
+      providers: [stub('alpha'), stub('kmage', ['generate'])],
+    });
+
+    const listed = service.listProviders();
+
+    expect(listed).toEqual([
+      { id: 'alpha', label: 'alpha label', capabilities: ['generate', 'edit'] },
+      { id: 'kmage', label: 'kmage label', capabilities: ['generate'] },
+    ]);
+    // baseUrl / apiKey 属于服务端配置,出现在这里就是外泄。
+    const serialized = JSON.stringify(listed);
+    expect(serialized).not.toContain('baseUrl');
+    expect(serialized).not.toContain('apiKey');
+  });
+
+  it('reports unconfigured when the injected provider list is empty', async () => {
+    const service = new ImageGenerationService({ providers: [] });
+
+    expect(service.configured).toBe(false);
+    const error = (await service
+      .generate(config)
+      .catch(caught => caught)) as ImageGenerationError;
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_NOT_CONFIGURED);
+  });
+});

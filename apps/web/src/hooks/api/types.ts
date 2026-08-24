@@ -46,3 +46,9 @@ export interface TaskStatusDto {
   errorCode?: string;
   errorMessage?: string;
 }
+
+export interface ImageGenerateProviderDto {
+  id: string;
+  label: string;
+  capabilities: Array<'generate' | 'edit'>;
+}

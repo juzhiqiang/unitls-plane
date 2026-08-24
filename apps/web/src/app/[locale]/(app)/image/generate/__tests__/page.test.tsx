@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   groupProgress: vi.fn(),
   onItemCompleted: vi.fn(),
   imageGenerateQuota: vi.fn(),
+  imageGenerateProviders: vi.fn(),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/auth-client', () => ({
 vi.mock('@/hooks/api/use-tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mocks.createTask }),
   useImageGenerateQuota: () => mocks.imageGenerateQuota(),
+  useImageGenerateProviders: () => mocks.imageGenerateProviders(),
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
@@ -96,6 +98,12 @@ beforeEach(() => {
   mocks.uploadFile.mockImplementation(async () => ({ id: 'file-9' }));
   mocks.imageGenerateQuota.mockReturnValue({
     data: { limit: 10, used: 3, remaining: 7 },
+  });
+  // 默认单来源:选择器不渲染,断言与多来源上线前完全一致。
+  mocks.imageGenerateProviders.mockReturnValue({
+    data: [
+      { id: 'default', label: 'Default', capabilities: ['generate', 'edit'] },
+    ],
   });
   Object.defineProperty(URL, 'createObjectURL', {
     value: vi.fn(() => 'blob:preview-url'),
@@ -435,9 +443,7 @@ describe('ImageGeneratePage', () => {
     mocks.useSession.mockReturnValue({ data: null });
     renderPage();
 
-    expect(
-      screen.queryByText(/remaining today/i)
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/remaining today/i)).not.toBeInTheDocument();
   });
 
   it('compares the reference against the result for image-to-image', async () => {
@@ -506,5 +512,100 @@ describe('ImageGeneratePage', () => {
     const { container } = renderPage();
 
     expect(container.querySelector('.sm\\:grid-cols-2')).not.toBeNull();
+  });
+
+  it('hides the source selector when only one provider is configured', () => {
+    renderPage();
+
+    expect(screen.queryByText('Source')).toBeNull();
+  });
+
+  it('sends the chosen provider id in the task input config', async () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        { id: 'openai', label: 'OpenAI', capabilities: ['generate', 'edit'] },
+        { id: 'kmage', label: 'KMage', capabilities: ['generate', 'edit'] },
+      ],
+    });
+    renderPage();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'KMage' }));
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'a shiba inu' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
+      providerId: 'kmage',
+    });
+  });
+
+  it('omits providerId while the default source is selected', async () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        { id: 'openai', label: 'OpenAI', capabilities: ['generate', 'edit'] },
+        { id: 'kmage', label: 'KMage', capabilities: ['generate', 'edit'] },
+      ],
+    });
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'a shiba inu' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).not.toHaveProperty(
+      'providerId'
+    );
+  });
+
+  it('disables image-to-image when the selected source cannot edit', () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        { id: 'textonly', label: 'Text only', capabilities: ['generate'] },
+      ],
+    });
+    renderPage();
+
+    expect(
+      screen.getByRole('radio', { name: 'Image to image' })
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        'The selected source does not support image to image. Pick another source.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to text-to-image when switching to a source without edit support', async () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        { id: 'openai', label: 'OpenAI', capabilities: ['generate', 'edit'] },
+        { id: 'textonly', label: 'Text only', capabilities: ['generate'] },
+      ],
+    });
+    const { container } = renderPage();
+
+    await chooseReference(container);
+    fireEvent.click(screen.getByRole('radio', { name: 'Text only' }));
+
+    expect(screen.getByRole('radio', { name: 'Text to image' })).toBeChecked();
+    // 参考图必须一起丢掉:留着它会攒出「文生图 + inputFileIds」这种服务端必拒的组合。
+    expect(screen.queryByAltText('Reference image preview')).toBeNull();
+  });
+
+  it('still renders when the provider list request fails', () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: undefined,
+      isError: true,
+    });
+    renderPage();
+
+    expect(screen.queryByText('Source')).toBeNull();
+    expect(
+      screen.getByRole('radio', { name: 'Image to image' })
+    ).not.toBeDisabled();
   });
 });

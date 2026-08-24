@@ -8,8 +8,15 @@ const tasksService = {
   getImageGenerateQuota: vi.fn(),
 };
 
+const imageGenerationService = {
+  listProviders: vi.fn(),
+};
+
 function createController() {
-  return new TasksController(tasksService as never);
+  return new TasksController(
+    tasksService as never,
+    imageGenerationService as never
+  );
 }
 
 beforeEach(() => {
@@ -19,6 +26,9 @@ beforeEach(() => {
     used: 3,
     remaining: 7,
   });
+  imageGenerationService.listProviders.mockReturnValue([
+    { id: 'default', label: '内置生图', capabilities: ['generate', 'edit'] },
+  ]);
 });
 
 it('returns the quota snapshot for an authenticated user', async () => {
@@ -31,9 +41,9 @@ it('returns the quota snapshot for an authenticated user', async () => {
 });
 
 it('throws 401 when no user is attached to the request', async () => {
-  await expect(createController().getImageGenerateQuota(undefined)).rejects.toThrow(
-    UnauthorizedException
-  );
+  await expect(
+    createController().getImageGenerateQuota(undefined)
+  ).rejects.toThrow(UnauthorizedException);
 
   expect(tasksService.getImageGenerateQuota).not.toHaveBeenCalled();
 });
@@ -49,4 +59,22 @@ it('propagates the service result unchanged to the response', async () => {
   const quota = await createController().getImageGenerateQuota(user);
 
   expect(quota).toEqual({ limit: 100, used: 100, remaining: 0 });
+});
+
+it('returns the configured providers for an authenticated user', async () => {
+  const user = { id: 'user-1', plan: 'signed_in', role: 'user' } as never;
+
+  const providers = await createController().listImageGenerateProviders(user);
+
+  expect(providers).toEqual([
+    { id: 'default', label: '内置生图', capabilities: ['generate', 'edit'] },
+  ]);
+});
+
+it('throws 401 when listing providers without a user', async () => {
+  await expect(
+    createController().listImageGenerateProviders(undefined)
+  ).rejects.toThrow(UnauthorizedException);
+
+  expect(imageGenerationService.listProviders).not.toHaveBeenCalled();
 });

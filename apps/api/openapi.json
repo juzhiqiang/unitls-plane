@@ -117,6 +117,39 @@
         ]
       }
     },
+    "/tasks/image-generate/providers": {
+      "get": {
+        "operationId": "TasksController_listImageGenerateProviders",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Configured image generation providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImageGenerateProviderDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the configured image generation providers",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/tasks/image-generate/quota": {
       "get": {
         "operationId": "TasksController_getImageGenerateQuota",
@@ -1038,6 +1071,35 @@
           "inputFileIds",
           "progress",
           "createdAt"
+        ]
+      },
+      "ImageGenerateProviderDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "来源 id，创建任务时放进 inputConfig.providerId"
+          },
+          "label": {
+            "type": "string",
+            "description": "展示给用户的来源名称"
+          },
+          "capabilities": {
+            "type": "array",
+            "description": "该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传",
+            "items": {
+              "type": "string",
+              "enum": [
+                "generate",
+                "edit"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "capabilities"
         ]
       },
       "ImageGenerateQuotaDto": {

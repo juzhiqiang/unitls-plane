@@ -3,6 +3,7 @@ import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/api-client';
 import type {
   CreateTaskDto,
+  ImageGenerateProviderDto,
   TaskResponseDto,
   TaskStatusDto,
   TaskTypeValue,
@@ -134,5 +135,25 @@ export function useImageGenerateQuota() {
       return data as { limit: number; used: number; remaining: number };
     },
     enabled: !sessionPending && !!userId,
+  });
+}
+
+/**
+ * 可用生图来源。来自服务端的 AI_IMAGE_PROVIDERS 配置,进程生命周期内不会变,
+ * 所以设成永不过期:每次进生图页重新拉一遍没有意义。
+ */
+export function useImageGenerateProviders() {
+  const { data: session, isPending: sessionPending } = useSession();
+  const userId = session?.user.id;
+
+  return useQuery({
+    queryKey: taskQueryKeys.imageGenerateProviders(),
+    queryFn: async () => {
+      const { data, error } = await api.GET('/tasks/image-generate/providers');
+      if (error) throw error;
+      return data as ImageGenerateProviderDto[];
+    },
+    enabled: !sessionPending && !!userId,
+    staleTime: Infinity,
   });
 }

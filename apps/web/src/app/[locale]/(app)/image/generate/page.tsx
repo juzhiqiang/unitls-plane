@@ -4,13 +4,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { authClient } from '@/lib/auth-client';
-import { useCreateTask, useImageGenerateQuota } from '@/hooks/api/use-tasks';
+import {
+  useCreateTask,
+  useImageGenerateProviders,
+  useImageGenerateQuota,
+} from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
 import {
   ImageGenerateModeField,
   ImageGenerateParamsFields,
   ImageGeneratePromptField,
+  ImageGenerateProviderField,
   type ImageGenerateDraft,
 } from '@/components/tools/image-generate-options';
 import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
@@ -46,6 +51,7 @@ const ERROR_MESSAGE_KEY: Record<string, string> = {
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
   AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
   AI_IMAGE_NOT_CONFIGURED: 'notConfigured',
+  AI_IMAGE_PROVIDER_UNAVAILABLE: 'providerUnavailable',
 };
 
 const INITIAL_DRAFT: ImageGenerateDraft = {
@@ -74,6 +80,7 @@ export default function ImageGeneratePage() {
   const { data: session } = authClient.useSession();
   const createTask = useCreateTask();
   const quota = useImageGenerateQuota();
+  const providersQuery = useImageGenerateProviders();
   const uploadFile = useUploadFile();
 
   const [draft, setDraft] = useState<ImageGenerateDraft>(INITIAL_DRAFT);
@@ -84,6 +91,15 @@ export default function ImageGeneratePage() {
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
+
+  // 来源列表拉取失败或还没回来时按「单来源」渲染:选择器不出现,providerId 不下发,
+  // 服务端仍会用配置里的第一个来源,页面不会因为这个附加接口而不可用。
+  const providers = providersQuery.data ?? [];
+  const selectedProvider =
+    providers.find(item => item.id === draft.providerId) ?? providers[0];
+  // 没拿到来源信息时不预先禁掉图生图:真正的能力校验在服务端。
+  const editSupported =
+    !selectedProvider || selectedProvider.capabilities.includes('edit');
 
   const sourceUrl = useObjectUrl(sourceFile);
   const comparedUrl = useObjectUrl(comparedFile);
@@ -174,7 +190,9 @@ export default function ImageGeneratePage() {
         // upload 走 multipart,OpenAPI 里 201 没有 JSON content schema,openapi-fetch
         // 把返回类型推成 undefined,这里先转 unknown 再断言,与 use-files 里
         // `data as unknown as FileListResponse` 同一处理方式。
-        const uploaded = (await uploadFile.mutateAsync(sourceFile)) as unknown as {
+        const uploaded = (await uploadFile.mutateAsync(
+          sourceFile
+        )) as unknown as {
           id: string;
         };
         inputFileIds = [uploaded.id];
@@ -206,6 +224,7 @@ export default function ImageGeneratePage() {
             size: draft.size,
             quality: draft.quality,
             ...(draft.style ? { style: draft.style } : {}),
+            ...(draft.providerId ? { providerId: draft.providerId } : {}),
           },
         });
         created.push(task.id);
@@ -258,10 +277,18 @@ export default function ImageGeneratePage() {
     >
       {/* 主输入块:模式 →(图生图)参考图 → 提示词。顺序与步骤条一致。 */}
       <div className="space-y-5 rounded-md border border-border p-4">
+        <ImageGenerateProviderField
+          value={draft}
+          onChange={changeDraft}
+          disabled={busy}
+          providers={providers}
+        />
+
         <ImageGenerateModeField
           value={draft}
           onChange={changeDraft}
           disabled={busy}
+          editSupported={editSupported}
         />
 
         {needsReference && (

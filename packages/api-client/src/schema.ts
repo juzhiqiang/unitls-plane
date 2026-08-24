@@ -22,6 +22,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/image-generate/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the configured image generation providers */
+        get: operations["TasksController_listImageGenerateProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/image-generate/quota": {
         parameters: {
             query?: never;
@@ -441,6 +458,14 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
+        ImageGenerateProviderDto: {
+            /** @description 来源 id，创建任务时放进 inputConfig.providerId */
+            id: string;
+            /** @description 展示给用户的来源名称 */
+            label: string;
+            /** @description 该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传 */
+            capabilities: ("generate" | "edit")[];
+        };
         ImageGenerateQuotaDto: {
             /** @description 当日生图张数上限 */
             limit: number;
@@ -568,6 +593,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskResponseDto"];
                 };
+            };
+        };
+    };
+    TasksController_listImageGenerateProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configured image generation providers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerateProviderDto"][];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

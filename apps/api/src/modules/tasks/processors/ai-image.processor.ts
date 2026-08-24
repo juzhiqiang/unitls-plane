@@ -122,8 +122,10 @@ export class AiImageProcessor extends WorkerHost {
     );
     await this.reportProgress(task.id, job, 80);
 
+    // 模型取实际出图的来源,而不是全局 env:多来源下两者会不一致,
+    // EXIF 里记错模型等于产物标识作废。
     const marked = await markGeneratedImage(generated.buffer, {
-      model: resolveAiImageModel(),
+      model: generated.model ?? resolveAiImageModel(),
       generatedAt: new Date(),
     });
 

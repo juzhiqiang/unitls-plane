@@ -107,6 +107,8 @@ ID_PHOTO_AI_IMAGE_QUALITY=high
 ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
 ID_PHOTO_AI_RESPONSE_FORMAT=url
 
+# 多来源:JSON 数组,第一项为默认来源;配置它即忽略下面的单来源变量,详见 .env.example
+AI_IMAGE_PROVIDERS=
 AI_IMAGE_BASE_URL=
 AI_IMAGE_API_KEY=
 AI_IMAGE_MODEL=gpt-image-1
@@ -189,7 +191,8 @@ API 模块：
 - 图片裁剪（/image/crop）与打码（/image/mosaic）纯浏览器 canvas 处理，图片不上传。
 - GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
-- AI 生图（/image/generate）走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图与图生图（上传一张参考图），局部重绘未实现。
+- AI 生图（/image/generate）走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图与图生图（上传一张参考图），局部重绘未实现。生图来源由
+  `AI_IMAGE_PROVIDERS` JSON 配置，可配多个 OpenAI 兼容来源并在页面手动选择，配额仍为全局。
 - Markdown /
   Word 转 PDF 页面免费进入。Markdown 支持在线编辑、实时预览和本地导出；登录后可选择服务端导出。DOCX 走服务端任务。
 - 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；Docker 组合镜像已安装 `libreoffice-writer`

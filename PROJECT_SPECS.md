@@ -155,6 +155,7 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 
 # AI image generation (optional, OpenAI-compatible, text-to-image + image-to-image)
 # 尺寸与质量是 per-request 的用户选择，由前端表单传入、zod schema 提供默认，不走 env
+AI_IMAGE_PROVIDERS=
 AI_IMAGE_BASE_URL=
 AI_IMAGE_API_KEY=
 AI_IMAGE_MODEL=gpt-image-1
@@ -185,19 +186,35 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 mask 的视觉模型；`image_result` 时调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
 兼容格式上传参考图并返回最终证件照。
 
-AI 生图使用一组独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响：
+AI 生图使用一组独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响，并支持配置多个来源：
 
 ```env
-AI_IMAGE_BASE_URL=https://example.com/v1
-AI_IMAGE_API_KEY=<api key>
-AI_IMAGE_MODEL=gpt-image-1
-AI_IMAGE_RESPONSE_FORMAT=b64_json
+AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","model":"gpt-image-1"},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","model":"gpt-image-2","editTransport":"generations_ref"}]'
 ```
 
-- 文生图调用 `POST /v1/images/generations`（JSON），图生图调用 `POST /v1/images/edits`
-  （multipart 上传参考图，参考图先经 sharp 转 PNG 并剥掉原图元数据）；两者都是
-  `n=1`，一张图对应一个任务。局部重绘尚未实现。
-- `AI_IMAGE_BASE_URL` 未配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
+- `AI_IMAGE_PROVIDERS`
+  是 JSON 数组，**数组第一项是默认来源**。新增一个兼容 OpenAI 格式的来源只需加一项，不需要改代码。JSON 非法或字段不合法时 API 直接启动失败，不静默降级。
+- 每项字段：`id`（必填，字母数字与
+  `-`/`_`）、`label`（必填，展示名）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
+  `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`）、`editTransport`（`multipart` 默认 /
+  `generations_ref`）、`refImagesField`（默认 `reference_images`）、`refImageEncoding`（`data_url`
+  默认 / `base64`）、`responseFormat`（`b64_json` 默认 / `url`）。
+- 未配置 `AI_IMAGE_PROVIDERS` 时回退到旧的单来源变量 `AI_IMAGE_BASE_URL` / `AI_IMAGE_API_KEY` /
+  `AI_IMAGE_MODEL` / `AI_IMAGE_RESPONSE_FORMAT` / `AI_IMAGE_LABEL`，等价于一个 `id: default`
+  的 multipart 来源，现网部署零改动。
+- 文生图所有来源统一调用 `POST /v1/images/generations`（JSON）。图生图按来源分支：`multipart` 走
+  `POST /v1/images/edits`（multipart 上传参考图）；`generations_ref` 也走
+  `POST /v1/images/generations`，参考图以 data URL 放进 `refImagesField` 数组（`image.dddd.zone`
+  一类网关没有 `/v1/images/edits`）。两者都是
+  `n=1`，一张图对应一个任务，参考图先经 sharp 转 PNG 并剥掉原图元数据。局部重绘尚未实现。
+- `GET /tasks/image-generate/providers` 返回可用来源，需登录，只下发 `id` / `label` /
+  `capabilities`；`baseUrl` 与 `apiKey` 属于服务端配置，不出网。前端只有一个来源时不展示选择器。
+- 前端把选中的来源作为 `inputConfig.providerId`
+  提交。省略时用第一个来源；来源不存在或不支持该模式时任务以 `AI_IMAGE_PROVIDER_UNAVAILABLE`
+  失败，不会静默换成另一个来源。
+- 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。
+- 每日张数配额是全局的，不按来源区分。
+- 都没配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
   失败，页面提示未配置。
 - 尺寸与质量不走 env，由前端表单传入、`imageGenerateTaskConfigSchema` 提供默认值。
 - 每日生成张数上限在 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']`

@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import type { ImageGenerateProviderDto } from '@/hooks/api/types';
 import {
   IMAGE_GENERATE_PROMPT_MAX_LENGTH,
   type ImageGenerateMode,
@@ -16,6 +17,8 @@ export interface ImageGenerateDraft {
   quality: ImageGenerateQuality;
   style?: ImageGenerateStyle;
   count: number;
+  /** 省略时由服务端用配置里的第一个来源;单来源部署下前端不展示这个选项。 */
+  providerId?: string;
 }
 
 /** inpaint 还没实现,不在页面上暴露。 */
@@ -53,7 +56,7 @@ interface ImageGenerateFieldProps {
 interface RadioRowProps<T extends string | number> {
   name: string;
   legend: string;
-  options: Array<{ value: T; label: string }>;
+  options: Array<{ value: T; label: string; disabled?: boolean }>;
   selected: T;
   disabled: boolean;
   onSelect: (value: T) => void;
@@ -82,7 +85,7 @@ function RadioRow<T extends string | number>({
               className="sr-only"
               value={String(option.value)}
               checked={selected === option.value}
-              disabled={disabled}
+              disabled={disabled || option.disabled}
               onChange={() => onSelect(option.value)}
             />
             {option.label}
@@ -93,25 +96,82 @@ function RadioRow<T extends string | number>({
   );
 }
 
+/**
+ * 模式选择。editSupported=false 时禁掉图生图而不是隐藏它:选项消失会让用户以为
+ * 这个工具不支持图生图,禁用加一行说明才能指向「换个来源」。
+ */
 export function ImageGenerateModeField({
   value,
   onChange,
   disabled = false,
-}: ImageGenerateFieldProps) {
+  editSupported = true,
+}: ImageGenerateFieldProps & { editSupported?: boolean }) {
   const t = useTranslations('ImageGenerate');
 
   return (
-    <RadioRow
-      name="image-generate-mode"
-      legend={t('modeLabel')}
-      selected={value.mode}
-      disabled={disabled}
-      options={MODES.map(mode => ({
-        value: mode,
-        label: t(`modes.${mode}`),
-      }))}
-      onSelect={mode => onChange({ ...value, mode })}
-    />
+    <div className="space-y-2">
+      <RadioRow
+        name="image-generate-mode"
+        legend={t('modeLabel')}
+        selected={value.mode}
+        disabled={disabled}
+        options={MODES.map(mode => ({
+          value: mode,
+          label: t(`modes.${mode}`),
+          disabled: mode === 'image_to_image' && !editSupported,
+        }))}
+        onSelect={mode => onChange({ ...value, mode })}
+      />
+      {!editSupported && (
+        <p className="text-xs text-muted-foreground">
+          {t('providerNoEditHint')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 来源选择。只有一个来源时整块不渲染:单选一项的单选组是纯噪音。
+ */
+export function ImageGenerateProviderField({
+  value,
+  onChange,
+  disabled = false,
+  providers,
+}: ImageGenerateFieldProps & { providers: ImageGenerateProviderDto[] }) {
+  const t = useTranslations('ImageGenerate');
+  const [first] = providers;
+  if (!first || providers.length < 2) return null;
+
+  const selected = value.providerId ?? first.id;
+
+  return (
+    <div className="space-y-2">
+      <RadioRow
+        name="image-generate-provider"
+        legend={t('providerLabel')}
+        selected={selected}
+        disabled={disabled}
+        options={providers.map(provider => ({
+          value: provider.id,
+          label: provider.label,
+        }))}
+        onSelect={providerId => {
+          const next = providers.find(item => item.id === providerId);
+          // 换到不支持图生图的来源时把模式退回文生图,否则会带着必失败的组合提交。
+          const keepsMode =
+            value.mode !== 'image_to_image' ||
+            (next?.capabilities.includes('edit') ?? true);
+          onChange({
+            ...value,
+            providerId,
+            mode: keepsMode ? value.mode : 'text_to_image',
+          });
+        }}
+      />
+      <p className="text-xs text-muted-foreground">{t('providerHint')}</p>
+    </div>
   );
 }
 

@@ -9,4 +9,6 @@ export const taskQueryKeys = {
   all: ['tasks'] as const,
   imageGenerateQuota: () =>
     [...taskQueryKeys.all, 'image-generate', 'quota'] as const,
+  imageGenerateProviders: () =>
+    [...taskQueryKeys.all, 'image-generate', 'providers'] as const,
 };

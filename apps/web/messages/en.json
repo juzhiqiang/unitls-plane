@@ -883,6 +883,9 @@
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe the image you want — the more specific, the better",
     "promptCounter": "{count} / {max}",
+    "providerLabel": "Source",
+    "providerHint": "Sources use different models, so output style and supported modes differ; results are always saved to your account files.",
+    "providerNoEditHint": "The selected source does not support image to image. Pick another source.",
     "modeLabel": "Mode",
     "modes": {
       "text_to_image": "Text to image",
@@ -922,6 +925,7 @@
     "quotaExceeded": "You have used today's quota. Try again tomorrow.",
     "contentRejected": "The prompt was rejected by the content policy. Try rephrasing it.",
     "notConfigured": "AI image generation is not configured. Contact the administrator.",
+    "providerUnavailable": "The selected source is unavailable. Pick another source and try again.",
     "failed": "Generation failed. Please try again.",
     "paramsSummary": "More options",
     "recoveryHint": "Retry anytime — failed generations do not use up your daily quota.",

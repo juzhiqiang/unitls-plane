@@ -171,3 +171,24 @@ export class ImageGenerateQuotaDto {
   })
   remaining!: number;
 }
+
+export class ImageGenerateProviderDto {
+  @ApiProperty({
+    description: '来源 id，创建任务时放进 inputConfig.providerId',
+  })
+  id!: string;
+
+  @ApiProperty({
+    description: '展示给用户的来源名称',
+  })
+  label!: string;
+
+  @ApiProperty({
+    description:
+      '该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传',
+    type: [String],
+    enum: ['generate', 'edit'],
+    isArray: true,
+  })
+  capabilities!: string[];
+}

@@ -883,6 +883,9 @@
     "promptLabel": "提示词",
     "promptPlaceholder": "描述你想要的画面，越具体越好",
     "promptCounter": "{count} / {max}",
+    "providerLabel": "来源",
+    "providerHint": "不同来源使用不同的模型，出图风格与支持的模式也不一样；产物都会保存到你的账号文件。",
+    "providerNoEditHint": "当前来源不支持图生图，请换一个来源。",
     "modeLabel": "模式",
     "modes": {
       "text_to_image": "文生图",
@@ -922,6 +925,7 @@
     "quotaExceeded": "今日额度已用完，明天再来。",
     "contentRejected": "提示词被内容策略拒绝，换个说法再试。",
     "notConfigured": "AI 生图尚未配置，请联系管理员。",
+    "providerUnavailable": "所选来源不可用，请换一个来源重试。",
     "failed": "生成失败，请重试。",
     "paramsSummary": "更多参数",
     "recoveryHint": "可随时重试，失败的生成不占用当日额度。",

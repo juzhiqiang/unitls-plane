@@ -174,23 +174,31 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 - `image_result`：调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
   兼容格式上传参考图并返回最终证件照结果图。
 
-AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响：
+AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响，并支持配置多个来源：
 
 ```env
-AI_IMAGE_BASE_URL=https://example.com/v1
-AI_IMAGE_API_KEY=<api key>
-AI_IMAGE_MODEL=gpt-image-1
-AI_IMAGE_RESPONSE_FORMAT=b64_json
+AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","model":"gpt-image-1"},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","model":"gpt-image-2","editTransport":"generations_ref"}]'
 ```
 
-- `AI_IMAGE_BASE_URL`：OpenAI 兼容网关地址。未配置时 `/image/generate` 入口仍然可见，生图任务会以
+- `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级。
+- 每项字段：`id`、`label`（必填，展示名，会下发前端）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
+  `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`，只支持文生图写
+  `["generate"]`）、`editTransport`（`multipart` 默认 / `generations_ref`）、`refImagesField`（默认
+  `reference_images`）、`refImageEncoding`（`data_url` 默认 /
+  `base64`）、`responseFormat`（`b64_json` 默认 / `url`）。
+- 未配置 `AI_IMAGE_PROVIDERS` 时回退到单来源变量
+  `AI_IMAGE_BASE_URL`、`AI_IMAGE_API_KEY`、`AI_IMAGE_MODEL`、`AI_IMAGE_RESPONSE_FORMAT`、`AI_IMAGE_LABEL`，等价于一个
+  `id: default` 的来源。两者都没配置时 `/image/generate` 入口仍然可见，生图任务会以
   `AI_IMAGE_NOT_CONFIGURED` 失败，页面提示未配置。
-- `AI_IMAGE_API_KEY`：网关鉴权 key。
-- `AI_IMAGE_MODEL`：模型名，默认 `gpt-image-1`。
-- `AI_IMAGE_RESPONSE_FORMAT`：provider 响应格式（`b64_json` / `url`），默认
-  `b64_json`。尺寸与质量不走 env——由前端选择传入、schema 提供默认。
+- 尺寸与质量不走 env——由前端选择传入、schema 提供默认。
 
-当前支持文生图（`POST /v1/images/generations`）与图生图（`POST /v1/images/edits`，页面上传一张参考图并可预览）；局部重绘尚未实现。每日生成张数上限在
+当前支持文生图（所有来源统一
+`POST /v1/images/generations`）与图生图（页面上传一张参考图并可预览）；图生图按来源分支：`multipart`
+走 `POST /v1/images/edits`，`generations_ref` 也走 `POST /v1/images/generations` 并把参考图以 data
+URL 放进 `reference_images` 数组（`image.dddd.zone`
+一类网关没有 edits 端点）。局部重绘尚未实现。页面在配置了多个来源时展示来源选择器，选中的来源随
+`inputConfig.providerId` 提交；来源不支持图生图时该模式被禁用。无论来源返回 `b64_json` 还是
+`url`，产物都会落到 MinIO，用户拿到的始终是本站文件地址。每日生成张数上限是全局的（不按来源区分），在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
 
 ### 启动前端开发服务
@@ -502,7 +510,8 @@ PostgreSQL + Redis + MinIO
 - Word/DOCX 转 PDF 走服务端任务队列；Docker 生产镜像内置 LibreOffice，服务端仍保留 PDF fallback。
 - PDF 和字体的重型处理主要走服务端任务队列。
 - AI 生图走服务端任务队列（独立
-  `ai-queue`），必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印。
+  `ai-queue`），必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印。可通过
+  `AI_IMAGE_PROVIDERS` 配置多个 OpenAI 兼容来源，由用户在页面上手动选择，不做自动切换。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式
   `pro_preview` 账号使用与 Private 相同的顶额权益，普通 `plan: free` 登录账号仍为 50MB。

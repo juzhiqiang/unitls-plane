@@ -114,4 +114,35 @@ describe('imageGenerateTaskConfigSchema', () => {
 
     expect(parsed.style).toBe('anime');
   });
+
+  it('accepts a provider id and leaves it untouched', () => {
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      providerId: 'kmage',
+      inputFileCount: 0,
+    });
+
+    expect(parsed.providerId).toBe('kmage');
+  });
+
+  it('leaves providerId undefined when it is omitted', () => {
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      inputFileCount: 0,
+    });
+
+    expect(parsed.providerId).toBeUndefined();
+  });
+
+  it('rejects a provider id with characters that could smuggle a path', () => {
+    for (const providerId of ['../etc', 'a b', '-lead', 'x'.repeat(65), '']) {
+      expect(
+        imageGenerateTaskConfigSchema.safeParse({
+          ...base,
+          providerId,
+          inputFileCount: 0,
+        }).success
+      ).toBe(false);
+    }
+  });
 });

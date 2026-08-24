@@ -17,12 +17,14 @@ import {
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { TasksService } from './tasks.service';
+import { ImageGenerationService } from './services/image-generation.service';
 import {
   CreateTaskDto,
   TaskQueryDto,
   TaskResponseDto,
   TaskStatusDto,
   ImageGenerateQuotaDto,
+  ImageGenerateProviderDto,
 } from './dto/tasks.dto';
 import { Public } from '../../common/decorators';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -36,7 +38,10 @@ interface AuthenticatedRequest extends Request {
 @ApiTags('tasks')
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly imageGenerationService: ImageGenerationService
+  ) {}
 
   @Post()
   @Public()
@@ -57,6 +62,27 @@ export class TasksController {
       },
       user ?? null
     );
+  }
+
+  /**
+   * 可用生图来源列表。
+   *
+   * 只下发 id / label / capabilities;baseUrl 与 apiKey 属于服务端配置,绝不出网。
+   * 与额度接口一致要求登录:生图本身就必须登录,匿名拿这个列表没有用途。
+   */
+  @Get('image-generate/providers')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List the configured image generation providers' })
+  @ApiResponse({
+    status: 200,
+    description: 'Configured image generation providers',
+    type: ImageGenerateProviderDto,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  async listImageGenerateProviders(@CurrentUser() currentUser?: User) {
+    if (!currentUser) throw new UnauthorizedException();
+    return this.imageGenerationService.listProviders();
   }
 
   @Get('image-generate/quota')

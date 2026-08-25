@@ -1556,6 +1556,39 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.4.0",
+          "date": "2026-08-25",
+          "title": "In-app file preview and image generation sources",
+          "summary": "Files and task records now preview images and PDFs in-app, AI image generation supports multiple provider sources with manual selection, and per-account daily quota is shown.",
+          "groups": [
+            {
+              "title": "New",
+              "items": [
+                "My Files grid cards now show thumbnails and an in-app dialog previews images and PDFs, so files can be identified without downloading.",
+                "Completed tasks gain a 'View file' entry that deep-links to /files?preview=<fileId> for instant preview.",
+                "AI image generation supports multiple OpenAI-compatible sources via environment config with manual on-page selection; switching to a source that lacks image-to-image falls back to text-to-image.",
+                "The generation page shows a 'N / M left today' quota that auto-refreshes after creating or retrying a task.",
+                "The plans page adds an 'AI image daily quota' column showing each plan's per-day image count."
+              ]
+            },
+            {
+              "title": "Improved",
+              "items": [
+                "File and task lists now download directly: a new ?download=1 parameter returns an attachment, fixing images and PDFs being previewed instead of downloaded under cross-origin setups.",
+                "The preview dialog is built on @radix-ui/react-dialog with focus management and Esc to close; files over 50 MB prompt a direct download.",
+                "Image generation upstream requests now have a timeout backstop (180 s by default), preventing tasks from hanging when a gateway connects but never responds."
+              ]
+            },
+            {
+              "title": "Fixed",
+              "items": [
+                "Fixed non-ASCII filenames being lost on download in some browsers by emitting a UTF-8 filename fallback per RFC 6266 / RFC 5987.",
+                "Fixed the release gate openapi:export step exiting abnormally under local Bun/Windows by switching to Bun.spawn's cwd option for a stable zero exit."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.3.0",
           "date": "2026-08-24",
           "title": "New AI image generation tool",

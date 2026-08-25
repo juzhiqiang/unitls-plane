@@ -355,8 +355,9 @@ cd packages/api-client && bun run generate
 - `/font` - 字体转换工具。
 - `/changelog` - 面向用户的精选版本更新日志。
 - `/plans` - 各套餐单文件上传额度与说明。
-- `/files`、`/files/trash` - 文件管理和回收站。
-- `/tasks` - 任务历史和任务详情。
+- `/files`、`/files/trash` - 文件管理和回收站；图片与 PDF 支持站内预览，图片小于 2
+  MB 时渲染网格缩略图，预览也可通过 `/files?preview=<fileId>` 深链打开。
+- `/tasks` - 任务历史和任务详情；已完成任务可跳转到产物文件预览。
 - `/settings` - 用户设置。
 - `/login`、`/register`、`/verify-email`、`/forgot-password`、`/reset-password` - 认证页面。
 

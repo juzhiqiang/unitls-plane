@@ -12,9 +12,11 @@ import {
 import type { TaskResponseDto } from '@/hooks/api/types';
 import { getTaskTypeCategory } from '@/lib/tasks/task-category';
 import { downloadStoredFile } from '@/lib/files/file-download';
+import { Link } from '@/i18n/navigation';
 import {
   ChevronDown,
   Download,
+  Eye,
   RotateCcw,
   FileText,
   Image as ImageIcon,
@@ -414,6 +416,20 @@ export default function TasksPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {task.status === 'completed' && task.outputFileId && (
+                      <Link
+                        href={{
+                          pathname: '/files',
+                          query: { preview: task.outputFileId },
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                        title={t('viewFile')}
+                        aria-label={t('viewFile')}
+                      >
+                        <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      </Link>
+                    )}
+                    {task.status === 'completed' && task.outputFileId && (
                       <button
                         type="button"
                         onClick={e => {
@@ -495,6 +511,20 @@ export default function TasksPage() {
                   )}
                 </div>
                 <div className="flex justify-end items-center gap-1">
+                  {task.status === 'completed' && task.outputFileId && (
+                    <Link
+                      href={{
+                        pathname: '/files',
+                        query: { preview: task.outputFileId },
+                      }}
+                      onClick={e => e.stopPropagation()}
+                      className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                      title={t('viewFile')}
+                      aria-label={t('viewFile')}
+                    >
+                      <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </Link>
+                  )}
                   {task.status === 'completed' && task.outputFileId && (
                     <button
                       type="button"

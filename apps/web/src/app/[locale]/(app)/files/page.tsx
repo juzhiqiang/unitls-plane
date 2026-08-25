@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/i18n/navigation';
 import {
+  useFile,
   useFiles,
   useDeleteFile,
   useBatchDeleteFiles,
@@ -12,9 +14,12 @@ import {
   type FileRecord,
 } from '@/hooks/api/use-files';
 import { FileDropzone } from '@/components/tools/file-dropzone';
+import { FileThumbnail } from '@/components/files/file-thumbnail';
+import { FilePreviewDialog } from '@/components/files/file-preview-dialog';
 import { downloadStoredFile } from '@/lib/files/file-download';
+import { canPreviewFile } from '@/lib/files/preview';
 import { authClient } from '@/lib/auth-client';
-import { Search, Grid3X3, List, Trash2, Download, X } from 'lucide-react';
+import { Search, Grid3X3, List, Trash2, Download, Eye, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 
 type ViewMode = 'grid' | 'list';
@@ -58,6 +63,15 @@ export default function FilesPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // 任务页等入口通过 /files?preview=<fileId> 深链打开预览。
+  const searchParams = useSearchParams();
+  const previewParam = searchParams.get('preview');
+  const [previewId, setPreviewId] = useState<string | null>(previewParam);
+
+  useEffect(() => {
+    if (previewParam) setPreviewId(previewParam);
+  }, [previewParam]);
+
   const query: FileQuery = {
     page,
     limit: 12,
@@ -73,6 +87,19 @@ export default function FilesPage() {
   const files = data?.files ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 12);
+
+  // 当前列表里已有的文件直接复用，深链才按 id 单独拉取。
+  const previewFromList = previewId
+    ? (files.find(file => file.id === previewId) ?? null)
+    : null;
+  const previewQuery = useFile(previewId && !previewFromList ? previewId : '');
+  const previewFile =
+    previewFromList ?? (previewQuery.data as FileRecord | undefined) ?? null;
+
+  const closePreview = () => {
+    setPreviewId(null);
+    if (previewParam) router.replace('/files');
+  };
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -298,6 +325,20 @@ export default function FilesPage() {
                   className="h-3.5 w-3.5 rounded-none border border-border bg-transparent checked:bg-accent checked:border-accent mt-0.5"
                 />
                 <div className="flex gap-1">
+                  {canPreviewFile(file) && (
+                    <button
+                      type="button"
+                      aria-label={t('previewFile', { filename: file.filename })}
+                      title={t('preview')}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setPreviewId(file.id);
+                      }}
+                      className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={t('downloadFile', { filename: file.filename })}
@@ -322,6 +363,22 @@ export default function FilesPage() {
                   </button>
                 </div>
               </div>
+              {canPreviewFile(file) ? (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setPreviewId(file.id);
+                  }}
+                  aria-label={t('previewFile', { filename: file.filename })}
+                  title={t('preview')}
+                  className="block w-full"
+                >
+                  <FileThumbnail file={file} />
+                </button>
+              ) : (
+                <FileThumbnail file={file} />
+              )}
               <p className="text-sm truncate" title={file.filename}>
                 {file.filename}
               </p>
@@ -343,7 +400,7 @@ export default function FilesPage() {
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <div className="min-w-[640px] sm:min-w-0">
             {/* Table header */}
-            <div className="grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-2 border-b border-border">
+            <div className="grid grid-cols-[24px_1fr_100px_100px_100px_100px] gap-3 px-3 py-2 border-b border-border">
               <input
                 type="checkbox"
                 checked={selected.size === files.length && files.length > 0}
@@ -371,7 +428,7 @@ export default function FilesPage() {
             {files.map(file => (
               <div
                 key={file.id}
-                className={`grid grid-cols-[24px_1fr_100px_100px_100px_80px] gap-3 px-3 py-3 border-b border-border transition-colors ${
+                className={`grid grid-cols-[24px_1fr_100px_100px_100px_100px] gap-3 px-3 py-3 border-b border-border transition-colors ${
                   selected.has(file.id) ? 'bg-accent/5' : 'hover:bg-muted/40'
                 }`}
               >
@@ -395,6 +452,17 @@ export default function FilesPage() {
                   {formatDate(file.createdAt)}
                 </span>
                 <div className="flex justify-end gap-1">
+                  {canPreviewFile(file) && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewId(file.id)}
+                      aria-label={t('previewFile', { filename: file.filename })}
+                      title={t('preview')}
+                      className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleDownload(file)}
@@ -437,6 +505,16 @@ export default function FilesPage() {
           ))}
         </div>
       )}
+
+      <FilePreviewDialog
+        file={previewFile}
+        open={Boolean(previewId)}
+        onClose={closePreview}
+        isLoading={Boolean(previewId) && !previewFile && previewQuery.isLoading}
+        isMissing={
+          Boolean(previewId) && !previewFile && !previewQuery.isLoading
+        }
+      />
     </div>
   );
 }

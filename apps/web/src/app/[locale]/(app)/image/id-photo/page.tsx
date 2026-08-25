@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { authClient } from '@/lib/auth-client';
 import { formatBytes } from '@/lib/format';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
@@ -28,6 +26,7 @@ import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { resolveToolStage } from '@/hooks/use-single-file-tool';
 import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
@@ -47,8 +46,7 @@ export default function IdPhotoPage() {
   const tUnits = useTranslations('Common.units');
   const locale = useLocale();
   const tool = getToolByHref('/image/id-photo')!;
-  const router = useRouter();
-  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const { session, sessionLoading, requireLogin } = useRequireLogin();
   // 这三个工具可能把图片发到服务端,因此受账号额度约束(纯本地工具不受)。
   const maxFileSize = getImageUploadMaxFileSize(session);
   const uploadFile = useUploadFile();
@@ -122,20 +120,24 @@ export default function IdPhotoPage() {
   const handleProcess = async () => {
     if (processingMode === 'local') {
       if (!file) return;
-      await local.process(file, highPrecision ? 'high' : 'balanced', {
-        preset: options.preset,
-        backgroundColor: options.backgroundColor,
-        outputType: options.outputType,
-        crop: options.crop,
-      });
+      // 本地路也要包 try/catch:useLocalIdPhoto 内部虽已捕获并 setError,
+      // 但 segmentToCutout / compositeIdPhoto 的 reject 在挂载卸载边界外时
+      // 会以未捕获 promise 漏出,与其它 13 个同构页对齐,这里统一兜底。
+      try {
+        await local.process(file, highPrecision ? 'high' : 'balanced', {
+          preset: options.preset,
+          backgroundColor: options.backgroundColor,
+          outputType: options.outputType,
+          crop: options.crop,
+        });
+      } catch (err) {
+        setError((err as Error).message);
+      }
       return;
     }
     // —— 以下为服务端逻辑,保持不变 ——
     if (!file) return;
-    if (!sessionLoading && !session) {
-      router.push(`/login?next=${encodeURIComponent('/image/id-photo')}`);
-      return;
-    }
+    if (requireLogin('/image/id-photo')) return;
 
     setProcessing(true);
     setError(null);

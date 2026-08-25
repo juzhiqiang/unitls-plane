@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { authClient } from '@/lib/auth-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   DEFAULT_IMAGE_COMPRESS_OPTIONS,
@@ -19,8 +17,7 @@ import {
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ImageCompare } from '@/components/tools/image-compare';
-import { DownloadButton } from '@/components/tools/download-button';
-import { ZipDownloadButton } from '@/components/tools/zip-download-button';
+import { ResultDownloadAction } from '@/components/tools/result-download-action';
 import { FileList, type FileItem } from '@/components/tools/file-list';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
@@ -39,6 +36,7 @@ import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import {
   getImageCompressionIndices,
   getImageCompressionMaxFileSize,
@@ -75,8 +73,7 @@ export default function CompressPage() {
   const [processing, setProcessing] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const router = useRouter();
-  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const { session, sessionLoading, requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
   const maxFileSize = getImageCompressionMaxFileSize(session);
@@ -146,11 +143,7 @@ export default function CompressPage() {
       return;
     }
 
-    if (mode === 'server' && !sessionLoading && !session) {
-      const next = encodeURIComponent('/image/compress');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (mode === 'server' && requireLogin('/image/compress')) return;
 
     const indicesToProcess = getImageCompressionIndices(items);
 
@@ -348,14 +341,10 @@ export default function CompressPage() {
                 : tShell('result.filesReady', { count: successResults.length })
             }
             action={
-              successResults.length === 1 ? (
-                <DownloadButton file={successResults[0]!} />
-              ) : (
-                <ZipDownloadButton
-                  files={successResults}
-                  zipName={`compressed-${successResults.length}-files.zip`}
-                />
-              )
+              <ResultDownloadAction
+                files={successResults}
+                zipName={`compressed-${successResults.length}-files.zip`}
+              />
             }
           />
         </div>

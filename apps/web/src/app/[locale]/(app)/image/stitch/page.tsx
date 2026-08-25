@@ -2,8 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { authClient } from '@/lib/auth-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   SortableImageList,
@@ -23,6 +21,7 @@ import {
 import { createBrowserId } from '@/lib/browser-id';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { WEBKIT_MAX_CANVAS_PIXELS } from '@/lib/processing/canvas-limits';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { cn } from '@/lib/utils';
 
 type WidthPreset = '750' | '1080' | '1242' | 'custom';
@@ -90,8 +89,7 @@ export default function ImageStitchPage() {
   const t = useTranslations('ImageStitch');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/image/stitch')!;
-  const router = useRouter();
-  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const { session, sessionLoading, requireLogin } = useRequireLogin();
   const entitlements = getImageStitchEntitlements(session);
   const [files, setFiles] = useState<SortableImageFile[]>([]);
   const [options, setOptions] = useState<StitchOptionsState>({
@@ -173,8 +171,7 @@ export default function ImageStitchPage() {
   };
 
   const handleCommercialLogin = () => {
-    const next = encodeURIComponent('/image/stitch');
-    router.push(`/login?next=${next}`);
+    requireLogin('/image/stitch');
   };
 
   const handleGenerate = async () => {

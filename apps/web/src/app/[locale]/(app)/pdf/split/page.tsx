@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
 import * as Tabs from '@radix-ui/react-tabs';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
@@ -16,7 +15,7 @@ import { loadPdf, renderPdfPage } from '@/lib/processing/pdf-client';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -78,7 +77,6 @@ export default function SplitPage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/split')!;
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -92,7 +90,7 @@ export default function SplitPage() {
   const [results, setResults] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -189,11 +187,7 @@ export default function SplitPage() {
   const handleSplit = async () => {
     if (!file || !canSplit()) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/split');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/split')) return;
 
     setProcessing(true);
     setError(null);

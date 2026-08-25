@@ -2,16 +2,12 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { api } from '@/lib/api-client';
-import { authClient } from '@/lib/auth-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { FileList, type FileItem } from '@/components/tools/file-list';
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ImageCompare } from '@/components/tools/image-compare';
-import { DownloadButton } from '@/components/tools/download-button';
-import { ZipDownloadButton } from '@/components/tools/zip-download-button';
+import { ResultDownloadAction } from '@/components/tools/result-download-action';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
@@ -22,6 +18,7 @@ import {
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { shouldProcessLocally } from '@/lib/processing/image-client';
+import { runImageTask } from '@/lib/processing/run-image-task';
 import {
   toServerTransformConfig,
   type NormalizedImageTransform,
@@ -39,6 +36,7 @@ import {
 import { IMAGE_WATERMARK_GRID } from '@utils-plane/validators';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { cn } from '@/lib/utils';
 
 type ColorPreset = 'gray' | 'red' | 'blue' | 'white';
@@ -105,38 +103,18 @@ async function processOnServer(
   createTaskMutate: (input: any) => Promise<{ id: string }>,
   outputType: ImageWatermarkOutputType
 ): Promise<File> {
-  const uploaded = (await uploadMutate(file)) as { id: string };
-  const task = await createTaskMutate({
+  // 之前是手写的轮询循环加 1s sleep,没有超时、没有中止;统一改走 runImageTask,
+  // 它内部用带超时的 waitForTask,并复用 compress/convert 的同一套轮询逻辑。
+  const ext = outputType === 'image/jpeg' ? 'jpg' : outputType.split('/')[1];
+  const base = file.name.replace(/\.[^.]+$/, '');
+  return runImageTask({
+    file,
     type: 'image_watermark',
-    inputFileIds: [uploaded.id],
     inputConfig: config,
+    outputName: `watermarked-${base}.${ext}`,
+    upload: uploadMutate,
+    createTask: createTaskMutate,
   });
-
-  while (true) {
-    const { data, error } = await api.GET('/tasks/{id}/status', {
-      params: { path: { id: task.id } },
-    });
-    if (error) throw new Error('Failed to poll task status');
-    if (data?.status === 'completed') {
-      const outputFileId = (data as any).outputFileId as string;
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) throw new Error('Failed to download result');
-      const blob = await response.blob();
-      const ext =
-        outputType === 'image/jpeg' ? 'jpg' : outputType.split('/')[1];
-      const base = file.name.replace(/\.[^.]+$/, '');
-      return new File([blob], `watermarked-${base}.${ext}`, {
-        type: blob.type || outputType,
-      });
-    }
-    if (data?.status === 'failed') {
-      throw new Error((data as any).errorMessage ?? 'Task failed');
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
 }
 
 export default function ImageWatermarkPage() {
@@ -165,8 +143,7 @@ export default function ImageWatermarkPage() {
   const [processing, setProcessing] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const router = useRouter();
-  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const { session, sessionLoading, requireLogin } = useRequireLogin();
   // 这三个工具可能把图片发到服务端,因此受账号额度约束(纯本地工具不受)。
   const maxFileSize = getImageUploadMaxFileSize(session);
   const uploadFile = useUploadFile();
@@ -217,11 +194,7 @@ export default function ImageWatermarkPage() {
       return;
     }
 
-    if (mode === 'server' && !sessionLoading && !session) {
-      const next = encodeURIComponent('/image/watermark');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (mode === 'server' && requireLogin('/image/watermark')) return;
 
     const indicesToProcess = items
       .map((it, i) => (it.status === 'done' && it.result ? -1 : i))
@@ -756,14 +729,10 @@ export default function ImageWatermarkPage() {
                 : tShell('result.filesReady', { count: successResults.length })
             }
             action={
-              successResults.length === 1 ? (
-                <DownloadButton file={successResults[0]!} />
-              ) : (
-                <ZipDownloadButton
-                  files={successResults}
-                  zipName={`watermarked-${successResults.length}-files.zip`}
-                />
-              )
+              <ResultDownloadAction
+                files={successResults}
+                zipName={`watermarked-${successResults.length}-files.zip`}
+              />
             }
           />
         </div>

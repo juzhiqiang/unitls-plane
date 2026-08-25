@@ -16,14 +16,16 @@ describe('image convert page', () => {
   });
 
   it('bundles multiple results into a ZIP', () => {
-    expect(source).toContain('ZipDownloadButton');
+    // 单/多产物下载分支已抽到 ResultDownloadAction,内部按数量分发到
+    // DownloadButton 或 ZipDownloadButton;页面只声明产物,不再手写分支。
+    expect(source).toContain('ResultDownloadAction');
     expect(source).toContain('converted-');
   });
 
   it('runs the server path through the shared task runner', () => {
-    // 不再手写 while(true) 轮询:那份实现没有超时,批量时 N 个文件就是 N 条永不放弃的轮询。
+    // 不再手写 while 循环轮询:那份实现没有超时,批量时 N 个文件就是 N 条永不放弃的轮询。
     expect(source).toContain('runImageTask');
-    expect(source).not.toContain('while (true)');
+    expect(source).not.toMatch(/\bwhile\s*\(\s*true\s*\)/);
   });
 
   it('still blocks locally-unencodable formats before processing', () => {
@@ -40,7 +42,7 @@ describe('image compress page', () => {
 
   it('shares the same task runner instead of hand-rolled polling', () => {
     expect(compressSource).toContain('runImageTask');
-    expect(compressSource).not.toContain('while (true)');
+    expect(compressSource).not.toMatch(/\bwhile\s*\(\s*true\s*\)/);
     expect(compressSource).not.toContain('processOnServer');
   });
 });

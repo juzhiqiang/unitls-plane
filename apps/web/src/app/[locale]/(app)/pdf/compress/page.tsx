@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
+import { useLocale, useTranslations } from 'next-intl';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
@@ -12,24 +11,19 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
+import { formatBytes } from '@/lib/format';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
 type CompressLevel = 'light' | 'medium' | 'heavy';
 
-function formatBytes(n: number): string {
-  if (n >= 1024 * 1024) {
-    return (n / 1024 / 1024).toFixed(2) + ' MB';
-  }
-  return (n / 1024).toFixed(2) + ' KB';
-}
-
 export default function CompressPage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
+  const tUnits = useTranslations('Common.units');
+  const locale = useLocale();
   const tool = getToolByHref('/pdf/compress')!;
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pdf, setPdf] = useState<any>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -40,7 +34,7 @@ export default function CompressPage() {
   const [compressedSize, setCompressedSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -102,11 +96,7 @@ export default function CompressPage() {
   const handleCompress = async () => {
     if (!file) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/compress');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/compress')) return;
 
     setProcessing(true);
     setError(null);
@@ -198,7 +188,8 @@ export default function CompressPage() {
             <div>
               <p className="text-sm font-mono text-foreground">{file.name}</p>
               <p className="text-[10px] font-mono text-muted-foreground tabular-nums">
-                {formatBytes(file.size)} · {pageCount} {t('compress.pages')}
+                {formatBytes(file.size, tUnits, locale)} · {pageCount}{' '}
+                {t('compress.pages')}
               </p>
             </div>
             <button
@@ -286,11 +277,11 @@ export default function CompressPage() {
           meta={[
             {
               label: t('compress.originalSize'),
-              value: formatBytes(originalSize),
+              value: formatBytes(originalSize, tUnits, locale),
             },
             {
               label: t('compress.compressedSize'),
-              value: formatBytes(compressedSize),
+              value: formatBytes(compressedSize, tUnits, locale),
             },
             { label: t('compress.saved'), value: `${savedPercent}%` },
           ]}

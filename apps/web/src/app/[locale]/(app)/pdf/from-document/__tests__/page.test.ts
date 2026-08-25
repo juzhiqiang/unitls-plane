@@ -24,9 +24,10 @@ describe('document to PDF page actions', () => {
 
     expect(localExportIndex).toBeGreaterThanOrEqual(0);
     expect(serverExportIndex).toBeGreaterThan(localExportIndex);
+    // 登录守卫已抽到 useRequireLogin,本地导出路不应触发它,服务端转换路才触发。
     expect(source.slice(localExportIndex, serverExportIndex)).not.toContain(
-      'router.push'
+      'requireLogin'
     );
-    expect(source.slice(serverExportIndex)).toContain('router.push');
+    expect(source.slice(serverExportIndex)).toContain('requireLogin');
   });
 });

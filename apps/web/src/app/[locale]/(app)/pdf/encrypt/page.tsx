@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
@@ -12,7 +11,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
@@ -22,7 +21,6 @@ export default function EncryptPage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/encrypt')!;
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [userPassword, setUserPassword] = useState('');
@@ -40,7 +38,7 @@ export default function EncryptPage() {
   const [resultFile, setResultFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -121,11 +119,7 @@ export default function EncryptPage() {
   const handleEncrypt = async () => {
     if (!file || !ownerPassword) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/encrypt');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/encrypt')) return;
 
     setProcessing(true);
     setError(null);

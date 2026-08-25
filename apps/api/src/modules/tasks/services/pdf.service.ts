@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { inflateRawSync } from 'node:zlib';
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PDFDocument, degrees, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, degrees, rgb, StandardFonts } from '@cantoo/pdf-lib';
+import type { SecurityOptions } from '@cantoo/pdf-lib';
 import { marked } from 'marked';
 import {
   defaultTreeAdapter,
@@ -1001,31 +1002,29 @@ export class PdfService {
   // ─── Encrypt ──────────────────────────────────────────────────────
 
   async encrypt(input: Buffer, opts: EncryptOptions): Promise<Buffer> {
-    const mupdf = await getMupdf();
-    const doc = mupdf.Document.openDocument(
-      input,
-      'application/pdf'
-    ) as import('mupdf').PDFDocument;
+    // 之前用 mupdf 的 saveToBuffer 传两个参数且 mupdf wasm 根本不支持加密写入，
+    // 导致产物未加密却返回成功。这里改用 @cantoo/pdf-lib 的 encrypt() 真正加密。
+    const doc = await PDFDocument.load(input);
     try {
       const perms = opts.permissions ?? {};
-      let permBits = 0;
-      if (perms.print !== false) permBits |= 0b000000000100;
-      if (perms.copy !== false) permBits |= 0b000000010000;
-      if (perms.modify !== false) permBits |= 0b000000001000;
-      if (perms.annotate !== false) permBits |= 0b000000100000;
+      const permissions: SecurityOptions['permissions'] = {
+        printing: perms.print === false ? false : 'highResolution',
+        modifying: perms.modify === false ? false : true,
+        copying: perms.copy === false ? false : true,
+        annotating: perms.annotate === false ? false : true,
+      };
 
-      const result = (doc as any).saveToBuffer('compress,incremental', {
-        userPassword: opts.userPassword ?? '',
+      const security: SecurityOptions = {
         ownerPassword: opts.ownerPassword,
-        permissions: permBits,
-      }) as import('mupdf').Buffer;
-      try {
-        return Buffer.from(result.asUint8Array());
-      } finally {
-        result.destroy();
-      }
+        userPassword: opts.userPassword ?? '',
+        permissions,
+      };
+
+      doc.encrypt(security);
+      const result = await doc.save();
+      return Buffer.from(result);
     } finally {
-      doc.destroy();
+      // cantoo/pdf-lib 在 save() 后会自动 flush，无需手动 cleanup
     }
   }
 

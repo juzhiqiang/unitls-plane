@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   SortableFileList,
@@ -16,14 +15,13 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 
 export default function MergePage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/merge')!;
-  const router = useRouter();
   const [files, setFiles] = useState<SortableFile[]>([]);
   const [outputFilename, setOutputFilename] = useState('merged.pdf');
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -31,7 +29,7 @@ export default function MergePage() {
   const [result, setResult] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -79,11 +77,7 @@ export default function MergePage() {
   const handleMerge = async () => {
     if (files.length < 2) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/merge');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/merge')) return;
 
     setProcessing(true);
     setError(null);

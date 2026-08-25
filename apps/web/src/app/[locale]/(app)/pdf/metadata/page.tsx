@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { PDFDocument } from 'pdf-lib';
-import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
@@ -13,7 +12,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 
 interface MetadataForm {
@@ -38,7 +37,6 @@ export default function MetadataPage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/metadata')!;
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [existing, setExisting] = useState<MetadataForm>(EMPTY_FORM);
   const [form, setForm] = useState<MetadataForm>(EMPTY_FORM);
@@ -47,7 +45,7 @@ export default function MetadataPage() {
   const [resultFile, setResultFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -123,11 +121,7 @@ export default function MetadataPage() {
   const handleStart = async () => {
     if (!file) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/metadata');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/metadata')) return;
 
     setProcessing(true);
     setError(null);

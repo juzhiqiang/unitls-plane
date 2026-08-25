@@ -1,4 +1,8 @@
-import { taskStatusEnum } from '@utils-plane/validators';
+import {
+  taskStatusEnum,
+  TASK_TYPES,
+  TASK_STATUSES,
+} from '@utils-plane/validators';
 import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -20,28 +24,8 @@ export const taskQuerySchema = z.object({
 
 export type TaskQueryInput = z.infer<typeof taskQuerySchema>;
 
-const TASK_TYPES = [
-  'compress',
-  'convert',
-  'image_watermark',
-  'image_id_photo',
-  'pdf_merge',
-  'pdf_split',
-  'pdf_to_image',
-  'font_convert',
-  'pdf_to_text',
-  'image_to_pdf',
-  'pdf_rotate',
-  'pdf_watermark',
-  'pdf_encrypt',
-  'pdf_compress',
-  'pdf_metadata',
-  'pdf_rearrange',
-  'pdf_from_document',
-  'image_generate',
-] as const;
-
 type TaskTypeValue = (typeof TASK_TYPES)[number];
+type TaskStatusValue = (typeof TASK_STATUSES)[number];
 
 export class CreateTaskDto {
   @ApiProperty({
@@ -77,11 +61,11 @@ export class TaskQueryDto {
   limit?: number = 20;
 
   @ApiPropertyOptional({
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: TASK_STATUSES,
   })
   @IsOptional()
-  @IsEnum(['pending', 'processing', 'completed', 'failed'])
-  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  @IsEnum(TASK_STATUSES)
+  status?: TaskStatusValue;
 
   @ApiPropertyOptional({
     enum: TASK_TYPES,
@@ -106,7 +90,7 @@ export class TaskResponseDto {
 
   @ApiProperty({
     type: String,
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: TASK_STATUSES,
   })
   status!: string;
 
@@ -138,7 +122,7 @@ export class TaskResponseDto {
 export class TaskStatusDto {
   @ApiProperty({
     type: String,
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: TASK_STATUSES,
   })
   status!: string;
 

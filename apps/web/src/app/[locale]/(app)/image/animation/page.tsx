@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { authClient } from '@/lib/auth-client';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   AnimationFrameList,
@@ -25,6 +23,7 @@ import {
 import { formatBytes } from '@/lib/format';
 import { createBrowserId } from '@/lib/browser-id';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { cn } from '@/lib/utils';
 
 type AnimationMode = 'create' | 'compress' | 'convert';
@@ -102,8 +101,7 @@ export default function ImageAnimationPage() {
   const tUnits = useTranslations('Common.units');
   const locale = useLocale();
   const tool = getToolByHref('/image/animation')!;
-  const router = useRouter();
-  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const { session, sessionLoading, requireLogin } = useRequireLogin();
   const entitlements = getImageAnimationEntitlements(session);
   const [mode, setMode] = useState<AnimationMode>('create');
   const [frames, setFrames] = useState<AnimationFrameFile[]>([]);
@@ -171,7 +169,7 @@ export default function ImageAnimationPage() {
   };
 
   const handleCommercialLogin = () => {
-    router.push(`/login?next=${encodeURIComponent('/image/animation')}`);
+    requireLogin('/image/animation');
   };
 
   const handleCreateDrop = (dropped: File[]) => {

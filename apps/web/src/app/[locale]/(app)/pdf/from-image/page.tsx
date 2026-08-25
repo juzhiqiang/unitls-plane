@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
   SortableFileList,
@@ -16,7 +15,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +33,6 @@ export default function FromImagePage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/from-image')!;
-  const router = useRouter();
   const [files, setFiles] = useState<SortableFile[]>([]);
   const [pageSize, setPageSize] = useState<PageSize>('a4');
   const [fit, setFit] = useState<FitMode>('fit');
@@ -44,7 +42,7 @@ export default function FromImagePage() {
   const [result, setResult] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -92,11 +90,7 @@ export default function FromImagePage() {
   const handleConvert = async () => {
     if (files.length < 1) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/from-image');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/from-image')) return;
 
     setProcessing(true);
     setError(null);

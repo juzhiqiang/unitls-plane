@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Download, FileText, Server, Type } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
 import { DownloadButton } from '@/components/tools/download-button';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { FileDropzone } from '@/components/tools/file-dropzone';
@@ -16,7 +15,7 @@ import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import {
   createMarkdownSourceFile,
   deriveDocumentPdfFilename,
@@ -47,7 +46,6 @@ export default function FromDocumentPage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/from-document')!;
-  const router = useRouter();
   const markdownPreviewRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<SourceMode>('markdown');
   const [markdown, setMarkdown] = useState(DEFAULT_MARKDOWN);
@@ -60,7 +58,7 @@ export default function FromDocumentPage() {
   const [result, setResult] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -143,11 +141,7 @@ export default function FromDocumentPage() {
   const handleConvert = async () => {
     if (!inputReady) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/from-document');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/from-document')) return;
 
     setProcessing(true);
     setError(null);

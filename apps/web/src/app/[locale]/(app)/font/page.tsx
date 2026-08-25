@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { FontPreview } from '@/components/tools/font-preview';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
@@ -13,7 +12,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { X } from 'lucide-react';
 
@@ -63,7 +62,6 @@ export default function FontPage() {
   const t = useTranslations('FontTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/font')!;
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [toFormat, setToFormat] = useState<FontFormat>('woff2');
   const [subsetText, setSubsetText] = useState('');
@@ -73,7 +71,7 @@ export default function FontPage() {
   const [result, setResult] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { session, requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -104,11 +102,7 @@ export default function FontPage() {
   const handleConvert = async () => {
     if (!file) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/font');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/font')) return;
 
     setProcessing(true);
     setError(null);

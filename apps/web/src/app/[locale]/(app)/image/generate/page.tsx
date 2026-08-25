@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { authClient } from '@/lib/auth-client';
 import {
   useCreateTask,
   useImageGenerateProviders,
@@ -11,6 +9,7 @@ import {
 } from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import {
   ImageGenerateModeField,
   ImageGenerateParamsFields,
@@ -76,8 +75,7 @@ function errorCodeOf(error: unknown): string {
 export default function ImageGeneratePage() {
   const t = useTranslations('ImageGenerate');
   const tShared = useTranslations('ToolsShared');
-  const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { session, requireLogin } = useRequireLogin();
   const createTask = useCreateTask();
   const quota = useImageGenerateQuota();
   const providersQuery = useImageGenerateProviders();
@@ -170,10 +168,7 @@ export default function ImageGeneratePage() {
   };
 
   const submit = async () => {
-    if (!session) {
-      router.push(`/login?next=${encodeURIComponent(TOOL_HREF)}`);
-      return;
-    }
+    if (requireLogin(TOOL_HREF)) return;
     const needsReference = draft.mode === 'image_to_image';
     if (needsReference && !sourceFile) {
       setFailure({ key: 'sourceRequired' });

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-export const taskTypeEnum = z.enum([
+/**
+ * 任务类型的单一来源。
+ * 数据库 pgEnum（packages/db/src/schema/tasks.ts）与 DTO（tasks.dto.ts）
+ * 都从这里取值，避免新增类型时漏改一处导致状态/分支不一致。
+ * 顺序即 zod enum 顺序，新增类型只在此追加���
+ */
+export const TASK_TYPES = [
   'compress',
   'convert',
   'image_watermark',
@@ -19,7 +25,9 @@ export const taskTypeEnum = z.enum([
   'pdf_rearrange',
   'pdf_from_document',
   'image_generate',
-]);
+] as const satisfies readonly string[];
+
+export const taskTypeEnum = z.enum(TASK_TYPES);
 
 export const createTaskSchema = z.object({
   type: taskTypeEnum,
@@ -33,6 +41,13 @@ export const taskStatusEnum = z.enum([
   'completed',
   'failed',
 ]);
+
+export const TASK_STATUSES = [
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+] as const satisfies readonly string[];
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type TaskType = z.infer<typeof taskTypeEnum>;

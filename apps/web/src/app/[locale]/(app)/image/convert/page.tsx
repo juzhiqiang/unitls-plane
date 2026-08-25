@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { authClient } from '@/lib/auth-client';
 import { formatBytes } from '@/lib/format';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import {
@@ -14,8 +12,7 @@ import {
 import { ModeToggle, type ProcessMode } from '@/components/tools/mode-toggle';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { ImageCompare } from '@/components/tools/image-compare';
-import { DownloadButton } from '@/components/tools/download-button';
-import { ZipDownloadButton } from '@/components/tools/zip-download-button';
+import { ResultDownloadAction } from '@/components/tools/result-download-action';
 import { FileList, type FileItem } from '@/components/tools/file-list';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
@@ -38,6 +35,7 @@ import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useImageEncodingSupport } from '@/hooks/use-image-encoding-support';
+import { useRequireLogin } from '@/hooks/use-require-login';
 
 export default function ConvertPage() {
   const t = useTranslations('ImageConvert');
@@ -57,8 +55,7 @@ export default function ConvertPage() {
   const [processing, setProcessing] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const router = useRouter();
-  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const { session, sessionLoading, requireLogin } = useRequireLogin();
   // 这三个工具可能把图片发到服务端,因此受账号额度约束(纯本地工具不受)。
   const maxFileSize = getImageUploadMaxFileSize(session);
   const uploadFile = useUploadFile();
@@ -103,11 +100,7 @@ export default function ConvertPage() {
       return;
     }
 
-    if (mode === 'server' && !sessionLoading && !session) {
-      const next = encodeURIComponent('/image/convert');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (mode === 'server' && requireLogin('/image/convert')) return;
 
     setProcessing(true);
     setGlobalError(null);
@@ -324,14 +317,10 @@ export default function ConvertPage() {
                 : []
             }
             action={
-              successResults.length === 1 ? (
-                <DownloadButton file={successResults[0]!} />
-              ) : (
-                <ZipDownloadButton
-                  files={successResults}
-                  zipName={`converted-${successResults.length}-files.zip`}
-                />
-              )
+              <ResultDownloadAction
+                files={successResults}
+                zipName={`converted-${successResults.length}-files.zip`}
+              />
             }
           />
         </div>

@@ -20,7 +20,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { X } from 'lucide-react';
-import { useRouter } from '@/i18n/navigation';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
@@ -31,7 +30,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { authClient } from '@/lib/auth-client';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
 
@@ -136,7 +135,6 @@ export default function RearrangePage() {
   const t = useTranslations('PdfTool');
   const tShell = useTranslations('ToolShell');
   const tool = getToolByHref('/pdf/rearrange')!;
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pdf, setPdf] = useState<any>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -146,7 +144,7 @@ export default function RearrangePage() {
   const [result, setResult] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { requireLogin } = useRequireLogin();
   const uploadFile = useUploadFile();
   const createTask = useCreateTask();
 
@@ -247,11 +245,7 @@ export default function RearrangePage() {
   const handleStart = async () => {
     if (!file || pageOrder.length === 0) return;
 
-    if (!session) {
-      const next = encodeURIComponent('/pdf/rearrange');
-      router.push(`/login?next=${next}`);
-      return;
-    }
+    if (requireLogin('/pdf/rearrange')) return;
 
     setProcessing(true);
     setError(null);

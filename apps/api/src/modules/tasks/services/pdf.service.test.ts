@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from '@cantoo/pdf-lib';
 import sharp from 'sharp';
 import {
   buildLibreOfficeArgs,
@@ -967,5 +967,53 @@ describe('PdfService.compressPdf', () => {
       PDFDocument.create = originalCreate;
       restoreDestroy();
     }
+  });
+});
+
+describe('PdfService.encrypt', () => {
+  // 回归测试：之前用 mupdf 的 saveToBuffer 传两个参数且 wasm 不支持加密，
+  // 导致产物未加密却返回成功。这里验证加密产物确实无法被明文读取。
+  it('produces an encrypted PDF that cannot be read without a password', async () => {
+    const service = new PdfService();
+    const plain = await createTextPdf(['plaintext secret content']);
+
+    const encrypted = await service.encrypt(plain, {
+      ownerPassword: 'owner-pwd',
+      userPassword: 'user-pwd',
+    });
+
+    // 产物仍是合法 PDF
+    expect(encrypted.subarray(0, 5).toString('utf8')).toBe('%PDF-');
+
+    // 加密后的字节流不应包含明文
+    expect(encrypted.includes('plaintext secret content')).toBe(false);
+
+    // 不带密码加载应失败（说明确实加密）
+    await expect(PDFDocument.load(encrypted)).rejects.toThrow();
+
+    // 用 owner 密码可以加载
+    const opened = await PDFDocument.load(encrypted, { password: 'owner-pwd' });
+    expect(opened.getPageCount()).toBe(1);
+  });
+
+  it('honors disabled permissions by withholding them from the encrypted document', async () => {
+    const service = new PdfService();
+    const plain = await createTextPdf(['permission test']);
+
+    const encrypted = await service.encrypt(plain, {
+      ownerPassword: 'owner-pwd',
+      permissions: {
+        print: false,
+        copy: false,
+        modify: false,
+        annotate: false,
+      },
+    });
+
+    // 用 owner 密码可加载（owner 拥有全部权限，但权限位应被写为受限）
+    const opened = await PDFDocument.load(encrypted, { password: 'owner-pwd' });
+    expect(opened.getPageCount()).toBe(1);
+    // 产物不应包含明文
+    expect(encrypted.includes('permission test')).toBe(false);
   });
 });

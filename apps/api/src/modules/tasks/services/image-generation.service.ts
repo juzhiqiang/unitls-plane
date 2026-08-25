@@ -10,6 +10,7 @@ import {
   LEGACY_PROVIDER_ID,
   loadImageProviderConfigs,
   resolveAiImageModel,
+  resolveAiImageRequestTimeoutMs,
   type ImageProviderCapability,
   type ImageProviderConfig,
   type ImageProviderEditTransport,
@@ -89,6 +90,8 @@ export interface OpenAiCompatibleImageGenerationProviderOptions {
   editTransport?: ImageProviderEditTransport;
   refImagesField?: string;
   refImageEncoding?: ImageProviderRefEncoding;
+  /** 单次上游请求超时,超过即按失败处理。省略时从 AI_IMAGE_REQUEST_TIMEOUT_MS 解析。 */
+  requestTimeoutMs?: number;
   fetch?: typeof fetch;
 }
 
@@ -112,6 +115,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
   private readonly editTransport: ImageProviderEditTransport;
   private readonly refImagesField: string;
   private readonly refImageEncoding: ImageProviderRefEncoding;
+  private readonly requestTimeoutMs: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor({
@@ -125,6 +129,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     editTransport = 'multipart',
     refImagesField = 'reference_images',
     refImageEncoding = 'data_url',
+    requestTimeoutMs = resolveAiImageRequestTimeoutMs(),
     fetch: fetchImpl = fetch,
   }: OpenAiCompatibleImageGenerationProviderOptions = {}) {
     if (!baseUrl) {
@@ -139,6 +144,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     this.editTransport = editTransport;
     this.refImagesField = refImagesField;
     this.refImageEncoding = refImageEncoding;
+    this.requestTimeoutMs = requestTimeoutMs;
     this.fetchImpl = fetchImpl;
   }
 
@@ -152,14 +158,42 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     });
   }
 
+  /**
+   * 给 fetch 套一个超时。挂死上游(连上 TLS、收了 body 却永不回响应)时,
+   * 不靠它就会一直挂到 TCP keepalive,worker 整段时间被占死。
+   * 超时统一抛 AbortError,外层兜成固定文案,不外泄。
+   */
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit
+  ): Promise<Response> {
+    const response = await this.fetchImpl(url, {
+      ...init,
+      signal: globalThis.AbortSignal.timeout(this.requestTimeoutMs),
+    });
+    return response as Response;
+  }
+
   async generate(
     config: ImageGenerateTaskConfig,
     reference?: Buffer
   ): Promise<Buffer> {
-    const response =
-      config.mode === 'image_to_image'
-        ? await this.postEdit(config, reference)
-        : await this.postGeneration(config);
+    let response: Response;
+    try {
+      response =
+        config.mode === 'image_to_image'
+          ? await this.postEdit(config, reference)
+          : await this.postGeneration(config);
+    } catch (error) {
+      // fetch 抛错(含超时 AbortError、DNS、连接重置)统一走兜底文案,原文只进日志。
+      this.logger.warn(
+        `AI image generation request failed: provider=${this.descriptor.id} error=${String(error instanceof Error ? error.message : error)}`
+      );
+      throw new ImageGenerationError(
+        ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+        'Image generation failed'
+      );
+    }
 
     if (!response.ok) {
       throw this.toSanitizedError(
@@ -188,7 +222,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     config: ImageGenerateTaskConfig,
     extraBody: Record<string, unknown> = {}
   ): Promise<Response> {
-    return this.fetchImpl(this.generationUrl, {
+    return this.fetchWithTimeout(this.generationUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -252,7 +286,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     form.set('response_format', this.responseFormat);
     form.set('n', '1');
 
-    return this.fetchImpl(this.editUrl, {
+    return this.fetchWithTimeout(this.editUrl, {
       method: 'POST',
       headers: {
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),

@@ -1,27 +1,42 @@
 const PRODUCTION_EMAIL_PATTERN =
   /^[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i;
 
+/**
+ * 单步命令。cwd 用 `Bun.spawn` 的 `cwd` 选项而不是 `bun --cwd=...` 命令行标志:
+ * 后者在本机 Bun/Windows 下跑 openapi:export(Nest bootstrap 内 `process.exit(0)` +
+ * Better-Auth/BullMQ 异步句柄)会异常退出 1,改成 spawn 选项才能稳定返回 0。
+ */
+interface CommandStep {
+  command: string;
+  args: readonly string[];
+  cwd?: string;
+}
+
 const commands = [
-  ['bun', ['run', 'format:check:changed']],
-  ['bun', ['run', 'lint']],
-  ['bun', ['run', 'test:packages']],
-  ['bun', ['run', 'test:api']],
-  ['bun', ['run', 'test:web']],
-  ['bun', ['--cwd=apps/api', 'run', 'openapi:export']],
-  ['bun', ['--cwd=packages/api-client', 'run', 'generate']],
-  [
-    'git',
-    [
+  { command: 'bun', args: ['run', 'format:check:changed'] },
+  { command: 'bun', args: ['run', 'lint'] },
+  { command: 'bun', args: ['run', 'test:packages'] },
+  { command: 'bun', args: ['run', 'test:api'] },
+  { command: 'bun', args: ['run', 'test:web'] },
+  { command: 'bun', args: ['run', 'openapi:export'], cwd: 'apps/api' },
+  {
+    command: 'bun',
+    args: ['run', 'generate'],
+    cwd: 'packages/api-client',
+  },
+  {
+    command: 'git',
+    args: [
       'diff',
       '--exit-code',
       '--',
       'apps/api/openapi.json',
       'packages/api-client/src/schema.ts',
     ],
-  ],
-  ['bun', ['run', 'build']],
-  ['bunx', ['playwright', 'test']],
-] as const;
+  },
+  { command: 'bun', args: ['run', 'build'] },
+  { command: 'bunx', args: ['playwright', 'test'] },
+] as const satisfies readonly CommandStep[];
 
 function isValidProductionSupportEmail(email: string | undefined): boolean {
   const normalizedEmail = email?.trim() ?? '';
@@ -56,14 +71,15 @@ if (await isWebDevServerRunning()) {
   process.exit(1);
 }
 
-for (const [index, [command, args]] of commands.entries()) {
+for (const [index, step] of commands.entries()) {
   console.log(
-    `\n[${index + 1}/${commands.length}] ${command} ${args.join(' ')}`
+    `\n[${index + 1}/${commands.length}] ${step.command} ${step.args.join(' ')}${step.cwd ? ` (cwd: ${step.cwd})` : ''}`
   );
 
-  const child = Bun.spawn([command, ...args], {
+  const child = Bun.spawn([step.command, ...step.args], {
     stdout: 'inherit',
     stderr: 'inherit',
+    ...(step.cwd ? { cwd: step.cwd } : {}),
   });
   const exitCode = await child.exited;
 

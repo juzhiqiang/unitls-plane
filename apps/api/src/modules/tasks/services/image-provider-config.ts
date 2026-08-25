@@ -120,6 +120,24 @@ export function resolveAiImageModel(
 }
 
 /**
+ * 单次上游请求的超时上限。
+ *
+ * 没有 this 的话,挂死的上游(连上了 TLS、收了请求体,但永远不回响应)会让 fetch
+ * 一直挂到 TCP keepalive 介入,worker 整段时间被占死、任务转成 failed 要等很久。
+ * 设了上限后这类来源会快速失败成 AI_IMAGE_GENERATION_FAILED,而不是无限期转圈。
+ *
+ * 默认 180s:实测 openai 兼容来源单张约 54s,留 3 倍余量;再大也仍小于 BullMQ
+ * 的 lockDuration(600s),不会撞上 stall。封顶 600000,避免配错成超过锁时长的值。
+ */
+export function resolveAiImageRequestTimeoutMs(
+  env: ImageProviderEnv = process.env
+): number {
+  const raw = Number(env.AI_IMAGE_REQUEST_TIMEOUT_MS);
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 600000);
+  return 180000;
+}
+
+/**
  * 解析生图来源配置。
  *
  * 三种情况分得很开:

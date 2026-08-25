@@ -68,6 +68,10 @@ it('generates an image and stores it against the task owner', async () => {
       buffer: Buffer.from('png-bytes'),
       mimeType: 'image/png',
       extension: 'png',
+      // GeneratedImage 永远带 model(service.generate 返回 provider.model ?? 默认)。
+      // mock 不补它就会落到 processor 的 resolveAiImageModel() env 兜底,
+      // 断言会被本机 AI_IMAGE_MODEL 污染 —— 这里补上,断言只验透传、不依赖 env。
+      model: 'gpt-image-1',
     }),
   };
 

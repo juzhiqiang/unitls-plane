@@ -195,6 +195,30 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.message).not.toContain('upstream boom');
   });
 
+  it('maps a thrown fetch (timeout/network) to a generic error without leaking it', async () => {
+    // 挂死上游(连上 TLS、收了 body 却永不回响应)会让 fetch 一直挂到 keepalive。
+    // 超时走 AbortSignal.timeout 抛 AbortError,这里直接模拟 fetch reject。
+    const fetchImpl = vi.fn(async () => {
+      throw new globalThis.DOMException(
+        'The user aborted a request',
+        'AbortError'
+      );
+    });
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(config)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error).toBeInstanceOf(ImageGenerationError);
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+    expect(error.message).toBe('Image generation failed');
+    expect(error.message).not.toContain('aborted');
+  });
+
   it('maps an undecodable success payload to a generic sanitized error', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ data: [{}] }));
     const provider = new OpenAiCompatibleImageGenerationProvider({

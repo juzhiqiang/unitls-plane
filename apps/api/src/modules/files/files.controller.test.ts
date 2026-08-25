@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Response } from 'express';
+import { FilesController } from './files.controller';
+import type { FilesService } from './files.service';
 
 describe('FilesController route order', () => {
   it('declares static trash routes before dynamic id routes', () => {
@@ -115,5 +118,58 @@ describe('FilesController route order', () => {
       "Pick<User, 'id' | 'plan' | 'role'> | string | null"
     );
     expect(uploadSource).not.toContain("typeof uploadUser === 'string'");
+  });
+});
+
+describe('FilesController download disposition', () => {
+  function createController(file: { filename: string; mimeType: string }) {
+    const service = {
+      getById: async () => file,
+      download: async () => Buffer.from('payload'),
+      getSignedUrl: async () => 'https://signed.example/file',
+    } as unknown as FilesService;
+
+    return new FilesController(service);
+  }
+
+  function createResponse() {
+    const headers = new Map<string, string>();
+    const res = {
+      setHeader: (name: string, value: string) => {
+        headers.set(name, value);
+        return res;
+      },
+      end: (body: unknown) => body,
+    };
+
+    return { res: res as unknown as Response, headers };
+  }
+
+  it('previews inline when no download flag is provided', async () => {
+    const controller = createController({
+      filename: 'avatar.png',
+      mimeType: 'image/png',
+    });
+    const { res, headers } = createResponse();
+
+    await controller.download('file-1', undefined, undefined, res);
+
+    expect(headers.get('Content-Type')).toBe('image/png');
+    expect(headers.get('Content-Disposition')).toStartWith('inline;');
+  });
+
+  it('forces an attachment download when download=1', async () => {
+    const controller = createController({
+      filename: '发票.pdf',
+      mimeType: 'application/pdf',
+    });
+    const { res, headers } = createResponse();
+
+    await controller.download('file-2', '1', undefined, res);
+
+    expect(headers.get('Content-Disposition')).toBe(
+      'attachment; filename="__.pdf"; filename*=UTF-8\'\'%E5%8F%91%E7%A5%A8.pdf'
+    );
+    expect(headers.get('Content-Length')).toBe('7');
   });
 });

@@ -11,6 +11,7 @@ import {
 } from '@/hooks/api/use-tasks';
 import type { TaskResponseDto } from '@/hooks/api/types';
 import { getTaskTypeCategory } from '@/lib/tasks/task-category';
+import { downloadStoredFile } from '@/lib/files/file-download';
 import {
   ChevronDown,
   Download,
@@ -275,11 +276,7 @@ export default function TasksPage() {
 
   const handleDownload = (task: TaskResponseDto) => {
     if (!task.outputFileId) return;
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/files/${task.outputFileId}/download`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    a.click();
+    downloadStoredFile(task.outputFileId);
   };
 
   const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [

@@ -23,8 +23,13 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiConsumes,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { normalizeUploadedFilename } from './filename.util';
+import {
+  buildContentDisposition,
+  resolveContentDispositionType,
+} from './content-disposition.util';
 import { FileIdsDto } from './dto/file-ids.dto';
 
 const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(
@@ -171,8 +176,15 @@ export class FilesController {
   @Public()
   @Get(':id/download')
   @ApiOperation({ summary: 'Download file by ID' })
+  @ApiQuery({
+    name: 'download',
+    required: false,
+    description:
+      'Set to 1/true to force an attachment download instead of inline preview',
+  })
   async download(
     @Param('id') id: string,
+    @Query('download') download?: string,
     @CurrentUser() user?: User,
     @Res() res?: Response
   ) {
@@ -183,11 +195,13 @@ export class FilesController {
       return { url: await this.filesService.getSignedUrl(id, user?.id) };
     }
 
+    const dispositionType = resolveContentDispositionType(download);
+
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', buffer.length.toString());
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${encodeURIComponent(file.filename)}"`
+      buildContentDisposition(file.filename, dispositionType)
     );
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.end(buffer);

@@ -12,6 +12,7 @@ import {
   type FileRecord,
 } from '@/hooks/api/use-files';
 import { FileDropzone } from '@/components/tools/file-dropzone';
+import { downloadStoredFile } from '@/lib/files/file-download';
 import { authClient } from '@/lib/auth-client';
 import { Search, Grid3X3, List, Trash2, Download, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
@@ -97,11 +98,7 @@ export default function FilesPage() {
   };
 
   const handleDownload = (file: FileRecord) => {
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/files/${file.id}/download`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.filename;
-    a.click();
+    downloadStoredFile(file.id, file.filename);
   };
 
   const handleDrop = useCallback(

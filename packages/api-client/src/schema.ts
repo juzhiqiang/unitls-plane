@@ -943,7 +943,10 @@ export interface operations {
     };
     FilesController_download: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Set to 1/true to force an attachment download instead of inline preview */
+                download?: string;
+            };
             header?: never;
             path: {
                 id: string;

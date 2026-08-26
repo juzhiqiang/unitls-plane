@@ -86,6 +86,10 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'ecommerceProduct',
     image: '/presets/ecommerce-product.jpg',
   },
+  {
+    id: 'ecommerceDetailPage',
+    image: '/presets/ecommerce-detail-page.jpg',
+  },
   { id: 'ipMascot' },
   { id: 'infographic' },
   { id: 'characterSheet' },

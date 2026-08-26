@@ -241,6 +241,7 @@ describe('ImageGeneratePage', () => {
       ['xiaohongshuCover', '/presets/xiaohongshu-cover.jpg'],
       ['wechatArticleCover', '/presets/wechat-article-cover.jpg'],
       ['ecommerceProduct', '/presets/ecommerce-product.jpg'],
+      ['ecommerceDetailPage', '/presets/ecommerce-detail-page.jpg'],
     ] as const;
     for (const [id, src] of expected) {
       const alt = en.ImageGenerate.presetExampleAlt.replace(

@@ -214,18 +214,18 @@ describe('ImageGeneratePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
     // 弹窗打开后,模板按钮出现在 tab 序列里。
     const presetButton = await screen.findByRole('button', {
-      name: /Portrait close-up/,
+      name: /Guided science picture book/,
     });
     fireEvent.click(presetButton);
 
     // 选中模板后提示词被填入,弹窗随之关闭。
     await waitFor(() =>
       expect(screen.getByLabelText('Prompt')).toHaveValue(
-        en.ImageGenerate.presets.portrait.prompt
+        en.ImageGenerate.presets.sciencePictureBook.prompt
       )
     );
     expect(
-      screen.queryByRole('button', { name: /Portrait close-up/ })
+      screen.queryByRole('button', { name: /Guided science picture book/ })
     ).not.toBeInTheDocument();
   });
 

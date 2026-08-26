@@ -50,20 +50,21 @@ const PROMPT_COUNTER_ID = 'image-generate-prompt-counter';
 /**
  * 预设提示词条目:id 同时作为 messages 里 ImageGenerate.presets.<id>.title / .prompt 的键。
  * 这里只存结构,文案在中英文 messages 里维护,和其它字段保持同一套本地化方式。
+ *
+ * 模板走「分类」思路:每条都是一个相对完整的创作框架(导览式科普绘本、拟人化 IP 海报、
+ * 信息图长图、角色设定三视图、节日主题海报),用户选了之后替换【主题】等占位即可,
+ * 而不是一条只有两三句话的简单示例。保留空间方便后续增删分类。
  */
 interface ImageGeneratePreset {
   id: string;
 }
 
 const PRESETS: ImageGeneratePreset[] = [
-  { id: 'portrait' },
-  { id: 'landscape' },
-  { id: 'anime' },
-  { id: 'product' },
-  { id: 'illustration' },
-  { id: 'threeD' },
-  { id: 'watercolor' },
-  { id: 'lineArt' },
+  { id: 'sciencePictureBook' },
+  { id: 'ipMascot' },
+  { id: 'infographic' },
+  { id: 'characterSheet' },
+  { id: 'festivalPoster' },
 ];
 
 // IMAGE_GENERATE_PROMPT_MAX_LENGTH 由 @utils-plane/validators 导出,这里直接复用,

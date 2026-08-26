@@ -82,6 +82,10 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'wechatArticleCover',
     image: '/presets/wechat-article-cover.jpg',
   },
+  {
+    id: 'ecommerceProduct',
+    image: '/presets/ecommerce-product.jpg',
+  },
   { id: 'ipMascot' },
   { id: 'infographic' },
   { id: 'characterSheet' },

@@ -66,6 +66,14 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'sciencePictureBook',
     image: '/presets/science-picture-book.jpg',
   },
+  {
+    id: 'marketStallProposal',
+    image: '/presets/market-stall-proposal.jpg',
+  },
+  {
+    id: 'twitterArticleCover',
+    image: '/presets/twitter-article-cover.jpg',
+  },
   { id: 'ipMascot' },
   { id: 'infographic' },
   { id: 'characterSheet' },

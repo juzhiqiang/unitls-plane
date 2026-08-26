@@ -229,18 +229,25 @@ describe('ImageGeneratePage', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows the example image for the guided science picture book preset', async () => {
+  it('shows the example image for each preset that ships one', async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
-    // 配了示例图的分类在卡片顶部渲染缩略图;只有导览式科普绘本这一类目前有图。
-    const img = await screen.findByAltText(
-      en.ImageGenerate.presetExampleAlt.replace(
+    // 配了示例图的分类在卡片顶部渲染缩略图;alt 文案为 "{title} example"。
+    const expected = [
+      ['sciencePictureBook', '/presets/science-picture-book.jpg'],
+      ['marketStallProposal', '/presets/market-stall-proposal.jpg'],
+      ['twitterArticleCover', '/presets/twitter-article-cover.jpg'],
+    ] as const;
+    for (const [id, src] of expected) {
+      const alt = en.ImageGenerate.presetExampleAlt.replace(
         '{title}',
-        en.ImageGenerate.presets.sciencePictureBook.title
-      )
-    );
-    expect(img).toHaveAttribute('src', '/presets/science-picture-book.jpg');
+        en.ImageGenerate.presets[id].title
+      );
+      // eslint-disable-next-line no-await-in-loop
+      const img = await screen.findByAltText(alt);
+      expect(img).toHaveAttribute('src', src);
+    }
   });
 
   it('renders a result preview and download link once a task completes', async () => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   useCreateTask,
+  useImageGeneratePresets,
   useImageGenerateProviders,
   useImageGenerateQuota,
 } from '@/hooks/api/use-tasks';
@@ -79,6 +80,7 @@ export default function ImageGeneratePage() {
   const createTask = useCreateTask();
   const quota = useImageGenerateQuota();
   const providersQuery = useImageGenerateProviders();
+  const presetsQuery = useImageGeneratePresets();
   const uploadFile = useUploadFile();
 
   const [draft, setDraft] = useState<ImageGenerateDraft>(INITIAL_DRAFT);
@@ -315,6 +317,7 @@ export default function ImageGeneratePage() {
           value={draft}
           onChange={changeDraft}
           disabled={busy}
+          presets={presetsQuery.data ?? []}
         />
       </div>
 

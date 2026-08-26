@@ -176,3 +176,31 @@ export class ImageGenerateProviderDto {
   })
   capabilities!: string[];
 }
+
+export class ImageGeneratePresetDto {
+  @ApiProperty({
+    description: '模板 id（uuid）',
+  })
+  id!: string;
+
+  @ApiProperty({
+    description: '当前语言（由 lang 查询参数决定）的模板标题',
+  })
+  title!: string;
+
+  @ApiProperty({
+    description: '当前语言（由 lang 查询参数决定）的提示词模板正文',
+  })
+  prompt!: string;
+
+  @ApiPropertyOptional({
+    description:
+      '示例图在 MinIO presets 桶内的对象 key；前端用 NEXT_PUBLIC_S3_PUBLIC_URL 自行拼公网 URL',
+  })
+  imageStorageKey?: string;
+
+  @ApiProperty({
+    description: '排序值，升序展示',
+  })
+  sortOrder!: number;
+}

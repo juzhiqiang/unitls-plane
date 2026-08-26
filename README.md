@@ -59,7 +59,8 @@ Codex 会直接读取 `AGENTS.md`；Claude Code 通过 `CLAUDE.md` 中的 `@AGEN
 - 图片加水印
 - 图片旋转、水平/垂直翻转、自动方向校正
 - 证件照生成与背景处理
-- AI 生图（/image/generate）：文字描述生成图片，或上传参考图做图生图，需要登录，每日限张数。
+- AI 生图（/image/generate）：文字描述生成图片，或上传参考图做图生图，需要登录，每日限张数。内置提示词模板由服务端下发（`image_generate_presets`
+  表 + MinIO `presets` 桶），可动态增删改，后台管理界面待后续。
 - 批量处理与 zip 下载
 - 压缩前后对比
 
@@ -511,7 +512,9 @@ PostgreSQL + Redis + MinIO
 - PDF 和字体的重型处理主要走服务端任务队列。
 - AI 生图走服务端任务队列（独立
   `ai-queue`），必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印。可通过
-  `AI_IMAGE_PROVIDERS` 配置多个 OpenAI 兼容来源，由用户在页面上手动选择，不做自动切换。
+  `AI_IMAGE_PROVIDERS`
+  配置多个 OpenAI 兼容来源，由用户在页面上手动选择，不做自动切换。提示词模板走 DB + MinIO `presets`
+  匿名只读桶，通过公开端点 `GET /tasks/image-generate/presets` 按语言下发。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式
   `pro_preview` 账号使用与 Private 相同的顶额权益，普通 `plan: free` 登录账号仍为 50MB。

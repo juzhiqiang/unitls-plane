@@ -18,6 +18,7 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { TasksService } from './tasks.service';
 import { ImageGenerationService } from './services/image-generation.service';
+import { ImageGeneratePresetsService } from './services/image-generate-presets.service';
 import {
   CreateTaskDto,
   TaskQueryDto,
@@ -25,6 +26,7 @@ import {
   TaskStatusDto,
   ImageGenerateQuotaDto,
   ImageGenerateProviderDto,
+  ImageGeneratePresetDto,
 } from './dto/tasks.dto';
 import { Public } from '../../common/decorators';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -40,7 +42,8 @@ interface AuthenticatedRequest extends Request {
 export class TasksController {
   constructor(
     private readonly tasksService: TasksService,
-    private readonly imageGenerationService: ImageGenerationService
+    private readonly imageGenerationService: ImageGenerationService,
+    private readonly imageGeneratePresetsService: ImageGeneratePresetsService
   ) {}
 
   @Post()
@@ -97,6 +100,29 @@ export class TasksController {
   async getImageGenerateQuota(@CurrentUser() currentUser?: User) {
     if (!currentUser) throw new UnauthorizedException();
     return this.tasksService.getImageGenerateQuota(currentUser);
+  }
+
+  /**
+   * AI 生图提示词模板列表。
+   *
+   * 必须声明在 `@Get(':id')` 之前,否则 `:id` 会吞掉 `image-generate` 字面段。
+   *
+   * 设为 @Public():模板内容只是展示用提示词 + 示例图对象 key,不含任何用户数据或服务端凭据;
+   * 弹窗本身在需登录的生图页内,端点公开可省去前端 session 门控。
+   *
+   * lang 决定取双语言列的哪一侧,返回单语言扁平对象,前端零字段切换。
+   */
+  @Get('image-generate/presets')
+  @Public()
+  @ApiOperation({ summary: 'List AI image generation prompt presets' })
+  @ApiResponse({
+    status: 200,
+    description: 'Enabled prompt presets in the requested language',
+    type: ImageGeneratePresetDto,
+    isArray: true,
+  })
+  async listImageGeneratePresets(@Query('lang') lang?: string) {
+    return this.imageGeneratePresetsService.list(lang === 'en' ? 'en' : 'zh');
   }
 
   @Get(':id')

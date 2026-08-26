@@ -1,8 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocale } from 'next-intl';
 import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/api-client';
 import type {
   CreateTaskDto,
+  ImageGeneratePresetDto,
   ImageGenerateProviderDto,
   TaskResponseDto,
   TaskStatusDto,
@@ -154,6 +156,30 @@ export function useImageGenerateProviders() {
       return data as ImageGenerateProviderDto[];
     },
     enabled: !sessionPending && !!userId,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * AI 生图提示词模板。走 DB + MinIO presets 桶下发（见 image_generate_presets 表），
+ * 端点是公开的，所以这里不做 session 门控。
+ *
+ * 服务端按 lang 返回单语言扁平对象，故 queryKey 带上当前 locale：
+ * 切语言要重新拉一次，同一语言内容在进程生命周期内不会变，设成永不过期。
+ */
+export function useImageGeneratePresets() {
+  const locale = useLocale();
+  const lang = locale === 'en' ? 'en' : 'zh';
+
+  return useQuery({
+    queryKey: taskQueryKeys.imageGeneratePresets(lang),
+    queryFn: async () => {
+      const { data, error } = await api.GET('/tasks/image-generate/presets', {
+        params: { query: { lang } } as any,
+      });
+      if (error) throw error;
+      return data as ImageGeneratePresetDto[];
+    },
     staleTime: Infinity,
   });
 }

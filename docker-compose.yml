@@ -62,6 +62,8 @@ services:
       mc alias set local http://minio:9000 minioadmin minioadmin;
       mc mb local/uploads --ignore-existing;
       mc anonymous set download local/uploads;
+      mc mb local/presets --ignore-existing;
+      mc anonymous set download local/presets;
       exit 0;
       "
 

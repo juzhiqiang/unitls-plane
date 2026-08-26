@@ -20,7 +20,28 @@ const mocks = vi.hoisted(() => ({
   onItemCompleted: vi.fn(),
   imageGenerateQuota: vi.fn(),
   imageGenerateProviders: vi.fn(),
+  imageGeneratePresets: vi.fn(),
 }));
+
+/**
+ * 提示词模板现在来自 GET /tasks/image-generate/presets（DB + MinIO presets 桶），
+ * 不再是前端硬编码 + messages 文案，所以测试里给 hook 喂固定的两条 mock 数据。
+ */
+const PRESETS = [
+  {
+    id: 'preset-uuid-1',
+    title: 'Guided science picture book',
+    prompt: 'Create a high-finish guided science picture book illustration.',
+    imageStorageKey: 'science-picture-book.jpg',
+    sortOrder: 0,
+  },
+  {
+    id: 'preset-uuid-2',
+    title: 'Mind map & knowledge graph',
+    prompt: 'Generate a mind-map infographic, educational-poster style.',
+    sortOrder: 1,
+  },
+];
 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) =>
@@ -36,6 +57,7 @@ vi.mock('@/hooks/api/use-tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mocks.createTask }),
   useImageGenerateQuota: () => mocks.imageGenerateQuota(),
   useImageGenerateProviders: () => mocks.imageGenerateProviders(),
+  useImageGeneratePresets: () => mocks.imageGeneratePresets(),
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
@@ -105,6 +127,9 @@ beforeEach(() => {
       { id: 'default', label: 'Default', capabilities: ['generate', 'edit'] },
     ],
   });
+  mocks.imageGeneratePresets.mockReturnValue({ data: PRESETS });
+  // 示例图公网 URL 由前端拼:测试里显式给一个 base,否则 presetImageUrl() 返回 null。
+  vi.stubEnv('NEXT_PUBLIC_S3_PUBLIC_URL', 'http://minio.test:9000');
   Object.defineProperty(URL, 'createObjectURL', {
     value: vi.fn(() => 'blob:preview-url'),
     configurable: true,
@@ -220,43 +245,44 @@ describe('ImageGeneratePage', () => {
 
     // 选中模板后提示词被填入,弹窗随之关闭。
     await waitFor(() =>
-      expect(screen.getByLabelText('Prompt')).toHaveValue(
-        en.ImageGenerate.presets.sciencePictureBook.prompt
-      )
+      expect(screen.getByLabelText('Prompt')).toHaveValue(PRESETS[0]!.prompt)
     );
     expect(
       screen.queryByRole('button', { name: /Guided science picture book/ })
     ).not.toBeInTheDocument();
   });
 
-  it('shows the example image for each preset that ships one', async () => {
+  it('renders the MinIO example image for presets that ship one', async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
-    // 配了示例图的分类在卡片顶部渲染缩略图;alt 文案为 "{title} example"。
-    const expected = [
-      ['sciencePictureBook', '/presets/science-picture-book.jpg'],
-      ['marketStallProposal', '/presets/market-stall-proposal.jpg'],
-      ['twitterArticleCover', '/presets/twitter-article-cover.jpg'],
-      ['xiaohongshuCover', '/presets/xiaohongshu-cover.jpg'],
-      ['wechatArticleCover', '/presets/wechat-article-cover.jpg'],
-      ['personalIpCover', '/presets/personal-ip-cover.png'],
-      ['ecommerceProduct', '/presets/ecommerce-product.jpg'],
-      ['ecommerceDetailPage', '/presets/ecommerce-detail-page.jpg'],
-      ['ecommercePromoPoster', '/presets/ecommerce-promo-poster.jpg'],
-      ['pptMindMap', '/presets/ppt-mind-map.jpg'],
-      ['tutorialSteps', '/presets/tutorial-steps.jpg'],
-      ['mindMap', '/presets/mind-map.jpg'],
-    ] as const;
-    for (const [id, src] of expected) {
-      const alt = en.ImageGenerate.presetExampleAlt.replace(
-        '{title}',
-        en.ImageGenerate.presets[id].title
-      );
-      // eslint-disable-next-line no-await-in-loop
-      const img = await screen.findByAltText(alt);
-      expect(img).toHaveAttribute('src', src);
-    }
+    // 配了 imageStorageKey 的模板在卡片顶部渲染缩略图;alt 文案为 "{title} example"。
+    const withImage = PRESETS[0]!;
+    const alt = en.ImageGenerate.presetExampleAlt.replace(
+      '{title}',
+      withImage.title
+    );
+    const img = await screen.findByAltText(alt);
+    expect(img).toHaveAttribute(
+      'src',
+      `http://minio.test:9000/presets/${withImage.imageStorageKey}`
+    );
+
+    // 没配图的模板不渲染 <img>,退化成纯文本卡片。
+    const withoutImageAlt = en.ImageGenerate.presetExampleAlt.replace(
+      '{title}',
+      PRESETS[1]!.title
+    );
+    expect(screen.queryByAltText(withoutImageAlt)).not.toBeInTheDocument();
+  });
+
+  it('hides the preset trigger when the API returns no templates', () => {
+    mocks.imageGeneratePresets.mockReturnValue({ data: [] });
+    renderPage();
+
+    expect(
+      screen.queryByRole('button', { name: 'Prompt templates' })
+    ).not.toBeInTheDocument();
   });
 
   it('renders a result preview and download link once a task completes', async () => {

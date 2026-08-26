@@ -180,6 +180,40 @@
         ]
       }
     },
+    "/tasks/image-generate/presets": {
+      "get": {
+        "operationId": "TasksController_listImageGeneratePresets",
+        "parameters": [
+          {
+            "name": "lang",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enabled prompt presets in the requested language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImageGeneratePresetDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List AI image generation prompt presets",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/tasks/{id}": {
       "get": {
         "operationId": "TasksController_getOne",
@@ -1131,6 +1165,37 @@
           "limit",
           "used",
           "remaining"
+        ]
+      },
+      "ImageGeneratePresetDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "模板 id（uuid）"
+          },
+          "title": {
+            "type": "string",
+            "description": "当前语言（由 lang 查询参数决定）的模板标题"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "当前语言（由 lang 查询参数决定）的提示词模板正文"
+          },
+          "imageStorageKey": {
+            "type": "string",
+            "description": "示例图在 MinIO presets 桶内的对象 key；前端用 NEXT_PUBLIC_S3_PUBLIC_URL 自行拼公网 URL"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "排序值，升序展示"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "prompt",
+          "sortOrder"
         ]
       },
       "TaskStatusDto": {

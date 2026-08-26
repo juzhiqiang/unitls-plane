@@ -213,6 +213,24 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   提交。省略时用第一个来源；来源不存在或不支持该模式时任务以 `AI_IMAGE_PROVIDER_UNAVAILABLE`
   失败，不会静默换成另一个来源。
 - 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。
+
+生图页的「提示词模板」已从前端硬编码迁移到 DB + 对象存储，方便后续做后台动态运营：
+
+- 模板存 `image_generate_presets` 表。双语言列（`title_zh`/`title_en`、`prompt_zh`/`prompt_en`），
+  `slug` 唯一（upsert 键），另有 `image_storage_key`、`sort_order`、`is_enabled`、`is_builtin`。
+- 示例图存 MinIO `presets` 桶（匿名只读，与 `models` 桶同模式，`immutable`
+  长缓存）。API 只下发对象 key，公网 URL 由前端用 `NEXT_PUBLIC_S3_PUBLIC_URL` 拼（见
+  `apps/web/src/lib/s3-assets.ts`）。
+- `GET /tasks/image-generate/presets` 是公开端点（`@Public()`），按 `lang` 查询参数（`zh` 默认 /
+  `en`）取双语言列的一侧，返回单语言扁平对象
+  `{ id, title, prompt, imageStorageKey, sortOrder }`，只含 `is_enabled=true` 的模板，按
+  `sort_order` 升序。前端零字段切换。
+- 内置 12 条模板由 `apps/api/src/scripts/seed-image-generate-presets.ts` seed：按 `slug`
+  `ON CONFLICT DO UPDATE` 刷新标题/提示词/图 key/排序，**不刷新
+  `is_enabled`**（后台将来禁用的内置模板 re-seed 后仍保持禁用），也不触碰 `is_builtin=false`
+  的后台新增行。脚本同时建桶、设匿名只读策略并上传示例图，全程失败不阻塞启动。组合镜像由
+  `docker/start-all.sh`、prod compose 由 `api.command` 在 `main.js` 之前调用。
+- 后台模板 CRUD 尚未开发。
 - 每日张数配额是全局的，不按来源区分。
 - 都没配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
   失败，页面提示未配置。

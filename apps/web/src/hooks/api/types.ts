@@ -52,3 +52,16 @@ export interface ImageGenerateProviderDto {
   label: string;
   capabilities: Array<'generate' | 'edit'>;
 }
+
+/**
+ * AI 生图提示词模板。服务端按 lang 查询参数取双语言列的一侧，
+ * 返回单语言扁平对象，前端零字段切换。
+ * imageStorageKey 是 MinIO presets 桶内的对象 key，用 presetImageUrl() 拼公网 URL。
+ */
+export interface ImageGeneratePresetDto {
+  id: string;
+  title: string;
+  prompt: string;
+  imageStorageKey?: string;
+  sortOrder: number;
+}

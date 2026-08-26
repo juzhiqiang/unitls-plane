@@ -67,6 +67,8 @@ services:
       mc anonymous set download local/uploads;
       mc mb local/models --ignore-existing;
       mc anonymous set download local/models;
+      mc mb local/presets --ignore-existing;
+      mc anonymous set download local/presets;
       exit 0;
       "
 
@@ -76,7 +78,7 @@ services:
       [
         'sh',
         '-c',
-        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/scripts/sync-id-photo-models.js && node apps/api/dist/main.js',
+        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/scripts/sync-id-photo-models.js && node apps/api/dist/scripts/seed-image-generate-presets.js && node apps/api/dist/main.js',
       ]
     ports:
       - '5006:3001'
@@ -97,6 +99,8 @@ services:
       S3_BUCKET: uploads
       S3_FORCE_PATH_STYLE: 'true'
       S3_MODELS_BUCKET: ${S3_MODELS_BUCKET:-models}
+      S3_PRESETS_BUCKET: ${S3_PRESETS_BUCKET:-presets}
+      IMAGE_GENERATE_PRESETS_DIR: /app/public/presets
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}

@@ -24,6 +24,12 @@ if [ -f apps/api/dist/scripts/sync-id-photo-models.js ]; then
   node apps/api/dist/scripts/sync-id-photo-models.js || echo "[start-all] id-photo model sync skipped (failed or MinIO not ready)"
 fi
 
+# Seed AI 生图提示词模板到 DB(image_generate_presets 表)+ MinIO presets 桶。
+# 按 slug upsert,只刷新内置模板内容,不动后台改过的启用状态。失败同样不阻塞启动。
+if [ -f apps/api/dist/scripts/seed-image-generate-presets.js ]; then
+  node apps/api/dist/scripts/seed-image-generate-presets.js || echo "[start-all] image generate presets seed skipped (failed or MinIO not ready)"
+fi
+
 node apps/api/dist/main.js &
 api_pid="$!"
 

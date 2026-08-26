@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { ImageGenerateProviderDto } from '@/hooks/api/types';
+import type {
+  ImageGeneratePresetDto,
+  ImageGenerateProviderDto,
+} from '@/hooks/api/types';
+import { presetImageUrl } from '@/lib/s3-assets';
 import {
   IMAGE_GENERATE_PROMPT_MAX_LENGTH,
   type ImageGenerateMode,
@@ -46,71 +50,6 @@ const STYLES: ImageGenerateStyle[] = [
 const COUNTS = [1, 2, 4];
 
 const PROMPT_COUNTER_ID = 'image-generate-prompt-counter';
-
-/**
- * 预设提示词条目:id 同时作为 messages 里 ImageGenerate.presets.<id>.title / .prompt 的键。
- * 这里只存结构,文案在中英文 messages 里维护,和其它字段保持同一套本地化方式。
- *
- * 模板走「分类」思路:每条都是一个相对完整的创作框架(导览式科普绘本、拟人化 IP 海报、
- * 信息图长图、角色设定三视图、节日主题海报),用户选了之后替换【主题】等占位即可,
- * 而不是一条只有两三句话的简单示例。保留空间方便后续增删分类。
- */
-interface ImageGeneratePreset {
-  id: string;
-  /** 可选示例图:放在 apps/web/public 下,按相对根路径引用。没有示例图的分类留空。 */
-  image?: string;
-}
-
-const PRESETS: ImageGeneratePreset[] = [
-  {
-    id: 'sciencePictureBook',
-    image: '/presets/science-picture-book.jpg',
-  },
-  {
-    id: 'marketStallProposal',
-    image: '/presets/market-stall-proposal.jpg',
-  },
-  {
-    id: 'twitterArticleCover',
-    image: '/presets/twitter-article-cover.jpg',
-  },
-  {
-    id: 'xiaohongshuCover',
-    image: '/presets/xiaohongshu-cover.jpg',
-  },
-  {
-    id: 'wechatArticleCover',
-    image: '/presets/wechat-article-cover.jpg',
-  },
-  {
-    id: 'personalIpCover',
-    image: '/presets/personal-ip-cover.png',
-  },
-  {
-    id: 'ecommerceProduct',
-    image: '/presets/ecommerce-product.jpg',
-  },
-  {
-    id: 'ecommerceDetailPage',
-    image: '/presets/ecommerce-detail-page.jpg',
-  },
-  {
-    id: 'ecommercePromoPoster',
-    image: '/presets/ecommerce-promo-poster.jpg',
-  },
-  {
-    id: 'pptMindMap',
-    image: '/presets/ppt-mind-map.jpg',
-  },
-  {
-    id: 'tutorialSteps',
-    image: '/presets/tutorial-steps.jpg',
-  },
-  {
-    id: 'mindMap',
-    image: '/presets/mind-map.jpg',
-  },
-];
 
 // IMAGE_GENERATE_PROMPT_MAX_LENGTH 由 @utils-plane/validators 导出,这里直接复用,
 // 避免跨包重复魔数。
@@ -248,11 +187,61 @@ export function ImageGenerateProviderField({
   );
 }
 
+/**
+ * 单个模板卡片。示例图独立成组件是为了让 onError 的 failed state 落在卡片内:
+ * 一张图挂了只影响这张卡,不会连带别的模板退化成纯文本。
+ */
+function PresetCard({
+  preset,
+  onPick,
+}: {
+  preset: ImageGeneratePresetDto;
+  onPick: (prompt: string) => void;
+}) {
+  const t = useTranslations('ImageGenerate');
+  const [failed, setFailed] = useState(false);
+  const url = presetImageUrl(preset.imageStorageKey);
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onPick(preset.prompt)}
+        className="flex w-full flex-col gap-1 rounded-md border border-border p-3 text-left transition-colors hover:border-foreground hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {url && !failed ? (
+          // 示例图让用户一眼看到这套模板的成品长什么样;图存 MinIO presets 匿名只读桶,
+          // 拉不到就退化成纯文本卡片而不是留个碎图占位。
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt={t('presetExampleAlt', { title: preset.title })}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            className="aspect-[4/3] w-full rounded-sm border border-border object-cover"
+          />
+        ) : null}
+        <span className="text-sm font-medium">{preset.title}</span>
+        <span className="line-clamp-3 text-xs text-muted-foreground">
+          {preset.prompt}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * 提示词输入 + 模板弹窗。
+ *
+ * presets 由页面从 GET /tasks/image-generate/presets 拉取后传入(与 providers 同模式):
+ * 模板内容存 DB、示例图存 MinIO,不再硬编码在前端,方便后台动态运营。
+ */
 export function ImageGeneratePromptField({
   value,
   onChange,
   disabled = false,
-}: ImageGenerateFieldProps) {
+  presets,
+}: ImageGenerateFieldProps & { presets: ImageGeneratePresetDto[] }) {
   const t = useTranslations('ImageGenerate');
   const [presetOpen, setPresetOpen] = useState(false);
 
@@ -267,56 +256,38 @@ export function ImageGeneratePromptField({
         >
           {t('promptLabel')}
         </label>
-        <Dialog open={presetOpen} onOpenChange={setPresetOpen}>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              disabled={disabled}
-              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {t('presetTrigger')}
-            </button>
-          </DialogTrigger>
-          <DialogContent closeLabel={t('presetClose')}>
-            <DialogTitle className="text-sm font-medium">
-              {t('presetTitle')}
-            </DialogTitle>
-            <DialogDescription>{t('presetDescription')}</DialogDescription>
-            <ul className="grid gap-2 overflow-y-auto sm:grid-cols-2">
-              {PRESETS.map(preset => {
-                const text = t(`presets.${preset.id}.prompt`);
-                const title = t(`presets.${preset.id}.title`);
-                return (
-                  <li key={preset.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChange({ ...value, prompt: text });
-                        setPresetOpen(false);
-                      }}
-                      className="flex w-full flex-col gap-1 rounded-md border border-border p-3 text-left transition-colors hover:border-foreground hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {preset.image ? (
-                        // 示例图让用户一眼看到这套模板的成品长什么样;只有配了图的分类才渲染,
-                        // 其余分类保持纯文本卡片。alt 带上模板标题,无图分类不进 alt 计算。
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={preset.image}
-                          alt={t('presetExampleAlt', { title })}
-                          className="aspect-[4/3] w-full rounded-sm border border-border object-cover"
-                        />
-                      ) : null}
-                      <span className="text-sm font-medium">{title}</span>
-                      <span className="line-clamp-3 text-xs text-muted-foreground">
-                        {text}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </DialogContent>
-        </Dialog>
+        {/* 模板一条都没拉到时不渲染入口:点开一个空弹窗比没有入口更让人困惑。 */}
+        {presets.length > 0 && (
+          <Dialog open={presetOpen} onOpenChange={setPresetOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                disabled={disabled}
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t('presetTrigger')}
+              </button>
+            </DialogTrigger>
+            <DialogContent closeLabel={t('presetClose')}>
+              <DialogTitle className="text-sm font-medium">
+                {t('presetTitle')}
+              </DialogTitle>
+              <DialogDescription>{t('presetDescription')}</DialogDescription>
+              <ul className="grid gap-2 overflow-y-auto sm:grid-cols-2">
+                {presets.map(preset => (
+                  <PresetCard
+                    key={preset.id}
+                    preset={preset}
+                    onPick={prompt => {
+                      onChange({ ...value, prompt });
+                      setPresetOpen(false);
+                    }}
+                  />
+                ))}
+              </ul>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
       {/* 限宽到 max-w-2xl:整宽时长提示词会变成一行 100+ 字,读写都难受。 */}
       <textarea

@@ -56,6 +56,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/image-generate/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List AI image generation prompt presets */
+        get: operations["TasksController_listImageGeneratePresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}": {
         parameters: {
             query?: never;
@@ -474,6 +491,18 @@ export interface components {
             /** @description 今日剩余张数 */
             remaining: number;
         };
+        ImageGeneratePresetDto: {
+            /** @description 模板 id（uuid） */
+            id: string;
+            /** @description 当前语言（由 lang 查询参数决定）的模板标题 */
+            title: string;
+            /** @description 当前语言（由 lang 查询参数决定）的提示词模板正文 */
+            prompt: string;
+            /** @description 示例图在 MinIO presets 桶内的对象 key；前端用 NEXT_PUBLIC_S3_PUBLIC_URL 自行拼公网 URL */
+            imageStorageKey?: string;
+            /** @description 排序值，升序展示 */
+            sortOrder: number;
+        };
         TaskStatusDto: {
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
@@ -647,6 +676,28 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    TasksController_listImageGeneratePresets: {
+        parameters: {
+            query: {
+                lang: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enabled prompt presets in the requested language */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGeneratePresetDto"][];
+                };
             };
         };
     };

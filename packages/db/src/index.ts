@@ -6,6 +6,7 @@ import {
   accountDeletionQueueScans,
   cleanupObligations,
   files,
+  imageGeneratePresets,
   tasks,
   type AccountDeletionQueueScan,
   type NewAccountDeletionQueueScan,
@@ -13,6 +14,8 @@ import {
   type NewCleanupObligation,
   type File,
   type NewFile,
+  type ImageGeneratePreset,
+  type NewImageGeneratePreset,
   type Task,
   type NewTask,
 } from './schema';
@@ -24,7 +27,16 @@ export type {
   NewCleanupObligation,
   File,
   NewFile,
+  ImageGeneratePreset,
+  NewImageGeneratePreset,
   Task,
   NewTask,
 };
-export { accountDeletionQueueScans, cleanupObligations, db, files, tasks };
+export {
+  accountDeletionQueueScans,
+  cleanupObligations,
+  db,
+  files,
+  imageGeneratePresets,
+  tasks,
+};

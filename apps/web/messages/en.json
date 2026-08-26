@@ -883,6 +883,44 @@
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe the image you want — the more specific, the better",
     "promptCounter": "{count} / {max}",
+    "presetTrigger": "Prompt templates",
+    "presetTitle": "Choose a prompt template",
+    "presetDescription": "Click any template below to fill the prompt field, then keep editing.",
+    "presetClose": "Close",
+    "presets": {
+      "portrait": {
+        "title": "Portrait close-up",
+        "prompt": "Half-body close-up of a young woman, soft natural side light, shallow depth of field, warm bokeh background, detailed skin texture, photorealistic, 85mm lens."
+      },
+      "landscape": {
+        "title": "Natural landscape",
+        "prompt": "Morning alpine lake reflection, mist over distant mountains, golden light through clouds onto the water, wildflowers in the foreground, wide-angle landscape, vivid color, high dynamic range."
+      },
+      "anime": {
+        "title": "Anime girl",
+        "prompt": "A silver-haired girl under cherry trees, petals drifting in the breeze, Japanese anime style, large eyes, soft gradient tones, blurred background, warm dusk light."
+      },
+      "product": {
+        "title": "Product shot",
+        "prompt": "A clear glass perfume bottle floating before a light gray backdrop, soft studio light, fine highlights and refraction, dewdrops, commercial product photography, minimal composition."
+      },
+      "illustration": {
+        "title": "Flat illustration",
+        "prompt": "Flat vector illustration of a future city, geometric skyscrapers and flying vehicles, limited palette, clean lines, magazine cover style."
+      },
+      "threeD": {
+        "title": "3D render",
+        "prompt": "An anthropomorphic orange fox 3D character render, Pixar style, soft global illumination, detailed fur texture, solid color background, centered composition."
+      },
+      "watercolor": {
+        "title": "Watercolor town",
+        "prompt": "Watercolor of a cobblestone corner in a European town, street cafe and flowered windowsills, natural pigment bleed, white edges, light and airy, hand-painted watercolor."
+      },
+      "lineArt": {
+        "title": "Architecture line art",
+        "prompt": "Pure line drawing of a European church facade elevation, fine architectural line art, isometric perspective, no shading, black-and-white ink style, suitable for reference."
+      }
+    },
     "providerLabel": "Source",
     "providerHint": "Sources use different models, so output style and supported modes differ; results are always saved to your account files.",
     "providerNoEditHint": "The selected source does not support image to image. Pick another source.",

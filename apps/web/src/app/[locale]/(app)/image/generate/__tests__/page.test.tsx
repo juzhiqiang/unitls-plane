@@ -208,6 +208,27 @@ describe('ImageGeneratePage', () => {
 
   // __NEW_TESTS__
 
+  it('fills the prompt field when a preset template is chosen from the dialog', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
+    // 弹窗打开后,模板按钮出现在 tab 序列里。
+    const presetButton = await screen.findByRole('button', {
+      name: /Portrait close-up/,
+    });
+    fireEvent.click(presetButton);
+
+    // 选中模板后提示词被填入,弹窗随之关闭。
+    await waitFor(() =>
+      expect(screen.getByLabelText('Prompt')).toHaveValue(
+        en.ImageGenerate.presets.portrait.prompt
+      )
+    );
+    expect(
+      screen.queryByRole('button', { name: /Portrait close-up/ })
+    ).not.toBeInTheDocument();
+  });
+
   it('renders a result preview and download link once a task completes', async () => {
     mocks.groupProgress.mockReturnValue({
       items: [

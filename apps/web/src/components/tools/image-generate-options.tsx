@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ImageGenerateProviderDto } from '@/hooks/api/types';
 import {
@@ -9,6 +10,13 @@ import {
   type ImageGenerateSize,
   type ImageGenerateStyle,
 } from '@utils-plane/validators';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 
 export interface ImageGenerateDraft {
   mode: ImageGenerateMode;
@@ -38,6 +46,25 @@ const STYLES: ImageGenerateStyle[] = [
 const COUNTS = [1, 2, 4];
 
 const PROMPT_COUNTER_ID = 'image-generate-prompt-counter';
+
+/**
+ * 预设提示词条目:id 同时作为 messages 里 ImageGenerate.presets.<id>.title / .prompt 的键。
+ * 这里只存结构,文案在中英文 messages 里维护,和其它字段保持同一套本地化方式。
+ */
+interface ImageGeneratePreset {
+  id: string;
+}
+
+const PRESETS: ImageGeneratePreset[] = [
+  { id: 'portrait' },
+  { id: 'landscape' },
+  { id: 'anime' },
+  { id: 'product' },
+  { id: 'illustration' },
+  { id: 'threeD' },
+  { id: 'watercolor' },
+  { id: 'lineArt' },
+];
 
 // IMAGE_GENERATE_PROMPT_MAX_LENGTH 由 @utils-plane/validators 导出,这里直接复用,
 // 避免跨包重复魔数。
@@ -181,17 +208,61 @@ export function ImageGeneratePromptField({
   disabled = false,
 }: ImageGenerateFieldProps) {
   const t = useTranslations('ImageGenerate');
+  const [presetOpen, setPresetOpen] = useState(false);
 
   return (
     <div className="space-y-2">
-      {/* label 必须是 block:textarea 默认 inline-block,限宽后两者会挤在同一个
-          line box 里按基线对齐,标签会跑到输入框底部。 */}
-      <label
-        htmlFor="image-generate-prompt"
-        className="block text-sm font-medium"
-      >
-        {t('promptLabel')}
-      </label>
+      <div className="flex items-center justify-between gap-3">
+        {/* label 必须是 block:textarea 默认 inline-block,限宽后两者会挤在同一个
+            line box 里按基线对齐,标签会跑到输入框底部。 */}
+        <label
+          htmlFor="image-generate-prompt"
+          className="block text-sm font-medium"
+        >
+          {t('promptLabel')}
+        </label>
+        <Dialog open={presetOpen} onOpenChange={setPresetOpen}>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              disabled={disabled}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {t('presetTrigger')}
+            </button>
+          </DialogTrigger>
+          <DialogContent closeLabel={t('presetClose')}>
+            <DialogTitle className="text-sm font-medium">
+              {t('presetTitle')}
+            </DialogTitle>
+            <DialogDescription>{t('presetDescription')}</DialogDescription>
+            <ul className="grid gap-2 overflow-y-auto sm:grid-cols-2">
+              {PRESETS.map(preset => {
+                const text = t(`presets.${preset.id}.prompt`);
+                return (
+                  <li key={preset.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange({ ...value, prompt: text });
+                        setPresetOpen(false);
+                      }}
+                      className="flex w-full flex-col gap-1 rounded-md border border-border p-3 text-left transition-colors hover:border-foreground hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className="text-sm font-medium">
+                        {t(`presets.${preset.id}.title`)}
+                      </span>
+                      <span className="line-clamp-3 text-xs text-muted-foreground">
+                        {text}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </DialogContent>
+        </Dialog>
+      </div>
       {/* 限宽到 max-w-2xl:整宽时长提示词会变成一行 100+ 字,读写都难受。 */}
       <textarea
         id="image-generate-prompt"

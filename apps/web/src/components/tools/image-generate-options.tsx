@@ -90,7 +90,19 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'ecommerceDetailPage',
     image: '/presets/ecommerce-detail-page.jpg',
   },
+  {
+    id: 'ecommercePromoPoster',
+    image: '/presets/ecommerce-promo-poster.jpg',
+  },
   { id: 'ipMascot' },
+  {
+    id: 'pptMindMap',
+    image: '/presets/ppt-mind-map.jpg',
+  },
+  {
+    id: 'tutorialSteps',
+    image: '/presets/tutorial-steps.jpg',
+  },
   { id: 'infographic' },
   { id: 'characterSheet' },
   { id: 'festivalPoster' },

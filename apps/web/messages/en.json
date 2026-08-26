@@ -887,6 +887,7 @@
     "presetTitle": "Choose a prompt template",
     "presetDescription": "Click any template below to fill the prompt field, then keep editing.",
     "presetClose": "Close",
+    "presetExampleAlt": "{title} example",
     "presets": {
       "sciencePictureBook": {
         "title": "Guided science picture book",

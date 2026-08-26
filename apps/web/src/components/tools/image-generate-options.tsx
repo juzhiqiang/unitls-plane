@@ -57,10 +57,15 @@ const PROMPT_COUNTER_ID = 'image-generate-prompt-counter';
  */
 interface ImageGeneratePreset {
   id: string;
+  /** 可选示例图:放在 apps/web/public 下,按相对根路径引用。没有示例图的分类留空。 */
+  image?: string;
 }
 
 const PRESETS: ImageGeneratePreset[] = [
-  { id: 'sciencePictureBook' },
+  {
+    id: 'sciencePictureBook',
+    image: '/presets/science-picture-book.jpg',
+  },
   { id: 'ipMascot' },
   { id: 'infographic' },
   { id: 'characterSheet' },
@@ -240,6 +245,7 @@ export function ImageGeneratePromptField({
             <ul className="grid gap-2 overflow-y-auto sm:grid-cols-2">
               {PRESETS.map(preset => {
                 const text = t(`presets.${preset.id}.prompt`);
+                const title = t(`presets.${preset.id}.title`);
                 return (
                   <li key={preset.id}>
                     <button
@@ -250,9 +256,17 @@ export function ImageGeneratePromptField({
                       }}
                       className="flex w-full flex-col gap-1 rounded-md border border-border p-3 text-left transition-colors hover:border-foreground hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span className="text-sm font-medium">
-                        {t(`presets.${preset.id}.title`)}
-                      </span>
+                      {preset.image ? (
+                        // 示例图让用户一眼看到这套模板的成品长什么样;只有配了图的分类才渲染,
+                        // 其余分类保持纯文本卡片。alt 带上模板标题,无图分类不进 alt 计算。
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={preset.image}
+                          alt={t('presetExampleAlt', { title })}
+                          className="aspect-[4/3] w-full rounded-sm border border-border object-cover"
+                        />
+                      ) : null}
+                      <span className="text-sm font-medium">{title}</span>
                       <span className="line-clamp-3 text-xs text-muted-foreground">
                         {text}
                       </span>

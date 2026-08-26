@@ -229,6 +229,20 @@ describe('ImageGeneratePage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('shows the example image for the guided science picture book preset', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
+    // 配了示例图的分类在卡片顶部渲染缩略图;只有导览式科普绘本这一类目前有图。
+    const img = await screen.findByAltText(
+      en.ImageGenerate.presetExampleAlt.replace(
+        '{title}',
+        en.ImageGenerate.presets.sciencePictureBook.title
+      )
+    );
+    expect(img).toHaveAttribute('src', '/presets/science-picture-book.jpg');
+  });
+
   it('renders a result preview and download link once a task completes', async () => {
     mocks.groupProgress.mockReturnValue({
       items: [

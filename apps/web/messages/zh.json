@@ -887,6 +887,7 @@
     "presetTitle": "选择提示词模板",
     "presetDescription": "点击下面任一模板即可填入提示词输入框，之后可继续修改。",
     "presetClose": "关闭",
+    "presetExampleAlt": "{title} 示例图",
     "presets": {
       "sciencePictureBook": {
         "title": "导览式科普绘本",

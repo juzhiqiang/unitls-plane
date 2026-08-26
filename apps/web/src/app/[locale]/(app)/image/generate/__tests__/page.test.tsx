@@ -239,6 +239,7 @@ describe('ImageGeneratePage', () => {
       ['marketStallProposal', '/presets/market-stall-proposal.jpg'],
       ['twitterArticleCover', '/presets/twitter-article-cover.jpg'],
       ['xiaohongshuCover', '/presets/xiaohongshu-cover.jpg'],
+      ['wechatArticleCover', '/presets/wechat-article-cover.jpg'],
     ] as const;
     for (const [id, src] of expected) {
       const alt = en.ImageGenerate.presetExampleAlt.replace(

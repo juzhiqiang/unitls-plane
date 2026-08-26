@@ -78,6 +78,10 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'xiaohongshuCover',
     image: '/presets/xiaohongshu-cover.jpg',
   },
+  {
+    id: 'wechatArticleCover',
+    image: '/presets/wechat-article-cover.jpg',
+  },
   { id: 'ipMascot' },
   { id: 'infographic' },
   { id: 'characterSheet' },

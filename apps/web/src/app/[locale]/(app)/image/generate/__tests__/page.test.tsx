@@ -240,11 +240,13 @@ describe('ImageGeneratePage', () => {
       ['twitterArticleCover', '/presets/twitter-article-cover.jpg'],
       ['xiaohongshuCover', '/presets/xiaohongshu-cover.jpg'],
       ['wechatArticleCover', '/presets/wechat-article-cover.jpg'],
+      ['personalIpCover', '/presets/personal-ip-cover.png'],
       ['ecommerceProduct', '/presets/ecommerce-product.jpg'],
       ['ecommerceDetailPage', '/presets/ecommerce-detail-page.jpg'],
       ['ecommercePromoPoster', '/presets/ecommerce-promo-poster.jpg'],
-      ['tutorialSteps', '/presets/tutorial-steps.jpg'],
       ['pptMindMap', '/presets/ppt-mind-map.jpg'],
+      ['tutorialSteps', '/presets/tutorial-steps.jpg'],
+      ['mindMap', '/presets/mind-map.jpg'],
     ] as const;
     for (const [id, src] of expected) {
       const alt = en.ImageGenerate.presetExampleAlt.replace(

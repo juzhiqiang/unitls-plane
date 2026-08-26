@@ -83,6 +83,10 @@ const PRESETS: ImageGeneratePreset[] = [
     image: '/presets/wechat-article-cover.jpg',
   },
   {
+    id: 'personalIpCover',
+    image: '/presets/personal-ip-cover.png',
+  },
+  {
     id: 'ecommerceProduct',
     image: '/presets/ecommerce-product.jpg',
   },
@@ -94,7 +98,6 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'ecommercePromoPoster',
     image: '/presets/ecommerce-promo-poster.jpg',
   },
-  { id: 'ipMascot' },
   {
     id: 'pptMindMap',
     image: '/presets/ppt-mind-map.jpg',
@@ -103,9 +106,10 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'tutorialSteps',
     image: '/presets/tutorial-steps.jpg',
   },
-  { id: 'infographic' },
-  { id: 'characterSheet' },
-  { id: 'festivalPoster' },
+  {
+    id: 'mindMap',
+    image: '/presets/mind-map.jpg',
+  },
 ];
 
 // IMAGE_GENERATE_PROMPT_MAX_LENGTH 由 @utils-plane/validators 导出,这里直接复用,

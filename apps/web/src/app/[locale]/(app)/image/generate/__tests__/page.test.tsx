@@ -238,6 +238,7 @@ describe('ImageGeneratePage', () => {
       ['sciencePictureBook', '/presets/science-picture-book.jpg'],
       ['marketStallProposal', '/presets/market-stall-proposal.jpg'],
       ['twitterArticleCover', '/presets/twitter-article-cover.jpg'],
+      ['xiaohongshuCover', '/presets/xiaohongshu-cover.jpg'],
     ] as const;
     for (const [id, src] of expected) {
       const alt = en.ImageGenerate.presetExampleAlt.replace(

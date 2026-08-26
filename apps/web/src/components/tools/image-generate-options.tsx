@@ -74,6 +74,10 @@ const PRESETS: ImageGeneratePreset[] = [
     id: 'twitterArticleCover',
     image: '/presets/twitter-article-cover.jpg',
   },
+  {
+    id: 'xiaohongshuCover',
+    image: '/presets/xiaohongshu-cover.jpg',
+  },
   { id: 'ipMascot' },
   { id: 'infographic' },
   { id: 'characterSheet' },

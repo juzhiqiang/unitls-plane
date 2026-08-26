@@ -30,7 +30,7 @@ describe('public changelog page', () => {
     const entry = changelog.entries[0];
 
     expect(entry.version).toBe(APP_VERSION_LABEL);
-    expect(entry.date).toBe('2026-08-25');
+    expect(entry.date).toBe('2026-08-27');
     expect(entry.groups).toHaveLength(3);
     expect(entry.groups.every(group => group.items.length > 0)).toBe(true);
   });

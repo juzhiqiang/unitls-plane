@@ -1561,6 +1561,35 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.5.0",
+          "date": "2026-08-27",
+          "title": "AI image generation prompt template library",
+          "summary": "AI image generation adds 12 curated scene prompt templates, each with an example image and a fill-in creative framework that loads on click; templates are now delivered dynamically from the database and object storage for future backend management. A silent PDF encryption failure is also fixed.",
+          "groups": [
+            {
+              "title": "New",
+              "items": [
+                "The AI image generation prompt field now offers system preset templates: 12 built-in scene templates covering guided science picture book, market stall design proposal, X/Twitter article cover, Xiaohongshu cover, WeChat article cover, personal IP cover, e-commerce product & scene, e-commerce product detail page, e-commerce promo poster, PPT mind map, step-by-step tutorial, and mind map & knowledge graph.",
+                "Each template ships with an example image and a structured prompt framework organized into placeholder blocks like [TOPIC], [ASPECT RATIO], and [STYLE]; one click fills it in for easy customization, lowering the barrier to writing prompts from scratch.",
+                "Templates are now delivered dynamically from a database table plus a read-only MinIO presets bucket with long-cached example images; templates can later be added, edited, or removed from the backend without a frontend redeploy."
+              ]
+            },
+            {
+              "title": "Improved",
+              "items": [
+                "The template dialog shows presets grouped by category with example-image thumbnails, so you can compare the effect before choosing.",
+                "When example images fail to load, a template gracefully degrades to a text-only card so it can still be selected."
+              ]
+            },
+            {
+              "title": "Fixed",
+              "items": [
+                "Fixed a silent PDF encryption failure: the underlying library could not write passwords, so encrypted PDFs actually had no password set yet opened normally while the task reported success; it now uses a real AES-256 encryption implementation, with regression tests verifying the encrypted output, denied passwordless loading, and enforced permissions."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.4.0",
           "date": "2026-08-25",
           "title": "In-app file preview and image generation sources",

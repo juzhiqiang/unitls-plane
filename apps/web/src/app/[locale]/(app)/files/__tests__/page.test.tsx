@@ -54,6 +54,13 @@ const largeImage = {
   filename: 'huge.png',
   originalSize: 8 * 1024 * 1024,
 };
+const hugeImage = {
+  ...smallImage,
+  id: 'file-4',
+  filename: 'gigantic.png',
+  // 服务端也拒绝缩放的体积:这种才退回类型图标。
+  originalSize: 64 * 1024 * 1024,
+};
 const fontFile = {
   ...smallImage,
   id: 'file-3',
@@ -74,17 +81,25 @@ beforeEach(() => {
   mocks.replace.mockReset();
   mocks.useFile.mockReturnValue({ data: undefined, isLoading: false });
   mocks.useFiles.mockReturnValue({
-    data: { files: [smallImage, largeImage, fontFile], total: 3 },
+    data: { files: [smallImage, largeImage, fontFile, hugeImage], total: 4 },
     isLoading: false,
   });
 });
 
 describe('FilesPage preview', () => {
-  it('renders a thumbnail only for small images', () => {
+  it('renders server-side thumbnails for images regardless of a few MB', () => {
     renderPage();
 
-    expect(screen.getByAltText('shot.png')).toBeInTheDocument();
-    expect(screen.queryByAltText('huge.png')).toBeNull();
+    // 生图产物动辄几 MB,以前被体积阈值挡成占位图标,这里必须出现真实缩略图。
+    expect(screen.getByAltText('shot.png')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/files/file-1/thumbnail')
+    );
+    expect(screen.getByAltText('huge.png')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/files/file-2/thumbnail')
+    );
+    expect(screen.queryByAltText('gigantic.png')).toBeNull();
   });
 
   it('offers preview for images and pdfs but not fonts', () => {

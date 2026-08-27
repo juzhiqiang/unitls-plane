@@ -657,6 +657,30 @@
         ]
       }
     },
+    "/files/{id}/thumbnail": {
+      "get": {
+        "operationId": "FilesController_thumbnail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a downscaled thumbnail for an image file",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/files/{id}/restore": {
       "post": {
         "operationId": "FilesController_restore",

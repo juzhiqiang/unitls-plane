@@ -200,8 +200,9 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
         </div>
       )}
 
-      {/* Error */}
-      {task.errorCode && (
+      {/* Error：只有失败的任务才显示。重试成功的任务可能还留着上一次 attempt 的
+          error_code（旧记录），不过滤会出现「done 却带失败原因」。 */}
+      {task.status === 'failed' && task.errorCode && (
         <div className="space-y-1">
           <span className="text-[10px] font-mono uppercase tracking-wider text-destructive">
             {t('failureReason')}

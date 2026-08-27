@@ -348,7 +348,7 @@ cd packages/api-client && bun run generate
 当前 API 模块：
 
 - `auth` - Better-Auth handler 和认证集成。
-- `files` - 上传、下载、签名 URL、文件列表、回收站、恢复、永久删除、批量操作。
+- `files` - 上传、下载、缩略图、签名 URL、文件列表、回收站、恢复、永久删除、批量操作。
 - `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler。
 - `health` - 健康检查。
 
@@ -357,7 +357,13 @@ cd packages/api-client && bun run generate
 - CORS 使用 `@utils-plane/auth` 的 trusted origin 逻辑。
 - `AuthGuard` 和 `CustomThrottlerGuard` 为全局 guard。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
-- BullMQ 队列：`image-queue`、`pdf-queue`、`font-queue`、`cleanup-queue`。
+- BullMQ 队列：`image-queue`、`pdf-queue`、`font-queue`、`ai-queue`、`cleanup-queue`。
+- 任务重试：`image-queue`/`pdf-queue`/`font-queue` 每个任务最多 3 次 attempt，`ai-queue`
+  只有 2 次（生图每次 attempt 都是一次真实计费的上游请求）。失败只在重试用尽后才写进任务记录；重试之间任务退回
+  `pending`，成功后会清掉上一次 attempt 的
+  `error_code`。内容策略拒绝这类确定性失败立即落库并停止重试。
+- `GET /files/:id/thumbnail` 返回 320px WebP 缩略图，访问控制与 `/files/:id/download`
+  相同；只支持 png/jpeg/webp/avif/gif，且原图不超过 32 MB。
 - `/admin/queues` 使用 Basic Auth 保护。
 - 生产 Docker compose 默认暴露 Web `5005`、API `5006`、PostgreSQL `5007`、Redis `5008`、MinIO API
   `5009`、MinIO Console `5010`。
@@ -373,8 +379,8 @@ cd packages/api-client && bun run generate
 - `/font` - 字体转换工具。
 - `/changelog` - 面向用户的精选版本更新日志。
 - `/plans` - 各套餐单文件上传额度与说明。
-- `/files`、`/files/trash` - 文件管理和回收站；图片与 PDF 支持站内预览，图片小于 2
-  MB 时渲染网格缩略图，预览也可通过 `/files?preview=<fileId>` 深链打开。
+- `/files`、`/files/trash` - 文件管理和回收站；图片与 PDF 支持站内预览，图片网格缩略图由服务端
+  `GET /files/:id/thumbnail` 缩到 320px，预览也可通过 `/files?preview=<fileId>` 深链打开。
 - `/tasks` - 任务历史和任务详情；已完成任务可跳转到产物文件预览。
 - `/settings` - 用户设置。
 - `/login`、`/register`、`/verify-email`、`/forgot-password`、`/reset-password` - 认证页面。

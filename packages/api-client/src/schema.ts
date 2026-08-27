@@ -295,6 +295,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/files/{id}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a downscaled thumbnail for an image file */
+        get: operations["FilesController_thumbnail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{id}/restore": {
         parameters: {
             query?: never;
@@ -998,6 +1015,25 @@ export interface operations {
                 /** @description Set to 1/true to force an attachment download instead of inline preview */
                 download?: string;
             };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilesController_thumbnail: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 id: string;

@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import { CleanupObligationService } from '../files/cleanup-obligation.service';
-import { getTaskQueueName, type TaskQueueName } from './task-queue';
+import {
+  getTaskQueueName,
+  getTaskQueueAttempts,
+  type TaskQueueName,
+} from './task-queue';
 import {
   TaskJobStateRepository,
   type TaskJobState,
@@ -91,7 +95,11 @@ export class TaskJobReconciler {
     const job = await queue.add(
       state.type,
       { taskId: state.id },
-      { jobId: state.id, delay: 1000 }
+      {
+        jobId: state.id,
+        delay: 1000,
+        attempts: getTaskQueueAttempts(queue.name),
+      }
     );
     const addedState = await job.getState();
     if (!PENDING_HEALTHY_JOB_STATES.has(addedState)) {

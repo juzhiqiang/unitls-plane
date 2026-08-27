@@ -10,6 +10,7 @@ import {
 import { IdPhotoError, IdPhotoService } from '../services/id-photo.service';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
+import { hasExhaustedAttempts, shouldRecordFailure } from './attempt-outcome';
 import { getTaskOutputOwner } from './task-output-owner';
 
 function getMimeType(format?: string): string {
@@ -81,6 +82,12 @@ export class ImageProcessor extends WorkerHost {
           throw new Error(`Unknown image task type: ${task.type}`);
       }
     } catch (err) {
+      // 还有重试机会时只退回 pending:提前写 failed 会让前端停掉轮询,
+      // 之后重试成功也没人再看,页面永远停在报错上。见 attempt-outcome.ts。
+      if (!shouldRecordFailure(job, err)) {
+        await this.markRetryingSafely(taskId);
+        throw err;
+      }
       try {
         const code =
           err instanceof IdPhotoError ? err.code : 'IMAGE_PROCESSING_FAILED';
@@ -95,6 +102,16 @@ export class ImageProcessor extends WorkerHost {
         );
       }
       throw err;
+    }
+  }
+
+  private async markRetryingSafely(taskId: string): Promise<void> {
+    try {
+      await this.tasksService.markRetrying(taskId);
+    } catch (dbErr) {
+      this.logger.error(
+        `Failed to mark task ${taskId} for retry: ${(dbErr as Error).message}`
+      );
     }
   }
 
@@ -277,9 +294,7 @@ export class ImageProcessor extends WorkerHost {
     this.logger.error(
       `Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`
     );
-    const attemptsMade = job.attemptsMade;
-    const maxAttempts = job.opts?.attempts ?? 3;
-    if (attemptsMade >= maxAttempts) {
+    if (hasExhaustedAttempts(job)) {
       const { taskId } = job.data as { taskId: string };
       await this.tasksService.markFailed(
         taskId,

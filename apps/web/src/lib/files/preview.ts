@@ -11,8 +11,12 @@ export interface PreviewableFile {
   originalSize: number;
 }
 
-/** 网格缩略图直接加载原图，超过该体积只显示类型图标，避免列表页浪费带宽。 */
-export const THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
+/**
+ * 网格缩略图交给服务端缩放(`/files/:id/thumbnail`),所以这里不再按原图体积决定
+ * 显示真图还是类型图标。这个上限只挡住服务端也拒绝缩放的超大原图,必须与 API 的
+ * `THUMBNAIL_SOURCE_MAX_BYTES` 保持一致。
+ */
+export const THUMBNAIL_MAX_BYTES = 32 * 1024 * 1024;
 
 /** 预览需要把整份文件读进浏览器，超过该体积提示用户直接下载。 */
 export const PREVIEW_MAX_BYTES = 50 * 1024 * 1024;
@@ -23,6 +27,18 @@ const UNRENDERABLE_IMAGE_TYPES = new Set([
   'image/heif',
   'image/tiff',
   'image/x-tiff',
+]);
+
+/**
+ * 服务端缩略图支持的原图类型，必须与 API 的 `THUMBNAILABLE_MIME_TYPES` 一致：
+ * 列在这之外的类型请求 `/thumbnail` 只会拿到 400，白跑一趟。
+ */
+const THUMBNAILABLE_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/avif',
+  'image/gif',
 ]);
 
 export function getFilePreviewKind(mimeType: string): FilePreviewKind {
@@ -49,7 +65,7 @@ export function canPreviewFile(file: PreviewableFile): boolean {
 /** 列表卡片是否渲染真实缩略图。 */
 export function shouldRenderThumbnail(file: PreviewableFile): boolean {
   return (
-    getFilePreviewKind(file.mimeType) === 'image' &&
+    THUMBNAILABLE_IMAGE_TYPES.has(file.mimeType?.trim().toLowerCase() ?? '') &&
     file.originalSize <= THUMBNAIL_MAX_BYTES
   );
 }

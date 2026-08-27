@@ -39,6 +39,14 @@ const transactionValues = vi.fn((task: Record<string, unknown>) => {
   return { returning };
 });
 const globalInsert = vi.fn(() => ({ values: globalValues }));
+/** markCompleted / markRetrying 只有 update:抓住 set 的载荷,断言写进去的字段。 */
+const updatedValues: Array<Record<string, unknown>> = [];
+const globalUpdate = vi.fn(() => ({
+  set: (values: Record<string, unknown>) => {
+    updatedValues.push(values);
+    return { where: () => undefined };
+  },
+}));
 const transactionInsert = vi.fn(() => ({ values: transactionValues }));
 const transaction = { insert: transactionInsert };
 const cleanupObligationService = {
@@ -88,7 +96,7 @@ mock.module('@utils-plane/db', () => ({
     kind: 'obligation-kind',
     resourceId: 'obligation-resource-id',
   },
-  db: { insert: globalInsert },
+  db: { insert: globalInsert, update: globalUpdate },
   files: {},
   tasks: {},
   user: {},
@@ -627,5 +635,42 @@ describe('TasksService image generation quota snapshot', () => {
     });
 
     expect(quota).toEqual({ limit: 50, used: 0, remaining: 50 });
+  });
+});
+
+describe('TasksService attempt bookkeeping', () => {
+  beforeEach(() => {
+    updatedValues.length = 0;
+  });
+
+  it('clears the previous attempt error when a retry finally completes', async () => {
+    const { service } = createService();
+
+    await service.markCompleted(TASK_ID, 'output-1');
+
+    expect(updatedValues[0]).toMatchObject({
+      status: 'completed',
+      outputFileId: 'output-1',
+      progress: 100,
+      // 不清掉就会出现「任务是 done、详情里却挂着上一次 attempt 的失败原因」。
+      errorCode: null,
+      errorMessage: null,
+    });
+  });
+
+  it('sends a task back to pending between attempts', async () => {
+    const { service } = createService();
+
+    await service.markRetrying(TASK_ID);
+
+    const values = updatedValues[0] ?? {};
+    // 不能留在 processing:退避期间 job 是 delayed,TaskJobReconciler 会把
+    // 「processing 但 job 不是 active」判成失败并清掉任务。
+    expect(values.status).toBe('pending');
+    expect(values.progress).toBe(0);
+    expect(values.errorCode).toBeNull();
+    // sql`retry_count + 1` 的具体形状由 drizzle 决定(且被别的测试文件 mock 掉了),
+    // 这里只锁住「载荷里确实带上了 retryCount 自增」。
+    expect(Object.keys(values)).toContain('retryCount');
   });
 });

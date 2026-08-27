@@ -1,4 +1,5 @@
 import { afterAll, expect, it, mock, vi } from 'bun:test';
+import { UnrecoverableError } from 'bullmq';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 
 const getTaskOutputOwner = mock(async () => ({
@@ -44,17 +45,18 @@ function createTasksService(overrides: Record<string, unknown> = {}) {
     updateProgress: vi.fn(),
     markCompleted: vi.fn(),
     markFailed: vi.fn(),
+    markRetrying: vi.fn(),
   };
 }
 
 /** 每个用例拿独立的 job:updateProgress 的调用不该跨用例累积。 */
-function createJob() {
+function createJob(opts: { attemptsMade?: number; attempts?: number } = {}) {
   return {
     id: 'job-1',
     data: { taskId: 'task-1' },
-    attemptsMade: 0,
+    attemptsMade: opts.attemptsMade ?? 0,
     updateProgress: vi.fn(),
-    opts: {},
+    opts: opts.attempts === undefined ? {} : { attempts: opts.attempts },
   } as never;
 }
 
@@ -234,4 +236,98 @@ it('rejects a mode this processor does not implement yet', async () => {
 
   await expect(processor.process(createJob())).rejects.toThrow();
   expect(tasksService.markFailed).toHaveBeenCalled();
+});
+
+it('leaves the task pending when a retry is still coming', async () => {
+  const tasksService = createTasksService();
+  const imageGenerationService = {
+    generate: vi
+      .fn()
+      .mockRejectedValue(
+        new ImageGenerationError(
+          ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+          'Image generation failed',
+          true
+        )
+      ),
+  };
+
+  const processor = new AiImageProcessor(
+    { upload: vi.fn() } as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  // 网关 502 这类瞬时失败在第一次 attempt 上不能落库成 failed:前端把 failed 当终态,
+  // 写下去就再也不会看到后面重试成功的那张图。
+  await expect(
+    processor.process(createJob({ attemptsMade: 0, attempts: 2 }))
+  ).rejects.toThrow();
+
+  expect(tasksService.markFailed).not.toHaveBeenCalled();
+  expect(tasksService.markRetrying).toHaveBeenCalledWith('task-1');
+});
+
+it('records the failure once the retries are used up', async () => {
+  const tasksService = createTasksService();
+  const imageGenerationService = {
+    generate: vi
+      .fn()
+      .mockRejectedValue(
+        new ImageGenerationError(
+          ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+          'Image generation failed',
+          true
+        )
+      ),
+  };
+
+  const processor = new AiImageProcessor(
+    { upload: vi.fn() } as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  await expect(
+    processor.process(createJob({ attemptsMade: 1, attempts: 2 }))
+  ).rejects.toThrow();
+
+  expect(tasksService.markRetrying).not.toHaveBeenCalled();
+  expect(tasksService.markFailed).toHaveBeenCalledWith(
+    'task-1',
+    ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+    'Image generation failed'
+  );
+});
+
+it('stops retrying a deterministic rejection instead of paying for it again', async () => {
+  const tasksService = createTasksService();
+  const imageGenerationService = {
+    generate: vi
+      .fn()
+      .mockRejectedValue(
+        new ImageGenerationError(
+          ErrorCodes.AI_IMAGE_CONTENT_REJECTED,
+          'The prompt was rejected by the provider content policy'
+        )
+      ),
+  };
+
+  const processor = new AiImageProcessor(
+    { upload: vi.fn() } as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  // 内容策略拒绝重来一次也一样:立刻落库,并用 UnrecoverableError 掐断剩下的 attempt。
+  await expect(
+    processor.process(createJob({ attemptsMade: 0, attempts: 3 }))
+  ).rejects.toBeInstanceOf(UnrecoverableError);
+
+  expect(tasksService.markRetrying).not.toHaveBeenCalled();
+  expect(tasksService.markFailed).toHaveBeenCalledWith(
+    'task-1',
+    ErrorCodes.AI_IMAGE_CONTENT_REJECTED,
+    'The prompt was rejected by the provider content policy'
+  );
 });

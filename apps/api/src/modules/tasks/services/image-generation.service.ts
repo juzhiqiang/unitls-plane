@@ -17,6 +17,7 @@ import {
   type ImageProviderRefEncoding,
 } from './image-provider-config';
 import {
+  GeneratedImageDownloadError,
   bufferFromGeneratedImagePayload,
   normalizeOpenAiCompatibleImageEditUrl,
   normalizeOpenAiCompatibleImageGenerationUrl,
@@ -51,10 +52,25 @@ const STYLE_PROMPT_PREFIX: Record<ImageGenerateStyle, string> = {
     'Minimal black and white line art, uniform stroke width, no shading. Subject: ',
 };
 
+/**
+ * 上游状态码里哪些值得再试一次。
+ *
+ * 5xx / 408 / 425 / 429 是「同一个请求过一会儿可能就成了」:网关 502、上游超时、限流。
+ * 400/401/403/404 是确定性的(提示词违规、密钥错、模型不存在),重试只会再烧一次钱。
+ */
+function isTransientUpstreamStatus(status: number): boolean {
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+}
+
 export class ImageGenerationError extends Error {
   constructor(
     readonly code: string,
-    message: string
+    message: string,
+    /**
+     * 下一次 attempt 有机会成功吗。默认 false:生图每次重试都是一次真实计费的上游请求,
+     * 只有明确判定为瞬时故障(网关 5xx、超时、限流)的地方才显式打开。
+     */
+    readonly retryable = false
   ) {
     super(message);
     this.name = 'ImageGenerationError';
@@ -186,12 +202,14 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
           : await this.postGeneration(config);
     } catch (error) {
       // fetch 抛错(含超时 AbortError、DNS、连接重置)统一走兜底文案,原文只进日志。
+      // 这类是瞬时故障,允许重试:实测网关偶发掐断连接,第二次往往就通了。
       this.logger.warn(
         `AI image generation request failed: provider=${this.descriptor.id} error=${String(error instanceof Error ? error.message : error)}`
       );
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
+        'Image generation failed',
+        true
       );
     }
 
@@ -211,9 +229,11 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       this.logger.warn(
         `AI image generation response could not be decoded: ${String(error)}`
       );
+      // 图没取回来(网关抖动)可以重试;响应结构不认识是确定性问题,重试只会再烧一次钱。
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
+        'Image generation failed',
+        error instanceof GeneratedImageDownloadError
       );
     }
   }
@@ -314,6 +334,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       lowered.includes(marker)
     );
 
+    // 内容策略拒绝重来一次也一样,不重试。其余按状态码判定瞬时性。
     return rejected
       ? new ImageGenerationError(
           ErrorCodes.AI_IMAGE_CONTENT_REJECTED,
@@ -321,7 +342,8 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
         )
       : new ImageGenerationError(
           ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-          'Image generation failed'
+          'Image generation failed',
+          isTransientUpstreamStatus(status)
         );
   }
 }

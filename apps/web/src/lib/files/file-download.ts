@@ -19,6 +19,14 @@ export function buildFileDownloadUrl(
   return options.attachment ? `${base}?download=1` : base;
 }
 
+/**
+ * 列表缩略图地址。服务端把原图缩到 320px WebP,网格不用再按体积决定显示真图还是类型图标。
+ * 访问控制与 `/download` 相同,同样靠 `<img>` 请求自带的 cookie 认证。
+ */
+export function buildFileThumbnailUrl(fileId: string): string {
+  return `${process.env.NEXT_PUBLIC_API_URL}/files/${fileId}/thumbnail`;
+}
+
 export function triggerBrowserDownload(url: string, filename?: string): void {
   const anchor = document.createElement('a');
   anchor.href = url;

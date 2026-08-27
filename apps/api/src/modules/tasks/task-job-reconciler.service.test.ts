@@ -78,6 +78,7 @@ function createReconciler(states: Array<Record<string, unknown> | null>) {
     imageQueue,
     pdfQueue,
     fontQueue,
+    aiQueue,
     stateRepository,
   };
 }
@@ -96,7 +97,7 @@ describe('TaskJobReconciler', () => {
     expect(pdfQueue.add).toHaveBeenCalledWith(
       'pdf_merge',
       { taskId: TASK_ID },
-      { jobId: TASK_ID, delay: 1000 }
+      { jobId: TASK_ID, delay: 1000, attempts: 3 }
     );
     expect(cleanupObligations.clear).toHaveBeenCalledWith('task-job', TASK_ID);
     expect(events).toEqual([
@@ -106,6 +107,24 @@ describe('TaskJobReconciler', () => {
       'task-state',
       'obligation-clear',
     ]);
+  });
+
+  it('enqueues AI generation with only one retry', async () => {
+    // 生图每次 attempt 都要向上游付一次钱,重试次数按队列区分,不能沿用全局的 3 次。
+    const aiTask = activeTask({ type: 'image_generate' });
+    const { reconciler, aiQueue } = createReconciler([aiTask, aiTask]);
+
+    await reconciler.reconcile({
+      resourceId: TASK_ID,
+      queueName: 'ai-queue',
+      jobId: TASK_ID,
+    });
+
+    expect(aiQueue.add).toHaveBeenCalledWith(
+      'image_generate',
+      { taskId: TASK_ID },
+      { jobId: TASK_ID, delay: 1000, attempts: 2 }
+    );
   });
 
   it('treats an anonymous task as active and ensures its job', async () => {
@@ -205,7 +224,7 @@ describe('TaskJobReconciler', () => {
       expect(pdfQueue.add).toHaveBeenCalledWith(
         'pdf_merge',
         { taskId: TASK_ID },
-        { jobId: TASK_ID, delay: 1000 }
+        { jobId: TASK_ID, delay: 1000, attempts: 3 }
       );
       expect(cleanupObligations.clear).toHaveBeenCalledWith(
         'task-job',

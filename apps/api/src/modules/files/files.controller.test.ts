@@ -173,3 +173,73 @@ describe('FilesController download disposition', () => {
     expect(headers.get('Content-Length')).toBe('7');
   });
 });
+
+describe('FilesController thumbnail', () => {
+  function createController(file: {
+    id: string;
+    mimeType: string;
+    originalSize: number;
+  }) {
+    const service = {
+      getById: async () => ({ ...file, storageKey: 'user-1/f/x.png' }),
+      thumbnail: async () => Buffer.from('webp-bytes'),
+    } as unknown as FilesService;
+
+    return new FilesController(service);
+  }
+
+  function createResponse() {
+    const headers = new Map<string, string>();
+    const res = {
+      setHeader: (name: string, value: string) => {
+        headers.set(name, value);
+        return res;
+      },
+      end: (body: unknown) => body,
+    };
+
+    return { res: res as unknown as Response, headers };
+  }
+
+  it('serves a cacheable webp thumbnail for images', async () => {
+    const controller = createController({
+      id: 'file-1',
+      mimeType: 'image/png',
+      // 生图产物的量级:以前网格按体积退化成图标,现在服务端缩完再发。
+      originalSize: 3 * 1024 * 1024,
+    });
+    const { res, headers } = createResponse();
+
+    await controller.thumbnail('file-1', undefined, res);
+
+    expect(headers.get('Content-Type')).toBe('image/webp');
+    expect(headers.get('Cache-Control')).toBe('private, max-age=86400');
+    expect(headers.get('ETag')).toContain('file-1');
+  });
+
+  it('refuses types it cannot rasterise', async () => {
+    const controller = createController({
+      id: 'file-2',
+      mimeType: 'application/pdf',
+      originalSize: 1024,
+    });
+    const { res } = createResponse();
+
+    await expect(
+      controller.thumbnail('file-2', undefined, res)
+    ).rejects.toThrow();
+  });
+
+  it('refuses originals too large to decode', async () => {
+    const controller = createController({
+      id: 'file-3',
+      mimeType: 'image/png',
+      originalSize: 64 * 1024 * 1024,
+    });
+    const { res } = createResponse();
+
+    await expect(
+      controller.thumbnail('file-3', undefined, res)
+    ).rejects.toThrow();
+  });
+});

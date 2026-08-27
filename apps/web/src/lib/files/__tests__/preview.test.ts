@@ -71,21 +71,39 @@ describe('canPreviewFile', () => {
 });
 
 describe('shouldRenderThumbnail', () => {
-  it('only renders small images', () => {
+  it('renders images the server can downscale, regardless of a few MB', () => {
+    // 生图产物普遍 2.5–4 MB,以前被 2 MB 阈值挡成占位图标。
+    expect(
+      shouldRenderThumbnail({
+        mimeType: 'image/png',
+        originalSize: 3 * 1024 * 1024,
+      })
+    ).toBe(true);
     expect(
       shouldRenderThumbnail({
         mimeType: 'image/png',
         originalSize: THUMBNAIL_MAX_BYTES,
       })
     ).toBe(true);
+  });
+
+  it('refuses originals the server also refuses to downscale', () => {
     expect(
       shouldRenderThumbnail({
         mimeType: 'image/png',
         originalSize: THUMBNAIL_MAX_BYTES + 1,
       })
     ).toBe(false);
-    expect(
-      shouldRenderThumbnail({ mimeType: 'application/pdf', originalSize: 10 })
-    ).toBe(false);
+  });
+
+  it('refuses types the thumbnail endpoint does not support', () => {
+    for (const mimeType of [
+      'application/pdf',
+      'image/svg+xml',
+      'image/tiff',
+      'font/ttf',
+    ]) {
+      expect(shouldRenderThumbnail({ mimeType, originalSize: 10 })).toBe(false);
+    }
   });
 });

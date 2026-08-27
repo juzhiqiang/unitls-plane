@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import {
   buildFileDownloadUrl,
+  buildFileThumbnailUrl,
   downloadStoredFile,
   triggerBrowserDownload,
 } from '../file-download';
@@ -36,6 +37,14 @@ describe('buildFileDownloadUrl', () => {
   it('appends download=1 when an attachment is requested', () => {
     expect(buildFileDownloadUrl('file-1', { attachment: true })).toBe(
       `${API_URL}/files/file-1/download?download=1`
+    );
+  });
+});
+
+describe('buildFileThumbnailUrl', () => {
+  it('points at the server-side thumbnail endpoint', () => {
+    expect(buildFileThumbnailUrl('file-1')).toBe(
+      `${API_URL}/files/file-1/thumbnail`
     );
   });
 });

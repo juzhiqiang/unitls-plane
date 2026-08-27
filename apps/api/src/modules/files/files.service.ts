@@ -31,6 +31,7 @@ import {
   type ActiveUserTransaction,
 } from '../../common/database/active-user-transaction';
 import { normalizeUploadedFilename } from './filename.util';
+import { renderThumbnail } from './thumbnail.util';
 import { CleanupObligationService } from './cleanup-obligation.service';
 
 const ALLOWED_MIME_TYPES = [
@@ -258,6 +259,15 @@ export class FilesService {
 
   async download(storageKey: string): Promise<Buffer> {
     return this.minioService.download(storageKey);
+  }
+
+  /**
+   * 列表缩略图。原图从 MinIO 取回后就地缩,不落盘也不入库:
+   * 文件内容不会变,缓存交给 HTTP(见 controller 的 Cache-Control/ETag)。
+   */
+  async thumbnail(storageKey: string): Promise<Buffer> {
+    const source = await this.minioService.download(storageKey);
+    return renderThumbnail(source);
   }
 
   async getSignedUrl(id: string, userId?: string): Promise<string> {

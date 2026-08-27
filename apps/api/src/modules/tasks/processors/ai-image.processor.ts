@@ -4,7 +4,7 @@ import {
   imageGenerateTaskConfigSchema,
   type ImageGenerateTaskConfig,
 } from '@utils-plane/validators';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import { FilesService } from '../../files/files.service';
 import { markGeneratedImage } from '../services/generated-image-marker';
@@ -14,6 +14,11 @@ import {
   resolveAiImageModel,
 } from '../services/image-generation.service';
 import { TasksService } from '../tasks.service';
+import {
+  isRetryableError,
+  hasExhaustedAttempts,
+  shouldRecordFailure,
+} from './attempt-outcome';
 import { getTaskOutputOwner } from './task-output-owner';
 
 type AiImageTask = {
@@ -60,8 +65,44 @@ export class AiImageProcessor extends WorkerHost {
           throw new Error(`Unknown AI image task type: ${task.type}`);
       }
     } catch (err) {
-      await this.markFailedSafely(taskId, err);
-      throw err;
+      throw await this.settleFailedAttempt(taskId, job, err);
+    }
+  }
+
+  /**
+   * 单次 attempt 失败后的收尾。
+   *
+   * 关键是不要在还会重试的时候就把任务写成 failed:前端把 failed 当终态,写下去的那一刻
+   * 轮询就停了,后面重试成功也不会再有人来看,页面永远停在报错上(产物只能去文件列表找)。
+   * 所以还有重试机会时只把任务退回 pending,让页面继续等。
+   *
+   * 反过来,确定性失败(内容策略拒绝、来源不支持该模式)要立刻落库并用
+   * UnrecoverableError 掐断后续 attempt —— 每次重试都是一次真实计费的上游请求。
+   */
+  private async settleFailedAttempt(
+    taskId: string,
+    job: Job,
+    err: unknown
+  ): Promise<unknown> {
+    if (!shouldRecordFailure(job, err)) {
+      await this.markRetryingSafely(taskId);
+      return err;
+    }
+
+    await this.markFailedSafely(taskId, err);
+    if (isRetryableError(err)) return err;
+    return new UnrecoverableError(
+      err instanceof Error ? err.message : 'Image generation failed'
+    );
+  }
+
+  private async markRetryingSafely(taskId: string): Promise<void> {
+    try {
+      await this.tasksService.markRetrying(taskId);
+    } catch (dbErr) {
+      this.logger.error(
+        `Failed to mark task ${taskId} for retry: ${(dbErr as Error).message}`
+      );
     }
   }
 
@@ -179,9 +220,8 @@ export class AiImageProcessor extends WorkerHost {
     this.logger.error(
       `Job ${job.id} failed (attempt ${job.attemptsMade}): ${err.message}`
     );
-    const attemptsMade = job.attemptsMade;
-    const maxAttempts = job.opts?.attempts ?? 3;
-    if (attemptsMade >= maxAttempts) {
+    // 兜底:process() 之外失败(例如 stalled 后被 BullMQ 判负)时任务不能停在 processing。
+    if (hasExhaustedAttempts(job)) {
       const { taskId } = job.data as { taskId: string };
       await this.markFailedSafely(taskId, err);
     }

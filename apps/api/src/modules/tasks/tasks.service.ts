@@ -204,6 +204,26 @@ export class TasksService {
       .where(eq(tasks.id, id));
   }
 
+  /**
+   * 一次 attempt 失败但还会重试:退回 pending,而不是留在 processing 或写成 failed。
+   *
+   * 写 failed 会让前端立刻停掉轮询(它把 failed 当终态),后面重试成功也没人再看。
+   * 留在 processing 又会被 TaskJobReconciler 判成「processing 但 job 不是 active」——
+   * 退避期间 job 正处于 delayed,会被误判并清掉。pending + delayed 是它认可的健康组合。
+   */
+  async markRetrying(id: string): Promise<void> {
+    await db
+      .update(tasks)
+      .set({
+        status: 'pending',
+        progress: 0,
+        errorCode: null,
+        errorMessage: null,
+        retryCount: sql`${tasks.retryCount} + 1`,
+      })
+      .where(eq(tasks.id, id));
+  }
+
   async markCompleted(id: string, outputFileId: string): Promise<void> {
     await db
       .update(tasks)
@@ -212,6 +232,9 @@ export class TasksService {
         outputFileId: outputFileId,
         progress: 100,
         completedAt: new Date(),
+        // 重试成功要清掉上一次 attempt 留下的错误,否则任务记录会同时显示「完成」和失败原因。
+        errorCode: null,
+        errorMessage: null,
       })
       .where(eq(tasks.id, id));
   }

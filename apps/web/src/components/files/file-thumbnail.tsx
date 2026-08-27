@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { FileText, Image as ImageIcon, Type } from 'lucide-react';
-import { buildFileDownloadUrl } from '@/lib/files/file-download';
+import { buildFileThumbnailUrl } from '@/lib/files/file-download';
 import { shouldRenderThumbnail } from '@/lib/files/preview';
 
 export interface FileThumbnailProps {
@@ -44,8 +44,8 @@ function TypeIcon({ mimeType }: { mimeType: string }) {
 }
 
 /**
- * 列表卡片缩略图：小图直接内联加载原图，其余显示类型图标。
- * 服务端缩略图尚未提供，因此这里用体积阈值控制带宽。
+ * 列表卡片缩略图：图片走服务端缩略图接口（320px WebP），失败时退回类型图标。
+ * 不再内联原图 —— 生图产物动辄 3 MB,靠体积阈值挡掉的结果就是网格里全是占位图标。
  */
 export function FileThumbnail({ file, className }: FileThumbnailProps) {
   const [failed, setFailed] = useState(false);
@@ -63,7 +63,7 @@ export function FileThumbnail({ file, className }: FileThumbnailProps) {
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={buildFileDownloadUrl(file.id)}
+          src={buildFileThumbnailUrl(file.id)}
           alt={file.filename}
           loading="lazy"
           onError={() => setFailed(true)}

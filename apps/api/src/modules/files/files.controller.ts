@@ -14,6 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { FilesService } from './files.service';
+import { ErrorCodes } from '../../common/errors/error-codes';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { User } from '@utils-plane/db';
@@ -26,6 +27,11 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { normalizeUploadedFilename } from './filename.util';
+import {
+  canThumbnailFile,
+  THUMBNAIL_CONTENT_TYPE,
+  THUMBNAIL_MAX_EDGE,
+} from './thumbnail.util';
 import {
   buildContentDisposition,
   resolveContentDispositionType,
@@ -204,6 +210,41 @@ export class FilesController {
       buildContentDisposition(file.filename, dispositionType)
     );
     res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.end(buffer);
+  }
+
+  /**
+   * 列表缩略图。访问控制与 download 完全一致(都走 getById),不新增暴露面;
+   * 只是把原图缩到 320px WebP,网格不必再为一张 3 MB 的生图退化成类型图标。
+   */
+  @Public()
+  @Get(':id/thumbnail')
+  @ApiOperation({ summary: 'Get a downscaled thumbnail for an image file' })
+  async thumbnail(
+    @Param('id') id: string,
+    @CurrentUser() user?: User,
+    @Res() res?: Response
+  ) {
+    const file = await this.filesService.getById(id, user?.id);
+
+    if (!canThumbnailFile(file)) {
+      throw new BadRequestException({
+        code: ErrorCodes.INVALID_FILE_TYPE,
+        message: 'Thumbnails are only available for images',
+      });
+    }
+
+    const buffer = await this.filesService.thumbnail(file.storageKey);
+
+    if (!res) {
+      return buffer;
+    }
+
+    res.setHeader('Content-Type', THUMBNAIL_CONTENT_TYPE);
+    res.setHeader('Content-Length', buffer.length.toString());
+    // 文件内容不可变,缩略图只随 id 变化:直接让浏览器长时间复用,列表滚动不再重复请求。
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('ETag', `"thumb-${file.id}-${THUMBNAIL_MAX_EDGE}"`);
     return res.end(buffer);
   }
 

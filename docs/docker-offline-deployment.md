@@ -155,8 +155,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
 - API 容器启动时会执行 `node apps/api/dist/scripts/migrate.js`，用于增量数据库迁移。
 - 如果使用已有 MinIO 实例，需要在 `.env.prod` 中设置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、
   `S3_SECRET_KEY` 指向该实例（内部网络可达地址或 `http://minio:9000`）。组合镜像 API 启动时会执行
-  `node apps/api/dist/scripts/sync-id-photo-models.js`，把镜像内置的证件照模型同步到
-  `models` 桶并设置匿名只读策略；桶名可通过 `S3_MODELS_BUCKET` 调整。同步失败不阻塞启动，可重启 api 重试。
+  `node apps/api/dist/scripts/sync-id-photo-models.js`，把镜像内置的证件照模型同步到 `models`
+  桶并设置匿名只读策略；桶名可通过 `S3_MODELS_BUCKET` 调整。同步失败不阻塞启动，可重启 api 重试。
 
 ## 更新环境变量字段
 
@@ -170,6 +170,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
 - `NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION`
 - `SMTP_*`
 - `S3_*`
+- `AI_IMAGE_PROVIDERS`（多来源生图配置，改了才会出现或更新页面上的「模型平台」选择器）
 
 上传新的 `.env.prod` 后执行：
 
@@ -220,10 +221,18 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-rec
 项目的 API 容器启动命令包含：
 
 ```bash
-node apps/api/dist/scripts/migrate.js && node apps/api/dist/main.js
+node apps/api/dist/scripts/migrate.js \
+  && node apps/api/dist/scripts/sync-id-photo-models.js \
+  && node apps/api/dist/scripts/seed-image-generate-presets.js \
+  && node apps/api/dist/main.js
 ```
 
 因此更新 `api` 容器时会自动执行 migration。migration 应只做增量结构变更，不应清空历史数据。
+
+注意后两个脚本在 `command` 里是 `&&` 串联的：任一脚本失败，`main.js` 就不会启动。所以 `.env.prod`
+里的 `S3_*` 必须可用，`presets` 桶要能创建（compose 的 `minio-init` 会
+`mc mb local/presets`）。如果服务器上的 `docker-compose.prod.yml` 是旧版本、`command` 里没有
+`seed-image-generate-presets.js`，则新表会被建出来但一行数据都没有，AI 生图页的提示词模板就是空的。
 
 推荐更新前备份数据库：
 
@@ -234,6 +243,59 @@ docker exec utils-pg-prod pg_dump -U utils -d utils_plane > backup_$(date +%Y%m%
 ```
 
 如需恢复备份，先确认目标数据库状态，再执行恢复命令。恢复属于高风险操作，不要在未确认备份文件和目标环境前直接覆盖生产库。
+
+### 新增表的线上增量升级
+
+新版本新增一张表（例如 v0.5.0 的
+`image_generate_presets`）时，不需要停机、不需要重建 volume，也不会动到已有表：drizzle 把已执行的 migration 记到
+`drizzle.__drizzle_migrations`，以其中最大的 `created_at` 为水位线，只执行
+`packages/db/drizzle/meta/_journal.json` 里 `when` 大于水位线的那几个
+`.sql`；新增表的 migration 只有 `CREATE TABLE` 和 `CREATE INDEX`，不含针对旧表的 `ALTER` /
+`DROP`，所以旧数据零影响。
+
+也因为比的是时间戳水位线而不是逐个文件比对：新增 migration 必须是 journal 里 `when`
+最大的一项。手工往中间插一个时间戳更早的 migration，线上会被静默跳过。
+
+标准流程就是常规更新（备份 → `docker load` → `--force-recreate api web`）。前置条件只有两条：
+
+- 服务器上的 `docker-compose.prod.yml` 与本次镜像同版本（含 `minio-init` 的 `presets` 桶、api 的
+  `S3_PRESETS_BUCKET` / `IMAGE_GENERATE_PRESETS_DIR` 和 seed 脚本）。
+- `.env.prod` 里补齐新版本新增的变量。
+
+升级后逐项确认：
+
+```bash
+cd /opt/utils-plane
+
+# 1. migration 已应用（应能看到 0016_small_chamber）
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs api | grep db:migrate
+docker exec utils-pg-prod psql -U utils -d utils_plane \
+  -c "select count(*) as applied, to_timestamp(max(created_at)/1000) as last_at from drizzle.__drizzle_migrations;"
+
+# 2. 新表已建且已 seed（内置模板 12 行）
+docker exec utils-pg-prod psql -U utils -d utils_plane \
+  -c "select count(*) from image_generate_presets;"
+
+# 3. 旧表数据没被动过（行数应与升级前一致）
+docker exec utils-pg-prod psql -U utils -d utils_plane \
+  -c "select (select count(*) from files) as files, (select count(*) from tasks) as tasks;"
+
+# 4. 公开端点已下发模板
+curl -s "http://127.0.0.1:5006/tasks/image-generate/presets?lang=zh" | head -c 200
+```
+
+如果第 2 步是 0，说明 seed 没跑成功（多为 MinIO 未就绪或 `presets` 桶不存在），重跑即可，脚本按
+`slug` upsert，可重复执行：
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod \
+  exec api node apps/api/dist/scripts/seed-image-generate-presets.js
+```
+
+AI 生图页的「模型平台」选择器是另一回事，与数据库无关：它只在服务端返回的来源数 >= 2 时出现，需要在
+`.env.prod` 里配置多来源 JSON
+`AI_IMAGE_PROVIDERS`（单引号包住整段，第一项为默认来源），并重建 api 容器。只配 `AI_IMAGE_BASE_URL`
+时线上只有一个 `default` 来源，选择器不显示。
 
 ## 保留历史数据的安全更新顺序
 

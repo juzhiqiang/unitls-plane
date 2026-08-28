@@ -127,12 +127,20 @@ services:
       ID_PHOTO_AI_IMAGE_QUALITY: ${ID_PHOTO_AI_IMAGE_QUALITY:-high}
       ID_PHOTO_AI_IMAGE_BACKGROUND: ${ID_PHOTO_AI_IMAGE_BACKGROUND:-opaque}
       ID_PHOTO_AI_RESPONSE_FORMAT: ${ID_PHOTO_AI_RESPONSE_FORMAT:-url}
-      # AI 生图（可选）。未配置 AI_IMAGE_BASE_URL 时生图任务以
-      # AI_IMAGE_NOT_CONFIGURED 失败，页面提示未配置。
+      # AI 生图（可选）。AI_IMAGE_PROVIDERS 与 AI_IMAGE_BASE_URL 都没配时，
+      # 生图任务以 AI_IMAGE_NOT_CONFIGURED 失败，页面提示未配置。
+      #
+      # AI_IMAGE_PROVIDERS 是多来源 JSON 数组（第一项为默认来源），配了它就忽略
+      # 下面的单来源变量；页面的「模型平台」选择器只在来源数 >= 2 时出现，
+      # 所以不透传这一项时线上只会看到单来源、选择器不显示。
+      # 值里有 apiKey，放 .env.prod 并用单引号包住整段 JSON。
+      AI_IMAGE_PROVIDERS: ${AI_IMAGE_PROVIDERS:-}
       AI_IMAGE_BASE_URL: ${AI_IMAGE_BASE_URL:-}
       AI_IMAGE_API_KEY: ${AI_IMAGE_API_KEY:-}
       AI_IMAGE_MODEL: ${AI_IMAGE_MODEL:-gpt-image-1}
       AI_IMAGE_RESPONSE_FORMAT: ${AI_IMAGE_RESPONSE_FORMAT:-b64_json}
+      AI_IMAGE_LABEL: ${AI_IMAGE_LABEL:-}
+      AI_IMAGE_REQUEST_TIMEOUT_MS: ${AI_IMAGE_REQUEST_TIMEOUT_MS:-}
     restart: unless-stopped
 
   web:

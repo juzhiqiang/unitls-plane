@@ -9,7 +9,7 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 
 ## 版本与更新日志
 
-- 当前统一发布版本为 `v0.5.0`，根包、Web、API 及所有 `packages/*` 共享 `0.5.0` 版本号。
+- 当前统一发布版本为 `v0.6.0`，根包、Web、API 及所有 `packages/*` 共享 `0.6.0` 版本号。
 - 面向用户的精选更新日志公开地址为 `/{locale}/changelog`，并从营销页页脚和认证页版本号进入。
 - 套餐额度公开页为 `/{locale}/plans`，展示各套餐的单文件上传额度与定位说明，数据来源于
   `packages/utils` 的 `entitlements`。

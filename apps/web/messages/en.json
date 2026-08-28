@@ -1563,6 +1563,37 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.6.0",
+          "date": "2026-08-28",
+          "title": "More generation providers and a fixed result hand-off",
+          "summary": "AI image generation can reach more OpenAI-compatible platforms; finished images no longer appear after a blank gap once the button is already re-enabled; tasks are no longer marked failed while retries remain; and the file grid now uses server thumbnails so large outputs are no longer replaced by placeholder icons.",
+          "groups": [
+            {
+              "title": "New",
+              "items": [
+                "AI image generation can now use more third-party OpenAI-compatible services: each provider gains an optional field-omission switch, so gateways that validate the request body strictly and reject any extra parameter can be added by configuration alone, with no code change; the on-page model platform picker then lists those platforms too."
+              ]
+            },
+            {
+              "title": "Improved",
+              "items": [
+                "After AI image generation finishes, the page keeps the button and progress bar busy until the image is actually fetched and ready to show, with a \"Fetching image\" placeholder in the result slot — no more re-enabled button next to an empty result area with the image popping in later.",
+                "If fetching an image fails, a retry action re-downloads the already generated image instead of generating it again, so it does not consume another daily credit.",
+                "The file grid now uses server-side thumbnails, so 2.5–4 MB outputs such as AI-generated images are no longer replaced by placeholder icons and can be seen directly in the list."
+              ]
+            },
+            {
+              "title": "Fixed",
+              "items": [
+                "Fixed tasks being marked failed while retries were still available: every failed attempt used to write a failed status, polling stopped immediately, and output from a later successful retry could only be found in the file list, while the task record kept both success and error details. Now only the final attempt marks a task failed and success clears the previous error, while cases that retries cannot fix — content-policy rejections and configuration errors — end right away instead of paying for another generation.",
+                "Fixed the model platform picker not appearing on the production AI image generation page: the deployment configuration did not pass the multi-provider setting to the server, so only a single provider was detected.",
+                "Fixed server-side ID photo generation getting stuck on \"processing\" forever when the output download failed: it now reports the error and returns to a retryable state.",
+                "Fixed the files page failing to open in some environments: it was missing the loading boundary it needs, which made static prerendering throw."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.5.0",
           "date": "2026-08-27",
           "title": "AI image generation prompt template library",

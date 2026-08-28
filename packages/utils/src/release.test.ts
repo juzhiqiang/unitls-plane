@@ -15,9 +15,9 @@ const manifests = [
 ];
 
 describe('release version', () => {
-  it('uses v0.5.0 in shared release metadata', () => {
-    expect(APP_VERSION).toBe('0.5.0');
-    expect(APP_VERSION_LABEL).toBe('v0.5.0');
+  it('uses v0.6.0 in shared release metadata', () => {
+    expect(APP_VERSION).toBe('0.6.0');
+    expect(APP_VERSION_LABEL).toBe('v0.6.0');
   });
 
   it.each(manifests)('keeps %s on the shared version', path => {

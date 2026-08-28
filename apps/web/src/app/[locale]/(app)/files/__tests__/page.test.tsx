@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -70,9 +70,11 @@ const fontFile = {
 
 function renderPage() {
   return render(
-    <NextIntlClientProvider locale="en" messages={en as never}>
-      <FilesPage />
-    </NextIntlClientProvider>
+    <Suspense fallback={null}>
+      <NextIntlClientProvider locale="en" messages={en as never}>
+        <FilesPage />
+      </NextIntlClientProvider>
+    </Suspense>
   );
 }
 

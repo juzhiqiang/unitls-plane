@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/i18n/navigation';
@@ -53,6 +53,17 @@ function getMimePrefix(filter: TypeFilter): string | undefined {
 }
 
 export default function FilesPage() {
+  // Next.js 14 App Router 要求客户端组件顶层 useSearchParams 被 <Suspense> 包裹，
+  // 否则 /en/files 与 /zh/files 的静态预渲染会直接抛错，阻断 docker:package:offline。
+  // 这里把实际逻辑放到 FilesPageContent，默认导出只包一层 Suspense。
+  return (
+    <Suspense fallback={null}>
+      <FilesPageContent />
+    </Suspense>
+  );
+}
+
+function FilesPageContent() {
   const t = useTranslations('FilesTool');
   const router = useRouter();
   const { data: session } = authClient.useSession();

@@ -15,6 +15,7 @@ import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import {
   createMarkdownSourceFile,
@@ -55,7 +56,12 @@ export default function FromDocumentPage() {
   const [outputFilename, setOutputFilename] = useState('document.pdf');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [result, setResult] = useState<File | null>(null);
+  // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
+  // 不再每页手写一遍 fetch + try/finally。
+  const output = useTaskOutput<File>();
+  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
+  const resetOutput = output.reset;
+  const result = output.result;
   const [error, setError] = useState<string | null>(null);
 
   const { requireLogin } = useRequireLogin();
@@ -64,23 +70,16 @@ export default function FromDocumentPage() {
 
   const { data: progress } = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' }
-        );
-        if (!response.ok) throw new Error('Download failed');
-        const blob = await response.blob();
-        setResult(
-          new File([blob], ensurePdfFilename(outputFilename), {
+      const { error: downloadError } = await output.download(
+        outputFileId,
+        blob => {
+          return new File([blob], ensurePdfFilename(outputFilename), {
             type: 'application/pdf',
-          })
-        );
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setProcessing(false);
-      }
+          });
+        }
+      );
+      if (downloadError) setError(downloadError.message);
+      setProcessing(false);
     },
     onFailed: err => {
       setError(err.message);
@@ -88,30 +87,36 @@ export default function FromDocumentPage() {
     },
   });
 
-  const handleMarkdownDrop = useCallback((files: File[]) => {
-    const file = files.find(isMarkdownDocumentFile);
-    if (!file) return;
+  const handleMarkdownDrop = useCallback(
+    (files: File[]) => {
+      const file = files.find(isMarkdownDocumentFile);
+      if (!file) return;
 
-    readMarkdownDocumentFile(file)
-      .then(text => {
-        setMarkdown(text);
-        setMarkdownSourceName(file.name);
-        setOutputFilename(deriveDocumentPdfFilename(file.name));
-        setResult(null);
-        setError(null);
-      })
-      .catch(err => setError((err as Error).message));
-  }, []);
+      readMarkdownDocumentFile(file)
+        .then(text => {
+          setMarkdown(text);
+          setMarkdownSourceName(file.name);
+          setOutputFilename(deriveDocumentPdfFilename(file.name));
+          resetOutput();
+          setError(null);
+        })
+        .catch(err => setError((err as Error).message));
+    },
+    [resetOutput]
+  );
 
-  const handleDocxDrop = useCallback((files: File[]) => {
-    const file = files.find(f => /\.docx$/i.test(f.name));
-    if (!file) return;
+  const handleDocxDrop = useCallback(
+    (files: File[]) => {
+      const file = files.find(f => /\.docx$/i.test(f.name));
+      if (!file) return;
 
-    setDocxFile(file);
-    setOutputFilename(`${file.name.replace(/\.docx$/i, '')}.pdf`);
-    setResult(null);
-    setError(null);
-  }, []);
+      setDocxFile(file);
+      setOutputFilename(`${file.name.replace(/\.docx$/i, '')}.pdf`);
+      resetOutput();
+      setError(null);
+    },
+    [resetOutput]
+  );
 
   const inputReady =
     mode === 'markdown' ? markdown.trim().length > 0 : docxFile !== null;
@@ -145,7 +150,7 @@ export default function FromDocumentPage() {
 
     setProcessing(true);
     setError(null);
-    setResult(null);
+    resetOutput();
 
     try {
       const sourceFile =
@@ -170,7 +175,7 @@ export default function FromDocumentPage() {
 
   const handleReset = () => {
     setDocxFile(null);
-    setResult(null);
+    resetOutput();
     setError(null);
     setTaskId(null);
     setProcessing(false);
@@ -202,7 +207,7 @@ export default function FromDocumentPage() {
             type="button"
             onClick={() => {
               setMode(value);
-              setResult(null);
+              resetOutput();
               setError(null);
             }}
             disabled={processing}
@@ -247,7 +252,7 @@ export default function FromDocumentPage() {
               value={markdown}
               onChange={value => {
                 setMarkdown(value);
-                setResult(null);
+                resetOutput();
                 setError(null);
               }}
               disabled={processing}

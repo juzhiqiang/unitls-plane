@@ -26,6 +26,7 @@ import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { resolveToolStage } from '@/hooks/use-single-file-tool';
@@ -53,7 +54,11 @@ export default function IdPhotoPage() {
   const createTask = useCreateTask();
 
   const [file, setFile] = useState<File | null>(null);
-  const [resultFile, setResultFile] = useState<File | null>(null);
+  // 服务端产物取回收在 hook 里:下载失败会落到 error 态并解除忙碌态,
+  // 以前这里没有 catch,下载一失败就永久卡在「处理中」。
+  const output = useTaskOutput<File>();
+  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
+  const resetOutput = output.reset;
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -86,19 +91,19 @@ export default function IdPhotoPage() {
       })()
     : null;
   const sourceUrl = useObjectUrl(file);
+  const resultFile = output.result;
   const resultUrl = useObjectUrl(resultFile);
   const local = useLocalIdPhoto();
   const localResultUrl = useObjectUrl(local.resultBlob);
 
   const taskQuery = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-        { credentials: 'include' }
-      );
-      const blob = await response.blob();
       const ext = options.outputType === 'image/png' ? 'png' : 'jpg';
-      setResultFile(new File([blob], `id-photo.${ext}`, { type: blob.type }));
+      const { error: downloadError } = await output.download(
+        outputFileId,
+        blob => new File([blob], `id-photo.${ext}`, { type: blob.type })
+      );
+      if (downloadError) setError(downloadError.message);
       setProcessing(false);
       setTaskId(null);
     },
@@ -113,7 +118,7 @@ export default function IdPhotoPage() {
     if (!files[0]) return;
     setFile(files[0]);
     setNatural(null);
-    setResultFile(null);
+    resetOutput();
     setError(null);
   };
 
@@ -141,7 +146,7 @@ export default function IdPhotoPage() {
 
     setProcessing(true);
     setError(null);
-    setResultFile(null);
+    resetOutput();
 
     try {
       const uploaded = await uploadFile.mutateAsync(file);
@@ -282,7 +287,7 @@ export default function IdPhotoPage() {
             onChange={m => {
               setProcessingMode(m);
               local.reset();
-              setResultFile(null);
+              resetOutput();
               setError(null);
             }}
             disabled={isProcessing}

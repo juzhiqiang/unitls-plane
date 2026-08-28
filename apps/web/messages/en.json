@@ -927,6 +927,8 @@
     "generating": "Generating",
     "resultTitle": "Results",
     "resultMeta": "Image {index}",
+    "resultFetching": "Fetching image…",
+    "resultFetchFailed": "Could not fetch the image. Try again.",
     "quotaExceeded": "You have used today's quota. Try again tomorrow.",
     "contentRejected": "The prompt was rejected by the content policy. Try rephrasing it.",
     "notConfigured": "AI image generation is not configured. Contact the administrator.",

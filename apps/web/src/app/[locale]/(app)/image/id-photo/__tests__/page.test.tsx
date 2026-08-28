@@ -119,6 +119,7 @@ describe('IdPhotoPage', () => {
     mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
 
     const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
       blob: () => Promise.resolve(new Blob(['result'], { type: 'image/jpeg' })),
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -177,6 +178,47 @@ describe('IdPhotoPage', () => {
     expect(startButton).toBeInTheDocument();
     // 本地模式不显示 segmentation mode(标准/AI 精修)
     expect(screen.queryByText('Cutout mode')).not.toBeInTheDocument();
+  });
+
+  it('surfaces a failed product download instead of staying stuck on processing', async () => {
+    // 以前 onCompleted 里没有 catch:下载一失败就永久卡在「处理中」,
+    // 而且以未捕获 promise 漏出。现在走 useTaskOutput,失败会解除忙碌态并报错。
+    mocks.useSession.mockReturnValue({
+      data: { user: { name: 'Tester', email: 't@example.com' } },
+      isPending: false,
+    });
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = renderPage();
+    const input = container.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [makeFile()] } });
+    await screen.findByRole('button', { name: 'Generate ID photo' });
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate ID photo' })
+    );
+    await waitFor(() => expect(taskMutate).toHaveBeenCalled());
+
+    await act(async () => {
+      await mocks.onCompleted('output-file-1');
+    });
+
+    expect(screen.getByText('Download failed')).toBeInTheDocument();
+    // 按钮回到可点状态,而不是停在处理中文案上。
+    expect(
+      screen.getByRole('button', { name: 'Generate ID photo' })
+    ).toBeEnabled();
+    expect(screen.queryByAltText('ID photo preview')).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
   });
 
   it('does not offer the print sheet before a photo exists', async () => {

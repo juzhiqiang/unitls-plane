@@ -11,6 +11,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { formatBytes } from '@/lib/format';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
@@ -30,7 +31,12 @@ export default function CompressPage() {
   const [level, setLevel] = useState<CompressLevel>('medium');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [resultFile, setResultFile] = useState<File | null>(null);
+  // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
+  // 不再每页手写一遍 fetch + try/finally。
+  const output = useTaskOutput<File>();
+  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
+  const resetOutput = output.reset;
+  const resultFile = output.result;
   const [compressedSize, setCompressedSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,26 +46,19 @@ export default function CompressPage() {
 
   const { data: progress } = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' }
-        );
-        if (!response.ok) throw new Error('Download failed');
-        const blob = await response.blob();
-        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-        const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
-        setCompressedSize(pdfBlob.size);
-        setResultFile(
-          new File([pdfBlob], `${baseName}-compressed.pdf`, {
+      const { error: downloadError } = await output.download(
+        outputFileId,
+        blob => {
+          const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+          const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
+          setCompressedSize(pdfBlob.size);
+          return new File([pdfBlob], `${baseName}-compressed.pdf`, {
             type: 'application/pdf',
-          })
-        );
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setProcessing(false);
-      }
+          });
+        }
+      );
+      if (downloadError) setError(downloadError.message);
+      setProcessing(false);
     },
     onFailed: err => {
       setError(err.message);
@@ -82,16 +81,19 @@ export default function CompressPage() {
     };
   }, [file]);
 
-  const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find(f => f.type === 'application/pdf');
-    if (!pdfFile) return;
-    setFile(pdfFile);
-    setPdf(null);
-    setPageCount(0);
-    setResultFile(null);
-    setCompressedSize(null);
-    setError(null);
-  }, []);
+  const handleDrop = useCallback(
+    (files: File[]) => {
+      const pdfFile = files.find(f => f.type === 'application/pdf');
+      if (!pdfFile) return;
+      setFile(pdfFile);
+      setPdf(null);
+      setPageCount(0);
+      resetOutput();
+      setCompressedSize(null);
+      setError(null);
+    },
+    [resetOutput]
+  );
 
   const handleCompress = async () => {
     if (!file) return;
@@ -100,7 +102,7 @@ export default function CompressPage() {
 
     setProcessing(true);
     setError(null);
-    setResultFile(null);
+    resetOutput();
     setCompressedSize(null);
 
     try {
@@ -147,7 +149,7 @@ export default function CompressPage() {
     setFile(null);
     setPdf(null);
     setPageCount(0);
-    setResultFile(null);
+    resetOutput();
     setCompressedSize(null);
     setError(null);
     setTaskId(null);

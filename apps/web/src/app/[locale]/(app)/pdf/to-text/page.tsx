@@ -13,6 +13,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
@@ -86,8 +87,14 @@ export default function ToTextPage() {
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [resultFile, setResultFile] = useState<File | null>(null);
-  const [resultText, setResultText] = useState<string | null>(null);
+  // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
+  // 不再每页手写一遍 fetch + try/finally。这一页要同时拿到正文与下载文件,
+  // 所以产物是二者的组合,避免两个 state 出现「有文件没正文」的中间态。
+  const output = useTaskOutput<{ file: File; text: string }>();
+  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
+  const resetOutput = output.reset;
+  const resultFile = output.result?.file ?? null;
+  const resultText = output.result?.text ?? null;
   const [error, setError] = useState<string | null>(null);
 
   const { requireLogin } = useRequireLogin();
@@ -96,25 +103,22 @@ export default function ToTextPage() {
 
   const { data: progress } = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' }
-        );
-        if (!response.ok) throw new Error('Download failed');
-        const text = await response.text();
-        const blob = new Blob([text], { type: 'text/plain' });
-        const ext = format === 'text' ? 'txt' : 'md';
-        const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
-        setResultText(text);
-        setResultFile(
-          new File([blob], `${baseName}.${ext}`, { type: 'text/plain' })
-        );
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setProcessing(false);
-      }
+      const { error: downloadError } = await output.download(
+        outputFileId,
+        async blob => {
+          const text = await blob.text();
+          const ext = format === 'text' ? 'txt' : 'md';
+          const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
+          return {
+            file: new File([text], `${baseName}.${ext}`, {
+              type: 'text/plain',
+            }),
+            text,
+          };
+        }
+      );
+      if (downloadError) setError(downloadError.message);
+      setProcessing(false);
     },
     onFailed: err => {
       setError(err.message);
@@ -137,18 +141,20 @@ export default function ToTextPage() {
     };
   }, [file]);
 
-  const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find(f => f.type === 'application/pdf');
-    if (!pdfFile) return;
-    setFile(pdfFile);
-    setPdf(null);
-    setPageCount(0);
-    setSelectedPages(new Set());
-    setSelectAll(true);
-    setResultFile(null);
-    setResultText(null);
-    setError(null);
-  }, []);
+  const handleDrop = useCallback(
+    (files: File[]) => {
+      const pdfFile = files.find(f => f.type === 'application/pdf');
+      if (!pdfFile) return;
+      setFile(pdfFile);
+      setPdf(null);
+      setPageCount(0);
+      setSelectedPages(new Set());
+      setSelectAll(true);
+      resetOutput();
+      setError(null);
+    },
+    [resetOutput]
+  );
 
   const togglePage = (page: number) => {
     setSelectedPages(prev => {
@@ -166,8 +172,7 @@ export default function ToTextPage() {
 
     setProcessing(true);
     setError(null);
-    setResultFile(null);
-    setResultText(null);
+    resetOutput();
 
     try {
       const uploaded = (await uploadFile.mutateAsync(file)) as any;
@@ -203,8 +208,7 @@ export default function ToTextPage() {
     setPageCount(0);
     setSelectedPages(new Set());
     setSelectAll(true);
-    setResultFile(null);
-    setResultText(null);
+    resetOutput();
     setError(null);
     setTaskId(null);
     setProcessing(false);

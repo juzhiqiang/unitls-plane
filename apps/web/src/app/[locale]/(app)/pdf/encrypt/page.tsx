@@ -11,6 +11,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
@@ -35,7 +36,12 @@ export default function EncryptPage() {
   });
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [resultFile, setResultFile] = useState<File | null>(null);
+  // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
+  // 不再每页手写一遍 fetch + try/finally。
+  const output = useTaskOutput<File>();
+  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
+  const resetOutput = output.reset;
+  const resultFile = output.result;
   const [error, setError] = useState<string | null>(null);
 
   const { requireLogin } = useRequireLogin();
@@ -44,25 +50,18 @@ export default function EncryptPage() {
 
   const { data: progress } = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' }
-        );
-        if (!response.ok) throw new Error('Download failed');
-        const blob = await response.blob();
-        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-        const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
-        setResultFile(
-          new File([pdfBlob], `${baseName}-encrypted.pdf`, {
+      const { error: downloadError } = await output.download(
+        outputFileId,
+        blob => {
+          const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+          const baseName = file?.name.replace(/\.pdf$/i, '') ?? 'output';
+          return new File([pdfBlob], `${baseName}-encrypted.pdf`, {
             type: 'application/pdf',
-          })
-        );
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setProcessing(false);
-      }
+          });
+        }
+      );
+      if (downloadError) setError(downloadError.message);
+      setProcessing(false);
     },
     onFailed: err => {
       setError(err.message);
@@ -88,23 +87,26 @@ export default function EncryptPage() {
     setUserPassword('');
     setOwnerPassword('');
     setPermissions({ print: true, copy: true, modify: true, annotate: true });
-    setResultFile(null);
+    resetOutput();
     setError(null);
     setTaskId(null);
   };
 
-  const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find(f => f.type === 'application/pdf');
-    if (!pdfFile) return;
-    setFile(pdfFile);
-    setPageCount(0);
-    setUserPassword('');
-    setOwnerPassword('');
-    setPermissions({ print: true, copy: true, modify: true, annotate: true });
-    setResultFile(null);
-    setError(null);
-    setTaskId(null);
-  }, []);
+  const handleDrop = useCallback(
+    (files: File[]) => {
+      const pdfFile = files.find(f => f.type === 'application/pdf');
+      if (!pdfFile) return;
+      setFile(pdfFile);
+      setPageCount(0);
+      setUserPassword('');
+      setOwnerPassword('');
+      setPermissions({ print: true, copy: true, modify: true, annotate: true });
+      resetOutput();
+      setError(null);
+      setTaskId(null);
+    },
+    [resetOutput]
+  );
 
   const handleChangeFile = () => {
     setFile(null);
@@ -123,7 +125,7 @@ export default function EncryptPage() {
 
     setProcessing(true);
     setError(null);
-    setResultFile(null);
+    resetOutput();
 
     try {
       const uploaded = (await uploadFile.mutateAsync(file)) as any;

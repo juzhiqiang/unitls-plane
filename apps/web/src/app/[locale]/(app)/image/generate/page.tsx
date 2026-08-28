@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   useCreateTask,
@@ -10,6 +10,7 @@ import {
 } from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
+import { useTaskOutputPreviews } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import {
   ImageGenerateModeField,
@@ -90,7 +91,8 @@ export default function ImageGeneratePage() {
   const [taskIds, setTaskIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [previews, setPreviews] = useState<Record<string, string>>({});
+  // 产物取回(状态 completed 之后还要再下载一次 blob)收在 hook 里,页面只读 previews/pending。
+  const output = useTaskOutputPreviews();
 
   // 来源列表拉取失败或还没回来时按「单来源」渲染:选择器不出现,providerId 不下发,
   // 服务端仍会用配置里的第一个来源,页面不会因为这个附加接口而不可用。
@@ -115,23 +117,8 @@ export default function ImageGeneratePage() {
     setDraft(next);
   };
 
-  const loadPreview = useCallback(async (taskId: string, fileId: string) => {
-    if (!fileId) return;
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/files/${fileId}/download`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) return;
-      const url = URL.createObjectURL(await response.blob());
-      setPreviews(current => ({ ...current, [taskId]: url }));
-    } catch {
-      // fetch 本身抛出的网络错误在此静默忽略,否则会在完成回调里变成 unhandled rejection。
-    }
-  }, []);
-
   const { items, settled, query } = useTaskGroupProgress(taskIds, {
-    onItemCompleted: loadPreview,
+    onItemCompleted: output.load,
   });
 
   // useTaskGroupProgress 的 queryFn 用 Promise.all 并发取 N 个状态,任一任务永久失败
@@ -141,32 +128,10 @@ export default function ImageGeneratePage() {
     taskIds.length > 0 && !settled && Boolean(query?.isError);
   const inFlight = taskIds.length > 0 && !settled && !groupErrored;
 
-  // previewsRef 跟随最新 previews,供 reset 与卸载清理读取当前值。
-  const previewsRef = useRef<Record<string, string>>({});
-  useEffect(() => {
-    previewsRef.current = previews;
-  }, [previews]);
-
-  // 只在卸载时统一回收 blob URL。不能把 cleanup 挂在 [previews] 上:每有一张图完成、
-  // previews 更新时,React 会先跑上一轮 cleanup(闭包捕获的是旧 previews),把仍在展示
-  // 的前一张 URL 提前 revoke 掉,导致其下载链接指向失效 blob。
-  useEffect(
-    () => () => {
-      for (const url of Object.values(previewsRef.current)) {
-        URL.revokeObjectURL(url);
-      }
-    },
-    []
-  );
-
   const reset = () => {
-    // 重新提交时显式回收上一批 URL,避免累积泄漏。
-    for (const url of Object.values(previewsRef.current)) {
-      URL.revokeObjectURL(url);
-    }
     setTaskIds([]);
     setFailure(null);
-    setPreviews({});
+    output.reset();
   };
 
   const submit = async () => {
@@ -243,7 +208,18 @@ export default function ImageGeneratePage() {
 
   const needsReference = draft.mode === 'image_to_image';
   const referenceMissing = needsReference && !sourceFile;
-  const busy = submitting || inFlight;
+
+  // 任务 settled 只说明服务端出图了,页面还要再下载一次 blob 才有东西可看。缺 entry
+  // 视为 loading:onItemCompleted 与 items 更新同一轮,少了这个兜底会漏出一帧空窗,
+  // 表现就是按钮先恢复、结果区空着、图片随后突然出现。
+  const fetchingResults =
+    taskIds.length > 0 &&
+    items.some(
+      item =>
+        item.status === 'completed' &&
+        (output.previews[item.taskId]?.state ?? 'loading') === 'loading'
+    );
+  const busy = submitting || inFlight || fetchingResults;
 
   const stage: ToolStage = submitting
     ? 'processing'
@@ -251,7 +227,7 @@ export default function ImageGeneratePage() {
       ? referenceMissing
         ? 'upload'
         : 'configure'
-      : settled || groupErrored
+      : (settled || groupErrored) && !fetchingResults
         ? 'result'
         : 'processing';
 
@@ -363,6 +339,11 @@ export default function ImageGeneratePage() {
         <ProcessingProgress progress={averageProgress} stage="generating" />
       )}
 
+      {/* 生成结束、图片还在取回:进度条不能先消失,否则页面看起来已经完事了。 */}
+      {!inFlight && fetchingResults && (
+        <ProcessingProgress progress={100} label={t('resultFetching')} />
+      )}
+
       {/* 多张结果排成两列:整宽堆叠时 4 张要滚很久,也没法互相比较。 */}
       <div
         className={items.length > 1 ? 'grid gap-6 sm:grid-cols-2' : 'space-y-6'}
@@ -380,7 +361,23 @@ export default function ImageGeneratePage() {
           }
           if (item.status !== 'completed') return null;
 
-          const previewUrl = previews[item.taskId];
+          const preview = output.previews[item.taskId];
+
+          // 取回失败给的是「重试取回」,不是重新生成 —— 图已经出好了,再走一遍生成
+          // 会白扣一次配额。
+          if (preview?.state === 'error') {
+            return (
+              <FailureRecoveryPanel
+                key={item.taskId}
+                message={t('resultFetchFailed')}
+                onRetry={() =>
+                  void output.load(item.taskId, item.outputFileId ?? '')
+                }
+              />
+            );
+          }
+
+          const previewUrl = preview?.url;
           const alt = t('resultMeta', { index: index + 1 });
           // 图生图给滑动对比:参考图和结果分处页面两端时,看不出到底改了什么。
           const showCompare = Boolean(comparedUrl && previewUrl);
@@ -391,7 +388,17 @@ export default function ImageGeneratePage() {
               title={t('resultTitle')}
               description={alt}
               preview={
-                showCompare && comparedUrl && previewUrl ? (
+                !previewUrl ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex h-64 w-full items-center justify-center rounded-md border border-dashed border-border bg-muted/30"
+                  >
+                    <span className="animate-pulse font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                      {t('resultFetching')}
+                    </span>
+                  </div>
+                ) : showCompare && comparedUrl && previewUrl ? (
                   <ImageGenerateCompare
                     beforeUrl={comparedUrl}
                     afterUrl={previewUrl}

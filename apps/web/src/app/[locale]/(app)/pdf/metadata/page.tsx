@@ -12,6 +12,7 @@ import { ResultPanel } from '@/components/tools/result-panel';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 
@@ -42,7 +43,12 @@ export default function MetadataPage() {
   const [form, setForm] = useState<MetadataForm>(EMPTY_FORM);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [resultFile, setResultFile] = useState<File | null>(null);
+  // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
+  // 不再每页手写一遍 fetch + try/finally。
+  const output = useTaskOutput<File>();
+  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
+  const resetOutput = output.reset;
+  const resultFile = output.result;
   const [error, setError] = useState<string | null>(null);
 
   const { requireLogin } = useRequireLogin();
@@ -51,20 +57,15 @@ export default function MetadataPage() {
 
   const { data: progress } = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/files/${outputFileId}/download`,
-          { credentials: 'include' }
-        );
-        if (!response.ok) throw new Error('Download failed');
-        const blob = await response.blob();
-        const name = file?.name ?? 'output.pdf';
-        setResultFile(new File([blob], name, { type: 'application/pdf' }));
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setProcessing(false);
-      }
+      const { error: downloadError } = await output.download(
+        outputFileId,
+        blob => {
+          const name = file?.name ?? 'output.pdf';
+          return new File([blob], name, { type: 'application/pdf' });
+        }
+      );
+      if (downloadError) setError(downloadError.message);
+      setProcessing(false);
     },
     onFailed: err => {
       setError(err.message);
@@ -103,15 +104,18 @@ export default function MetadataPage() {
     };
   }, [file]);
 
-  const handleDrop = useCallback((files: File[]) => {
-    const pdfFile = files.find(f => f.type === 'application/pdf');
-    if (!pdfFile) return;
-    setFile(pdfFile);
-    setExisting(EMPTY_FORM);
-    setForm(EMPTY_FORM);
-    setResultFile(null);
-    setError(null);
-  }, []);
+  const handleDrop = useCallback(
+    (files: File[]) => {
+      const pdfFile = files.find(f => f.type === 'application/pdf');
+      if (!pdfFile) return;
+      setFile(pdfFile);
+      setExisting(EMPTY_FORM);
+      setForm(EMPTY_FORM);
+      resetOutput();
+      setError(null);
+    },
+    [resetOutput]
+  );
 
   const handleChange =
     (key: keyof MetadataForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,7 +129,7 @@ export default function MetadataPage() {
 
     setProcessing(true);
     setError(null);
-    setResultFile(null);
+    resetOutput();
 
     try {
       const uploaded = (await uploadFile.mutateAsync(file)) as any;
@@ -185,7 +189,7 @@ export default function MetadataPage() {
     setFile(null);
     setExisting(EMPTY_FORM);
     setForm(EMPTY_FORM);
-    setResultFile(null);
+    resetOutput();
     setError(null);
     setTaskId(null);
     setProcessing(false);

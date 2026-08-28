@@ -323,7 +323,114 @@ describe('ImageGeneratePage', () => {
 
     vi.unstubAllGlobals();
   });
-  // __NEW_TESTS_2__
+  it('stays busy until the generated image is actually on screen', async () => {
+    // 服务端 settled 只代表出图了,页面还要再下载一次 blob。这段空窗里按钮必须仍是
+    // 忙碌态,结果位显示占位 —— 否则表现为按钮先恢复、结果区空着、图片随后突然出现。
+    mocks.groupProgress.mockReturnValue({
+      items: [
+        {
+          taskId: 't1',
+          status: 'completed',
+          progress: 100,
+          outputFileId: 'f1',
+        },
+      ],
+      completedCount: 1,
+      failedCount: 0,
+      settled: true,
+      query: { isError: false },
+    });
+    let releaseDownload: (() => void) | undefined;
+    const gate = new Promise<void>(resolve => {
+      releaseDownload = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await gate;
+        return {
+          ok: true,
+          blob: () => Promise.resolve(new Blob(['img'], { type: 'image/png' })),
+        };
+      })
+    );
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'a shiba inu' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
+
+    let downloading: Promise<unknown> | undefined;
+    act(() => {
+      downloading = mocks.onItemCompleted('t1', 'f1');
+    });
+
+    // 图还没到手:按钮仍显示忙碌文案,结果位是占位而不是空白。
+    expect(
+      await screen.findByRole('button', { name: 'Generating' })
+    ).toBeDisabled();
+    expect(screen.getAllByText('Fetching image…').length).toBeGreaterThan(0);
+    expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
+
+    await act(async () => {
+      releaseDownload?.();
+      await downloading;
+    });
+
+    expect(await screen.findByAltText('Image 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
+    expect(screen.queryByText('Fetching image…')).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('retries fetching a failed download without generating again', async () => {
+    mocks.groupProgress.mockReturnValue({
+      items: [
+        {
+          taskId: 't1',
+          status: 'completed',
+          progress: 100,
+          outputFileId: 'f1',
+        },
+      ],
+      completedCount: 1,
+      failedCount: 0,
+      settled: true,
+      query: { isError: false },
+    });
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Prompt'), {
+      target: { value: 'a shiba inu' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await mocks.onItemCompleted('t1', 'f1');
+    });
+
+    // 取回失败不能把页面永久按在忙碌态,也不能只留一块空白。
+    expect(
+      screen.getByText('Could not fetch the image. Try again.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    });
+
+    // 重试只重新下载产物,不再走一次生成 —— 否则白扣一次配额。
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mocks.createTask).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
 
   it('keeps every preview URL alive while multiple tasks complete', async () => {
     mocks.groupProgress.mockReturnValue({

@@ -74,8 +74,44 @@ it('applies OpenAI-compatible defaults to a minimal entry', () => {
     refImagesField: 'reference_images',
     refImageEncoding: 'data_url',
     responseFormat: 'b64_json',
+    omitBodyFields: [],
   });
   expect(provider?.apiKey).toBeUndefined();
+});
+
+it('reads omitBodyFields and drops duplicates', () => {
+  const [provider] = loadImageProviderConfigs(
+    env({
+      AI_IMAGE_PROVIDERS: JSON.stringify([
+        {
+          id: 'wan',
+          label: '通义万相',
+          baseUrl: 'https://wan.example.com',
+          model: 'wan2.2-t2i',
+          omitBodyFields: ['quality', 'response_format', 'quality'],
+        },
+      ]),
+    })
+  );
+
+  expect(provider?.omitBodyFields).toEqual(['quality', 'response_format']);
+});
+
+it('rejects an unknown omitBodyFields entry', () => {
+  expect(() =>
+    loadImageProviderConfigs(
+      env({
+        AI_IMAGE_PROVIDERS: JSON.stringify([
+          {
+            id: 'wan',
+            label: 'wan',
+            baseUrl: 'https://wan.example.com',
+            omitBodyFields: ['prompt'],
+          },
+        ]),
+      })
+    )
+  ).toThrow(/AI_IMAGE_PROVIDERS is invalid/);
 });
 
 it('keeps configuration order so the first entry stays the default provider', () => {

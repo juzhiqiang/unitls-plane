@@ -198,7 +198,8 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   `-`/`_`）、`label`（必填，展示名）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
   `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`）、`editTransport`（`multipart` 默认 /
   `generations_ref`）、`refImagesField`（默认 `reference_images`）、`refImageEncoding`（`data_url`
-  默认 / `base64`）、`responseFormat`（`b64_json` 默认 / `url`）。
+  默认 / `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
+  `size`/`quality`/`response_format`/`n`，用于请求体校验严格、多一个未知字段就 400 的网关）。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到旧的单来源变量 `AI_IMAGE_BASE_URL` / `AI_IMAGE_API_KEY` /
   `AI_IMAGE_MODEL` / `AI_IMAGE_RESPONSE_FORMAT` / `AI_IMAGE_LABEL`，等价于一个 `id: default`
   的 multipart 来源，现网部署零改动。

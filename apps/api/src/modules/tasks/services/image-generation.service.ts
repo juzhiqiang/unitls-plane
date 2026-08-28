@@ -14,6 +14,7 @@ import {
   type ImageProviderCapability,
   type ImageProviderConfig,
   type ImageProviderEditTransport,
+  type ImageProviderOmittableBodyField,
   type ImageProviderRefEncoding,
 } from './image-provider-config';
 import {
@@ -106,6 +107,8 @@ export interface OpenAiCompatibleImageGenerationProviderOptions {
   editTransport?: ImageProviderEditTransport;
   refImagesField?: string;
   refImageEncoding?: ImageProviderRefEncoding;
+  /** 请求体里要省略的可选字段,给严格校验请求体的网关用。 */
+  omitBodyFields?: ImageProviderOmittableBodyField[];
   /** 单次上游请求超时,超过即按失败处理。省略时从 AI_IMAGE_REQUEST_TIMEOUT_MS 解析。 */
   requestTimeoutMs?: number;
   fetch?: typeof fetch;
@@ -131,6 +134,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
   private readonly editTransport: ImageProviderEditTransport;
   private readonly refImagesField: string;
   private readonly refImageEncoding: ImageProviderRefEncoding;
+  private readonly omitBodyFields: ReadonlySet<ImageProviderOmittableBodyField>;
   private readonly requestTimeoutMs: number;
   private readonly fetchImpl: typeof fetch;
 
@@ -145,6 +149,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     editTransport = 'multipart',
     refImagesField = 'reference_images',
     refImageEncoding = 'data_url',
+    omitBodyFields = [],
     requestTimeoutMs = resolveAiImageRequestTimeoutMs(),
     fetch: fetchImpl = fetch,
   }: OpenAiCompatibleImageGenerationProviderOptions = {}) {
@@ -160,6 +165,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     this.editTransport = editTransport;
     this.refImagesField = refImagesField;
     this.refImageEncoding = refImageEncoding;
+    this.omitBodyFields = new Set(omitBodyFields);
     this.requestTimeoutMs = requestTimeoutMs;
     this.fetchImpl = fetchImpl;
   }
@@ -238,25 +244,40 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     }
   }
 
+  /**
+   * 可选字段的名字与值。JSON 与 multipart 两条路都按这一份表拼,省得两边漏删。
+   * model / prompt 不在表里:它们必发。
+   */
+  private optionalBodyFields(
+    config: ImageGenerateTaskConfig
+  ): Array<[ImageProviderOmittableBodyField, string | number]> {
+    return [
+      ['size', config.size],
+      ['quality', config.quality],
+      ['response_format', this.responseFormat],
+      ['n', 1],
+    ];
+  }
+
   private async postGeneration(
     config: ImageGenerateTaskConfig,
     extraBody: Record<string, unknown> = {}
   ): Promise<Response> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      prompt: buildImageGenerationPrompt(config),
+    };
+    for (const [field, value] of this.optionalBodyFields(config)) {
+      if (!this.omitBodyFields.has(field)) body[field] = value;
+    }
+
     return this.fetchWithTimeout(this.generationUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
       },
-      body: JSON.stringify({
-        model: this.model,
-        prompt: buildImageGenerationPrompt(config),
-        size: config.size,
-        quality: config.quality,
-        response_format: this.responseFormat,
-        n: 1,
-        ...extraBody,
-      }),
+      body: JSON.stringify({ ...body, ...extraBody }),
     });
   }
 
@@ -301,10 +322,9 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       'source.png'
     );
     form.set('prompt', buildImageGenerationPrompt(config));
-    form.set('size', config.size);
-    form.set('quality', config.quality);
-    form.set('response_format', this.responseFormat);
-    form.set('n', '1');
+    for (const [field, value] of this.optionalBodyFields(config)) {
+      if (!this.omitBodyFields.has(field)) form.set(field, String(value));
+    }
 
     return this.fetchWithTimeout(this.editUrl, {
       method: 'POST',

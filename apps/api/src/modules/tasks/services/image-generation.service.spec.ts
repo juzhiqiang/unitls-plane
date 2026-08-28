@@ -80,6 +80,89 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     });
   });
 
+  it('drops the body fields the provider cannot accept', async () => {
+    // wan 一类网关对请求体做严格校验:多一个不认识的字段就整个 400
+    // (「请求包含未知字段」)。omitBodyFields 让这类来源不必改代码。
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      id: 'wan',
+      baseUrl: 'https://wan.test',
+      model: 'wan2.2-t2i',
+      omitBodyFields: ['quality', 'response_format'],
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(config);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({
+      model: 'wan2.2-t2i',
+      prompt: '一只戴礼帽的柴犬',
+      size: '1024x1024',
+      n: 1,
+    });
+    expect(body).not.toHaveProperty('quality');
+    expect(body).not.toHaveProperty('response_format');
+  });
+
+  it('keeps the reference images field when other body fields are omitted', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      id: 'wan',
+      baseUrl: 'https://wan.test',
+      editTransport: 'generations_ref',
+      omitBodyFields: ['quality', 'response_format', 'n'],
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(
+      { ...config, mode: 'image_to_image', inputFileCount: 1 },
+      await referencePng()
+    );
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.reference_images).toHaveLength(1);
+    expect(body).not.toHaveProperty('n');
+    expect(body).not.toHaveProperty('quality');
+  });
+
+  it('drops the omitted fields from the multipart edit form too', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      omitBodyFields: ['response_format'],
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(
+      { ...config, mode: 'image_to_image', inputFileCount: 1 },
+      await referencePng()
+    );
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const form = init.body as FormData;
+    expect(form.get('size')).toBe('1024x1024');
+    expect(form.get('quality')).toBe('high');
+    expect(form.has('response_format')).toBe(false);
+  });
+
   it('prefixes the prompt with the selected style template', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })

@@ -30,6 +30,23 @@ export const imageProviderRefEncodingEnum = z.enum(['data_url', 'base64']);
 export const imageProviderResponseFormatEnum = z.enum(['b64_json', 'url']);
 
 /**
+ * 请求体里允许省略的可选字段。
+ *
+ * 我们默认按 OpenAI 的 /v1/images/generations 发全套 size / quality / response_format / n,
+ * 但不少网关对请求体做严格校验:多一个它不认识的字段就整个 400(wan 回
+ * 「请求包含未知字段」),gpt-image-1 自己也已经不接受 response_format。
+ * 出现这种来源时,把对应字段列进 omitBodyFields 即可,不需要改代码。
+ *
+ * model 与 prompt 不在可省略范围内 —— 少了它们请求本身没有意义。
+ */
+export const imageProviderOmittableBodyFieldEnum = z.enum([
+  'size',
+  'quality',
+  'response_format',
+  'n',
+]);
+
+/**
  * 单个生图来源。
  *
  * 只要是 OpenAI 兼容的生图接口,新增来源就是往 AI_IMAGE_PROVIDERS 数组里加一项,
@@ -66,6 +83,11 @@ export const imageProviderConfigSchema = z
       .default('reference_images'),
     refImageEncoding: imageProviderRefEncodingEnum.default('data_url'),
     responseFormat: imageProviderResponseFormatEnum.default('b64_json'),
+    /** 见 imageProviderOmittableBodyFieldEnum:严格校验请求体的网关靠这个删字段。 */
+    omitBodyFields: z
+      .array(imageProviderOmittableBodyFieldEnum)
+      .default([])
+      .transform(list => [...new Set(list)]),
   })
   .strict();
 
@@ -103,6 +125,9 @@ export type ImageProviderRefEncoding = z.infer<
 >;
 export type ImageProviderResponseFormat = z.infer<
   typeof imageProviderResponseFormatEnum
+>;
+export type ImageProviderOmittableBodyField = z.infer<
+  typeof imageProviderOmittableBodyFieldEnum
 >;
 export type ImageProviderConfig = z.infer<typeof imageProviderConfigSchema>;
 

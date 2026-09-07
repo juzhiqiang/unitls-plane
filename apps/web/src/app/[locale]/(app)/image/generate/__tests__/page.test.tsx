@@ -233,25 +233,6 @@ describe('ImageGeneratePage', () => {
 
   // __NEW_TESTS__
 
-  it('fills the prompt field when a preset template is chosen from the dialog', async () => {
-    renderPage();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
-    // 弹窗打开后,模板按钮出现在 tab 序列里。
-    const presetButton = await screen.findByRole('button', {
-      name: /Guided science picture book/,
-    });
-    fireEvent.click(presetButton);
-
-    // 选中模板后提示词被填入,弹窗随之关闭。
-    await waitFor(() =>
-      expect(screen.getByLabelText('Prompt')).toHaveValue(PRESETS[0]!.prompt)
-    );
-    expect(
-      screen.queryByRole('button', { name: /Guided science picture book/ })
-    ).not.toBeInTheDocument();
-  });
-
   it('renders the MinIO example image for presets that ship one', async () => {
     renderPage();
 
@@ -262,8 +243,12 @@ describe('ImageGeneratePage', () => {
       '{title}',
       withImage.title
     );
-    const img = await screen.findByAltText(alt);
-    expect(img).toHaveAttribute(
+    // 空态模板墙与弹窗共用 PresetCard,查重时只看弹窗(portal)里的那张。
+    const imgsInDialog = await screen
+      .findAllByAltText(alt)
+      .then(all => all.filter(img => img.closest('[role="dialog"]')));
+    expect(imgsInDialog).toHaveLength(1);
+    expect(imgsInDialog[0]).toHaveAttribute(
       'src',
       `http://minio.test:9000/presets/${withImage.imageStorageKey}`
     );
@@ -432,7 +417,7 @@ describe('ImageGeneratePage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps every preview URL alive while multiple tasks complete', async () => {
+  it('switches the main preview through the thumbnail strip without revoking urls', async () => {
     mocks.groupProgress.mockReturnValue({
       items: [
         {
@@ -469,7 +454,6 @@ describe('ImageGeneratePage', () => {
 
     renderPage();
 
-    // 两张图分别在不同的轮询 tick 完成。
     await act(async () => {
       await mocks.onItemCompleted('t1', 'f1');
     });
@@ -477,16 +461,20 @@ describe('ImageGeneratePage', () => {
       await mocks.onItemCompleted('t2', 'f2');
     });
 
-    // 两张预览都渲染,且 URL 各自有效:第二张完成时不得 revoke 第一张仍在展示的 URL。
+    // 默认大图是第一张;第一张的 URL 必须在第二张完成后仍然存活。
     expect(await screen.findByAltText('Image 1')).toHaveAttribute(
       'src',
       'blob:preview-1'
     );
-    expect(screen.getByAltText('Image 2')).toHaveAttribute(
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    // 缩略条切换到第二张,大图随 selectedIndex 变化。
+    fireEvent.click(screen.getByRole('button', { name: 'View image 2' }));
+    expect(await screen.findByAltText('Image 2')).toHaveAttribute(
       'src',
       'blob:preview-2'
     );
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
 
     vi.unstubAllGlobals();
   });
@@ -593,28 +581,39 @@ describe('ImageGeneratePage', () => {
     ).not.toBeInTheDocument();
   });
 
-  // 文生图没有上传环节,步骤条不该给它挂一个永远走不到的第一步。
-  it('hides the upload step for text-to-image and shows it for image-to-image', async () => {
-    const { container } = renderPage();
+  // 信任条已随工作台改版移除,恢复提示统一走失败面板。
 
-    expect(screen.queryByText('Upload')).not.toBeInTheDocument();
-    expect(screen.getByText('Configure')).toBeInTheDocument();
-
-    await chooseReference(container);
-
-    expect(screen.getByText('Upload')).toBeInTheDocument();
-  });
-
-  // 信任条第四格是「恢复方式」,常态显示「生成失败」会被当成当前状态。
-  it('describes recovery neutrally instead of announcing a failure', () => {
+  it('shows the template wall in the empty state and fills the prompt on pick', () => {
     renderPage();
 
+    expect(screen.getByText('Idea templates')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Guided science picture book/ })
+    );
+    expect(screen.getByLabelText('Prompt')).toHaveValue(PRESETS[0]!.prompt);
+  });
+
+  it('fills the prompt field when a preset template is chosen from the dialog', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
+    // 弹窗打开后,模板按钮出现在 tab 序列里;空态模板墙与弹窗共用卡片,取弹窗那张。
+    const presetButton = (
+      await screen.findAllByRole('button', {
+        name: /Guided science picture book/,
+      })
+    ).find(button => button.closest('[role="dialog"]'))!;
+    fireEvent.click(presetButton);
+
+    // 选中模板后提示词被填入,弹窗随之关闭。
+    await waitFor(() =>
+      expect(screen.getByLabelText('Prompt')).toHaveValue(PRESETS[0]!.prompt)
+    );
     expect(
-      screen.getByText(/failed generations do not use up your daily quota/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText('Generation failed. Please try again.')
-    ).not.toBeInTheDocument();
+      screen
+        .queryAllByRole('button', { name: /Guided science picture book/ })
+        .some(button => button.closest('[role="dialog"]'))
+    ).toBe(false);
   });
 
   it('shows the remaining daily quota for a signed-in user', () => {
@@ -670,32 +669,6 @@ describe('ImageGeneratePage', () => {
     expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
 
     vi.unstubAllGlobals();
-  });
-
-  it('lays multiple results out in two columns', () => {
-    mocks.groupProgress.mockReturnValue({
-      items: [
-        {
-          taskId: 't1',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f1',
-        },
-        {
-          taskId: 't2',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f2',
-        },
-      ],
-      completedCount: 2,
-      failedCount: 0,
-      settled: true,
-      query: { isError: false },
-    });
-    const { container } = renderPage();
-
-    expect(container.querySelector('.sm\\:grid-cols-2')).not.toBeNull();
   });
 
   it('hides the source selector when only one provider is configured', () => {

@@ -20,12 +20,11 @@ import {
   type ImageGenerateDraft,
 } from '@/components/tools/image-generate-options';
 import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
+import { ImageGenerateTemplateWall } from '@/components/tools/image-generate-template-wall';
+import { ImageGenerateWorkbench } from '@/components/tools/image-generate-workbench';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
-import { ResultPanel } from '@/components/tools/result-panel';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
-import { ToolPageShell } from '@/components/tools/tool-page-shell';
-import type { ToolStage } from '@/components/tools/tool-step-rail';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 
@@ -34,19 +33,6 @@ const TOOL_HREF = '/image/generate';
 const REFERENCE_ACCEPT = {
   'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'],
 };
-
-/** 文生图没有上传环节,步骤条不该给它挂一个永远不会发生的第一步。 */
-const TEXT_TO_IMAGE_STAGES: readonly ToolStage[] = [
-  'configure',
-  'processing',
-  'result',
-];
-const IMAGE_TO_IMAGE_STAGES: readonly ToolStage[] = [
-  'upload',
-  'configure',
-  'processing',
-  'result',
-];
 
 const ERROR_MESSAGE_KEY: Record<string, string> = {
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
@@ -89,6 +75,8 @@ export default function ImageGeneratePage() {
   // 提交那一刻用到的参考图,单独存一份:用户在看结果时换图不该悄悄改掉对比的「前」。
   const [comparedFile, setComparedFile] = useState<File | null>(null);
   const [taskIds, setTaskIds] = useState<string[]>([]);
+  // 结果态下大图展示第几张;新一轮生成时在 reset 里归零。
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   // 产物取回(状态 completed 之后还要再下载一次 blob)收在 hook 里,页面只读 previews/pending。
@@ -131,6 +119,7 @@ export default function ImageGeneratePage() {
   const reset = () => {
     setTaskIds([]);
     setFailure(null);
+    setSelectedIndex(0);
     output.reset();
   };
 
@@ -221,213 +210,267 @@ export default function ImageGeneratePage() {
     );
   const busy = submitting || inFlight || fetchingResults;
 
-  const stage: ToolStage = submitting
-    ? 'processing'
-    : taskIds.length === 0
-      ? referenceMissing
-        ? 'upload'
-        : 'configure'
-      : (settled || groupErrored) && !fetchingResults
-        ? 'result'
-        : 'processing';
-
   const averageProgress =
     items.length > 0
       ? items.reduce((sum, item) => sum + (item.progress ?? 0), 0) /
         items.length
       : 0;
 
+  // 大图位:已完成的任务里按 selectedIndex 取,越界时夹回最后一张。
+  const completedItems = items.filter(item => item.status === 'completed');
+  const activeIndex = Math.min(
+    selectedIndex,
+    Math.max(completedItems.length - 1, 0)
+  );
+  const activeItem = completedItems[activeIndex];
+  const activeUrl = activeItem
+    ? output.previews[activeItem.taskId]?.url
+    : undefined;
+  // 图生图给滑动对比:参考图和结果分处页面两端时,看不出到底改了什么。
+  const showCompare = Boolean(comparedUrl && activeUrl);
+
+  // 右主区空态:还没提交过、也没有失败提示,才把版面交给模板墙。items 非空说明
+  // 已有结果可看(测试与 mock 场景会在 taskIds 之外直接喂数据),绝不能回到空态。
+  const showWall =
+    !submitting && taskIds.length === 0 && items.length === 0 && !failure;
+
+  const pickPreset = (prompt: string) => {
+    changeDraft({ ...draft, prompt });
+    // 填完把焦点交回输入框,用户可以立刻继续改写模板。
+    document.getElementById('image-generate-prompt')?.focus();
+  };
+
   return (
-    <ToolPageShell
+    <ImageGenerateWorkbench
       title={t('title')}
-      description={t('description')}
-      processing="server"
-      retention="account-files"
-      requiresLogin
-      recovery={t('recoveryHint')}
-      stage={stage}
-      stages={needsReference ? IMAGE_TO_IMAGE_STAGES : TEXT_TO_IMAGE_STAGES}
+      panel={
+        <>
+          {/* 左面板顺序:模式 →(图生图)参考图 → 提示词 → 参数组 → 来源(多来源时)。 */}
+          <ImageGenerateModeField
+            value={draft}
+            onChange={changeDraft}
+            disabled={busy}
+            editSupported={editSupported}
+          />
+
+          {needsReference && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">{t('sourceLabel')}</p>
+              <FileDropzone
+                accept={REFERENCE_ACCEPT}
+                maxSize={maxFileSize}
+                density="compact"
+                disabled={busy}
+                hint={t('sourceHint')}
+                onDrop={files => {
+                  const [next] = files;
+                  if (next) setSourceFile(next);
+                }}
+              />
+              {sourceUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={sourceUrl}
+                  alt={t('sourcePreviewAlt')}
+                  className="max-h-48 w-auto rounded-md border border-border"
+                />
+              )}
+            </div>
+          )}
+
+          <ImageGeneratePromptField
+            value={draft}
+            onChange={changeDraft}
+            disabled={busy}
+            presets={presetsQuery.data ?? []}
+          />
+
+          <ImageGenerateParamsFields
+            value={draft}
+            onChange={changeDraft}
+            disabled={busy}
+          />
+
+          <ImageGenerateProviderField
+            value={draft}
+            onChange={changeDraft}
+            disabled={busy}
+            providers={providers}
+          />
+        </>
+      }
+      panelFooter={
+        <>
+          {/* 已登录才展示当日额度:free = 0,匿名走登录跳转,没必要显示一行 0。 */}
+          {session && quota.data && (
+            <p className="font-mono text-xs tabular-nums text-muted-foreground">
+              {t('quotaRemaining', {
+                remaining: String(quota.data.remaining),
+                limit: String(quota.data.limit),
+              })}
+            </p>
+          )}
+
+          {/* 主操作吸面板底部:参数区怎么滚,按钮始终在手边。 */}
+          <button
+            type="button"
+            className="h-10 w-full rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={
+              draft.prompt.trim().length === 0 || referenceMissing || busy
+            }
+            onClick={submit}
+          >
+            {busy ? t('generating') : t('submit')}
+          </button>
+        </>
+      }
     >
-      {/* 主输入块:模式 →(图生图)参考图 → 提示词。顺序与步骤条一致。 */}
-      <div className="space-y-5 rounded-md border border-border p-4">
-        <ImageGenerateProviderField
-          value={draft}
-          onChange={changeDraft}
-          disabled={busy}
-          providers={providers}
-        />
-
-        <ImageGenerateModeField
-          value={draft}
-          onChange={changeDraft}
-          disabled={busy}
-          editSupported={editSupported}
-        />
-
-        {needsReference && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium">{t('sourceLabel')}</p>
-            <FileDropzone
-              accept={REFERENCE_ACCEPT}
-              maxSize={maxFileSize}
-              density="compact"
-              disabled={busy}
-              hint={t('sourceHint')}
-              onDrop={files => {
-                const [next] = files;
-                if (next) setSourceFile(next);
-              }}
-            />
-            {sourceUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={sourceUrl}
-                alt={t('sourcePreviewAlt')}
-                className="max-h-64 w-auto rounded-md border border-border"
-              />
-            )}
-          </div>
-        )}
-
-        <ImageGeneratePromptField
-          value={draft}
-          onChange={changeDraft}
-          disabled={busy}
+      {showWall ? (
+        <ImageGenerateTemplateWall
           presets={presetsQuery.data ?? []}
+          disabled={busy}
+          onPick={pickPreset}
         />
-      </div>
+      ) : (
+        <div className="space-y-5">
+          {/* 生成中:进度条;取回图片的空窗也不能让进度条先消失。 */}
+          {(inFlight || fetchingResults) && (
+            <ProcessingProgress
+              progress={averageProgress}
+              stage={inFlight ? 'generating' : undefined}
+              label={
+                !inFlight && fetchingResults ? t('resultFetching') : undefined
+              }
+            />
+          )}
 
-      <ImageGenerateParamsFields
-        value={draft}
-        onChange={changeDraft}
-        disabled={busy}
-      />
+          {failure && (
+            <FailureRecoveryPanel
+              message={t(failure.key)}
+              errorCode={failure.code}
+              onRetry={submit}
+            />
+          )}
 
-      {/* 已登录才展示当日额度:free = 0,匿名走登录跳转,没必要显示一行 0。 */}
-      {session && quota.data && (
-        <p className="font-mono text-xs tabular-nums text-muted-foreground">
-          {t('quotaRemaining', {
-            remaining: String(quota.data.remaining),
-            limit: String(quota.data.limit),
-          })}
-        </p>
-      )}
+          {groupErrored && (
+            <FailureRecoveryPanel message={t('failed')} onRetry={submit} />
+          )}
 
-      {/* 主操作与其它图片工具页保持一致:整宽填充按钮。 */}
-      <button
-        type="button"
-        className="h-10 w-full rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={draft.prompt.trim().length === 0 || referenceMissing || busy}
-        onClick={submit}
-      >
-        {busy ? t('generating') : t('submit')}
-      </button>
-
-      {failure && (
-        <FailureRecoveryPanel
-          message={t(failure.key)}
-          errorCode={failure.code}
-          onRetry={submit}
-        />
-      )}
-
-      {groupErrored && (
-        <FailureRecoveryPanel message={t('failed')} onRetry={submit} />
-      )}
-
-      {inFlight && (
-        <ProcessingProgress progress={averageProgress} stage="generating" />
-      )}
-
-      {/* 生成结束、图片还在取回:进度条不能先消失,否则页面看起来已经完事了。 */}
-      {!inFlight && fetchingResults && (
-        <ProcessingProgress progress={100} label={t('resultFetching')} />
-      )}
-
-      {/* 多张结果排成两列:整宽堆叠时 4 张要滚很久,也没法互相比较。 */}
-      <div
-        className={items.length > 1 ? 'grid gap-6 sm:grid-cols-2' : 'space-y-6'}
-      >
-        {items.map((item, index) => {
-          if (item.status === 'failed') {
-            return (
-              <FailureRecoveryPanel
-                key={item.taskId}
-                message={t(ERROR_MESSAGE_KEY[item.errorCode ?? ''] ?? 'failed')}
-                errorCode={item.errorCode}
-                onRetry={submit}
-              />
-            );
-          }
-          if (item.status !== 'completed') return null;
-
-          const preview = output.previews[item.taskId];
-
-          // 取回失败给的是「重试取回」,不是重新生成 —— 图已经出好了,再走一遍生成
-          // 会白扣一次配额。
-          if (preview?.state === 'error') {
-            return (
-              <FailureRecoveryPanel
-                key={item.taskId}
-                message={t('resultFetchFailed')}
-                onRetry={() =>
-                  void output.load(item.taskId, item.outputFileId ?? '')
-                }
-              />
-            );
-          }
-
-          const previewUrl = preview?.url;
-          const alt = t('resultMeta', { index: index + 1 });
-          // 图生图给滑动对比:参考图和结果分处页面两端时,看不出到底改了什么。
-          const showCompare = Boolean(comparedUrl && previewUrl);
-
-          return (
-            <ResultPanel
-              key={item.taskId}
-              title={t('resultTitle')}
-              description={alt}
-              preview={
-                !previewUrl ? (
+          {activeItem && (
+            <section className="space-y-3">
+              <div className="flex min-h-64 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/20 p-2">
+                {!activeUrl ? (
                   <div
                     role="status"
                     aria-live="polite"
-                    className="flex h-64 w-full items-center justify-center rounded-md border border-dashed border-border bg-muted/30"
+                    className="flex h-64 w-full items-center justify-center"
                   >
                     <span className="animate-pulse font-mono text-xs uppercase tracking-wider text-muted-foreground">
                       {t('resultFetching')}
                     </span>
                   </div>
-                ) : showCompare && comparedUrl && previewUrl ? (
-                  <ImageGenerateCompare
-                    beforeUrl={comparedUrl}
-                    afterUrl={previewUrl}
-                    title={t('compareTitle')}
-                  />
-                ) : previewUrl ? (
+                ) : showCompare ? (
+                  <div className="w-full">
+                    <ImageGenerateCompare
+                      beforeUrl={comparedUrl!}
+                      afterUrl={activeUrl}
+                      title={t('compareTitle')}
+                    />
+                  </div>
+                ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={previewUrl}
-                    alt={alt}
-                    className="max-h-96 w-auto rounded-md"
+                    src={activeUrl}
+                    alt={t('resultMeta', { index: activeIndex + 1 })}
+                    className="max-h-[32rem] w-auto rounded-md"
                   />
-                ) : undefined
-              }
-              action={
-                previewUrl ? (
-                  <a
-                    href={previewUrl}
-                    download={`ai-image-${index + 1}.png`}
-                    className="rounded-md border px-3 py-1.5 text-sm"
-                  >
-                    {tShared('download')}
-                  </a>
-                ) : null
-              }
-            />
-          );
-        })}
-      </div>
-    </ToolPageShell>
+                )}
+              </div>
+
+              {activeUrl && (
+                <a
+                  href={activeUrl}
+                  download={`ai-image-${activeIndex + 1}.png`}
+                  className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm hover:bg-muted/40"
+                >
+                  {tShared('download')}
+                </a>
+              )}
+
+              {/* 多张结果才有缩略条:单张大图不需要「切换到自己」。 */}
+              {completedItems.length > 1 && (
+                <div
+                  role="group"
+                  aria-label={t('thumbnailLabel')}
+                  className="flex flex-wrap gap-2"
+                >
+                  {completedItems.map((item, index) => {
+                    const thumbUrl = output.previews[item.taskId]?.url;
+                    return (
+                      <button
+                        key={item.taskId}
+                        type="button"
+                        aria-label={t('selectResult', { index: index + 1 })}
+                        aria-pressed={index === activeIndex}
+                        disabled={busy || !thumbUrl}
+                        onClick={() => setSelectedIndex(index)}
+                        className={`overflow-hidden rounded-md border p-0.5 ${
+                          index === activeIndex
+                            ? 'border-foreground'
+                            : 'border-transparent hover:border-border'
+                        }`}
+                      >
+                        {thumbUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={thumbUrl}
+                            alt=""
+                            className="h-16 w-16 rounded-sm object-cover"
+                          />
+                        ) : (
+                          <span className="block h-16 w-16 animate-pulse rounded-sm bg-muted" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 逐项异常:生成失败的任务、取回失败的任务。取回失败给「重试取回」,
+              不是重新生成 —— 图已经出好了,再走一遍生成会白扣一次配额。 */}
+          {items.map(item => {
+            if (item.status === 'failed') {
+              return (
+                <FailureRecoveryPanel
+                  key={item.taskId}
+                  message={t(
+                    ERROR_MESSAGE_KEY[item.errorCode ?? ''] ?? 'failed'
+                  )}
+                  errorCode={item.errorCode}
+                  onRetry={submit}
+                />
+              );
+            }
+            if (
+              item.status === 'completed' &&
+              output.previews[item.taskId]?.state === 'error'
+            ) {
+              return (
+                <FailureRecoveryPanel
+                  key={item.taskId}
+                  message={t('resultFetchFailed')}
+                  onRetry={() =>
+                    void output.load(item.taskId, item.outputFileId ?? '')
+                  }
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+      )}
+    </ImageGenerateWorkbench>
   );
 }

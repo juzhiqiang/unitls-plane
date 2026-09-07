@@ -211,10 +211,13 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     let response: Response;
     try {
       response =
-        config.mode === 'image_to_image'
-          ? await this.postEdit(config, references)
-          : await this.postGeneration(config);
+        config.mode === 'text_to_image'
+          ? await this.postGeneration(config)
+          : await this.postEdit(config, references);
     } catch (error) {
+      // provider 内部抛出的确定性错误(generations_ref 不支持局部重绘、缺参考图等)
+      // 原样透传:它们不是网络故障,重试只会原样再失败一遍。
+      if (error instanceof ImageGenerationError) throw error;
       // fetch 抛错(含超时 AbortError、DNS、连接重置)统一走兜底文案,原文只进日志。
       // 这类是瞬时故障,允许重试:实测网关偶发掐断连接,第二次往往就通了。
       this.logger.warn(
@@ -312,14 +315,48 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       );
     }
 
+    // 局部重绘:references = [原图, 蒙版]。蒙版的透明区是要重绘的区域(OpenAI 语义),
+    // 不能压平 alpha;原图与普通图生图一样压平(wan 系拒绝带 alpha 的图)。
+    // generations_ref 传图是 JSON 数组,表达不了"哪张是蒙版",明确不支持。
+    let mask: Buffer | undefined;
+    let images = loaded;
+    if (config.mode === 'inpaint') {
+      if (loaded.length !== 2) {
+        this.logger.warn(
+          `AI image inpaint requires exactly 2 inputs (image + mask), got ${loaded.length}`
+        );
+        throw new ImageGenerationError(
+          ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+          'Image generation failed'
+        );
+      }
+      if (this.editTransport === 'generations_ref') {
+        this.logger.warn(
+          `Image provider ${this.descriptor.id} cannot transport an inpaint mask over generations_ref`
+        );
+        throw new ImageGenerationError(
+          ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
+          'The selected image provider does not support this mode'
+        );
+      }
+      [images, mask] = [loaded.slice(0, 1), loaded[1]];
+    }
+
     // 统一转 PNG(上游只认少数格式)、按 EXIF 方向摆正、压平透明通道
     // (wan2.7 一类网关直接拒绝带 alpha 的 PNG),sharp 默认不透传元数据,
     // 不会把用户照片里的 GPS 发给 provider。
     const normalized = await Promise.all(
-      loaded.map(buffer =>
-        sharp(buffer).rotate().flatten({ background: '#ffffff' }).png().toBuffer()
+      images.map(buffer =>
+        sharp(buffer)
+          .rotate()
+          .flatten({ background: '#ffffff' })
+          .png()
+          .toBuffer()
       )
     );
+    const normalizedMask = mask
+      ? await sharp(mask).rotate().png().toBuffer()
+      : undefined;
 
     // kmage 一类网关没有 /v1/images/edits:图生图也走 generations,参考图放进 JSON 数组,
     // 多张融合天然就是数组多放几个元素。
@@ -347,6 +384,14 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
         `source-${index + 1}.png`
       );
     });
+    if (normalizedMask) {
+      // 蒙版透明区 = 重绘区(OpenAI 语义);kmage 的 gpt-image-2 实测接受。
+      form.append(
+        'mask',
+        new Blob([new Uint8Array(normalizedMask)], { type: 'image/png' }),
+        'mask.png'
+      );
+    }
     form.set('prompt', buildImageGenerationPrompt(config));
     for (const [field, value] of this.optionalBodyFields(config)) {
       if (value === undefined) continue;
@@ -417,7 +462,7 @@ const REQUIRED_CAPABILITY: Record<
 > = {
   text_to_image: 'generate',
   image_to_image: 'edit',
-  inpaint: 'edit',
+  inpaint: 'inpaint',
 };
 
 @Injectable()

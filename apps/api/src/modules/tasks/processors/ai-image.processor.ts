@@ -144,16 +144,8 @@ export class AiImageProcessor extends WorkerHost {
       ...(task.inputConfig as Record<string, unknown>),
       inputFileCount: task.inputFileIds?.length ?? 0,
     });
-    if (config.mode === 'inpaint') {
-      // 局部重绘还没实现:蒙版通道与画笔组件都不存在,先明确拒绝而不是把蒙版当参考图发出去。
-      this.logger.warn(
-        `AI image task ${task.id} requested unsupported inpaint`
-      );
-      throw new ImageGenerationError(
-        ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
-      );
-    }
+    // inpaint(局部重绘)现在支持:蒙版编辑器在前端画布上产出 base + mask 两个输入文件,
+    // 能力校验(来源是否声明 inpaint)由 ImageGenerationService 在解析来源时完成。
     await this.reportProgress(task.id, job, 30);
 
     const references = await this.loadReferences(task, config.mode);
@@ -188,17 +180,17 @@ export class AiImageProcessor extends WorkerHost {
   }
 
   /**
-   * 图生图的参考图(1..N 张,多张即图片融合)。
+   * 图生图/融合的参考图(1..N 张)与局部重绘的 [原图, 蒙版]。
    *
    * getById 必须带 task.userId:它是文件归属校验,少了这个参数等于允许任务引用
-   * 别人账号里的文件。schema 已保证 image_to_image 的数量区间,这里的兜底
+   * 别人账号里的文件。schema 已保证各模式的数量区间,这里的兜底
    * 只为在数据异常时给出与其它失败一致的通用文案。
    */
   private async loadReferences(
     task: AiImageTask,
     mode: ImageGenerateTaskConfig['mode']
   ): Promise<Buffer[] | undefined> {
-    if (mode !== 'image_to_image') return undefined;
+    if (mode !== 'image_to_image' && mode !== 'inpaint') return undefined;
 
     const fileIds = task.inputFileIds ?? [];
     if (fileIds.length === 0) {

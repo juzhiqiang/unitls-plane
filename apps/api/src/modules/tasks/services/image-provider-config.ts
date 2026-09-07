@@ -3,7 +3,18 @@ import { z } from 'zod';
 /** provider 与生成标识共用同一个默认模型,避免 EXIF 记的模型与实际请求不一致。 */
 export const DEFAULT_AI_IMAGE_MODEL = 'gpt-image-1';
 
-export const imageProviderCapabilityEnum = z.enum(['generate', 'edit']);
+/**
+ * 来源能力位。
+ *
+ * `generate` = 文生图,`edit` = 图生图/多图融合,`inpaint` = 蒙版局部重绘
+ * (依赖 /v1/images/edits 的 mask 字段,wan 系网关没有;kmage 的 gpt-image-2 实测可用)。
+ * inpaint 不进默认值:支持的来源显式声明,前端据此决定编辑器入口是否出现。
+ */
+export const imageProviderCapabilityEnum = z.enum([
+  'generate',
+  'edit',
+  'inpaint',
+]);
 
 /**
  * 图生图的上游调用方式。OpenAI 兼容网关在这一点上并不统一:

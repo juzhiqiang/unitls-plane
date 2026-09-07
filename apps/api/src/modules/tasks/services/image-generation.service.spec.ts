@@ -561,6 +561,60 @@ describe('OpenAiCompatibleImageGenerationProvider (multi-image fusion)', () => {
     expect(form.getAll('image')).toHaveLength(2);
   });
 
+  /** 局部重绘:multipart 带 mask 字段,蒙版不压平 alpha。 */
+  it('posts the inpaint mask alongside the base image', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(
+      {
+        ...config,
+        mode: 'inpaint' as const,
+        prompt: '把圈出的区域改成夜空',
+        inputFileCount: 2,
+      },
+      [await referencePng(), await referencePng()]
+    );
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const form = init.body as FormData;
+    expect(form.getAll('image')).toHaveLength(1);
+    expect(form.get('mask')).toBeInstanceOf(Blob);
+  });
+
+  it('rejects inpaint on generations_ref providers instead of guessing', async () => {
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      id: 'kmage',
+      baseUrl: 'https://image.dddd.zone',
+      editTransport: 'generations_ref',
+      fetch: (async () => {
+        throw new Error('should not reach upstream');
+      }) as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(
+        {
+          ...config,
+          mode: 'inpaint' as const,
+          prompt: 'x',
+          inputFileCount: 2,
+        },
+        [await referencePng(), await referencePng()]
+      )
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE);
+  });
+
   it('sends every reference in the refImagesField array for generations_ref', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })

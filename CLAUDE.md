@@ -191,8 +191,10 @@ API 模块：
 - 图片裁剪（/image/crop）与打码（/image/mosaic）纯浏览器 canvas 处理，图片不上传。
 - GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
-- AI 生图（/image/generate）走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图与图生图（上传一张参考图），局部重绘未实现。生图来源由
-  `AI_IMAGE_PROVIDERS` JSON 配置，可配多个 OpenAI 兼容来源并在页面手动选择，配额仍为全局。
+- AI 生图（/image/generate）是对话式布局（会话侧栏 + 消息流 + 底部输入条），走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图与图生图（附/粘贴/拖入一张参考图即为图生图），局部重绘未实现。生图来源由
+  `AI_IMAGE_PROVIDERS` JSON 配置，可配多个 OpenAI 兼容来源并在参数面板选择（含各来源 `sizes`
+  尺寸声明），配额仍为全局。会话由任务派生（`tasks.session_id`），端点为
+  `GET /tasks/image-generate/sessions` 与 `.../sessions/:sessionId/tasks`。
 - AI 生图的提示词模板已动态化：模板存 `image_generate_presets` 表（双语言列），示例图存 MinIO
   `presets` 匿名只读桶，由 `GET /tasks/image-generate/presets`（公开端点，按 `lang`
   返回单语言扁平对象）下发；内置 12 条由 `apps/api/src/scripts/seed-image-generate-presets.ts` 按

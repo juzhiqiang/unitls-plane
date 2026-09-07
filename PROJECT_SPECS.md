@@ -196,10 +196,12 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   是 JSON 数组，**数组第一项是默认来源**。新增一个兼容 OpenAI 格式的来源只需加一项，不需要改代码。JSON 非法或字段不合法时 API 直接启动失败，不静默降级。
 - 每项字段：`id`（必填，字母数字与
   `-`/`_`）、`label`（必填，展示名）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
-  `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`）、`editTransport`（`multipart` 默认 /
+  `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`）、`sizes`（该来源支持的尺寸列表，默认
+  `["1024x1024","1024x1536","1536x1024"]`，随 providers 端点下发，前端画面比例档位由它派生，processor 请求前交叉校验；默认不含
+  `"auto"` —— 那只是 gpt-image-1 一族的语义，严格网关会 400，需要「自动」档的来源显式声明）、`editTransport`（`multipart` 默认 /
   `generations_ref`）、`refImagesField`（默认 `reference_images`）、`refImageEncoding`（`data_url`
   默认 / `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
-  `size`/`quality`/`response_format`/`n`，用于请求体校验严格、多一个未知字段就 400 的网关）。
+  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到旧的单来源变量 `AI_IMAGE_BASE_URL` / `AI_IMAGE_API_KEY` /
   `AI_IMAGE_MODEL` / `AI_IMAGE_RESPONSE_FORMAT` / `AI_IMAGE_LABEL`，等价于一个 `id: default`
   的 multipart 来源，现网部署零改动。
@@ -209,10 +211,10 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   一类网关没有 `/v1/images/edits`）。两者都是
   `n=1`，一张图对应一个任务，参考图先经 sharp 转 PNG 并剥掉原图元数据。局部重绘尚未实现。
 - `GET /tasks/image-generate/providers` 返回可用来源，需登录，只下发 `id` / `label` /
-  `capabilities`；`baseUrl` 与 `apiKey` 属于服务端配置，不出网。前端只有一个来源时不展示选择器。
+  `capabilities` / `sizes`；`baseUrl` 与 `apiKey` 属于服务端配置，不出网。前端只有一个来源时不展示模型行。
 - 前端把选中的来源作为 `inputConfig.providerId`
-  提交。省略时用第一个来源；来源不存在或不支持该模式时任务以 `AI_IMAGE_PROVIDER_UNAVAILABLE`
-  失败，不会静默换成另一个来源。
+  提交。省略时用第一个来源；来源不存在、不支持该模式或不支持所请求尺寸时任务以
+  `AI_IMAGE_PROVIDER_UNAVAILABLE` 失败，不会静默换成另一个来源。
 - 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。
 
 生图页的「提示词模板」已从前端硬编码迁移到 DB + 对象存储，方便后续做后台动态运营：
@@ -235,7 +237,18 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 - 每日张数配额是全局的，不按来源区分。
 - 都没配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
   失败，页面提示未配置。
-- 尺寸与质量不走 env，由前端表单传入、`imageGenerateTaskConfigSchema` 提供默认值。
+- 画面比例与质量由前端参数面板传入：`size` 为 `"auto"` 或 `WxH`（形状由
+  `imageGenerateTaskConfigSchema` 校验，取值由来源 `sizes` 交叉校验），`quality` 为
+  `auto`/`standard`/`high`；`background` 可选 `transparent`（透明背景，依赖本站恒 PNG 的产物）。
+  设计稿中的「分辨率」行明确不做：「自动」语义已由画面比例=自动（`size:"auto"`）覆盖。
+  风格（`style`）行已从 UI 下线，schema 字段保留以兼容旧任务 retry。
+- **生图页为对话式布局**（2026-09-07 改版）：左侧会话历史侧栏（新对话/搜索/列表）+ 主画布消息流
+  （每次生成 = 提示词气泡 + 结果网格）+ 底部输入条（参考图附件/粘贴/拖入即图生图，无显式模式开关）。
+  会话从任务派生：`tasks.session_id` 列（建任务时从 `inputConfig.sessionId` 提取，uuid 校验，非法即
+  丢弃），一次提交的 N 张图靠 `inputConfig.clientGroupId` 聚成一条消息。会话端点：
+  `GET /tasks/image-generate/sessions`（列表，首条提示词前 20 字符做标题，最近活动倒序，上限 50）、
+  `GET /tasks/image-generate/sessions/:sessionId/tasks`（正序任务列表，上限 200），均需登录；
+  v1 无会话删除。无 `session_id` 的历史生图任务不进会话，仍可在任务列表页看到。
 - 每日生成张数上限在 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']`
   中按 plan 配置。
 

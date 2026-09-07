@@ -184,12 +184,13 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 - `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级。
 - 每项字段：`id`、`label`（必填，展示名，会下发前端）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
   `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`，只支持文生图写
-  `["generate"]`）、`editTransport`（`multipart` 默认 / `generations_ref`）、`refImagesField`（默认
+  `["generate"]`）、`sizes`（默认 `["1024x1024","1024x1536","1536x1024"]`，页面画面比例档位由它派生，SDXL 系网关可声明更多
+  WxH 档位；gpt-image-1 类来源想要「自动」档需显式加 `"auto"`，严格网关收到 `"auto"` 会 400）、`editTransport`（`multipart` 默认 / `generations_ref`）、`refImagesField`（默认
   `reference_images`）、`refImageEncoding`（`data_url` 默认 /
   `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
-  `size`/`quality`/`response_format`/`n`）。
+  `size`/`quality`/`response_format`/`n`/`background`）。
 - `omitBodyFields` 用于请求体校验严格的网关：默认按 OpenAI 发全套
-  `size`/`quality`/`response_format`/`n`，但有些网关多一个不认识的字段就整个 400（wan 回「请求包含未知字段」），gpt-image-1 本身也不再接受
+  `size`/`quality`/`response_format`/`n`（透明背景时另有 `background`），但有些网关多一个不认识的字段就整个 400（wan 回「请求包含未知字段」），gpt-image-1 本身也不再接受
   `response_format`。把对应字段列进去即可，不必改代码；`model` 与 `prompt` 不可省略。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到单来源变量
   `AI_IMAGE_BASE_URL`、`AI_IMAGE_API_KEY`、`AI_IMAGE_MODEL`、`AI_IMAGE_RESPONSE_FORMAT`、`AI_IMAGE_LABEL`，等价于一个

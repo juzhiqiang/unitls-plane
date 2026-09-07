@@ -333,8 +333,9 @@ export default function ImageGeneratePage() {
         />
       ) : (
         <div className="space-y-5">
-          {/* 生成中:进度条;取回图片的空窗也不能让进度条先消失。 */}
-          {(inFlight || fetchingResults) && (
+          {/* 工作态全程给进度占位:上传参考图 + 串行建任务的 submitting 阶段、
+              生成中的 inFlight、取回图片的空窗,都不能让主区先空着。 */}
+          {(submitting || inFlight || fetchingResults) && (
             <ProcessingProgress
               progress={averageProgress}
               stage={inFlight ? 'generating' : undefined}
@@ -412,7 +413,9 @@ export default function ImageGeneratePage() {
                         type="button"
                         aria-label={t('selectResult', { index: index + 1 })}
                         aria-pressed={index === activeIndex}
-                        disabled={busy || !thumbUrl}
+                        // blob URL 在 reset() 前一直存活,生成中途也能安全切换到
+                        // 已取回的图;没取回的缩略位本来就有脉动占位,只按它禁用。
+                        disabled={!thumbUrl}
                         onClick={() => setSelectedIndex(index)}
                         className={`overflow-hidden rounded-md border p-0.5 ${
                           index === activeIndex

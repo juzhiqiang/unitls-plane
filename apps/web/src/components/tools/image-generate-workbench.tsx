@@ -26,13 +26,13 @@ export function ImageGenerateWorkbench({
     <div className="mx-auto max-w-7xl space-y-4">
       <h1 className="text-xl font-medium tracking-tight">{title}</h1>
       <div className="grid items-start gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="flex min-w-0 flex-col gap-4 self-start rounded-md border border-border p-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)]">
+        <aside className="order-2 flex min-w-0 flex-col gap-4 self-start rounded-md border border-border p-4 lg:order-1 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)]">
           <div className="min-h-0 flex-1 space-y-5 lg:overflow-y-auto lg:pr-1">
             {panel}
           </div>
           <div className="shrink-0 space-y-3">{panelFooter}</div>
         </aside>
-        <div className="min-w-0">{children}</div>
+        <div className="order-1 min-w-0 lg:order-2">{children}</div>
       </div>
     </div>
   );

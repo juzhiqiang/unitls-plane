@@ -60,7 +60,7 @@ page.tsx(状态编排 + 提交逻辑,现有 hooks 全部保留)
 
 - `empty`:无 taskIds 且无 failure(且非 submitting)→ 模板墙。
 - `working`:submitting || inFlight || fetchingResults → 进度占位;failure 非空时叠加失败重试面板。
-- `result`:已有完成的 previews 可展示;若部分任务仍在 working,保持 working 态为主、完成图先可预览(与现状一致:大图 + 逐张出现)。
+- `result`:已完成的任务显示大图预览(下载按钮挂在预览位,保留现有 download 链接行为);若部分任务仍在生成,已完成的图先进入预览可看,进度占位持续到全部 settled,逐张可切换。
 
 ## 空态模板墙
 

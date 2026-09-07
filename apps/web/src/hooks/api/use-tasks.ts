@@ -244,3 +244,29 @@ export function useImageGenerateSessionTasks(sessionId: string) {
     },
   });
 }
+
+/** 删除一个生图会话(任务行 + 产物/参考图文件硬删,不进回收站)。 */
+export function useDeleteImageGenerateSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { data, error } = await api.DELETE(
+        '/tasks/image-generate/sessions/{sessionId}' as any,
+        { params: { path: { sessionId } } as any }
+      );
+      if (error) throw error;
+      return data as unknown as { deletedTasks: number };
+    },
+    onSuccess: () => {
+      // 会话从任务派生:删任务后列表、会话任务与任务列表缓存都要刷新。
+      queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.imageGenerateSessions(),
+      });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({
+        queryKey: accountQueryKeys.summaries(),
+      });
+    },
+  });
+}

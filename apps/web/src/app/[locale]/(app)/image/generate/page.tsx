@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 import {
   useCreateTask,
+  useDeleteImageGenerateSession,
   useImageGeneratePresets,
   useImageGenerateProviders,
   useImageGenerateQuota,
@@ -89,8 +90,8 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
         clientGroupId,
         prompt,
         mode,
-        referenceFileId:
-          mode === 'image_to_image' ? task.inputFileIds[0] : undefined,
+        referenceFileIds:
+          mode === 'image_to_image' ? (task.inputFileIds as string[]) : [],
         taskIds: [task.id],
         tasks: [entry],
       });
@@ -116,7 +117,8 @@ export default function ImageGeneratePage() {
   );
   const [activeSessionId, setActiveSessionId] = useState(newSessionId);
   const [draft, setDraft] = useState<ImageGenerateChatDraft>(INITIAL_DRAFT);
-  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  // 参考图数组:0 张文生图、1 张图生图、多张融合。
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<{ key: string; code?: string } | null>(
     null
@@ -183,7 +185,7 @@ export default function ImageGeneratePage() {
     const id = globalThis.crypto.randomUUID();
     setNewSessionId(id);
     setActiveSessionId(id);
-    setReferenceFile(null);
+    setReferenceFiles([]);
     setFailure(null);
     setOptimistic(null);
     setMobileSidebarOpen(false);
@@ -199,7 +201,8 @@ export default function ImageGeneratePage() {
   const submit = async () => {
     if (requireLogin(TOOL_HREF)) return;
 
-    const mode = referenceFile ? 'image_to_image' : 'text_to_image';
+    const mode =
+      referenceFiles.length > 0 ? 'image_to_image' : 'text_to_image';
     const clientGroupId = globalThis.crypto.randomUUID();
     const prompt = draft.prompt.trim();
     // 草稿尺寸(默认 auto)不在当前来源支持列表时回落到第一档,免得提交一个
@@ -212,6 +215,7 @@ export default function ImageGeneratePage() {
       clientGroupId,
       prompt,
       mode,
+      referenceFileIds: [],
       taskIds: [],
       // 数量占位:服务端数据到达前,消息里先亮出 N 个脉动格子。
       tasks: Array.from({ length: draft.count }, (_, index) => ({
@@ -220,19 +224,23 @@ export default function ImageGeneratePage() {
       })),
     });
 
-    // 参考图只上传一次,N 个任务共用同一个 fileId:同一张图重复上传既费额度也费带宽。
+    // 参考图各上传一次,N 个任务共用同一组 fileId:同一批图重复上传既费额度也费带宽。
     let inputFileIds: string[] = [];
-    if (mode === 'image_to_image' && referenceFile) {
+    if (mode === 'image_to_image' && referenceFiles.length > 0) {
       try {
         // upload 走 multipart,OpenAPI 里 201 没有 JSON content schema,openapi-fetch
         // 把返回类型推成 undefined,这里先转 unknown 再断言,与 use-files 里同一处理方式。
-        const uploaded = (await uploadFile.mutateAsync(
-          referenceFile
-        )) as unknown as { id: string };
-        inputFileIds = [uploaded.id];
+        const uploadedIds: string[] = [];
+        for (const file of referenceFiles) {
+          const uploaded = (await uploadFile.mutateAsync(
+            file
+          )) as unknown as { id: string };
+          uploadedIds.push(uploaded.id);
+        }
+        inputFileIds = uploadedIds;
         setOptimistic(current =>
           current && current.clientGroupId === clientGroupId
-            ? { ...current, referenceFileId: uploaded.id }
+            ? { ...current, referenceFileIds: uploadedIds }
             : current
         );
       } catch {
@@ -315,6 +323,29 @@ export default function ImageGeneratePage() {
     document.getElementById('image-generate-prompt')?.focus();
   };
 
+  const deleteSession = useDeleteImageGenerateSession();
+  const handleDeleteSession = (sessionId: string) => {
+    void deleteSession.mutate(sessionId, {
+      onSuccess: () => {
+        // 删的是当前会话:画布切回新对话,预览与加载记录一并清空。
+        if (sessionId === activeSessionId) {
+          startNewChat();
+        } else {
+          output.reset();
+          loadedRef.current = new Set();
+        }
+      },
+      onError: error => {
+        const code = (error as { code?: unknown })?.code;
+        setFailure(
+          code === 'SESSION_HAS_ACTIVE_TASKS'
+            ? { key: 'sessionHasActiveTasks' }
+            : { key: 'failed' }
+        );
+      },
+    });
+  };
+
   const sidebar = (
     <ConversationSidebar
       sessions={sessionsQuery.data ?? []}
@@ -322,6 +353,10 @@ export default function ImageGeneratePage() {
       activeSessionId={activeSessionId}
       onSelect={selectSession}
       onNew={startNewChat}
+      onDelete={handleDeleteSession}
+      deletingSessionId={
+        deleteSession.isPending ? deleteSession.variables : null
+      }
     />
   );
 
@@ -381,8 +416,8 @@ export default function ImageGeneratePage() {
             <PromptComposer
               draft={draft}
               onDraftChange={setDraft}
-              referenceFile={referenceFile}
-              onReferenceChange={setReferenceFile}
+              referenceFiles={referenceFiles}
+              onReferenceChange={setReferenceFiles}
               onSubmit={submit}
               busy={busy}
               providers={providers}

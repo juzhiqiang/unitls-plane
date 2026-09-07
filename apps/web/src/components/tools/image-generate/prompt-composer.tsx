@@ -3,17 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Paperclip, Settings2, X } from 'lucide-react';
+import { IMAGE_GENERATE_MAX_REFERENCE_IMAGES } from '@utils-plane/validators';
 import type { ImageGenerateChatDraft } from './types';
 import { SettingsPanel } from './settings-panel';
+import { ImageLightbox } from './image-lightbox';
 import type { ImageGenerateProviderDto } from '@/hooks/api/types';
-import { useObjectUrl } from '@/hooks/use-object-url';
+import { useObjectUrls } from '@/hooks/use-object-urls';
 
 interface PromptComposerProps {
   draft: ImageGenerateChatDraft;
   onDraftChange: (next: ImageGenerateChatDraft) => void;
-  /** 已附参考图(File 对象),null = 文生图。附图即图生图,无显式模式开关。 */
-  referenceFile: File | null;
-  onReferenceChange: (file: File | null) => void;
+  /** 已附参考图;0 张 = 文生图,1 张 = 图生图,多张 = 图片融合。 */
+  referenceFiles: File[];
+  onReferenceChange: (files: File[]) => void;
   onSubmit: () => void;
   busy: boolean;
   disabled?: boolean;
@@ -29,13 +31,14 @@ interface PromptComposerProps {
 /**
  * 底部输入条:附件 + 自动增高 textarea + 参数面板 + 生成按钮。
  *
- * 参考图三路进入:点附件按钮选文件、textarea 粘贴、整个卡片拖放。
+ * 参考图三路进入(点附件按钮选文件、textarea 粘贴、整个卡片拖放),可多选,
+ * 多张即图片融合(上限 IMAGE_GENERATE_MAX_REFERENCE_IMAGES)。
  * Enter 提交 / Shift+Enter 换行;中文输入法组词中的回车不上屏(isComposing)。
  */
 export function PromptComposer({
   draft,
   onDraftChange,
-  referenceFile,
+  referenceFiles,
   onReferenceChange,
   onSubmit,
   busy,
@@ -49,9 +52,10 @@ export function PromptComposer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const referenceUrl = useObjectUrl(referenceFile);
+  const referenceUrls = useObjectUrls(referenceFiles);
 
   // 自动增高:每次内容变化后重置高度再按 scrollHeight 撑开,上限 10rem。
   useEffect(() => {
@@ -61,14 +65,45 @@ export function PromptComposer({
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [draft.prompt]);
 
-  const acceptReference = (file: File | undefined | null) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    if (maxReferenceSize !== undefined && file.size > maxReferenceSize) {
-      setReferenceError(t('referenceTooLarge'));
-      return;
+  const acceptReferences = (incoming: FileList | File[] | null | undefined) => {
+    if (!incoming || !editSupported) return;
+
+    const accepted: File[] = [];
+    let tooLarge = false;
+    let overLimit = false;
+    for (const file of Array.from(incoming)) {
+      if (!file.type.startsWith('image/')) continue;
+      if (maxReferenceSize !== undefined && file.size > maxReferenceSize) {
+        tooLarge = true;
+        continue;
+      }
+      if (
+        referenceFiles.length + accepted.length >=
+        IMAGE_GENERATE_MAX_REFERENCE_IMAGES
+      ) {
+        overLimit = true;
+        break;
+      }
+      accepted.push(file);
     }
+
+    setReferenceError(
+      tooLarge
+        ? t('referenceTooLarge')
+        : overLimit
+          ? t('referenceLimitExceeded', {
+              max: String(IMAGE_GENERATE_MAX_REFERENCE_IMAGES),
+            })
+          : null
+    );
+    if (accepted.length > 0) {
+      onReferenceChange([...referenceFiles, ...accepted]);
+    }
+  };
+
+  const removeReference = (index: number) => {
+    onReferenceChange(referenceFiles.filter((_, i) => i !== index));
     setReferenceError(null);
-    onReferenceChange(file);
   };
 
   const quotaExhausted = quota !== undefined && quota.remaining <= 0;
@@ -86,8 +121,7 @@ export function PromptComposer({
       onDrop={event => {
         event.preventDefault();
         setDragOver(false);
-        if (!editSupported) return;
-        acceptReference(event.dataTransfer.files?.[0]);
+        acceptReferences(event.dataTransfer.files);
       }}
     >
       {settingsOpen && (
@@ -105,28 +139,43 @@ export function PromptComposer({
           dragOver ? 'border-foreground' : 'border-border'
         }`}
       >
-        {/* 参考图 chip:缩略图 + 移除。 */}
-        {referenceFile && (
-          <div className="flex items-center gap-2 px-1 pb-2 pt-1">
-            {referenceUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={referenceUrl}
-                alt={t('sourcePreviewAlt')}
-                className="h-10 w-10 rounded-md border border-border object-cover"
-              />
-            )}
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {referenceFile.name}
-            </span>
-            <button
-              type="button"
-              aria-label={t('removeReference')}
-              onClick={() => onReferenceChange(null)}
-              className="rounded-sm p-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        {/* 参考图 chips:缩略图(可放大)+ 移除;多张即融合。 */}
+        {referenceFiles.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-1 pb-2 pt-1">
+            {referenceFiles.map((file, index) => (
+              <span
+                key={`${file.name}-${index}`}
+                className="relative inline-block"
+              >
+                <button
+                  type="button"
+                  aria-label={t('enlargeReference')}
+                  onClick={() =>
+                    setLightboxUrl(referenceUrls[index] ?? null)
+                  }
+                  className="block overflow-hidden rounded-md border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {referenceUrls[index] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={referenceUrls[index]}
+                      alt={file.name}
+                      className="h-10 w-10 object-cover"
+                    />
+                  ) : (
+                    <span className="block h-10 w-10 bg-muted" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('removeReference')}
+                  onClick={() => removeReference(index)}
+                  className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
           </div>
         )}
 
@@ -145,10 +194,11 @@ export function PromptComposer({
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={event => {
-              acceptReference(event.target.files?.[0]);
-              // 同名文件二次选择也要触发 onChange:不清空 value 就不会。
+              acceptReferences(event.target.files);
+              // 同一组文件二次选择也要触发 onChange:不清空 value 就不会。
               event.target.value = '';
             }}
           />
@@ -175,8 +225,7 @@ export function PromptComposer({
               }
             }}
             onPaste={event => {
-              if (!editSupported) return;
-              acceptReference(event.clipboardData.files?.[0]);
+              acceptReferences(event.clipboardData.files);
             }}
             className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           />
@@ -222,6 +271,12 @@ export function PromptComposer({
           </p>
         )}
       </div>
+
+      <ImageLightbox
+        url={lightboxUrl}
+        alt={t('sourcePreviewAlt')}
+        onClose={() => setLightboxUrl(null)}
+      />
     </div>
   );
 }

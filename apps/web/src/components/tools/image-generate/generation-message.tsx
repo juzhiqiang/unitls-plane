@@ -7,6 +7,7 @@ import type { TaskOutputPreview } from '@/hooks/api/use-task-output';
 import { useFilePreviewUrl } from '@/hooks/api/use-file-preview';
 import { useRetryTask } from '@/hooks/api/use-tasks';
 import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
+import { ImageLightbox } from './image-lightbox';
 
 /** 服务端错误码 → 文案键。与页面提交路径的映射保持同一份语义。 */
 export const MESSAGE_ERROR_KEYS: Record<string, string> = {
@@ -52,8 +53,26 @@ interface GenerationMessageProps {
   onRetryFetch: (taskId: string, outputFileId: string) => void;
 }
 
+/** 消息里一张参考图的缩略(点击放大)。 */
+function ReferenceThumb({ fileId, onOpen }: { fileId: string; onOpen: (url: string) => void }) {
+  const url = useFilePreviewUrl(fileId);
+  const t = useTranslations('ImageGenerate');
+  if (!url) return null;
+  return (
+    <button
+      type="button"
+      aria-label={t('enlargeReference')}
+      onClick={() => onOpen(url)}
+      className="block overflow-hidden rounded-md border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={t('sourcePreviewAlt')} className="h-16 w-16 object-cover" />
+    </button>
+  );
+}
+
 /**
- * 一条生成消息:提示词气泡(图生图带参考图缩略)→ 结果网格。
+ * 一条生成消息:提示词气泡(右,图生图/融合带参考图缩略)→ 结果气泡(左,点击放大)。
  *
  * 失败任务行内展示错误与「重新生成」(走 retry 端点,重试任务落回同一会话);
  * 图生图消息提供「对比」开关,展开后用现有滑动对比组件。
@@ -66,149 +85,177 @@ export function GenerationMessage({
   const t = useTranslations('ImageGenerate');
   const retryTask = useRetryTask();
   const [compareOpen, setCompareOpen] = useState(false);
-  const referenceUrl = useFilePreviewUrl(group.referenceFileId);
+  const [lightbox, setLightbox] = useState<{ url: string; alt: string } | null>(
+    null
+  );
 
   const completedTasks = (group.tasks ?? []).filter(
     task => task.status === 'completed'
   );
   const firstUrl = previews[completedTasks[0]?.taskId ?? '']?.url;
+  const referenceUrlForCompare = useFilePreviewUrl(
+    group.referenceFileIds[0]
+  );
   const showCompareToggle = Boolean(
-    group.mode === 'image_to_image' && referenceUrl && firstUrl
+    group.mode === 'image_to_image' && referenceUrlForCompare && firstUrl
   );
 
   return (
-    <article className="space-y-3">
+    <article className="space-y-2">
       {/* 提示词气泡:右对齐的「用户消息」。 */}
       <div className="flex justify-end">
         <div className="max-w-[min(36rem,90%)] space-y-2 rounded-lg bg-muted/60 px-4 py-3 text-sm leading-relaxed">
-          {group.mode === 'image_to_image' && referenceUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={referenceUrl}
-              alt={t('sourcePreviewAlt')}
-              className="h-16 w-16 rounded-md border border-border object-cover"
-            />
+          {group.referenceFileIds.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {group.referenceFileIds.map(fileId => (
+                <ReferenceThumb
+                  key={fileId}
+                  fileId={fileId}
+                  onOpen={url => setLightbox({ url, alt: t('sourcePreviewAlt') })}
+                />
+              ))}
+            </div>
           )}
           <p className="whitespace-pre-wrap break-words">{group.prompt}</p>
         </div>
       </div>
 
-      {/* 结果区:左对齐的「助手消息」。 */}
-      <div className="space-y-2">
-        {showCompareToggle && (
-          <button
-            type="button"
-            aria-pressed={compareOpen}
-            onClick={() => setCompareOpen(value => !value)}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            {t('compareToggle')}
-          </button>
-        )}
+      {/* 结果气泡:左对齐的「助手消息」。 */}
+      <div className="flex justify-start">
+        <div className="w-full max-w-[min(44rem,100%)] space-y-2 rounded-lg border border-border bg-muted/30 px-3 py-3">
+          {showCompareToggle && (
+            <button
+              type="button"
+              aria-pressed={compareOpen}
+              onClick={() => setCompareOpen(value => !value)}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {t('compareToggle')}
+            </button>
+          )}
 
-        {compareOpen && showCompareToggle ? (
-          <div className="max-w-xl">
-            <ImageGenerateCompare
-              beforeUrl={referenceUrl!}
-              afterUrl={firstUrl!}
-              title={t('compareTitle')}
-            />
-          </div>
-        ) : (
-          <div
-            className={
-              (group.tasks?.length ?? 0) > 2
-                ? 'grid max-w-2xl grid-cols-2 gap-2'
-                : 'flex max-w-2xl flex-wrap gap-2'
-            }
-          >
-            {(group.tasks ?? []).map((task, index) => {
-              const preview = previews[task.taskId];
+          {compareOpen && showCompareToggle ? (
+            <div className="max-w-xl">
+              <ImageGenerateCompare
+                beforeUrl={referenceUrlForCompare!}
+                afterUrl={firstUrl!}
+                title={t('compareTitle')}
+              />
+            </div>
+          ) : (
+            <div
+              className={
+                (group.tasks?.length ?? 0) > 2
+                  ? 'grid grid-cols-2 gap-2'
+                  : 'flex flex-wrap gap-2'
+              }
+            >
+              {(group.tasks ?? []).map((task, index) => {
+                const preview = previews[task.taskId];
 
-              if (task.status === 'failed') {
+                if (task.status === 'failed') {
+                  return (
+                    <div
+                      key={task.taskId}
+                      className="flex aspect-square min-h-24 flex-1 flex-col items-center justify-center gap-1 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs"
+                    >
+                      <span className="text-foreground">
+                        {t(
+                          MESSAGE_ERROR_KEYS[task.errorCode ?? ''] ?? 'failed'
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => retryTask.mutate(task.taskId)}
+                        className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        {t('retryGenerate')}
+                      </button>
+                    </div>
+                  );
+                }
+
+                if (!preview?.url) {
+                  return (
+                    <div
+                      key={task.taskId}
+                      role="status"
+                      aria-live="polite"
+                      className="flex aspect-square min-h-24 flex-1 items-center justify-center rounded-md bg-muted/40"
+                    >
+                      <span className="animate-pulse font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {task.status === 'completed'
+                          ? t('resultFetching')
+                          : t('generating')}
+                      </span>
+                    </div>
+                  );
+                }
+
                 return (
-                  <div
+                  <figure
                     key={task.taskId}
-                    className="flex aspect-square min-h-24 flex-1 flex-col items-center justify-center gap-1 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs"
+                    className="group relative flex-1 overflow-hidden rounded-md border border-border"
                   >
-                    <span className="text-foreground">
-                      {t(
-                        MESSAGE_ERROR_KEYS[task.errorCode ?? ''] ?? 'failed'
-                      )}
-                    </span>
                     <button
                       type="button"
-                      onClick={() => retryTask.mutate(task.taskId)}
-                      className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      aria-label={t('enlargeResult')}
+                      onClick={() =>
+                        setLightbox({
+                          url: preview.url!,
+                          alt: t('resultMeta', { index: String(index + 1) }),
+                        })
+                      }
+                      className="block w-full cursor-zoom-in"
                     >
-                      {t('retryGenerate')}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={preview.url}
+                        alt={t('resultMeta', { index: String(index + 1) })}
+                        className="h-auto w-full object-contain"
+                      />
                     </button>
-                  </div>
+                    <a
+                      href={preview.url}
+                      download={`ai-image-${index + 1}.png`}
+                      className="absolute bottom-2 right-2 rounded-md bg-background/90 px-2 py-1 text-xs text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      {t('downloadImage')}
+                    </a>
+                  </figure>
                 );
-              }
+              })}
+            </div>
+          )}
 
-              if (!preview?.url) {
-                return (
-                  <div
-                    key={task.taskId}
-                    role="status"
-                    aria-live="polite"
-                    className="flex aspect-square min-h-24 flex-1 items-center justify-center rounded-md bg-muted/40"
-                  >
-                    <span className="animate-pulse font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {task.status === 'completed'
-                        ? t('resultFetching')
-                        : t('generating')}
-                    </span>
-                  </div>
-                );
-              }
-
+          {/* 产物取回失败的行内重试(区别于生成失败:图已生成,只补一次下载)。 */}
+          {(group.tasks ?? []).map(task => {
+            if (
+              task.status === 'completed' &&
+              task.outputFileId &&
+              previews[task.taskId]?.state === 'error'
+            ) {
               return (
-                <figure
+                <button
                   key={task.taskId}
-                  className="relative flex-1 overflow-hidden rounded-md border border-border"
+                  type="button"
+                  onClick={() => onRetryFetch(task.taskId, task.outputFileId!)}
+                  className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={preview.url}
-                    alt={t('resultMeta', { index: String(index + 1) })}
-                    className="h-auto w-full object-contain"
-                  />
-                  <a
-                    href={preview.url}
-                    download={`ai-image-${index + 1}.png`}
-                    className="absolute bottom-2 right-2 rounded-md bg-background/90 px-2 py-1 text-xs text-foreground shadow-sm hover:bg-background"
-                  >
-                    {t('downloadImage')}
-                  </a>
-                </figure>
+                  {t('resultFetchFailed')} · {t('retryFetch')}
+                </button>
               );
-            })}
-          </div>
-        )}
-
-        {/* 产物取回失败的行内重试(区别于生成失败:图已生成,只补一次下载)。 */}
-        {(group.tasks ?? []).map(task => {
-          if (
-            task.status === 'completed' &&
-            task.outputFileId &&
-            previews[task.taskId]?.state === 'error'
-          ) {
-            return (
-              <button
-                key={task.taskId}
-                type="button"
-                onClick={() => onRetryFetch(task.taskId, task.outputFileId!)}
-                className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-              >
-                {t('resultFetchFailed')} · {t('retryFetch')}
-              </button>
-            );
-          }
-          return null;
-        })}
+            }
+            return null;
+          })}
+        </div>
       </div>
+
+      <ImageLightbox
+        url={lightbox?.url ?? null}
+        alt={lightbox?.alt ?? ''}
+        onClose={() => setLightbox(null)}
+      />
     </article>
   );
 }

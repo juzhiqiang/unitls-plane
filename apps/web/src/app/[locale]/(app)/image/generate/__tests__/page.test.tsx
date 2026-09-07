@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   outputLoad: vi.fn(),
   retryTask: vi.fn(),
   maxReferenceSize: vi.fn(),
+  deleteSession: vi.fn(),
 }));
 
 const PRESETS = [
@@ -53,7 +54,16 @@ const DEFAULT_PROVIDER = {
   id: 'default',
   label: 'Default',
   capabilities: ['generate', 'edit'] as const,
-  sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
+  sizes: [
+    'auto',
+    '1024x1024',
+    '1024x1536',
+    '1536x1024',
+    '864x1152',
+    '1152x864',
+    '864x1536',
+    '1536x864',
+  ],
 };
 
 vi.mock('@/i18n/navigation', () => ({
@@ -88,6 +98,11 @@ vi.mock('@/hooks/api/use-tasks', () => ({
   useImageGenerateSessionTasks: (sessionId: string) =>
     mocks.sessionTasks(sessionId),
   useRetryTask: () => ({ mutate: mocks.retryTask }),
+  useDeleteImageGenerateSession: () => ({
+    mutate: mocks.deleteSession,
+    isPending: false,
+    variables: null,
+  }),
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
@@ -108,6 +123,10 @@ vi.mock('@/hooks/api/use-file-preview', () => ({
 
 vi.mock('@/hooks/use-object-url', () => ({
   useObjectUrl: () => 'blob:object-url',
+}));
+
+vi.mock('@/hooks/use-object-urls', () => ({
+  useObjectUrls: (files: File[]) => files.map(() => 'blob:object-url'),
 }));
 
 vi.mock('@/lib/tools/image-limits', () => ({
@@ -193,11 +212,11 @@ function openSettings() {
   fireEvent.click(screen.getByRole('button', { name: 'Generation settings' }));
 }
 
-function attachViaInput(container: HTMLElement, file: File) {
+function attachViaInput(container: HTMLElement, files: File | File[]) {
   const input = container.querySelector(
     'input[type="file"]'
   ) as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [file] } });
+  fireEvent.change(input, { target: { files: [files].flat() } });
 }
 
 beforeEach(() => {
@@ -374,7 +393,7 @@ describe('ImageGeneratePage', () => {
     expect(
       screen.getByText(/exceeds the size limit/)
     ).toBeInTheDocument();
-    expect(screen.queryByText('source.png')).not.toBeInTheDocument();
+    expect(screen.queryByAltText('source.png')).not.toBeInTheDocument();
   });
 
   it('does not create tasks when the reference upload fails', async () => {
@@ -513,6 +532,11 @@ describe('ImageGeneratePage', () => {
     expect(screen.getByText('1:1')).toBeInTheDocument();
     expect(screen.getByText('2:3')).toBeInTheDocument();
     expect(screen.getByText('3:2')).toBeInTheDocument();
+    // 新增四档常见比例(SDXL 系尺寸,gcd 约分出标签)。
+    expect(screen.getByText('3:4')).toBeInTheDocument();
+    expect(screen.getByText('4:3')).toBeInTheDocument();
+    expect(screen.getByText('9:16')).toBeInTheDocument();
+    expect(screen.getByText('16:9')).toBeInTheDocument();
     // 单来源部署不渲染模型行。
     expect(screen.queryByText('Model')).not.toBeInTheDocument();
     // 背景与质量行存在。
@@ -575,6 +599,84 @@ describe('ImageGeneratePage', () => {
     expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
       size: '1024x1024',
     });
+  });
+
+  it('uploads every reference once and fuses them into image_to_image', async () => {
+    const { container } = renderPage();
+    mocks.uploadFile.mockImplementation(async () => ({
+      id: `file-${Math.floor(Math.random() * 1000)}`,
+    }));
+    // 两次上传返回固定 id,mockImplementation 顺序递增更可控:
+    let seq = 9;
+    mocks.uploadFile.mockImplementation(async () => {
+      seq += 1;
+      return { id: `file-${seq}` };
+    });
+    setPrompt('fuse these two photos');
+    attachViaInput(container, [
+      referenceFile(),
+      new File(['y'], 'source2.png', { type: 'image/png' }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(2);
+    expect(mocks.createTask.mock.calls[0][0]).toMatchObject({
+      inputFileIds: ['file-10', 'file-11'],
+    });
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
+      mode: 'image_to_image',
+    });
+  });
+
+  it('caps references at four images and surfaces the limit notice', () => {
+    const { container } = renderPage();
+    attachViaInput(
+      container,
+      Array.from({ length: 5 }, (_, i) => new File(['z'], `s${i}.png`, { type: 'image/png' }))
+    );
+
+    expect(
+      screen.getByText(/At most 4 reference images/)
+    ).toBeInTheDocument();
+    // 只收前 4 张:第 5 张没有缩略 chip。
+    expect(screen.getAllByRole('button', { name: 'Enlarge reference image' })).toHaveLength(4);
+  });
+
+  it('deletes a session after inline confirmation and switches to a new chat', async () => {
+    const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
+    mocks.imageGenerateSessions.mockReturnValue({
+      data: [
+        {
+          sessionId,
+          title: 'delete me',
+          taskCount: 1,
+          createdAt: '2026-09-07T10:00:00Z',
+          updatedAt: '2026-09-07T10:05:00Z',
+        },
+      ],
+    });
+    // 让 mock mutate 同步触发 onSuccess,模拟真实 mutation 的成功回调。
+    mocks.deleteSession.mockImplementation(
+      (_sessionId: string, options?: { onSuccess?: () => void }) => {
+        options?.onSuccess?.();
+      }
+    );
+    renderPage();
+
+    // 点删除 → 行内确认 → 确认删除。
+    fireEvent.click(screen.getByRole('button', { name: 'Delete conversation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }));
+
+    await waitFor(() =>
+      expect(mocks.deleteSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.anything()
+      )
+    );
+    // 删除的是当前会话:query 切到新的本地会话 id。
+    const lastId = mocks.sessionTasks.mock.calls.at(-1)?.[0];
+    expect(lastId).not.toBe(sessionId);
   });
 
   it('fills the prompt when picking a template from the empty state', () => {

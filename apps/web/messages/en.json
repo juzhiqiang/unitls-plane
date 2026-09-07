@@ -937,6 +937,10 @@
     "paramsSummary": "More options",
     "recoveryHint": "Retry anytime — failed generations do not use up your daily quota.",
     "compareTitle": "Before / after",
+    "templateWallTitle": "Idea templates",
+    "templateWallEmpty": "Describe your prompt on the left to start creating.",
+    "thumbnailLabel": "Result thumbnails",
+    "selectResult": "View image {index}",
     "quotaRemaining": "{remaining} / {limit} remaining today"
   },
   "PdfTool": {

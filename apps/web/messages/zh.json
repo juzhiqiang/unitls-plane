@@ -937,6 +937,10 @@
     "paramsSummary": "更多参数",
     "recoveryHint": "可随时重试，失败的生成不占用当日额度。",
     "compareTitle": "改动对比",
+    "templateWallTitle": "灵感模板",
+    "templateWallEmpty": "在左侧输入提示词开始创作。",
+    "thumbnailLabel": "结果缩略图",
+    "selectResult": "查看第 {index} 张",
     "quotaRemaining": "今日剩余 {remaining} / {limit} 张"
   },
   "PdfTool": {

@@ -54,10 +54,14 @@ export const tasks = pgTable(
     retryCount: smallint('retry_count').default(0),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     completedAt: timestamp('completed_at'),
+    // 生图会话 id(客户端 crypto.randomUUID)。text 而非 uuid 列型:格式约束放写入侧,
+    // 避免第三方脏数据在迁移/写入时炸列;会话查询都先按 userId 过滤,复合索引覆盖。
+    sessionId: text('session_id'),
   },
   t => ({
     userCreatedIdx: index('tasks_user_created_idx').on(t.userId, t.createdAt),
     statusIdx: index('tasks_status_idx').on(t.status),
+    sessionIdx: index('tasks_session_idx').on(t.userId, t.sessionId),
   })
 );
 

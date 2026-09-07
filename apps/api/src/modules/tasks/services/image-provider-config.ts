@@ -51,12 +51,12 @@ export const imageProviderOmittableBodyFieldEnum = z.enum([
  * 来源支持的尺寸列表("auto" 或 "WxH")。
  *
  * 该列表随 providers 端点下发,前端据此决定画面比例 chips 显示哪些档;
- * processor 在请求前用它交叉校验任务里的 size。OpenAI 兼容网关普遍支持
- * SDXL 系的更多档位(9:16、3:4 等),声明即可解锁。
+ * processor 在请求前用它交叉校验任务里的 size。
  *
  * 默认值刻意不含 "auto":它只是 gpt-image-1 一族的语义,严格校验请求体的
  * 网关(如 wan)收到 "auto" 会整个 400 —— 存量部署不配 sizes 也能照常工作。
  * gpt-image-1 类来源想要「自动」档,在配置里显式加 "auto" 即可。
+ * 覆盖 1:1 / 2:3 / 3:2 / 3:4 / 4:3 / 9:16 / 16:9 七档常见比例。
  */
 export const imageProviderSizeSchema = z
   .string()
@@ -67,6 +67,10 @@ export const DEFAULT_AI_IMAGE_SIZES = [
   '1024x1024',
   '1024x1536',
   '1536x1024',
+  '864x1152',
+  '1152x864',
+  '864x1536',
+  '1536x864',
 ] as const;
 
 /**

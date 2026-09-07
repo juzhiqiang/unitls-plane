@@ -75,7 +75,15 @@ it('applies OpenAI-compatible defaults to a minimal entry', () => {
     refImageEncoding: 'data_url',
     responseFormat: 'b64_json',
     omitBodyFields: [],
-    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    sizes: [
+      '1024x1024',
+      '1024x1536',
+      '1536x1024',
+      '864x1152',
+      '1152x864',
+      '864x1536',
+      '1536x864',
+    ],
   });
   expect(provider?.apiKey).toBeUndefined();
 });

@@ -89,10 +89,13 @@ export interface ImageProviderDescriptor {
 }
 
 export interface ImageGenerationProvider {
-  /** reference 只在 image_to_image 下有意义:文生图传了也会被忽略。 */
+  /**
+   * reference 只在 image_to_image 下有意义:文生图传了也会被忽略。
+   * 多张 = 图片融合(全部参考图一起发给上游),1..IMAGE_GENERATE_MAX_REFERENCE_IMAGES。
+   */
   generate(
     config: ImageGenerateTaskConfig,
-    reference?: Buffer
+    references?: Buffer[]
   ): Promise<Buffer>;
   readonly descriptor?: ImageProviderDescriptor;
   /** 实际请求用的模型,写进产物 EXIF。 */
@@ -203,13 +206,13 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
 
   async generate(
     config: ImageGenerateTaskConfig,
-    reference?: Buffer
+    references?: Buffer[]
   ): Promise<Buffer> {
     let response: Response;
     try {
       response =
         config.mode === 'image_to_image'
-          ? await this.postEdit(config, reference)
+          ? await this.postEdit(config, references)
           : await this.postGeneration(config);
     } catch (error) {
       // fetch 抛错(含超时 AbortError、DNS、连接重置)统一走兜底文案,原文只进日志。
@@ -289,18 +292,19 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
   }
 
   /**
-   * 图生图。端点与传图方式按来源配置分支;文生图则所有来源共用 /v1/images/generations。
+   * 图生图 / 图片融合。端点与传图方式按来源配置分支;文生图则所有来源共用 /v1/images/generations。
    *
-   * 参考图先过 sharp:统一转 PNG(上游只认少数格式)、按 EXIF 方向摆正,
-   * 并顺带丢掉原图元数据(sharp 默认不透传),不把用户照片里的 GPS 发给 provider。
+   * 参考图先过 sharp:统一转 PNG、按 EXIF 方向摆正、压平透明通道并剥掉元数据,
+   * 细节见 postEdit 内的注释。
    */
   private async postEdit(
     config: ImageGenerateTaskConfig,
-    reference?: Buffer
+    references?: Buffer[]
   ): Promise<Response> {
-    if (!reference?.length) {
+    const loaded = (references ?? []).filter(buffer => buffer.length > 0);
+    if (loaded.length === 0) {
       this.logger.warn(
-        'AI image edit requested without a reference image; refusing to call upstream'
+        'AI image edit requested without reference images; refusing to call upstream'
       );
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
@@ -308,26 +312,41 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       );
     }
 
-    const normalized = await sharp(reference).rotate().png().toBuffer();
+    // 统一转 PNG(上游只认少数格式)、按 EXIF 方向摆正、压平透明通道
+    // (wan2.7 一类网关直接拒绝带 alpha 的 PNG),sharp 默认不透传元数据,
+    // 不会把用户照片里的 GPS 发给 provider。
+    const normalized = await Promise.all(
+      loaded.map(buffer =>
+        sharp(buffer).rotate().flatten({ background: '#ffffff' }).png().toBuffer()
+      )
+    );
 
-    // kmage 一类网关没有 /v1/images/edits:图生图也走 generations,参考图放进 JSON 数组。
+    // kmage 一类网关没有 /v1/images/edits:图生图也走 generations,参考图放进 JSON 数组,
+    // 多张融合天然就是数组多放几个元素。
     if (this.editTransport === 'generations_ref') {
-      const base64 = normalized.toString('base64');
-      const encoded =
-        this.refImageEncoding === 'base64'
+      const encoded = normalized.map(buffer => {
+        const base64 = buffer.toString('base64');
+        return this.refImageEncoding === 'base64'
           ? base64
           : `data:image/png;base64,${base64}`;
-      return this.postGeneration(config, { [this.refImagesField]: [encoded] });
+      });
+      return this.postGeneration(config, {
+        [this.refImagesField]: encoded,
+      });
     }
 
     // 不要手写 Content-Type:multipart 的 boundary 只有 FormData 自己知道。
+    // 多图融合按重复 image 字段上传(实测 wan 系网关认这个,OpenAI 官方语义的
+    // image[] 反而会被「未知文件字段」拒掉),单图/多图同名字段,网关按出现次数收集。
     const form = new FormData();
     form.set('model', this.model);
-    form.set(
-      'image',
-      new Blob([new Uint8Array(normalized)], { type: 'image/png' }),
-      'source.png'
-    );
+    normalized.forEach((buffer, index) => {
+      form.append(
+        'image',
+        new Blob([new Uint8Array(buffer)], { type: 'image/png' }),
+        `source-${index + 1}.png`
+      );
+    });
     form.set('prompt', buildImageGenerationPrompt(config));
     for (const [field, value] of this.optionalBodyFields(config)) {
       if (value === undefined) continue;
@@ -511,10 +530,10 @@ export class ImageGenerationService {
 
   async generate(
     config: ImageGenerateTaskConfig,
-    reference?: Buffer
+    references?: Buffer[]
   ): Promise<GeneratedImage> {
     const provider = this.resolveProvider(config);
-    const buffer = await provider.generate(config, reference);
+    const buffer = await provider.generate(config, references);
     return {
       buffer,
       mimeType: 'image/png',

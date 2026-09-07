@@ -151,7 +151,18 @@ describe('imageGenerateTaskConfigSchema', () => {
     ).toThrow('text_to_image');
   });
 
-  it('requires exactly one input file for image_to_image', () => {
+  it('accepts 1 to 4 input files for image_to_image fusion', () => {
+    for (const inputFileCount of [1, 2, 3, 4]) {
+      const parsed = imageGenerateTaskConfigSchema.parse({
+        mode: 'image_to_image',
+        prompt: 'x',
+        inputFileCount,
+      });
+
+      expect(parsed.inputFileCount).toBe(inputFileCount);
+    }
+
+    // 0 张(没附图)与 5 张(超融合上限)都拒绝。
     expect(() =>
       imageGenerateTaskConfigSchema.parse({
         mode: 'image_to_image',
@@ -159,6 +170,13 @@ describe('imageGenerateTaskConfigSchema', () => {
         inputFileCount: 0,
       })
     ).toThrow('image_to_image');
+    expect(() =>
+      imageGenerateTaskConfigSchema.parse({
+        mode: 'image_to_image',
+        prompt: 'x',
+        inputFileCount: 5,
+      })
+    ).toThrow('1-4');
   });
 
   it('requires exactly two input files for inpaint', () => {

@@ -156,10 +156,10 @@ export class AiImageProcessor extends WorkerHost {
     }
     await this.reportProgress(task.id, job, 30);
 
-    const reference = await this.loadReference(task, config.mode);
+    const references = await this.loadReferences(task, config.mode);
     const generated = await this.imageGenerationService.generate(
       config,
-      reference
+      references
     );
     await this.reportProgress(task.id, job, 80);
 
@@ -188,31 +188,34 @@ export class AiImageProcessor extends WorkerHost {
   }
 
   /**
-   * 图生图的参考图。
+   * 图生图的参考图(1..N 张,多张即图片融合)。
    *
    * getById 必须带 task.userId:它是文件归属校验,少了这个参数等于允许任务引用
-   * 别人账号里的文件。schema 已保证 image_to_image 恰好一个输入文件,这里的兜底
+   * 别人账号里的文件。schema 已保证 image_to_image 的数量区间,这里的兜底
    * 只为在数据异常时给出与其它失败一致的通用文案。
    */
-  private async loadReference(
+  private async loadReferences(
     task: AiImageTask,
     mode: ImageGenerateTaskConfig['mode']
-  ): Promise<Buffer | undefined> {
+  ): Promise<Buffer[] | undefined> {
     if (mode !== 'image_to_image') return undefined;
 
-    const fileId = task.inputFileIds?.[0];
-    if (!fileId) {
+    const fileIds = task.inputFileIds ?? [];
+    if (fileIds.length === 0) {
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
         'Image generation failed'
       );
     }
 
-    const inputFile = await this.filesService.getById(
-      fileId,
-      task.userId ?? null
+    const files = await Promise.all(
+      fileIds.map(fileId =>
+        this.filesService.getById(fileId, task.userId ?? null)
+      )
     );
-    return this.filesService.download(inputFile.storageKey);
+    return Promise.all(
+      files.map(file => this.filesService.download(file.storageKey))
+    );
   }
 
   @OnWorkerEvent('failed')

@@ -202,7 +202,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     await provider.generate(
       { ...config, mode: 'image_to_image', inputFileCount: 1 },
-      await referencePng()
+      [await referencePng()]
     );
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -227,7 +227,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     await provider.generate(
       { ...config, mode: 'image_to_image', inputFileCount: 1 },
-      await referencePng()
+      [await referencePng()]
     );
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -413,7 +413,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    const buffer = await provider.generate(editConfig, await referencePng());
+    const buffer = await provider.generate(editConfig, [await referencePng()]);
 
     expect(buffer.toString('utf8')).toBe('hello');
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
@@ -479,7 +479,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await provider.generate(config, Buffer.from('source-bytes'));
+    await provider.generate(config, [Buffer.from('source-bytes')]);
 
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.test/v1/images/generations');
@@ -520,13 +520,73 @@ describe('ImageGenerationService', () => {
 
     await service.generate(
       { ...config, mode: 'image_to_image', inputFileCount: 1 },
-      Buffer.from('source-bytes')
+      [Buffer.from('source-bytes')]
     );
 
     expect(generate).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'image_to_image' }),
-      Buffer.from('source-bytes')
+      [Buffer.from('source-bytes')]
     );
+  });
+});
+
+describe('OpenAiCompatibleImageGenerationProvider (multi-image fusion)', () => {
+  const editConfig = {
+    ...config,
+    mode: 'image_to_image' as const,
+    prompt: '把两张图融合成一张',
+    inputFileCount: 2,
+  };
+
+  /** 多图融合:multipart 用重复的 image 字段(wan 系网关认这个,image[] 会被拒)。 */
+  it('appends every reference as a repeated image field in the multipart form', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(editConfig, [
+      await referencePng(),
+      await referencePng(),
+    ]);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const form = init.body as FormData;
+    expect(form.getAll('image')).toHaveLength(2);
+  });
+
+  it('sends every reference in the refImagesField array for generations_ref', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      id: 'kmage',
+      baseUrl: 'https://image.dddd.zone',
+      editTransport: 'generations_ref',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(editConfig, [
+      await referencePng(),
+      await referencePng(),
+      await referencePng(),
+    ]);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.reference_images).toHaveLength(3);
+    for (const entry of body.reference_images) {
+      expect(String(entry)).toMatch(/^data:image\/png;base64,/);
+    }
   });
 });
 
@@ -552,7 +612,7 @@ describe('OpenAiCompatibleImageGenerationProvider (generations_ref transport)', 
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    const buffer = await provider.generate(editConfig, await referencePng());
+    const buffer = await provider.generate(editConfig, [await referencePng()]);
 
     expect(buffer.toString('utf8')).toBe('hello');
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -587,7 +647,7 @@ describe('OpenAiCompatibleImageGenerationProvider (generations_ref transport)', 
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await provider.generate(editConfig, await referencePng());
+    await provider.generate(editConfig, [await referencePng()]);
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
       string,
@@ -609,7 +669,7 @@ describe('OpenAiCompatibleImageGenerationProvider (generations_ref transport)', 
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await provider.generate(editConfig, await referencePng());
+    await provider.generate(editConfig, [await referencePng()]);
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
       string,

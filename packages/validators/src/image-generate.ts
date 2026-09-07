@@ -52,14 +52,21 @@ export const imageGenerateProviderIdSchema = z
     'providerId must start with a letter or digit and contain only letters, digits, "-" or "_"'
   );
 
-/** 每个 mode 要求的输入文件数量,用于把模式契约收在一处。 */
+/** 图生图(融合)最多同时携带的参考图张数。 */
+export const IMAGE_GENERATE_MAX_REFERENCE_IMAGES = 4;
+
+/**
+ * 每个 mode 允许的输入文件数量范围,用于把模式契约收在一处。
+ *
+ * image_to_image 是 1..N:单张是常规图生图,多张是图片融合(全部参考图一起发给上游)。
+ */
 export const IMAGE_GENERATE_INPUT_FILE_COUNT: Record<
   z.infer<typeof imageGenerateModeEnum>,
-  number
+  { min: number; max: number }
 > = {
-  text_to_image: 0,
-  image_to_image: 1,
-  inpaint: 2,
+  text_to_image: { min: 0, max: 0 },
+  image_to_image: { min: 1, max: IMAGE_GENERATE_MAX_REFERENCE_IMAGES },
+  inpaint: { min: 2, max: 2 },
 };
 
 export const imageGenerateTaskConfigSchema = z
@@ -81,12 +88,15 @@ export const imageGenerateTaskConfigSchema = z
     inputFileCount: z.number().int().min(0),
   })
   .superRefine((value, ctx) => {
-    const expected = IMAGE_GENERATE_INPUT_FILE_COUNT[value.mode];
-    if (value.inputFileCount !== expected) {
+    const range = IMAGE_GENERATE_INPUT_FILE_COUNT[value.mode];
+    if (value.inputFileCount < range.min || value.inputFileCount > range.max) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['inputFileCount'],
-        message: `mode ${value.mode} requires exactly ${expected} input file(s)`,
+        message:
+          range.min === range.max
+            ? `mode ${value.mode} requires exactly ${range.min} input file(s)`
+            : `mode ${value.mode} requires ${range.min}-${range.max} input files`,
       });
     }
   });

@@ -201,9 +201,54 @@ it('sends the uploaded reference image for image_to_image', async () => {
       prompt: '把背景换成海边',
       inputFileCount: 1,
     }),
-    Buffer.from('source-bytes')
+    // 参考图现在以数组传递(多张 = 融合)。
+    [Buffer.from('source-bytes')]
   );
   expect(tasksService.markCompleted).toHaveBeenCalledWith('task-1', 'output-2');
+});
+
+it('sends every reference image for multi-image fusion', async () => {
+  const filesService = {
+    getById: vi.fn().mockImplementation(async (id: string) => ({
+      id,
+      storageKey: `user-1/${id}/source.png`,
+      filename: `${id}.png`,
+    })),
+    download: vi
+      .fn()
+      .mockImplementation(async (key: string) =>
+        Buffer.from(`bytes-of-${key.split('/')[1]}`)
+      ),
+    upload: vi.fn().mockResolvedValue({ id: 'output-3' }),
+  };
+  const tasksService = createTasksService({
+    inputConfig: { mode: 'image_to_image', prompt: '把三张图融合成一张' },
+    inputFileIds: ['file-1', 'file-2', 'file-3'],
+  });
+  const imageGenerationService = {
+    generate: vi.fn().mockResolvedValue({
+      buffer: Buffer.from('fused-bytes'),
+      mimeType: 'image/png',
+      extension: 'png',
+      model: 'gpt-image-1',
+    }),
+  };
+  const processor = new AiImageProcessor(
+    filesService as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  await processor.process(createJob());
+
+  expect(imageGenerationService.generate).toHaveBeenCalledWith(
+    expect.objectContaining({ mode: 'image_to_image', inputFileCount: 3 }),
+    [
+      Buffer.from('bytes-of-file-1'),
+      Buffer.from('bytes-of-file-2'),
+      Buffer.from('bytes-of-file-3'),
+    ]
+  );
 });
 
 it('fails image_to_image without leaking why when the input file is missing', async () => {

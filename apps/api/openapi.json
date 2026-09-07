@@ -289,6 +289,47 @@
         ]
       }
     },
+    "/tasks/image-generate/sessions/{sessionId}": {
+      "delete": {
+        "operationId": "TasksController_deleteImageGenerateSession",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session deleted"
+          },
+          "400": {
+            "description": "sessionId is not a valid UUID"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "409": {
+            "description": "Session has tasks still running"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an image generation session with its files",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/tasks/{id}": {
       "get": {
         "operationId": "TasksController_getOne",

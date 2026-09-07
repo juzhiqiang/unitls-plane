@@ -49,6 +49,15 @@ const globalUpdate = vi.fn(() => ({
 }));
 const transactionInsert = vi.fn(() => ({ values: transactionValues }));
 const transaction = { insert: transactionInsert };
+
+/** deleteImageGenerateSession 的 db 形状:select 返回行数组,delete 收 where(无 from)。 */
+let selectRows: Array<Record<string, unknown>> = [];
+const selectWhere = vi.fn(async () => selectRows);
+const globalSelectFrom = vi.fn(() => ({ where: selectWhere }));
+const globalSelect = vi.fn(() => ({ from: globalSelectFrom }));
+const globalDeleteWhere = vi.fn(async () => undefined);
+const globalDelete = vi.fn(() => ({ where: globalDeleteWhere }));
+
 const cleanupObligationService = {
   recordTaskJob: vi.fn(async () => {
     events.push('obligation-record');
@@ -96,7 +105,12 @@ mock.module('@utils-plane/db', () => ({
     kind: 'obligation-kind',
     resourceId: 'obligation-resource-id',
   },
-  db: { insert: globalInsert, update: globalUpdate },
+  db: {
+    insert: globalInsert,
+    update: globalUpdate,
+    select: globalSelect,
+    delete: globalDelete,
+  },
   files: {},
   tasks: {},
   user: {},
@@ -182,6 +196,7 @@ function createService(
 beforeEach(() => {
   insertedTask = null;
   events.length = 0;
+  selectRows = [];
   vi.clearAllMocks();
   countTasksCreatedToday.mockResolvedValue(0);
 });
@@ -725,5 +740,94 @@ describe('TasksService attempt bookkeeping', () => {
     // sql`retry_count + 1` 的具体形状由 drizzle 决定(且被别的测试文件 mock 掉了),
     // 这里只锁住「载荷里确实带上了 retryCount 自增」。
     expect(Object.keys(values)).toContain('retryCount');
+  });
+});
+
+describe('TasksService image generate session deletion', () => {
+  const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
+
+  function sessionTask(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'task-1',
+      userId: 'user-1',
+      type: 'image_generate',
+      status: 'completed',
+      sessionId,
+      inputFileIds: ['file-in-1'],
+      outputFileId: 'file-out-1',
+      createdAt: new Date('2026-09-07T10:00:00Z'),
+      ...overrides,
+    };
+  }
+
+  function createServiceWithFiles() {
+    const filesService = {
+      getById: vi.fn(),
+      forceDeleteOwned: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = createService(filesService).service;
+    return { service, filesService };
+  }
+
+  it('refuses to delete a session that does not exist', async () => {
+    const { service } = createServiceWithFiles();
+
+    await expect(
+      service.deleteImageGenerateSession('user-1', sessionId)
+    ).rejects.toThrow('Session not found');
+  });
+
+  it('refuses to delete a session with tasks still running', async () => {
+    selectRows = [
+      sessionTask({ status: 'completed' }),
+      sessionTask({ id: 'task-2', status: 'processing' }),
+    ];
+    const { service, filesService } = createServiceWithFiles();
+
+    await expect(
+      service.deleteImageGenerateSession('user-1', sessionId)
+    ).rejects.toThrow('still running');
+    expect(filesService.forceDeleteOwned).not.toHaveBeenCalled();
+  });
+
+  it('hard-deletes output and reference files then removes the task rows', async () => {
+    selectRows = [
+      sessionTask(),
+      sessionTask({
+        id: 'task-2',
+        inputFileIds: ['file-in-2'],
+        outputFileId: 'file-out-2',
+      }),
+    ];
+    const { service, filesService } = createServiceWithFiles();
+
+    const result = await service.deleteImageGenerateSession(
+      'user-1',
+      sessionId
+    );
+
+    expect(result).toEqual({ deletedTasks: 2 });
+    // 产物与参考图都要硬删,且去重(两个任务共用 file-in-1 时只删一次)。
+    const deletedIds = filesService.forceDeleteOwned.mock.calls.map(
+      call => call[0]
+    );
+    expect(deletedIds.sort()).toEqual(
+      ['file-in-1', 'file-out-1', 'file-in-2', 'file-out-2'].sort()
+    );
+    for (const id of deletedIds) {
+      expect(
+        filesService.forceDeleteOwned.mock.calls.find(call => call[0] === id)
+      ).toEqual([id, 'user-1']);
+    }
+    // cleanup obligation 与任务行都按任务清理。
+    expect(cleanupObligationService.clear).toHaveBeenCalledWith(
+      'task-job',
+      'task-1'
+    );
+    expect(cleanupObligationService.clear).toHaveBeenCalledWith(
+      'task-job',
+      'task-2'
+    );
+    expect(globalDelete).toHaveBeenCalled();
   });
 });

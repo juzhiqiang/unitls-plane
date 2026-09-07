@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -254,6 +255,80 @@ export class TasksService {
     ]);
 
     return { tasks: sessionTasks, total: countResult[0]?.count ?? 0 };
+  }
+
+  /**
+   * 删除一个生图会话:任务行 + 产物文件 + 参考图文件全部硬删(不进回收站)。
+   *
+   * - 会话里有 pending/processing 任务时拒绝:BullMQ job 还在跑,删行会让
+   *   worker 的 markCompleted/markFailed 打空,任务状态永久悬空。
+   * - 文件删除走 FilesService.forceDeleteOwned(带归属校验与 purge 租约),
+   *   missing(用户已自行删掉参考图等)按成功处理。
+   * - 任务删除前清理对应的 cleanup obligation 行,避免留下孤儿记录。
+   */
+  async deleteImageGenerateSession(
+    userId: string,
+    sessionId: string
+  ): Promise<{ deletedTasks: number }> {
+    const sessionTasks = await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.sessionId, sessionId),
+          eq(tasks.type, 'image_generate')
+        )
+      );
+
+    if (sessionTasks.length === 0) {
+      throw new NotFoundException({
+        code: ErrorCodes.SESSION_NOT_FOUND,
+        message: 'Session not found',
+      });
+    }
+
+    if (
+      sessionTasks.some(
+        task => task.status === 'pending' || task.status === 'processing'
+      )
+    ) {
+      throw new ConflictException({
+        code: ErrorCodes.SESSION_HAS_ACTIVE_TASKS,
+        message: 'Session has tasks still running',
+      });
+    }
+
+    // 先删文件再删行:行删了就找不到关联 id 了;文件删失败会让整个请求报错,
+    // 任务行保留,用户重试删除即可(文件 purge 租约保证不会重复删对象)。
+    const fileIds = new Set<string>();
+    for (const task of sessionTasks) {
+      if (task.outputFileId) fileIds.add(task.outputFileId);
+      for (const fileId of (task.inputFileIds as string[]) ?? []) {
+        fileIds.add(fileId);
+      }
+    }
+    for (const fileId of fileIds) {
+      await this.filesService.forceDeleteOwned(fileId, userId);
+    }
+
+    for (const task of sessionTasks) {
+      await this.cleanupObligationService.clear('task-job', task.id);
+    }
+    await db
+      .delete(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.sessionId, sessionId),
+          eq(tasks.type, 'image_generate')
+        )
+      );
+
+    this.logger.log(
+      `Deleted image generate session ${sessionId}: ${sessionTasks.length} tasks, ${fileIds.size} files purged`
+    );
+    return { deletedTasks: sessionTasks.length };
   }
 
   async listByUser(

@@ -8,6 +8,7 @@ const tasksService = {
   getImageGenerateQuota: vi.fn(),
   listImageGenerateSessions: vi.fn(),
   listImageGenerateSessionTasks: vi.fn(),
+  deleteImageGenerateSession: vi.fn(),
 };
 
 const imageGenerationService = {
@@ -145,4 +146,34 @@ it('throws 401 when listing session tasks without a user', async () => {
   ).rejects.toThrow(UnauthorizedException);
 
   expect(tasksService.listImageGenerateSessionTasks).not.toHaveBeenCalled();
+});
+
+it('deletes a session for an authenticated user', async () => {
+  const user = { id: 'user-1', plan: 'signed_in', role: 'user' } as never;
+  const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
+  tasksService.deleteImageGenerateSession.mockResolvedValue({
+    deletedTasks: 3,
+  });
+
+  const result = await createController().deleteImageGenerateSession(
+    sessionId,
+    user
+  );
+
+  expect(tasksService.deleteImageGenerateSession).toHaveBeenCalledWith(
+    user.id,
+    sessionId
+  );
+  expect(result).toEqual({ deletedTasks: 3 });
+});
+
+it('throws 401 when deleting a session without a user', async () => {
+  await expect(
+    createController().deleteImageGenerateSession(
+      '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001',
+      undefined
+    )
+  ).rejects.toThrow(UnauthorizedException);
+
+  expect(tasksService.deleteImageGenerateSession).not.toHaveBeenCalled();
 });

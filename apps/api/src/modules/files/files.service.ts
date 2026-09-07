@@ -456,6 +456,22 @@ export class FilesService {
     }
   }
 
+  /**
+   * 跳过回收站直接硬删一个归属文件(对象 + 行)。
+   *
+   * 给「删除会话连带清产物/参考图」这类业务级硬删用:文件本身没进过回收站,
+   * 走 permanentDelete 会因为不在回收站而 404。missing(文件已不存在)按成功
+   * 处理 —— 调用方在意的是"删完之后它不在了"。purge 租约机制照常防并发。
+   */
+  async forceDeleteOwned(id: string, userId: string): Promise<void> {
+    const result = await this.permanentlyDeleteEligibleFile(
+      requireFileEligibility(and(eq(files.id, id), eq(files.userId, userId)))
+    );
+    if (result === 'deleted') {
+      this.logger.log(`Force deleted owned file ${id}`);
+    }
+  }
+
   async batchPermanentDelete(ids: string[], userId: string): Promise<void> {
     const userFiles = await db
       .select()

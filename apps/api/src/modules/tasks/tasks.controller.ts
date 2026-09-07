@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Param,
   Body,
   Query,
@@ -166,6 +167,31 @@ export class TasksController {
   ) {
     if (!currentUser) throw new UnauthorizedException();
     return this.tasksService.listImageGenerateSessionTasks(
+      currentUser.id,
+      sessionId
+    );
+  }
+
+  /**
+   * 删除一个生图会话:任务行与关联文件(产物 + 参考图)全部硬删,不进回收站。
+   * 会话里有任务仍在生成时返回 409。
+   */
+  @Delete('image-generate/sessions/:sessionId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Delete an image generation session with its files',
+  })
+  @ApiResponse({ status: 200, description: 'Session deleted' })
+  @ApiResponse({ status: 400, description: 'sessionId is not a valid UUID' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiResponse({ status: 409, description: 'Session has tasks still running' })
+  async deleteImageGenerateSession(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentUser() currentUser?: User
+  ) {
+    if (!currentUser) throw new UnauthorizedException();
+    return this.tasksService.deleteImageGenerateSession(
       currentUser.id,
       sessionId
     );

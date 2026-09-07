@@ -212,7 +212,7 @@ export function PresetCard({
       onClick={() => onPick(preset.prompt)}
       className="flex w-full flex-col gap-1 rounded-md border border-border p-3 text-left transition-colors hover:border-foreground hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
     >
-        {url && !failed ? (
+      {url && !failed ? (
         // 示例图让用户一眼看到这套模板的成品长什么样;图存 MinIO presets 匿名只读桶,
         // 拉不到就退化成纯文本卡片而不是留个碎图占位。
         // eslint-disable-next-line @next/next/no-img-element

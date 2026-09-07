@@ -77,7 +77,9 @@ describe('ImageGenerateTemplateWall', () => {
   it('degrades to a plain hint when no presets are available', () => {
     renderWall([]);
 
-    expect(screen.getByText('Describe your prompt on the left to start creating.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Describe your prompt on the left to start creating.')
+    ).toBeInTheDocument();
     expect(screen.queryByText('Idea templates')).not.toBeInTheDocument();
   });
 
@@ -86,6 +88,9 @@ describe('ImageGenerateTemplateWall', () => {
 
     expect(
       screen.getByRole('button', { name: /Guided science picture book/ })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /Mind map & knowledge graph/ })
     ).toBeDisabled();
   });
 });

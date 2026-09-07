@@ -24,7 +24,9 @@ export function ImageGenerateTemplateWall({
   if (presets.length === 0) {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border p-8 text-center">
-        <p className="text-sm text-muted-foreground">{t('templateWallEmpty')}</p>
+        <p className="text-sm text-muted-foreground">
+          {t('templateWallEmpty')}
+        </p>
       </div>
     );
   }

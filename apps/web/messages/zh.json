@@ -934,7 +934,6 @@
     "notConfigured": "AI 生图尚未配置，请联系管理员。",
     "providerUnavailable": "所选来源不可用，请换一个来源重试。",
     "failed": "生成失败，请重试。",
-    "paramsSummary": "更多参数",
     "recoveryHint": "可随时重试，失败的生成不占用当日额度。",
     "compareTitle": "改动对比",
     "templateWallTitle": "灵感模板",

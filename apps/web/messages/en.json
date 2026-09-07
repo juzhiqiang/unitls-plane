@@ -934,7 +934,6 @@
     "notConfigured": "AI image generation is not configured. Contact the administrator.",
     "providerUnavailable": "The selected source is unavailable. Pick another source and try again.",
     "failed": "Generation failed. Please try again.",
-    "paramsSummary": "More options",
     "recoveryHint": "Retry anytime — failed generations do not use up your daily quota.",
     "compareTitle": "Before / after",
     "templateWallTitle": "Idea templates",

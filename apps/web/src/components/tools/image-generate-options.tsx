@@ -292,11 +292,11 @@ export function ImageGeneratePromptField({
           </Dialog>
         )}
       </div>
-      {/* 限宽到 max-w-2xl:整宽时长提示词会变成一行 100+ 字,读写都难受。 */}
+      {/* 宽度交给左面板约束,这里不再自限 max-w-2xl。 */}
       <textarea
         id="image-generate-prompt"
         aria-describedby={PROMPT_COUNTER_ID}
-        className="min-h-40 w-full max-w-2xl rounded-md border bg-background p-3 text-sm leading-relaxed disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-40 w-full rounded-md border bg-background p-3 text-sm leading-relaxed disabled:cursor-not-allowed disabled:opacity-60"
         maxLength={IMAGE_GENERATE_PROMPT_MAX_LENGTH}
         placeholder={t('promptPlaceholder')}
         value={value.prompt}
@@ -307,7 +307,7 @@ export function ImageGeneratePromptField({
           传字符串而不是数字:数字参数会被 Intl.NumberFormat 加千位分隔符。 */}
       <p
         id={PROMPT_COUNTER_ID}
-        className="max-w-2xl text-right font-mono text-xs tabular-nums text-muted-foreground"
+        className="text-right font-mono text-xs tabular-nums text-muted-foreground"
       >
         {t('promptCounter', {
           count: String(value.prompt.length),
@@ -325,71 +325,64 @@ export function ImageGenerateParamsFields({
 }: ImageGenerateFieldProps) {
   const t = useTranslations('ImageGenerate');
 
+  // 工作台左面板空间有限,参数组直接平铺展开;尺寸/数量影响真实计费,本就不该折叠。
   return (
-    // 用原生 details 而不是自己管开合状态:默认展开,尺寸和数量会影响真实计费,
-    // 不该藏起来,但它们也不该和唯一必填的提示词抢视觉权重。
-    <details open className="rounded-md border border-border p-4">
-      <summary className="cursor-pointer text-sm font-medium">
-        {t('paramsSummary')}
-      </summary>
-      <div className="mt-4 space-y-5">
-        <RadioRow
-          name="image-generate-size"
-          legend={t('sizeLabel')}
-          selected={value.size}
-          disabled={disabled}
-          options={SIZES.map(size => ({
-            value: size,
-            label: t(`sizes.${size}`),
-          }))}
-          onSelect={size => onChange({ ...value, size })}
-        />
+    <div className="space-y-5">
+      <RadioRow
+        name="image-generate-size"
+        legend={t('sizeLabel')}
+        selected={value.size}
+        disabled={disabled}
+        options={SIZES.map(size => ({
+          value: size,
+          label: t(`sizes.${size}`),
+        }))}
+        onSelect={size => onChange({ ...value, size })}
+      />
 
-        <RadioRow
-          name="image-generate-quality"
-          legend={t('qualityLabel')}
-          selected={value.quality}
-          disabled={disabled}
-          options={QUALITIES.map(quality => ({
-            value: quality,
-            label: t(`qualities.${quality}`),
-          }))}
-          onSelect={quality => onChange({ ...value, quality })}
-        />
+      <RadioRow
+        name="image-generate-quality"
+        legend={t('qualityLabel')}
+        selected={value.quality}
+        disabled={disabled}
+        options={QUALITIES.map(quality => ({
+          value: quality,
+          label: t(`qualities.${quality}`),
+        }))}
+        onSelect={quality => onChange({ ...value, quality })}
+      />
 
-        <RadioRow
-          name="image-generate-style"
-          legend={t('styleLabel')}
-          selected={value.style ?? 'none'}
-          disabled={disabled}
-          options={[
-            { value: 'none' as const, label: t('styles.none') },
-            ...STYLES.map(style => ({
-              value: style,
-              label: t(`styles.${style}`),
-            })),
-          ]}
-          onSelect={style =>
-            onChange({
-              ...value,
-              style:
-                style === 'none' ? undefined : (style as ImageGenerateStyle),
-            })
-          }
-        />
+      <RadioRow
+        name="image-generate-style"
+        legend={t('styleLabel')}
+        selected={value.style ?? 'none'}
+        disabled={disabled}
+        options={[
+          { value: 'none' as const, label: t('styles.none') },
+          ...STYLES.map(style => ({
+            value: style,
+            label: t(`styles.${style}`),
+          })),
+        ]}
+        onSelect={style =>
+          onChange({
+            ...value,
+            style: style === 'none' ? undefined : (style as ImageGenerateStyle),
+          })
+        }
+      />
 
-        <RadioRow
-          name="image-generate-count"
-          legend={t('countLabel')}
-          selected={value.count}
-          disabled={disabled}
-          options={COUNTS.map(count => ({
-            value: count,
-            label: String(count),
-          }))}
-          onSelect={count => onChange({ ...value, count })}
-        />
-      </div>
-    </details>
+      <RadioRow
+        name="image-generate-count"
+        legend={t('countLabel')}
+        selected={value.count}
+        disabled={disabled}
+        options={COUNTS.map(count => ({
+          value: count,
+          label: String(count),
+        }))}
+        onSelect={count => onChange({ ...value, count })}
+      />
+    </div>
   );
 }

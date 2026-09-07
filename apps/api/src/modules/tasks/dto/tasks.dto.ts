@@ -175,6 +175,60 @@ export class ImageGenerateProviderDto {
     isArray: true,
   })
   capabilities!: string[];
+
+  @ApiProperty({
+    description:
+      '该来源支持的尺寸（"auto" 或 "WxH"）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size',
+    type: [String],
+    isArray: true,
+  })
+  sizes!: string[];
+}
+
+export class ImageGenerateSessionDto {
+  @ApiProperty({
+    description:
+      '会话 id（客户端生成 uuid，创建任务时放进 inputConfig.sessionId）',
+    type: String,
+    format: 'uuid',
+  })
+  sessionId!: string;
+
+  @ApiProperty({
+    description: '会话标题：该会话第一条任务的提示词前 20 个字符',
+  })
+  title!: string;
+
+  @ApiProperty({
+    description: '会话内生图任务总数',
+  })
+  taskCount!: number;
+
+  @ApiProperty({
+    description: '会话创建时间（首条任务时间，ISO 8601 UTC）',
+    type: String,
+  })
+  createdAt!: string;
+
+  @ApiProperty({
+    description: '会话最近活动时间（末条任务时间，ISO 8601 UTC）',
+    type: String,
+  })
+  updatedAt!: string;
+}
+
+export class ImageGenerateSessionTasksDto {
+  @ApiProperty({
+    description: '会话内任务，按创建时间正序排列（消息流数据源）',
+    type: [TaskResponseDto],
+    isArray: true,
+  })
+  tasks!: TaskResponseDto[];
+
+  @ApiProperty({
+    description: '会话内任务总数（返回条数上限 200）',
+  })
+  total!: number;
 }
 
 export class ImageGeneratePresetDto {

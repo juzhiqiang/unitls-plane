@@ -8,6 +8,7 @@ import {
   UseGuards,
   Req,
   UnauthorizedException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,6 +28,8 @@ import {
   ImageGenerateQuotaDto,
   ImageGenerateProviderDto,
   ImageGeneratePresetDto,
+  ImageGenerateSessionDto,
+  ImageGenerateSessionTasksDto,
 } from './dto/tasks.dto';
 import { Public } from '../../common/decorators';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -123,6 +126,49 @@ export class TasksController {
   })
   async listImageGeneratePresets(@Query('lang') lang?: string) {
     return this.imageGeneratePresetsService.list(lang === 'en' ? 'en' : 'zh');
+  }
+
+  /**
+   * 生图会话列表(对话式布局左侧栏)。
+   *
+   * 同 providers/quota 一样要求登录:生图任务本身必须登录,会话由任务派生。
+   * 必须声明在 `@Get(':id')` 之前。
+   */
+  @Get('image-generate/sessions')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List AI image generation sessions' })
+  @ApiResponse({
+    status: 200,
+    description: 'Sessions derived from image generate tasks, newest first',
+    type: ImageGenerateSessionDto,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  async listImageGenerateSessions(@CurrentUser() currentUser?: User) {
+    if (!currentUser) throw new UnauthorizedException();
+    return this.tasksService.listImageGenerateSessions(currentUser.id);
+  }
+
+  /** 单个会话的任务列表(消息流数据源)。sessionId 非法 uuid 直接 400。 */
+  @Get('image-generate/sessions/:sessionId/tasks')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List the tasks of one image generation session' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session tasks ordered by creation time ascending',
+    type: ImageGenerateSessionTasksDto,
+  })
+  @ApiResponse({ status: 400, description: 'sessionId is not a valid UUID' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  async listImageGenerateSessionTasks(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentUser() currentUser?: User
+  ) {
+    if (!currentUser) throw new UnauthorizedException();
+    return this.tasksService.listImageGenerateSessionTasks(
+      currentUser.id,
+      sessionId
+    );
   }
 
   @Get(':id')

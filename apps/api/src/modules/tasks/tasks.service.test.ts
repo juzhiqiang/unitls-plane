@@ -533,6 +533,59 @@ describe('TasksService task creation', () => {
     expect(aiQueue.add).not.toHaveBeenCalled();
     expect(events).toContain('rollback');
   });
+
+  it('extracts a valid sessionId from image_generate inputConfig into the row', async () => {
+    const { service } = createService();
+    const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
+
+    await service.create(
+      {
+        type: 'image_generate',
+        inputFileIds: [],
+        inputConfig: { mode: 'text_to_image', prompt: 'x', sessionId },
+      },
+      { id: 'user-1', plan: 'signed_in', role: 'user' } as never
+    );
+
+    expect(insertedTask).toMatchObject({ sessionId });
+  });
+
+  it('drops a malformed sessionId instead of failing the task', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create(
+        {
+          type: 'image_generate',
+          inputFileIds: [],
+          inputConfig: {
+            mode: 'text_to_image',
+            prompt: 'x',
+            sessionId: 'not-a-uuid',
+          },
+        },
+        { id: 'user-1', plan: 'signed_in', role: 'user' } as never
+      )
+    ).resolves.toMatchObject({ type: 'image_generate' });
+
+    expect(insertedTask).not.toHaveProperty('sessionId');
+  });
+
+  it('never writes a sessionId for other task types', async () => {
+    const { service } = createService();
+
+    await service.create(
+      {
+        type: 'image_generate',
+        inputFileIds: ['file-1'],
+        inputConfig: { mode: 'image_to_image', prompt: 'x' },
+      },
+      { id: 'user-1', plan: 'signed_in', role: 'user' } as never
+    );
+
+    // inputConfig 里没有 sessionId 时,行上不该出现 sessionId 键。
+    expect(insertedTask).not.toHaveProperty('sessionId');
+  });
 });
 
 describe('TasksService image generation quota snapshot', () => {

@@ -13,7 +13,7 @@ import {
   getLimit,
   type EntitlementUser,
 } from '@utils-plane/utils';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, asc, and, isNotNull, sql } from 'drizzle-orm';
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
   CreateTaskInput,
@@ -87,6 +87,13 @@ export class TasksService {
     await this.assertCanAccessInputFiles(input, user, database);
     await this.assertWithinDailyQuota(input.type, user, database);
 
+    // 生图会话归属在建任务时落列(而非 processor):任务失败也要留在会话流里,
+    // 且不依赖 worker 生命周期。非法形状直接丢弃,任务照建。
+    const sessionId =
+      input.type === 'image_generate'
+        ? extractSessionId(input.inputConfig)
+        : null;
+
     const [task] = await database
       .insert(tasks)
       .values({
@@ -96,6 +103,7 @@ export class TasksService {
         status: 'pending',
         inputFileIds: input.inputFileIds,
         inputConfig: input.inputConfig ?? {},
+        ...(sessionId ? { sessionId } : {}),
       } as NewTask)
       .returning();
 
@@ -154,6 +162,98 @@ export class TasksService {
     );
     const used = await countTasksCreatedToday(db, user.id, 'image_generate');
     return { limit, used, remaining: Math.max(0, limit - used) };
+  }
+
+  /**
+   * 当前账号的生图会话列表,按最近活动倒序,最多 50 条。
+   *
+   * 会话不是独立实体:直接从 image_generate 任务行按 session_id 派生
+   * (count/min/max 一查,首条 prompt 标题一查,合并即返回),不建新表、不做删除。
+   */
+  async listImageGenerateSessions(userId: string): Promise<
+    Array<{
+      sessionId: string;
+      title: string;
+      taskCount: number;
+      createdAt: string;
+      updatedAt: string;
+    }>
+  > {
+    const scope = and(
+      eq(tasks.userId, userId),
+      eq(tasks.type, 'image_generate'),
+      isNotNull(tasks.sessionId)
+    );
+
+    const [groups, firstTasks] = await Promise.all([
+      db
+        .select({
+          sessionId: tasks.sessionId,
+          taskCount: sql<number>`count(*)::int`,
+          // 聚合的 timestamp 不会像普通列那样带时区序号化:直接让 SQL 产出
+          // 带 Z 的 ISO 串(created_at 存 UTC),省得 Date 解析按本地时区偏移。
+          createdAt: sql<string>`to_char(min(${tasks.createdAt}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+          updatedAt: sql<string>`to_char(max(${tasks.createdAt}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+        })
+        .from(tasks)
+        .where(scope)
+        .groupBy(tasks.sessionId)
+        .orderBy(desc(sql`max(${tasks.createdAt})`))
+        .limit(50),
+      // DISTINCT ON (session_id) + createdAt 正序:每个会话取最早一条任务做标题。
+      db
+        .selectDistinctOn([tasks.sessionId], {
+          sessionId: tasks.sessionId,
+          prompt: sql<string | null>`${tasks.inputConfig} ->> 'prompt'`,
+        })
+        .from(tasks)
+        .where(scope)
+        .orderBy(tasks.sessionId, asc(tasks.createdAt)),
+    ]);
+
+    const firstPrompt = new Map(
+      firstTasks.map(row => [row.sessionId, row.prompt ?? ''])
+    );
+
+    return groups.map(group => ({
+      sessionId: group.sessionId as string,
+      title: (firstPrompt.get(group.sessionId) ?? '').slice(0, 20),
+      taskCount: group.taskCount,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    }));
+  }
+
+  /**
+   * 单个会话的任务列表(消息流数据源):createdAt 正序,上限 200。
+   *
+   * 不复用 listByUser 加 sessionId 参数:那边是 desc + offset 分页的通用列表,
+   * 会话视图要 asc + 类型固定 + 归属隐含,语义混在一起两边都别扭。
+   */
+  async listImageGenerateSessionTasks(
+    userId: string,
+    sessionId: string
+  ): Promise<{ tasks: Task[]; total: number }> {
+    const scope = and(
+      eq(tasks.userId, userId),
+      eq(tasks.sessionId, sessionId),
+      eq(tasks.type, 'image_generate')
+    );
+
+    const [sessionTasks, countResult] = await Promise.all([
+      db
+        .select()
+        .from(tasks)
+        .where(scope)
+        .orderBy(asc(tasks.createdAt))
+        .limit(200),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(tasks)
+        .where(scope),
+    ]);
+
+    return { tasks: sessionTasks, total: countResult[0]?.count ?? 0 };
   }
 
   async listByUser(
@@ -390,3 +490,16 @@ export class TasksService {
     }
   }
 }
+
+/** 建任务时从 inputConfig 提取会话 id;形状不对返回 null,列不写。 */
+function extractSessionId(
+  inputConfig?: Record<string, unknown>
+): string | null {
+  const sessionId = inputConfig?.sessionId;
+  return typeof sessionId === 'string' && UUID_PATTERN.test(sessionId.trim())
+    ? sessionId.trim()
+    : null;
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

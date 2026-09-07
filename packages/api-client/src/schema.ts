@@ -73,6 +73,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/image-generate/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List AI image generation sessions */
+        get: operations["TasksController_listImageGenerateSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/image-generate/sessions/{sessionId}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the tasks of one image generation session */
+        get: operations["TasksController_listImageGenerateSessionTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}": {
         parameters: {
             query?: never;
@@ -499,6 +533,8 @@ export interface components {
             label: string;
             /** @description 该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传 */
             capabilities: ("generate" | "edit")[];
+            /** @description 该来源支持的尺寸（"auto" 或 "WxH"）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size */
+            sizes: string[][];
         };
         ImageGenerateQuotaDto: {
             /** @description 当日生图张数上限 */
@@ -519,6 +555,27 @@ export interface components {
             imageStorageKey?: string;
             /** @description 排序值，升序展示 */
             sortOrder: number;
+        };
+        ImageGenerateSessionDto: {
+            /**
+             * Format: uuid
+             * @description 会话 id（客户端生成 uuid，创建任务时放进 inputConfig.sessionId）
+             */
+            sessionId: string;
+            /** @description 会话标题：该会话第一条任务的提示词前 20 个字符 */
+            title: string;
+            /** @description 会话内生图任务总数 */
+            taskCount: number;
+            /** @description 会话创建时间（首条任务时间，ISO 8601 UTC） */
+            createdAt: string;
+            /** @description 会话最近活动时间（末条任务时间，ISO 8601 UTC） */
+            updatedAt: string;
+        };
+        ImageGenerateSessionTasksDto: {
+            /** @description 会话内任务，按创建时间正序排列（消息流数据源） */
+            tasks: Record<string, never>[][];
+            /** @description 会话内任务总数（返回条数上限 200） */
+            total: number;
         };
         TaskStatusDto: {
             /** @enum {string} */
@@ -715,6 +772,69 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImageGeneratePresetDto"][];
                 };
+            };
+        };
+    };
+    TasksController_listImageGenerateSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessions derived from image generate tasks, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerateSessionDto"][];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_listImageGenerateSessionTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session tasks ordered by creation time ascending */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerateSessionTasksDto"];
+                };
+            };
+            /** @description sessionId is not a valid UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

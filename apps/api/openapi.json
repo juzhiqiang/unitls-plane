@@ -214,6 +214,81 @@
         ]
       }
     },
+    "/tasks/image-generate/sessions": {
+      "get": {
+        "operationId": "TasksController_listImageGenerateSessions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sessions derived from image generate tasks, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImageGenerateSessionDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List AI image generation sessions",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/image-generate/sessions/{sessionId}/tasks": {
+      "get": {
+        "operationId": "TasksController_listImageGenerateSessionTasks",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session tasks ordered by creation time ascending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageGenerateSessionTasksDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "sessionId is not a valid UUID"
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the tasks of one image generation session",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/tasks/{id}": {
       "get": {
         "operationId": "TasksController_getOne",
@@ -1161,12 +1236,23 @@
                 "edit"
               ]
             }
+          },
+          "sizes": {
+            "description": "该来源支持的尺寸（\"auto\" 或 \"WxH\"）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": "array"
           }
         },
         "required": [
           "id",
           "label",
-          "capabilities"
+          "capabilities",
+          "sizes"
         ]
       },
       "ImageGenerateQuotaDto": {
@@ -1220,6 +1306,62 @@
           "title",
           "prompt",
           "sortOrder"
+        ]
+      },
+      "ImageGenerateSessionDto": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "会话 id（客户端生成 uuid，创建任务时放进 inputConfig.sessionId）",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "会话标题：该会话第一条任务的提示词前 20 个字符"
+          },
+          "taskCount": {
+            "type": "number",
+            "description": "会话内生图任务总数"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "会话创建时间（首条任务时间，ISO 8601 UTC）"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "会话最近活动时间（末条任务时间，ISO 8601 UTC）"
+          }
+        },
+        "required": [
+          "sessionId",
+          "title",
+          "taskCount",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ImageGenerateSessionTasksDto": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "description": "会话内任务，按创建时间正序排列（消息流数据源）",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "taskResponseDto"
+              }
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "number",
+            "description": "会话内任务总数（返回条数上限 200）"
+          }
+        },
+        "required": [
+          "tasks",
+          "total"
         ]
       },
       "TaskStatusDto": {

@@ -1,184 +1,270 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useQueryClient } from '@tanstack/react-query';
+import { History } from 'lucide-react';
 import {
   useCreateTask,
   useImageGeneratePresets,
   useImageGenerateProviders,
   useImageGenerateQuota,
+  useImageGenerateSessions,
+  useImageGenerateSessionTasks,
 } from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
-import { useTaskGroupProgress } from '@/hooks/api/use-task-group-progress';
 import { useTaskOutputPreviews } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
+import { taskQueryKeys } from '@/hooks/api/query-keys';
+import type { TaskResponseDto } from '@/hooks/api/types';
+import { ConversationSidebar } from '@/components/tools/image-generate/conversation-sidebar';
+import { MessageCanvas } from '@/components/tools/image-generate/message-canvas';
 import {
-  ImageGenerateModeField,
-  ImageGenerateParamsFields,
-  ImageGeneratePromptField,
-  ImageGenerateProviderField,
-  type ImageGenerateDraft,
-} from '@/components/tools/image-generate-options';
-import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
-import { ImageGenerateTemplateWall } from '@/components/tools/image-generate-template-wall';
-import { ImageGenerateWorkbench } from '@/components/tools/image-generate-workbench';
-import { FileDropzone } from '@/components/tools/file-dropzone';
-import { ProcessingProgress } from '@/components/tools/processing-progress';
-import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
-import { useObjectUrl } from '@/hooks/use-object-url';
+  GenerationMessage,
+  SystemNotice,
+} from '@/components/tools/image-generate/generation-message';
+import { PromptComposer } from '@/components/tools/image-generate/prompt-composer';
+import { EmptyState } from '@/components/tools/image-generate/empty-state';
+import type {
+  GenerationMessageGroup,
+  GenerationMessageTask,
+  ImageGenerateChatDraft,
+} from '@/components/tools/image-generate/types';
+import { resolveDraftSize } from '@/components/tools/image-generate/types';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { DialogTitle } from '@/components/ui/dialog';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 
 const TOOL_HREF = '/image/generate';
 
-const REFERENCE_ACCEPT = {
-  'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.avif'],
-};
-
-const ERROR_MESSAGE_KEY: Record<string, string> = {
+/** batch 级(提交/建任务阶段)错误的文案映射,与消息内联展示共用语义。 */
+const SUBMIT_ERROR_KEYS: Record<string, string> = {
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
   AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
   AI_IMAGE_NOT_CONFIGURED: 'notConfigured',
   AI_IMAGE_PROVIDER_UNAVAILABLE: 'providerUnavailable',
 };
 
-const INITIAL_DRAFT: ImageGenerateDraft = {
-  mode: 'text_to_image',
+const INITIAL_DRAFT: ImageGenerateChatDraft = {
   prompt: '',
-  size: '1024x1024',
-  quality: 'high',
+  size: 'auto',
+  quality: 'auto',
   count: 1,
 };
-
-/** 失败提示统一走一个通道:key 是文案,code 只有服务端错误才有。 */
-interface Failure {
-  key: string;
-  code?: string;
-}
 
 function errorCodeOf(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' ? code : 'AI_IMAGE_GENERATION_FAILED';
 }
 
+/** 服务端任务列表 → 消息组:一次提交(clientGroupId)聚成一条消息。 */
+function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
+  const groups = new Map<string, GenerationMessageGroup>();
+  for (const task of tasks) {
+    const config = (task.inputConfig ?? {}) as {
+      prompt?: unknown;
+      mode?: unknown;
+      clientGroupId?: unknown;
+    };
+    // 旧客户端的任务没有 clientGroupId,单任务自成一组。
+    const clientGroupId =
+      typeof config.clientGroupId === 'string' ? config.clientGroupId : task.id;
+    const prompt = typeof config.prompt === 'string' ? config.prompt : '';
+    const mode =
+      config.mode === 'image_to_image' ? 'image_to_image' : 'text_to_image';
+    const entry: GenerationMessageTask = {
+      taskId: task.id,
+      status: task.status,
+      progress: task.progress,
+      outputFileId: task.outputFileId,
+      errorCode: task.errorCode,
+    };
+
+    const existing = groups.get(clientGroupId);
+    if (existing) {
+      existing.taskIds.push(task.id);
+      existing.tasks?.push(entry);
+    } else {
+      groups.set(clientGroupId, {
+        clientGroupId,
+        prompt,
+        mode,
+        referenceFileId:
+          mode === 'image_to_image' ? task.inputFileIds[0] : undefined,
+        taskIds: [task.id],
+        tasks: [entry],
+      });
+    }
+  }
+  return Array.from(groups.values());
+}
+
 export default function ImageGeneratePage() {
   const t = useTranslations('ImageGenerate');
-  const tShared = useTranslations('ToolsShared');
+  const queryClient = useQueryClient();
   const { session, requireLogin } = useRequireLogin();
   const createTask = useCreateTask();
   const quota = useImageGenerateQuota();
   const providersQuery = useImageGenerateProviders();
   const presetsQuery = useImageGeneratePresets();
+  const sessionsQuery = useImageGenerateSessions();
   const uploadFile = useUploadFile();
 
-  const [draft, setDraft] = useState<ImageGenerateDraft>(INITIAL_DRAFT);
-  const [sourceFile, setSourceFile] = useState<File | null>(null);
-  // 提交那一刻用到的参考图,单独存一份:用户在看结果时换图不该悄悄改掉对比的「前」。
-  const [comparedFile, setComparedFile] = useState<File | null>(null);
-  const [taskIds, setTaskIds] = useState<string[]>([]);
-  // 结果态下大图展示第几张;新一轮生成时在 reset 里归零。
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // 会话:新对话在本地生成 uuid,提交首个任务后才出现在服务端列表里。
+  const [newSessionId, setNewSessionId] = useState(() =>
+    globalThis.crypto.randomUUID()
+  );
+  const [activeSessionId, setActiveSessionId] = useState(newSessionId);
+  const [draft, setDraft] = useState<ImageGenerateChatDraft>(INITIAL_DRAFT);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [failure, setFailure] = useState<Failure | null>(null);
-  // 产物取回(状态 completed 之后还要再下载一次 blob)收在 hook 里,页面只读 previews/pending。
-  const output = useTaskOutputPreviews();
+  const [failure, setFailure] = useState<{ key: string; code?: string } | null>(
+    null
+  );
+  // 乐观消息:从提交开始显示,直到服务端数据里出现同 clientGroupId 的组。
+  const [optimistic, setOptimistic] = useState<GenerationMessageGroup | null>(
+    null
+  );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // 来源列表拉取失败或还没回来时按「单来源」渲染:选择器不出现,providerId 不下发,
-  // 服务端仍会用配置里的第一个来源,页面不会因为这个附加接口而不可用。
+  const output = useTaskOutputPreviews();
+  // 已发起产物下载的 taskId:切会话后 previews 被清空,这个集合也要跟着重置。
+  const loadedRef = useRef<Set<string>>(new Set());
+
   const providers = providersQuery.data ?? [];
   const selectedProvider =
     providers.find(item => item.id === draft.providerId) ?? providers[0];
-  // 没拿到来源信息时不预先禁掉图生图:真正的能力校验在服务端。
   const editSupported =
     !selectedProvider || selectedProvider.capabilities.includes('edit');
 
-  const sourceUrl = useObjectUrl(sourceFile);
-  const comparedUrl = useObjectUrl(comparedFile);
-  const maxFileSize = getImageUploadMaxFileSize(session);
+  // 新会话在服务端没有任务,query 返回空列表,与「未启用」效果一致,无需额外门控。
+  const sessionTasksQuery = useImageGenerateSessionTasks(activeSessionId);
+  const sessionTasks = sessionTasksQuery.data?.tasks ?? [];
 
-  // 切回文生图时丢掉参考图:留着它会让「模式=文生图 却带着 inputFileIds」这种
-  // schema 会直接拒的组合有机会被提交。
-  const changeDraft = (next: ImageGenerateDraft) => {
-    if (next.mode !== 'image_to_image') {
-      setSourceFile(null);
-      setComparedFile(null);
+  const messageGroups = useMemo(() => {
+    const serverGroups = toMessageGroups(sessionTasks);
+    // 乐观组只在服务端还没有它的期间显示(提交中或刷新间隙),避免消息闪没。
+    if (
+      optimistic &&
+      !serverGroups.some(
+        group => group.clientGroupId === optimistic.clientGroupId
+      )
+    ) {
+      return [...serverGroups, optimistic];
     }
-    setDraft(next);
+    return serverGroups;
+  }, [sessionTasks, optimistic]);
+
+  // 切会话:清空预览与已加载集合,恢复历史会话时 completed 任务会经 effect 重新取回。
+  useEffect(() => {
+    output.reset();
+    loadedRef.current = new Set();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
+
+  // completed 任务统一在这里取回产物(新完成的与历史恢复的走同一条路)。
+  useEffect(() => {
+    for (const group of messageGroups) {
+      for (const task of group.tasks ?? []) {
+        if (
+          task.status === 'completed' &&
+          task.outputFileId &&
+          !loadedRef.current.has(task.taskId)
+        ) {
+          loadedRef.current.add(task.taskId);
+          void output.load(task.taskId, task.outputFileId);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageGroups]);
+
+  const startNewChat = () => {
+    const id = globalThis.crypto.randomUUID();
+    setNewSessionId(id);
+    setActiveSessionId(id);
+    setReferenceFile(null);
+    setFailure(null);
+    setOptimistic(null);
+    setMobileSidebarOpen(false);
   };
 
-  const { items, settled, query } = useTaskGroupProgress(taskIds, {
-    onItemCompleted: output.load,
-  });
-
-  // useTaskGroupProgress 的 queryFn 用 Promise.all 并发取 N 个状态,任一任务永久失败
-  // (例如 taskId 返回 404)会让整个 query 进 error、settled 永不为 true、其余回调永不
-  // 触发。必须消费 query.isError,否则永久失败会表现为「进度条转到底也不结束」。
-  const groupErrored =
-    taskIds.length > 0 && !settled && Boolean(query?.isError);
-  const inFlight = taskIds.length > 0 && !settled && !groupErrored;
-
-  const reset = () => {
-    setTaskIds([]);
+  const selectSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
     setFailure(null);
-    setSelectedIndex(0);
-    output.reset();
+    setOptimistic(null);
+    setMobileSidebarOpen(false);
   };
 
   const submit = async () => {
     if (requireLogin(TOOL_HREF)) return;
-    const needsReference = draft.mode === 'image_to_image';
-    if (needsReference && !sourceFile) {
-      setFailure({ key: 'sourceRequired' });
-      return;
-    }
 
-    reset();
+    const mode = referenceFile ? 'image_to_image' : 'text_to_image';
+    const clientGroupId = globalThis.crypto.randomUUID();
+    const prompt = draft.prompt.trim();
+    // 草稿尺寸(默认 auto)不在当前来源支持列表时回落到第一档,免得提交一个
+    // 会在 processor 被尺寸交叉校验拒掉的值。
+    const size = resolveDraftSize(draft.size, selectedProvider?.sizes);
+
+    setFailure(null);
     setSubmitting(true);
+    setOptimistic({
+      clientGroupId,
+      prompt,
+      mode,
+      taskIds: [],
+      // 数量占位:服务端数据到达前,消息里先亮出 N 个脉动格子。
+      tasks: Array.from({ length: draft.count }, (_, index) => ({
+        taskId: `${clientGroupId}-optimistic-${index}`,
+        status: 'pending' as const,
+      })),
+    });
 
     // 参考图只上传一次,N 个任务共用同一个 fileId:同一张图重复上传既费额度也费带宽。
     let inputFileIds: string[] = [];
-    if (needsReference && sourceFile) {
+    if (mode === 'image_to_image' && referenceFile) {
       try {
         // upload 走 multipart,OpenAPI 里 201 没有 JSON content schema,openapi-fetch
-        // 把返回类型推成 undefined,这里先转 unknown 再断言,与 use-files 里
-        // `data as unknown as FileListResponse` 同一处理方式。
+        // 把返回类型推成 undefined,这里先转 unknown 再断言,与 use-files 里同一处理方式。
         const uploaded = (await uploadFile.mutateAsync(
-          sourceFile
-        )) as unknown as {
-          id: string;
-        };
+          referenceFile
+        )) as unknown as { id: string };
         inputFileIds = [uploaded.id];
-        setComparedFile(sourceFile);
+        setOptimistic(current =>
+          current && current.clientGroupId === clientGroupId
+            ? { ...current, referenceFileId: uploaded.id }
+            : current
+        );
       } catch {
         setFailure({ key: 'uploadFailed' });
         setSubmitting(false);
+        setOptimistic(null);
         return;
       }
-    } else {
-      setComparedFile(null);
     }
 
-    const created: string[] = [];
     let failureCode: string | null = null;
 
     // 串行(而非 Promise.all)创建:createTask 只是入队(廉价 insert),真正生成在
-    // worker 并发跑,N 张只多几次入队往返。串行才能让配额判定确定——每次都看到前一次扣减
-    // 后的计数,第一个 AI_IMAGE_DAILY_LIMIT_EXCEEDED 能干净地 break。Promise.all 无法
-    // break 且会与配额记账竞态,切勿"优化"成并发。
+    // worker 并发跑,N 张只多几次入队往返。串行才能让配额判定确定 —— 每次都看到
+    // 前一次扣减后的计数,第一个 AI_IMAGE_DAILY_LIMIT_EXCEEDED 能干净地 break。
+    // Promise.all 无法 break 且会与配额记账竞态,切勿"优化"成并发。
     for (let index = 0; index < draft.count; index += 1) {
       try {
-        const task = await createTask.mutateAsync({
+        await createTask.mutateAsync({
           type: 'image_generate',
           inputFileIds,
           inputConfig: {
-            mode: draft.mode,
-            prompt: draft.prompt.trim(),
-            size: draft.size,
+            mode,
+            prompt,
+            size,
             quality: draft.quality,
-            ...(draft.style ? { style: draft.style } : {}),
+            ...(draft.background ? { background: draft.background } : {}),
             ...(draft.providerId ? { providerId: draft.providerId } : {}),
+            sessionId: activeSessionId,
+            clientGroupId,
           },
         });
-        created.push(task.id);
       } catch (error) {
         // 部分超额不整批回滚:已建出的任务继续跑,剩下的报错。
         failureCode = errorCodeOf(error);
@@ -186,294 +272,139 @@ export default function ImageGeneratePage() {
       }
     }
 
-    setTaskIds(created);
     setFailure(
       failureCode
-        ? { key: ERROR_MESSAGE_KEY[failureCode] ?? 'failed', code: failureCode }
+        ? {
+            key: SUBMIT_ERROR_KEYS[failureCode] ?? 'failed',
+            code: failureCode,
+          }
         : null
     );
     setSubmitting(false);
+    // 服务端会话列表刷新后,当前会话的任务 query 随之更新(会话任务 key 是它的前缀)。
+    await queryClient.invalidateQueries({
+      queryKey: taskQueryKeys.imageGenerateSessions(),
+    });
   };
 
-  const needsReference = draft.mode === 'image_to_image';
-  const referenceMissing = needsReference && !sourceFile;
-
-  // 任务 settled 只说明服务端出图了,页面还要再下载一次 blob 才有东西可看。缺 entry
-  // 视为 loading:onItemCompleted 与 items 更新同一轮,少了这个兜底会漏出一帧空窗,
-  // 表现就是按钮先恢复、结果区空着、图片随后突然出现。
-  const fetchingResults =
-    taskIds.length > 0 &&
-    items.some(
-      item =>
-        item.status === 'completed' &&
-        (output.previews[item.taskId]?.state ?? 'loading') === 'loading'
-    );
+  const inFlight = messageGroups.some(group =>
+    (group.tasks ?? []).some(
+      task => task.status === 'pending' || task.status === 'processing'
+    )
+  );
+  // 任务 settled 只说明服务端出图了,页面还要再下载一次 blob 才有东西可看:
+  // busy 要按住到图片真的能显示,否则按钮先恢复、格子空着、图片随后突然出现。
+  const fetchingResults = messageGroups.some(group =>
+    (group.tasks ?? []).some(
+      task =>
+        task.status === 'completed' &&
+        (output.previews[task.taskId]?.state ?? 'loading') === 'loading'
+    )
+  );
   const busy = submitting || inFlight || fetchingResults;
 
-  const averageProgress =
-    items.length > 0
-      ? items.reduce((sum, item) => sum + (item.progress ?? 0), 0) /
-        items.length
-      : 0;
-
-  // 大图位:已完成的任务里按 selectedIndex 取,越界时夹回最后一张。
-  const completedItems = items.filter(item => item.status === 'completed');
-  const activeIndex = Math.min(
-    selectedIndex,
-    Math.max(completedItems.length - 1, 0)
-  );
-  const activeItem = completedItems[activeIndex];
-  const activeUrl = activeItem
-    ? output.previews[activeItem.taskId]?.url
-    : undefined;
-  // 图生图给滑动对比:参考图和结果分处页面两端时,看不出到底改了什么。
-  const showCompare = Boolean(comparedUrl && activeUrl);
-
-  // 右主区空态:还没提交过、也没有失败提示,才把版面交给模板墙。items 非空说明
-  // 已有结果可看(测试与 mock 场景会在 taskIds 之外直接喂数据),绝不能回到空态。
-  const showWall =
-    !submitting && taskIds.length === 0 && items.length === 0 && !failure;
+  const activeSessionTitle =
+    activeSessionId === newSessionId
+      ? t('newChat')
+      : (sessionsQuery.data ?? []).find(
+          item => item.sessionId === activeSessionId
+        )?.title || t('title');
 
   const pickPreset = (prompt: string) => {
-    changeDraft({ ...draft, prompt });
-    // 填完把焦点交回输入框,用户可以立刻继续改写模板。
+    setDraft(current => ({ ...current, prompt }));
     document.getElementById('image-generate-prompt')?.focus();
   };
 
+  const sidebar = (
+    <ConversationSidebar
+      sessions={sessionsQuery.data ?? []}
+      newSessionId={newSessionId}
+      activeSessionId={activeSessionId}
+      onSelect={selectSession}
+      onNew={startNewChat}
+    />
+  );
+
+  const canvas =
+    messageGroups.length === 0 && !failure && !sessionTasksQuery.isError ? (
+      <EmptyState
+        presets={presetsQuery.data ?? []}
+        disabled={busy}
+        onPick={pickPreset}
+      />
+    ) : (
+      <>
+        {messageGroups.map(group => (
+          <GenerationMessage
+            key={group.clientGroupId}
+            group={group}
+            previews={output.previews}
+            onRetryFetch={(taskId, outputFileId) =>
+              void output.load(taskId, outputFileId)
+            }
+          />
+        ))}
+        {failure && <SystemNotice message={t(failure.key)} onRetry={submit} />}
+        {sessionTasksQuery.isError && <SystemNotice message={t('failed')} />}
+      </>
+    );
+
   return (
-    <ImageGenerateWorkbench
-      title={t('title')}
-      panel={
-        <>
-          {/* 左面板顺序:模式 →(图生图)参考图 → 提示词 → 参数组 → 来源(多来源时)。 */}
-          <ImageGenerateModeField
-            value={draft}
-            onChange={changeDraft}
-            disabled={busy}
-            editSupported={editSupported}
-          />
+    // 负 margin 吃掉 (app) main 的 padding:对话页需要贴边的全高布局。
+    <div className="-m-4 flex min-h-0 flex-1 overflow-hidden lg:-m-6">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-border lg:flex">
+        {sidebar}
+      </aside>
 
-          {needsReference && (
-            <div className="space-y-3">
-              <p className="text-sm font-medium">{t('sourceLabel')}</p>
-              <FileDropzone
-                accept={REFERENCE_ACCEPT}
-                maxSize={maxFileSize}
-                density="compact"
-                disabled={busy}
-                hint={t('sourceHint')}
-                onDrop={files => {
-                  const [next] = files;
-                  if (next) setSourceFile(next);
-                }}
-              />
-              {sourceUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={sourceUrl}
-                  alt={t('sourcePreviewAlt')}
-                  className="max-h-48 w-auto rounded-md border border-border"
-                />
-              )}
-            </div>
-          )}
-
-          <ImageGeneratePromptField
-            value={draft}
-            onChange={changeDraft}
-            disabled={busy}
-            presets={presetsQuery.data ?? []}
-          />
-
-          <ImageGenerateParamsFields
-            value={draft}
-            onChange={changeDraft}
-            disabled={busy}
-          />
-
-          <ImageGenerateProviderField
-            value={draft}
-            onChange={changeDraft}
-            disabled={busy}
-            providers={providers}
-          />
-        </>
-      }
-      panelFooter={
-        <>
-          {/* 已登录才展示当日额度:free = 0,匿名走登录跳转,没必要显示一行 0。 */}
-          {session && quota.data && (
-            <p className="font-mono text-xs tabular-nums text-muted-foreground">
-              {t('quotaRemaining', {
-                remaining: String(quota.data.remaining),
-                limit: String(quota.data.limit),
-              })}
-            </p>
-          )}
-
-          {/* 主操作吸面板底部:参数区怎么滚,按钮始终在手边。 */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* 移动端顶条:打开会话侧栏。 */}
+        <div className="flex items-center gap-2 border-b border-border p-2 lg:hidden">
           <button
             type="button"
-            className="h-10 w-full rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={
-              draft.prompt.trim().length === 0 || referenceMissing || busy
-            }
-            onClick={submit}
+            aria-label={t('sidebarTitle')}
+            onClick={() => setMobileSidebarOpen(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           >
-            {busy ? t('generating') : t('submit')}
+            <History className="h-4 w-4" />
           </button>
-        </>
-      }
-    >
-      {showWall ? (
-        <ImageGenerateTemplateWall
-          presets={presetsQuery.data ?? []}
-          disabled={busy}
-          onPick={pickPreset}
-        />
-      ) : (
-        <div className="space-y-5">
-          {/* 工作态全程给进度占位:上传参考图 + 串行建任务的 submitting 阶段、
-              生成中的 inFlight、取回图片的空窗,都不能让主区先空着。 */}
-          {(submitting || inFlight || fetchingResults) && (
-            <ProcessingProgress
-              progress={averageProgress}
-              stage={inFlight ? 'generating' : undefined}
-              label={
-                !inFlight && fetchingResults ? t('resultFetching') : undefined
-              }
-            />
-          )}
-
-          {failure && (
-            <FailureRecoveryPanel
-              message={t(failure.key)}
-              errorCode={failure.code}
-              onRetry={submit}
-            />
-          )}
-
-          {groupErrored && (
-            <FailureRecoveryPanel message={t('failed')} onRetry={submit} />
-          )}
-
-          {activeItem && (
-            <section className="space-y-3">
-              <div className="flex min-h-64 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/20 p-2">
-                {!activeUrl ? (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className="flex h-64 w-full items-center justify-center"
-                  >
-                    <span className="animate-pulse font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                      {t('resultFetching')}
-                    </span>
-                  </div>
-                ) : showCompare ? (
-                  <div className="w-full">
-                    <ImageGenerateCompare
-                      beforeUrl={comparedUrl!}
-                      afterUrl={activeUrl}
-                      title={t('compareTitle')}
-                    />
-                  </div>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={activeUrl}
-                    alt={t('resultMeta', { index: activeIndex + 1 })}
-                    className="max-h-[32rem] w-auto rounded-md"
-                  />
-                )}
-              </div>
-
-              {activeUrl && (
-                <a
-                  href={activeUrl}
-                  download={`ai-image-${activeIndex + 1}.png`}
-                  className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm hover:bg-muted/40"
-                >
-                  {tShared('download')}
-                </a>
-              )}
-
-              {/* 多张结果才有缩略条:单张大图不需要「切换到自己」。 */}
-              {completedItems.length > 1 && (
-                <div
-                  role="group"
-                  aria-label={t('thumbnailLabel')}
-                  className="flex flex-wrap gap-2"
-                >
-                  {completedItems.map((item, index) => {
-                    const thumbUrl = output.previews[item.taskId]?.url;
-                    return (
-                      <button
-                        key={item.taskId}
-                        type="button"
-                        aria-label={t('selectResult', { index: index + 1 })}
-                        aria-pressed={index === activeIndex}
-                        // blob URL 在 reset() 前一直存活,生成中途也能安全切换到
-                        // 已取回的图;没取回的缩略位本来就有脉动占位,只按它禁用。
-                        disabled={!thumbUrl}
-                        onClick={() => setSelectedIndex(index)}
-                        className={`overflow-hidden rounded-md border p-0.5 ${
-                          index === activeIndex
-                            ? 'border-foreground'
-                            : 'border-transparent hover:border-border'
-                        }`}
-                      >
-                        {thumbUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={thumbUrl}
-                            alt=""
-                            className="h-16 w-16 rounded-sm object-cover"
-                          />
-                        ) : (
-                          <span className="block h-16 w-16 animate-pulse rounded-sm bg-muted" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* 逐项异常:生成失败的任务、取回失败的任务。取回失败给「重试取回」,
-              不是重新生成 —— 图已经出好了,再走一遍生成会白扣一次配额。 */}
-          {items.map(item => {
-            if (item.status === 'failed') {
-              return (
-                <FailureRecoveryPanel
-                  key={item.taskId}
-                  message={t(
-                    ERROR_MESSAGE_KEY[item.errorCode ?? ''] ?? 'failed'
-                  )}
-                  errorCode={item.errorCode}
-                  onRetry={submit}
-                />
-              );
-            }
-            if (
-              item.status === 'completed' &&
-              output.previews[item.taskId]?.state === 'error'
-            ) {
-              return (
-                <FailureRecoveryPanel
-                  key={item.taskId}
-                  message={t('resultFetchFailed')}
-                  onRetry={() =>
-                    void output.load(item.taskId, item.outputFileId ?? '')
-                  }
-                />
-              );
-            }
-            return null;
-          })}
+          <span className="truncate text-sm font-medium">
+            {activeSessionTitle}
+          </span>
         </div>
-      )}
-    </ImageGenerateWorkbench>
+
+        <div className="min-h-0 flex-1">
+          <MessageCanvas>{canvas}</MessageCanvas>
+        </div>
+
+        <div className="shrink-0 p-3 lg:p-4">
+          <div className="mx-auto max-w-3xl">
+            <PromptComposer
+              draft={draft}
+              onDraftChange={setDraft}
+              referenceFile={referenceFile}
+              onReferenceChange={setReferenceFile}
+              onSubmit={submit}
+              busy={busy}
+              providers={providers}
+              quota={session ? quota.data : undefined}
+              editSupported={editSupported}
+              maxReferenceSize={getImageUploadMaxFileSize(session)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 移动端会话侧栏。DialogTitle 是 Radix 的无障碍要求(DialogContent 必须有标题)。 */}
+      <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+        <SheetContent
+          side="left"
+          className="w-72 border-r p-0"
+          aria-label={t('sidebarTitle')}
+        >
+          <DialogTitle className="sr-only">{t('sidebarTitle')}</DialogTitle>
+          {sidebar}
+        </SheetContent>
+      </Sheet>
+    </div>
   );
 }

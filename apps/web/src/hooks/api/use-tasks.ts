@@ -6,6 +6,7 @@ import type {
   CreateTaskDto,
   ImageGeneratePresetDto,
   ImageGenerateProviderDto,
+  ImageGenerateSessionDto,
   TaskResponseDto,
   TaskStatusDto,
   TaskTypeValue,
@@ -29,6 +30,10 @@ function refreshTaskQueries(queryClient: ReturnType<typeof useQueryClient>) {
   });
   queryClient.invalidateQueries({
     queryKey: taskQueryKeys.imageGenerateQuota(),
+  });
+  // 建任务后会话列表与会话任务都要刷新(会话从任务派生)。
+  queryClient.invalidateQueries({
+    queryKey: taskQueryKeys.imageGenerateSessions(),
   });
 }
 
@@ -153,7 +158,8 @@ export function useImageGenerateProviders() {
     queryFn: async () => {
       const { data, error } = await api.GET('/tasks/image-generate/providers');
       if (error) throw error;
-      return data as ImageGenerateProviderDto[];
+      // openapi 生成的 sizes 类型是 string[][],与手写 DTO 不重叠,经 unknown 转换。
+      return data as unknown as ImageGenerateProviderDto[];
     },
     enabled: !sessionPending && !!userId,
     staleTime: Infinity,
@@ -181,5 +187,60 @@ export function useImageGeneratePresets() {
       return data as ImageGeneratePresetDto[];
     },
     staleTime: Infinity,
+  });
+}
+
+/**
+ * 生图会话列表(对话式布局左侧栏)。会话由当前账号的 image_generate 任务按
+ * sessionId 派生,所以生图必须登录,这里同样做 session 门控。
+ */
+export function useImageGenerateSessions() {
+  const { data: session, isPending: sessionPending } = useSession();
+  const userId = session?.user.id;
+
+  return useQuery({
+    queryKey: taskQueryKeys.imageGenerateSessions(),
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        '/tasks/image-generate/sessions' as any,
+        {} as any
+      );
+      if (error) throw error;
+      return data as ImageGenerateSessionDto[];
+    },
+    enabled: !sessionPending && !!userId,
+  });
+}
+
+/**
+ * 单个会话的任务列表(消息流数据源),createdAt 正序。
+ * 还有 pending/processing 任务时每 5s 轮询,与 useTasks 同节奏。
+ */
+export function useImageGenerateSessionTasks(sessionId: string) {
+  const { data: session, isPending: sessionPending } = useSession();
+  const userId = session?.user.id;
+
+  return useQuery({
+    queryKey: taskQueryKeys.imageGenerateSessionTasks(sessionId),
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        '/tasks/image-generate/sessions/{sessionId}/tasks' as any,
+        { params: { path: { sessionId } } as any }
+      );
+      if (error) throw error;
+      return data as unknown as { tasks: TaskResponseDto[]; total: number };
+    },
+    enabled: !sessionPending && !!userId && !!sessionId,
+    refetchInterval: query => {
+      const tasks = (query.state.data as
+        | { tasks?: TaskResponseDto[] }
+        | undefined)?.tasks;
+      if (
+        tasks?.some(t => t.status === 'pending' || t.status === 'processing')
+      ) {
+        return 5000;
+      }
+      return false;
+    },
   });
 }

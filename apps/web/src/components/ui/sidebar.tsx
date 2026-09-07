@@ -41,8 +41,10 @@ interface SidebarInsetProps {
 }
 
 export function SidebarInset({ children }: SidebarInsetProps) {
+  // flex 列:让 main 内的全高页面(如生图对话页)能用 min-h-0 + flex-1 占满,
+  // 而不是被 min-h-screen 撑出一段永远滚不到底的空白。
   return (
-    <div className="flex-1 lg:ml-60 min-w-0">
+    <div className="flex min-h-screen flex-1 flex-col lg:ml-60 min-w-0">
       {children}
     </div>
   );

@@ -22,7 +22,14 @@ describe('message catalogues', () => {
 
   it('carries the AI image generation namespace in both locales', () => {
     for (const keys of [zhKeys, enKeys]) {
-      expect(keys).toContain('ImageGenerate.promptLabel');
+      // 对话式布局的关键键(新对话/参数面板/空态),删键时同步更新这里。
+      expect(keys).toContain('ImageGenerate.newChat');
+      expect(keys).toContain('ImageGenerate.searchSessions');
+      expect(keys).toContain('ImageGenerate.settingsTitle');
+      expect(keys).toContain('ImageGenerate.modelLabel');
+      expect(keys).toContain('ImageGenerate.ratioLabel');
+      expect(keys).toContain('ImageGenerate.backgroundTransparent');
+      expect(keys).toContain('ImageGenerate.emptyTitle');
       expect(keys).toContain('ImageGenerate.quotaExceeded');
       expect(keys).toContain('ToolCatalog.tools.imageGenerate.title');
       expect(keys).toContain('ToolCatalog.categories.imageGenerate');

@@ -4,29 +4,35 @@ import {
   screen,
   fireEvent,
   waitFor,
-  act,
 } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../../../../messages/en.json';
 import ImageGeneratePage from '../page';
 
+/**
+ * 对话式生图页测试:沿用全 hook 手动 mock + 真实 en.json 的骨架。
+ * 服务端数据(会话列表/会话任务)是可变变量,提交后把 createTask 收到的
+ * inputConfig 回填成任务行,再 rerender 模拟 query 刷新 —— 这也是真实链路
+ * 的顺序:提交 → 任务落库(带 sessionId/clientGroupId)→ 会话任务 query 刷新。
+ */
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
   createTask: vi.fn(),
   uploadFile: vi.fn(),
   push: vi.fn(),
-  groupProgress: vi.fn(),
-  onItemCompleted: vi.fn(),
+  invalidate: vi.fn(),
   imageGenerateQuota: vi.fn(),
   imageGenerateProviders: vi.fn(),
   imageGeneratePresets: vi.fn(),
+  imageGenerateSessions: vi.fn(),
+  sessionTasks: vi.fn(),
+  previews: vi.fn(),
+  outputLoad: vi.fn(),
+  retryTask: vi.fn(),
+  maxReferenceSize: vi.fn(),
 }));
 
-/**
- * 提示词模板现在来自 GET /tasks/image-generate/presets（DB + MinIO presets 桶），
- * 不再是前端硬编码 + messages 文案，所以测试里给 hook 喂固定的两条 mock 数据。
- */
 const PRESETS = [
   {
     id: 'preset-uuid-1',
@@ -43,6 +49,13 @@ const PRESETS = [
   },
 ];
 
+const DEFAULT_PROVIDER = {
+  id: 'default',
+  label: 'Default',
+  capabilities: ['generate', 'edit'] as const,
+  sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
+};
+
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) =>
     React.createElement('a', { href }, children),
@@ -53,82 +66,160 @@ vi.mock('@/lib/auth-client', () => ({
   authClient: { useSession: () => mocks.useSession() },
 }));
 
+vi.mock('@/hooks/use-require-login', () => ({
+  useRequireLogin: () => ({
+    session: mocks.useSession().data,
+    requireLogin: (returnUrl: string) => {
+      if (!mocks.useSession().data) {
+        mocks.push(`/login?next=${encodeURIComponent(returnUrl)}`);
+        return true;
+      }
+      return false;
+    },
+  }),
+}));
+
 vi.mock('@/hooks/api/use-tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mocks.createTask }),
   useImageGenerateQuota: () => mocks.imageGenerateQuota(),
   useImageGenerateProviders: () => mocks.imageGenerateProviders(),
   useImageGeneratePresets: () => mocks.imageGeneratePresets(),
+  useImageGenerateSessions: () => mocks.imageGenerateSessions(),
+  useImageGenerateSessionTasks: (sessionId: string) =>
+    mocks.sessionTasks(sessionId),
+  useRetryTask: () => ({ mutate: mocks.retryTask }),
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
   useUploadFile: () => ({ mutateAsync: mocks.uploadFile }),
 }));
 
-vi.mock('@/hooks/api/use-task-group-progress', () => ({
-  useTaskGroupProgress: (
-    _taskIds: string[],
-    options?: { onItemCompleted?: (taskId: string, fileId: string) => void }
-  ) => {
-    // 捕获页面传入的 onItemCompleted(= loadPreview),测试里手动驱动某项完成,
-    // 从而走通预览/下载路径。
-    mocks.onItemCompleted.mockImplementation(
-      options?.onItemCompleted ?? (() => {})
-    );
-    return mocks.groupProgress();
-  },
+vi.mock('@/hooks/api/use-task-output', () => ({
+  useTaskOutputPreviews: () => ({
+    previews: mocks.previews(),
+    load: mocks.outputLoad,
+    reset: vi.fn(),
+  }),
 }));
 
+vi.mock('@/hooks/api/use-file-preview', () => ({
+  useFilePreviewUrl: () => 'blob:file-preview',
+}));
+
+vi.mock('@/hooks/use-object-url', () => ({
+  useObjectUrl: () => 'blob:object-url',
+}));
+
+vi.mock('@/lib/tools/image-limits', () => ({
+  getImageUploadMaxFileSize: () => mocks.maxReferenceSize(),
+}));
+
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: mocks.invalidate }),
+}));
+
+// 对比滑块是 dynamic import 的重组件,这里只断言它被渲染。
+vi.mock('@/components/tools/image-generate-compare', () => ({
+  ImageGenerateCompare: ({ title }: { title: string }) =>
+    React.createElement('div', { 'data-testid': 'compare-slider' }, title),
+}));
+
+type ServerTask = {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  inputConfig: Record<string, unknown>;
+  inputFileIds: string[];
+  outputFileId?: string;
+  errorCode?: string;
+};
+
+let serverTasks: ServerTask[];
+let taskSeq: number;
+
 function renderPage() {
-  return render(
+  const view = render(
     <NextIntlClientProvider locale="en" messages={en}>
       <ImageGeneratePage />
     </NextIntlClientProvider>
   );
+  const rerender = () =>
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <ImageGeneratePage />
+      </NextIntlClientProvider>
+    );
+  return { ...view, rerender };
 }
 
-function referenceFile() {
-  return new File(['pixel-data'], 'source.png', { type: 'image/png' });
+function referenceFile(size = 8) {
+  return new File(['x'.repeat(size)], 'source.png', { type: 'image/png' });
+}
+
+/** 从 createTask 调用里取 inputConfig,回填成服务端任务并 rerender。 */
+function syncServerTasks(rerender: () => void) {
+  // mockReturnValue 捕获的是当时的数组引用,重赋值后必须重新喂给 mock。
+  serverTasks = mocks.createTask.mock.calls.map(([payload], index) => {
+    const config = payload.inputConfig as Record<string, unknown>;
+    return {
+      id: `task-${index + 1}`,
+      status: 'pending' as const,
+      inputConfig: config,
+      inputFileIds: payload.inputFileIds as string[],
+    };
+  });
+  refreshSessionTasks(rerender);
+  return serverTasks;
 }
 
 /**
- * 切到图生图并选一张参考图。
- *
- * react-dropzone 的 onDrop 是异步的(它自己 await fromEvent 解析 DataTransfer),
- * 所以必须等预览出现再继续 —— 否则后面点「Generate」时 sourceFile 还是 null,
- * 按钮仍处于 disabled,点击被静默丢掉。
+ * 就地改任务字段后刷新页面:useMemo 按 sessionTasks 引用缓存,原地突变不会
+ * 触发重算,这里喂一个浅拷贝新数组模拟 react-query 重新 fetch 的行为。
  */
-async function chooseReference(container: HTMLElement) {
-  fireEvent.click(screen.getByRole('radio', { name: 'Image to image' }));
+function refreshSessionTasks(rerender: () => void) {
+  mocks.sessionTasks.mockReturnValue({
+    data: { tasks: [...serverTasks], total: serverTasks.length },
+  });
+  rerender();
+}
+
+function setPrompt(value: string) {
+  fireEvent.change(
+    screen.getByPlaceholderText(/Describe the image you want/),
+    { target: { value } }
+  );
+}
+
+function openSettings() {
+  fireEvent.click(screen.getByRole('button', { name: 'Generation settings' }));
+}
+
+function attachViaInput(container: HTMLElement, file: File) {
   const input = container.querySelector(
     'input[type="file"]'
   ) as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [referenceFile()] } });
-  await screen.findByAltText('Reference image preview');
+  fireEvent.change(input, { target: { files: [file] } });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  serverTasks = [];
+  taskSeq = 0;
   mocks.useSession.mockReturnValue({ data: { user: { id: 'user-1' } } });
-  mocks.groupProgress.mockReturnValue({
-    items: [],
-    completedCount: 0,
-    failedCount: 0,
-    settled: false,
-    query: { isError: false },
+  mocks.createTask.mockImplementation(async () => {
+    taskSeq += 1;
+    return { id: `task-${taskSeq}` };
   });
-  mocks.createTask.mockImplementation(async () => ({ id: 'task-1' }));
   mocks.uploadFile.mockImplementation(async () => ({ id: 'file-9' }));
   mocks.imageGenerateQuota.mockReturnValue({
     data: { limit: 10, used: 3, remaining: 7 },
   });
-  // 默认单来源:选择器不渲染,断言与多来源上线前完全一致。
-  mocks.imageGenerateProviders.mockReturnValue({
-    data: [
-      { id: 'default', label: 'Default', capabilities: ['generate', 'edit'] },
-    ],
-  });
+  mocks.imageGenerateProviders.mockReturnValue({ data: [DEFAULT_PROVIDER] });
   mocks.imageGeneratePresets.mockReturnValue({ data: PRESETS });
-  // 示例图公网 URL 由前端拼:测试里显式给一个 base,否则 presetImageUrl() 返回 null。
+  mocks.imageGenerateSessions.mockReturnValue({ data: [] });
+  mocks.sessionTasks.mockReturnValue({ data: { tasks: serverTasks, total: 0 } });
+  mocks.previews.mockReturnValue({});
+  mocks.outputLoad.mockResolvedValue(undefined);
+  mocks.maxReferenceSize.mockReturnValue(1024 * 1024);
   vi.stubEnv('NEXT_PUBLIC_S3_PUBLIC_URL', 'http://minio.test:9000');
   Object.defineProperty(URL, 'createObjectURL', {
     value: vi.fn(() => 'blob:preview-url'),
@@ -147,9 +238,7 @@ describe('ImageGeneratePage', () => {
     mocks.useSession.mockReturnValue({ data: null });
     renderPage();
 
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
+    setPrompt('a shiba inu');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() =>
@@ -165,37 +254,50 @@ describe('ImageGeneratePage', () => {
     expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled();
   });
 
-  it('creates one task per requested image with an empty input file list', async () => {
-    renderPage();
+  it('creates one task per image sharing sessionId and clientGroupId', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
 
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('radio', { name: '2' }));
+    openSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Increase image count' }));
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
-    expect(mocks.createTask).toHaveBeenCalledWith({
-      type: 'image_generate',
-      inputFileIds: [],
-      inputConfig: {
-        mode: 'text_to_image',
-        prompt: 'a shiba inu',
-        size: '1024x1024',
-        quality: 'high',
-      },
+
+    const configs = mocks.createTask.mock.calls.map(
+      ([payload]) => payload.inputConfig
+    );
+    expect(configs[0]).toMatchObject({
+      mode: 'text_to_image',
+      prompt: 'a shiba inu',
+      size: 'auto',
+      quality: 'auto',
     });
+    expect(configs[0]).not.toHaveProperty('background');
+    // 同一次提交:N 个任务共享 sessionId 与 clientGroupId,且都是 uuid 形状。
+    const UUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    for (const key of ['sessionId', 'clientGroupId']) {
+      expect(configs.map(config => config[key])).toEqual([
+        configs[0][key],
+        configs[0][key],
+      ]);
+      expect(configs[0][key]).toMatch(UUID);
+    }
+    // 串行提交:第二个调用发生在第一个 resolve 之后(mock 实现本身按序 resolve,
+    // 断言调用次数即可,并发与否由 mock 顺序保证不了,这里只钉住契约形状)。
+    expect(mocks.createTask.mock.calls[0][0].inputFileIds).toEqual([]);
+    expect(mocks.createTask.mock.calls[1][0].inputFileIds).toEqual([]);
+    void rerender;
   });
 
   it('surfaces the daily quota error without creating more tasks', async () => {
-    mocks.createTask.mockRejectedValue({
+    mocks.createTask.mockRejectedValueOnce({
       code: 'AI_IMAGE_DAILY_LIMIT_EXCEEDED',
     });
     renderPage();
 
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
+    setPrompt('a shiba inu');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() =>
@@ -203,563 +305,326 @@ describe('ImageGeneratePage', () => {
         screen.getByText("You have used today's quota. Try again tomorrow.")
       ).toBeInTheDocument()
     );
-  });
-
-  it('renders a failure panel when status polling keeps erroring instead of spinning forever', async () => {
-    // 某项任务永久失败(如 404)会让 useTaskGroupProgress 的 Promise.all 持续 reject,
-    // settled 永不为 true。页面必须消费 query.isError,渲染失败提示而非停留在处理中。
-    mocks.groupProgress.mockReturnValue({
-      items: [],
-      completedCount: 0,
-      failedCount: 0,
-      settled: false,
-      query: { isError: true },
-    });
-    renderPage();
-
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-
-    await waitFor(() =>
-      expect(
-        screen.getByText('Generation failed. Please try again.')
-      ).toBeInTheDocument()
-    );
-    // 没有停留在处理中:进度条按钮不应显示 Generating,而是回到可重试状态。
-    expect(screen.queryByText('Generating')).not.toBeInTheDocument();
-  });
-
-  it('renders the MinIO example image for presets that ship one', async () => {
-    renderPage();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
-    // 配了 imageStorageKey 的模板在卡片顶部渲染缩略图;alt 文案为 "{title} example"。
-    const withImage = PRESETS[0]!;
-    const alt = en.ImageGenerate.presetExampleAlt.replace(
-      '{title}',
-      withImage.title
-    );
-    // 空态模板墙与弹窗共用 PresetCard,查重时只看弹窗(portal)里的那张。
-    const imgsInDialog = await screen
-      .findAllByAltText(alt)
-      .then(all => all.filter(img => img.closest('[role="dialog"]')));
-    expect(imgsInDialog).toHaveLength(1);
-    expect(imgsInDialog[0]).toHaveAttribute(
-      'src',
-      `http://minio.test:9000/presets/${withImage.imageStorageKey}`
-    );
-
-    // 没配图的模板不渲染 <img>,退化成纯文本卡片。
-    const withoutImageAlt = en.ImageGenerate.presetExampleAlt.replace(
-      '{title}',
-      PRESETS[1]!.title
-    );
-    expect(screen.queryByAltText(withoutImageAlt)).not.toBeInTheDocument();
-  });
-
-  it('hides the preset trigger when the API returns no templates', () => {
-    mocks.imageGeneratePresets.mockReturnValue({ data: [] });
-    renderPage();
-
-    expect(
-      screen.queryByRole('button', { name: 'Prompt templates' })
-    ).not.toBeInTheDocument();
-  });
-
-  it('renders a result preview and download link once a task completes', async () => {
-    mocks.groupProgress.mockReturnValue({
-      items: [
-        {
-          taskId: 't1',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f1',
-        },
-      ],
-      completedCount: 1,
-      failedCount: 0,
-      settled: true,
-      query: { isError: false },
-    });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      blob: () => Promise.resolve(new Blob(['img'], { type: 'image/png' })),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderPage();
-
-    // mock 的 hook 不会自己调 onItemCompleted,这里手动驱动完成回调走通预览路径。
-    await act(async () => {
-      await mocks.onItemCompleted('t1', 'f1');
-    });
-
-    const img = await screen.findByAltText('Image 1');
-    expect(img.getAttribute('src')).toBe('blob:preview-url');
-    expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute(
-      'href',
-      'blob:preview-url'
-    );
-    expect(fetchMock).toHaveBeenCalled();
-
-    vi.unstubAllGlobals();
-  });
-  it('stays busy until the generated image is actually on screen', async () => {
-    // 服务端 settled 只代表出图了,页面还要再下载一次 blob。这段空窗里按钮必须仍是
-    // 忙碌态,结果位显示占位 —— 否则表现为按钮先恢复、结果区空着、图片随后突然出现。
-    mocks.groupProgress.mockReturnValue({
-      items: [
-        {
-          taskId: 't1',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f1',
-        },
-      ],
-      completedCount: 1,
-      failedCount: 0,
-      settled: true,
-      query: { isError: false },
-    });
-    let releaseDownload: (() => void) | undefined;
-    const gate = new Promise<void>(resolve => {
-      releaseDownload = resolve;
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        await gate;
-        return {
-          ok: true,
-          blob: () => Promise.resolve(new Blob(['img'], { type: 'image/png' })),
-        };
-      })
-    );
-
-    renderPage();
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
-
-    let downloading: Promise<unknown> | undefined;
-    act(() => {
-      downloading = mocks.onItemCompleted('t1', 'f1');
-    });
-
-    // 图还没到手:按钮仍显示忙碌文案,结果位是占位而不是空白。
-    expect(
-      await screen.findByRole('button', { name: 'Generating' })
-    ).toBeDisabled();
-    expect(screen.getAllByText('Fetching image…').length).toBeGreaterThan(0);
-    expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
-
-    await act(async () => {
-      releaseDownload?.();
-      await downloading;
-    });
-
-    expect(await screen.findByAltText('Image 1')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
-    expect(screen.queryByText('Fetching image…')).not.toBeInTheDocument();
-
-    vi.unstubAllGlobals();
-  });
-
-  it('retries fetching a failed download without generating again', async () => {
-    mocks.groupProgress.mockReturnValue({
-      items: [
-        {
-          taskId: 't1',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f1',
-        },
-      ],
-      completedCount: 1,
-      failedCount: 0,
-      settled: true,
-      query: { isError: false },
-    });
-    const fetchMock = vi.fn(async () => ({ ok: false, status: 500 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderPage();
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
-
-    await act(async () => {
-      await mocks.onItemCompleted('t1', 'f1');
-    });
-
-    // 取回失败不能把页面永久按在忙碌态,也不能只留一块空白。
-    expect(
-      screen.getByText('Could not fetch the image. Try again.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    });
-
-    // 重试只重新下载产物,不再走一次生成 —— 否则白扣一次配额。
-    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mocks.createTask).toHaveBeenCalledTimes(1);
-
-    vi.unstubAllGlobals();
   });
 
-  it('switches the main preview through the thumbnail strip without revoking urls', async () => {
-    mocks.groupProgress.mockReturnValue({
-      items: [
-        {
-          taskId: 't1',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f1',
-        },
-        {
-          taskId: 't2',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f2',
-        },
-      ],
-      completedCount: 2,
-      failedCount: 0,
-      settled: true,
-      query: { isError: false },
+  it('renders a failure notice when the session task query keeps erroring', async () => {
+    mocks.sessionTasks.mockReturnValue({
+      data: undefined,
+      isError: true,
     });
-    let counter = 0;
-    Object.defineProperty(URL, 'createObjectURL', {
-      value: vi.fn(() => `blob:preview-${(counter += 1)}`),
-      configurable: true,
-      writable: true,
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        blob: () => Promise.resolve(new Blob(['img'], { type: 'image/png' })),
-      })
-    );
-
     renderPage();
+    setPrompt('a shiba inu');
 
-    await act(async () => {
-      await mocks.onItemCompleted('t1', 'f1');
-    });
-    await act(async () => {
-      await mocks.onItemCompleted('t2', 'f2');
-    });
-
-    // 默认大图是第一张;第一张的 URL 必须在第二张完成后仍然存活。
-    expect(await screen.findByAltText('Image 1')).toHaveAttribute(
-      'src',
-      'blob:preview-1'
-    );
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
-
-    // 缩略条切换到第二张,大图随 selectedIndex 变化。
-    fireEvent.click(screen.getByRole('button', { name: 'View image 2' }));
-    expect(await screen.findByAltText('Image 2')).toHaveAttribute(
-      'src',
-      'blob:preview-2'
-    );
-    expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
-
-    vi.unstubAllGlobals();
+    await screen.findByText('Generation failed. Please try again.');
   });
 
-  it('includes the chosen style in the task input config', async () => {
-    renderPage();
-
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('radio', { name: 'Photographic' }));
+  it('uploads the reference once and reuses the fileId for image_to_image', async () => {
+    const { container } = renderPage();
+    setPrompt('turn it into a watercolor');
+    attachViaInput(container, referenceFile());
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
-    expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inputConfig: expect.objectContaining({ style: 'photographic' }),
-      })
-    );
-  });
-
-  it('offers no upload target while text-to-image is selected', () => {
-    const { container } = renderPage();
-
-    expect(container.querySelector('input[type="file"]')).toBeNull();
-  });
-
-  it('previews the reference image after it is selected', async () => {
-    const { container } = renderPage();
-
-    await chooseReference(container);
-
-    const preview = await screen.findByAltText('Reference image preview');
-    expect(preview.getAttribute('src')).toBe('blob:preview-url');
-  });
-
-  it('keeps submit disabled for image-to-image until a reference image is chosen', () => {
-    renderPage();
-
-    fireEvent.click(screen.getByRole('radio', { name: 'Image to image' }));
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'turn the background into a beach' },
-    });
-
-    expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled();
-  });
-
-  it('uploads the reference once and reuses its file id for every image', async () => {
-    const { container } = renderPage();
-
-    await chooseReference(container);
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'turn the background into a beach' },
-    });
-    fireEvent.click(screen.getByRole('radio', { name: '2' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
-    // 一张参考图只上传一次,N 个任务共用同一个 fileId。
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
     expect(mocks.uploadFile).toHaveBeenCalledTimes(1);
-    expect(mocks.createTask).toHaveBeenCalledWith({
-      type: 'image_generate',
+    expect(mocks.createTask.mock.calls[0][0]).toMatchObject({
       inputFileIds: ['file-9'],
-      inputConfig: {
-        mode: 'image_to_image',
-        prompt: 'turn the background into a beach',
-        size: '1024x1024',
-        quality: 'high',
-      },
+    });
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
+      mode: 'image_to_image',
     });
   });
 
-  it('surfaces an upload failure without creating tasks', async () => {
-    mocks.uploadFile.mockRejectedValue(new Error('network down'));
-    const { container } = renderPage();
-
-    await chooseReference(container);
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'turn the background into a beach' },
+  it('accepts a pasted reference image and switches to image_to_image', async () => {
+    renderPage();
+    setPrompt('remix this');
+    const textarea = screen.getByPlaceholderText(/Describe the image you want/);
+    fireEvent.paste(textarea, {
+      clipboardData: { files: [referenceFile()] },
     });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
+      mode: 'image_to_image',
+    });
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('removing the reference chip falls back to text_to_image', async () => {
+    const { container } = renderPage();
+    setPrompt('remix this');
+    attachViaInput(container, referenceFile());
+    fireEvent.click(screen.getByRole('button', { name: 'Remove reference image' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
+      mode: 'text_to_image',
+    });
+    expect(mocks.uploadFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized reference image with an inline notice', () => {
+    const { container } = renderPage();
+    attachViaInput(container, referenceFile(2 * 1024 * 1024));
+
+    expect(
+      screen.getByText(/exceeds the size limit/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('source.png')).not.toBeInTheDocument();
+  });
+
+  it('does not create tasks when the reference upload fails', async () => {
+    mocks.uploadFile.mockRejectedValue(new Error('boom'));
+    const { container } = renderPage();
+    setPrompt('remix this');
+    attachViaInput(container, referenceFile());
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() =>
       expect(
-        screen.getByText(
-          'Uploading the reference image failed. Please try again.'
-        )
+        screen.getByText('Uploading the reference image failed. Please try again.')
       ).toBeInTheDocument()
     );
     expect(mocks.createTask).not.toHaveBeenCalled();
   });
 
-  it('drops the reference image when switching back to text-to-image', async () => {
-    const { container } = renderPage();
-
-    await chooseReference(container);
-    await screen.findByAltText('Reference image preview');
-
-    fireEvent.click(screen.getByRole('radio', { name: 'Text to image' }));
-
-    expect(
-      screen.queryByAltText('Reference image preview')
-    ).not.toBeInTheDocument();
-  });
-
-  // 信任条已随工作台改版移除,恢复提示统一走失败面板。
-
-  it('shows the template wall in the empty state and fills the prompt on pick', () => {
-    renderPage();
-
-    expect(screen.getByText('Idea templates')).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole('button', { name: /Guided science picture book/ })
-    );
-    expect(screen.getByLabelText('Prompt')).toHaveValue(PRESETS[0]!.prompt);
-  });
-
-  it('fills the prompt field when a preset template is chosen from the dialog', async () => {
-    renderPage();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Prompt templates' }));
-    // 弹窗打开后,模板按钮出现在 tab 序列里;空态模板墙与弹窗共用卡片,取弹窗那张。
-    const presetButton = (
-      await screen.findAllByRole('button', {
-        name: /Guided science picture book/,
-      })
-    ).find(button => button.closest('[role="dialog"]'))!;
-    fireEvent.click(presetButton);
-
-    // 选中模板后提示词被填入,弹窗随之关闭。
-    await waitFor(() =>
-      expect(screen.getByLabelText('Prompt')).toHaveValue(PRESETS[0]!.prompt)
-    );
-    expect(
-      screen
-        .queryAllByRole('button', { name: /Guided science picture book/ })
-        .some(button => button.closest('[role="dialog"]'))
-    ).toBe(false);
-  });
-
-  it('shows the remaining daily quota for a signed-in user', () => {
-    renderPage();
-
-    expect(screen.getByText('7 / 10 remaining today')).toBeInTheDocument();
-  });
-
-  it('hides the remaining quota line for an anonymous visitor', () => {
-    mocks.useSession.mockReturnValue({ data: null });
-    renderPage();
-
-    expect(screen.queryByText(/remaining today/i)).not.toBeInTheDocument();
-  });
-
-  it('compares the reference against the result for image-to-image', async () => {
-    mocks.groupProgress.mockReturnValue({
-      items: [
+  it('disables the reference entry when the provider cannot edit', () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
         {
-          taskId: 't1',
-          status: 'completed',
-          progress: 100,
-          outputFileId: 'f1',
+          id: 't2i-only',
+          label: 'Text only',
+          capabilities: ['generate'] as const,
+          sizes: ['auto', '1024x1024'],
         },
       ],
-      completedCount: 1,
-      failedCount: 0,
-      settled: true,
-      query: { isError: false },
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        blob: () => Promise.resolve(new Blob(['img'], { type: 'image/png' })),
+    renderPage();
+
+    expect(
+      screen.getByRole('button', { name: 'Attach reference image' })
+    ).toBeDisabled();
+  });
+
+  it('shows images and per-image downloads once previews are fetched', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    // 任务落库(query 刷新)→ completed + outputFileId → 页面发起取回。
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    refreshSessionTasks(rerender);
+
+    await waitFor(() =>
+      expect(mocks.outputLoad).toHaveBeenCalledWith('task-1', 'file-out-1')
+    );
+
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'ready', url: 'blob:image-1' },
+    });
+    rerender();
+
+    const image = await screen.findByAltText('Image 1');
+    expect(image).toHaveAttribute('src', 'blob:image-1');
+    const download = screen.getByRole('link', { name: 'Download' });
+    expect(download).toHaveAttribute('href', 'blob:image-1');
+  });
+
+  it('stays busy until the fetched image is actually visible', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    refreshSessionTasks(rerender);
+
+    // 取回仍在 loading:按钮保持禁用(busy 时文案变为 Generating)。
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'loading' },
+    });
+    rerender();
+    expect(screen.getByRole('button', { name: 'Generating' })).toBeDisabled();
+
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'ready', url: 'blob:image-1' },
+    });
+    rerender();
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
+  });
+
+  it('offers a fetch retry (not a regeneration) when the download fails', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    refreshSessionTasks(rerender);
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'error' },
+    });
+    rerender();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Retry fetch/ })
+    );
+    expect(mocks.outputLoad).toHaveBeenCalledTimes(2);
+    // 重试取回不再触发生成:总调用数不变。
+    expect(mocks.createTask).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an inline error and a regenerate action for a failed task', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'failed';
+    task.errorCode = 'AI_IMAGE_CONTENT_REJECTED';
+    refreshSessionTasks(rerender);
+
+    expect(
+      screen.getByText('The prompt was rejected by the content policy. Try rephrasing it.')
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+    expect(mocks.retryTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('derives ratio chips from provider sizes and hides the model row for a single provider', () => {
+    renderPage();
+    openSettings();
+
+    expect(screen.getByText('Aspect ratio')).toBeInTheDocument();
+    // DEFAULT_PROVIDER.sizes → 比例行 Auto/1:1/2:3/3:2;质量行也有一枚 Auto。
+    expect(screen.getAllByText('Auto').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('1:1')).toBeInTheDocument();
+    expect(screen.getByText('2:3')).toBeInTheDocument();
+    expect(screen.getByText('3:2')).toBeInTheDocument();
+    // 单来源部署不渲染模型行。
+    expect(screen.queryByText('Model')).not.toBeInTheDocument();
+    // 背景与质量行存在。
+    expect(screen.getByText('Background')).toBeInTheDocument();
+    expect(screen.getByText('Transparent')).toBeInTheDocument();
+  });
+
+  it('shows the model row with the provider dropdown for multi-source setups', () => {
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        DEFAULT_PROVIDER,
+        {
+          id: 'kmage',
+          label: 'Kmage',
+          capabilities: ['generate', 'edit'] as const,
+          sizes: ['auto', '1024x1024'],
+        },
+      ],
+    });
+    renderPage();
+    openSettings();
+
+    expect(screen.getByText('Model')).toBeInTheDocument();
+    // 'Default' 同时是背景默认 chip 与当前来源名;下拉内容(Radix)关闭时不渲染,
+    // 这里断言触发器显示当前来源即可。
+    expect(screen.getAllByText('Default').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('caps the count stepper at the remaining quota', () => {
+    mocks.imageGenerateQuota.mockReturnValue({
+      data: { limit: 10, used: 9, remaining: 1 },
+    });
+    renderPage();
+    openSettings();
+
+    const increment = screen.getByRole('button', {
+      name: 'Increase image count',
+    });
+    // 剩 1 张:+ 直接不可点。
+    expect(increment).toBeDisabled();
+  });
+
+  it('falls back to the first supported size when the draft size is not declared', async () => {
+    // 来源没声明 "auto"(严格网关的常态):提交值回落到第一档,不发送 auto。
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        {
+          id: 'wan',
+          label: 'wan',
+          capabilities: ['generate', 'edit'] as const,
+          sizes: ['1024x1024', '1024x1536'],
+        },
+      ],
+    });
+    renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
+      size: '1024x1024',
+    });
+  });
+
+  it('fills the prompt when picking a template from the empty state', () => {
+    renderPage();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Guided science picture book/,
       })
     );
-    const { container } = renderPage();
 
-    await chooseReference(container);
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'turn the background into a beach' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
-    await act(async () => {
-      await mocks.onItemCompleted('t1', 'f1');
-    });
-
-    // 前后对比取代了单张结果图。
-    expect(screen.getByText('Before')).toBeInTheDocument();
-    expect(screen.getByText('After')).toBeInTheDocument();
-    expect(screen.queryByAltText('Image 1')).not.toBeInTheDocument();
-
-    vi.unstubAllGlobals();
+    const textarea = screen.getByPlaceholderText(
+      /Describe the image you want/
+    ) as HTMLTextAreaElement;
+    expect(textarea.value).toBe(PRESETS[0].prompt);
   });
 
-  it('hides the source selector when only one provider is configured', () => {
-    renderPage();
-
-    expect(screen.queryByText('Source')).toBeNull();
-  });
-
-  it('sends the chosen provider id in the task input config', async () => {
-    mocks.imageGenerateProviders.mockReturnValue({
+  it('lists sessions, loads the selected session tasks and resets on new chat', async () => {
+    const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
+    mocks.imageGenerateSessions.mockReturnValue({
       data: [
-        { id: 'openai', label: 'OpenAI', capabilities: ['generate', 'edit'] },
-        { id: 'kmage', label: 'KMage', capabilities: ['generate', 'edit'] },
+        {
+          sessionId,
+          title: 'a shiba in a top hat',
+          taskCount: 2,
+          createdAt: '2026-09-07T10:00:00Z',
+          updatedAt: '2026-09-07T10:05:00Z',
+        },
       ],
     });
-    renderPage();
+    const { rerender } = renderPage();
 
-    fireEvent.click(screen.getByRole('radio', { name: 'KMage' }));
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
-    expect(mocks.createTask.mock.calls[0][0].inputConfig).toMatchObject({
-      providerId: 'kmage',
-    });
-  });
-
-  it('omits providerId while the default source is selected', async () => {
-    mocks.imageGenerateProviders.mockReturnValue({
-      data: [
-        { id: 'openai', label: 'OpenAI', capabilities: ['generate', 'edit'] },
-        { id: 'kmage', label: 'KMage', capabilities: ['generate', 'edit'] },
-      ],
-    });
-    renderPage();
-
-    fireEvent.change(screen.getByLabelText('Prompt'), {
-      target: { value: 'a shiba inu' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalled());
-    expect(mocks.createTask.mock.calls[0][0].inputConfig).not.toHaveProperty(
-      'providerId'
+    fireEvent.click(screen.getByText('a shiba in a top hat'));
+    await waitFor(() =>
+      expect(mocks.sessionTasks).toHaveBeenLastCalledWith(sessionId)
     );
+
+    // 切回去(新对话):query 跟着切回新会话 id(uuid,非 sessionId)。
+    fireEvent.click(screen.getAllByRole('button', { name: 'New chat' })[0]);
+    const lastId = mocks.sessionTasks.mock.calls.at(-1)?.[0];
+    expect(lastId).not.toBe(sessionId);
+    void rerender;
   });
 
-  it('disables image-to-image when the selected source cannot edit', () => {
-    mocks.imageGenerateProviders.mockReturnValue({
-      data: [
-        { id: 'textonly', label: 'Text only', capabilities: ['generate'] },
-      ],
-    });
-    renderPage();
+  it('shows the quota line only for signed-in users', () => {
+    const { rerender } = renderPage();
+    expect(screen.getByText(/7 \/ 10 remaining today/)).toBeInTheDocument();
 
-    expect(
-      screen.getByRole('radio', { name: 'Image to image' })
-    ).toBeDisabled();
-    expect(
-      screen.getByText(
-        'The selected source does not support image to image. Pick another source.'
-      )
-    ).toBeInTheDocument();
-  });
-
-  it('falls back to text-to-image when switching to a source without edit support', async () => {
-    mocks.imageGenerateProviders.mockReturnValue({
-      data: [
-        { id: 'openai', label: 'OpenAI', capabilities: ['generate', 'edit'] },
-        { id: 'textonly', label: 'Text only', capabilities: ['generate'] },
-      ],
-    });
-    const { container } = renderPage();
-
-    await chooseReference(container);
-    fireEvent.click(screen.getByRole('radio', { name: 'Text only' }));
-
-    expect(screen.getByRole('radio', { name: 'Text to image' })).toBeChecked();
-    // 参考图必须一起丢掉:留着它会攒出「文生图 + inputFileIds」这种服务端必拒的组合。
-    expect(screen.queryByAltText('Reference image preview')).toBeNull();
-  });
-
-  it('still renders when the provider list request fails', () => {
-    mocks.imageGenerateProviders.mockReturnValue({
-      data: undefined,
-      isError: true,
-    });
-    renderPage();
-
-    expect(screen.queryByText('Source')).toBeNull();
-    expect(
-      screen.getByRole('radio', { name: 'Image to image' })
-    ).not.toBeDisabled();
+    mocks.useSession.mockReturnValue({ data: null });
+    rerender();
+    expect(screen.queryByText(/remaining today/)).not.toBeInTheDocument();
   });
 });

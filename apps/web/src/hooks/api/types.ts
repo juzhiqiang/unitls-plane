@@ -51,6 +51,17 @@ export interface ImageGenerateProviderDto {
   id: string;
   label: string;
   capabilities: Array<'generate' | 'edit'>;
+  /** 该来源支持的尺寸("auto" 或 "WxH"),画面比例档位由它派生。 */
+  sizes: string[];
+}
+
+/** 生图会话(由 image_generate 任务按 sessionId 派生,非独立实体)。 */
+export interface ImageGenerateSessionDto {
+  sessionId: string;
+  title: string;
+  taskCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**

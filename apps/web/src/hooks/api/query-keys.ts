@@ -13,4 +13,8 @@ export const taskQueryKeys = {
     [...taskQueryKeys.all, 'image-generate', 'providers'] as const,
   imageGeneratePresets: (lang?: string) =>
     [...taskQueryKeys.all, 'image-generate', 'presets', lang] as const,
+  imageGenerateSessions: () =>
+    [...taskQueryKeys.all, 'image-generate', 'sessions'] as const,
+  imageGenerateSessionTasks: (sessionId: string) =>
+    [...taskQueryKeys.imageGenerateSessions(), sessionId, 'tasks'] as const,
 };

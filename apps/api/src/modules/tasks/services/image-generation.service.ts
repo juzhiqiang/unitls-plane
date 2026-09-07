@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import {
   DEFAULT_AI_IMAGE_MODEL,
+  DEFAULT_AI_IMAGE_SIZES,
   LEGACY_PROVIDER_ID,
   loadImageProviderConfigs,
   resolveAiImageModel,
@@ -78,11 +79,13 @@ export class ImageGenerationError extends Error {
   }
 }
 
-/** 下发给前端的来源信息。只有这三个字段可以出网:baseUrl 与 apiKey 永不外泄。 */
+/** 下发给前端的来源信息。只有这四个字段可以出网:baseUrl 与 apiKey 永不外泄。 */
 export interface ImageProviderDescriptor {
   id: string;
   label: string;
   capabilities: ImageProviderCapability[];
+  /** 该来源支持的尺寸,前端据此派生画面比例档位。 */
+  sizes: string[];
 }
 
 export interface ImageGenerationProvider {
@@ -104,6 +107,7 @@ export interface OpenAiCompatibleImageGenerationProviderOptions {
   model?: string;
   responseFormat?: string;
   capabilities?: ImageProviderCapability[];
+  sizes?: string[];
   editTransport?: ImageProviderEditTransport;
   refImagesField?: string;
   refImageEncoding?: ImageProviderRefEncoding;
@@ -146,6 +150,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     model = resolveAiImageModel(),
     responseFormat = process.env.AI_IMAGE_RESPONSE_FORMAT || 'b64_json',
     capabilities = ['generate', 'edit'],
+    sizes = [...DEFAULT_AI_IMAGE_SIZES],
     editTransport = 'multipart',
     refImagesField = 'reference_images',
     refImageEncoding = 'data_url',
@@ -160,7 +165,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     this.editUrl = normalizeOpenAiCompatibleImageEditUrl(baseUrl);
     this.apiKey = apiKey;
     this.model = model;
-    this.descriptor = { id, label: label ?? id, capabilities };
+    this.descriptor = { id, label: label ?? id, capabilities, sizes };
     this.responseFormat = responseFormat;
     this.editTransport = editTransport;
     this.refImagesField = refImagesField;
@@ -246,16 +251,17 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
 
   /**
    * 可选字段的名字与值。JSON 与 multipart 两条路都按这一份表拼,省得两边漏删。
-   * model / prompt 不在表里:它们必发。
+   * model / prompt 不在表里:它们必发。值为 undefined 的行(如未选背景)在拼装时跳过。
    */
   private optionalBodyFields(
     config: ImageGenerateTaskConfig
-  ): Array<[ImageProviderOmittableBodyField, string | number]> {
+  ): Array<[ImageProviderOmittableBodyField, string | number | undefined]> {
     return [
       ['size', config.size],
       ['quality', config.quality],
       ['response_format', this.responseFormat],
       ['n', 1],
+      ['background', config.background],
     ];
   }
 
@@ -268,6 +274,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       prompt: buildImageGenerationPrompt(config),
     };
     for (const [field, value] of this.optionalBodyFields(config)) {
+      if (value === undefined) continue;
       if (!this.omitBodyFields.has(field)) body[field] = value;
     }
 
@@ -323,6 +330,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     );
     form.set('prompt', buildImageGenerationPrompt(config));
     for (const [field, value] of this.optionalBodyFields(config)) {
+      if (value === undefined) continue;
       if (!this.omitBodyFields.has(field)) form.set(field, String(value));
     }
 
@@ -441,6 +449,7 @@ export class ImageGenerationService {
       id: provider.descriptor?.id ?? id,
       label: provider.descriptor?.label ?? id,
       capabilities: provider.descriptor?.capabilities ?? ['generate', 'edit'],
+      sizes: provider.descriptor?.sizes ?? [...DEFAULT_AI_IMAGE_SIZES],
     }));
   }
 
@@ -480,6 +489,20 @@ export class ImageGenerationService {
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
         'The selected image provider does not support this mode'
+      );
+    }
+
+    // 尺寸交叉校验:前端的画面比例 chips 由 provider.sizes 派生,正常流程到不了这里;
+    // 只有旧缓存客户端或对已收窄 sizes 的来源重试旧任务时触发,按不可用处理。
+    // 注入的 externalProvider 没有 descriptor.sizes 时跳过(单来源部署默认四档)。
+    const sizes = provider.descriptor?.sizes;
+    if (sizes && !sizes.includes(config.size)) {
+      this.logger.warn(
+        `Image provider ${provider.descriptor?.id} does not support size ${config.size}`
+      );
+      throw new ImageGenerationError(
+        ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
+        'The selected image provider does not support the requested size'
       );
     }
 

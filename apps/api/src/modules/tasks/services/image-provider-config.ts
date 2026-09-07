@@ -44,7 +44,30 @@ export const imageProviderOmittableBodyFieldEnum = z.enum([
   'quality',
   'response_format',
   'n',
+  'background',
 ]);
+
+/**
+ * 来源支持的尺寸列表("auto" 或 "WxH")。
+ *
+ * 该列表随 providers 端点下发,前端据此决定画面比例 chips 显示哪些档;
+ * processor 在请求前用它交叉校验任务里的 size。OpenAI 兼容网关普遍支持
+ * SDXL 系的更多档位(9:16、3:4 等),声明即可解锁。
+ *
+ * 默认值刻意不含 "auto":它只是 gpt-image-1 一族的语义,严格校验请求体的
+ * 网关(如 wan)收到 "auto" 会整个 400 —— 存量部署不配 sizes 也能照常工作。
+ * gpt-image-1 类来源想要「自动」档,在配置里显式加 "auto" 即可。
+ */
+export const imageProviderSizeSchema = z
+  .string()
+  .trim()
+  .regex(/^(auto|\d{2,5}x\d{2,5})$/, 'size must be "auto" or "WxH"');
+
+export const DEFAULT_AI_IMAGE_SIZES = [
+  '1024x1024',
+  '1024x1536',
+  '1536x1024',
+] as const;
 
 /**
  * 单个生图来源。
@@ -83,6 +106,12 @@ export const imageProviderConfigSchema = z
       .default('reference_images'),
     refImageEncoding: imageProviderRefEncodingEnum.default('data_url'),
     responseFormat: imageProviderResponseFormatEnum.default('b64_json'),
+    /** 该来源支持的尺寸;下发前端用于派生画面比例档位。 */
+    sizes: z
+      .array(imageProviderSizeSchema)
+      .min(1)
+      .default([...DEFAULT_AI_IMAGE_SIZES])
+      .transform(list => [...new Set(list)]),
     /** 见 imageProviderOmittableBodyFieldEnum:严格校验请求体的网关靠这个删字段。 */
     omitBodyFields: z
       .array(imageProviderOmittableBodyFieldEnum)

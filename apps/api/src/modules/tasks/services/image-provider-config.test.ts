@@ -75,8 +75,77 @@ it('applies OpenAI-compatible defaults to a minimal entry', () => {
     refImageEncoding: 'data_url',
     responseFormat: 'b64_json',
     omitBodyFields: [],
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
   });
   expect(provider?.apiKey).toBeUndefined();
+});
+
+it('reads declared sizes and drops duplicates', () => {
+  const [provider] = loadImageProviderConfigs(
+    env({
+      AI_IMAGE_PROVIDERS: JSON.stringify([
+        {
+          id: 'sdxl',
+          label: 'SDXL 网关',
+          baseUrl: 'https://sdxl.example.com',
+          sizes: ['1024x1024', '1344x768', '1024x1024', 'auto'],
+        },
+      ]),
+    })
+  );
+
+  expect(provider?.sizes).toEqual(['1024x1024', '1344x768', 'auto']);
+});
+
+it('rejects a malformed size entry', () => {
+  expect(() =>
+    loadImageProviderConfigs(
+      env({
+        AI_IMAGE_PROVIDERS: JSON.stringify([
+          {
+            id: 'sdxl',
+            label: 'sdxl',
+            baseUrl: 'https://sdxl.example.com',
+            sizes: ['square'],
+          },
+        ]),
+      })
+    )
+  ).toThrow(/AI_IMAGE_PROVIDERS is invalid/);
+});
+
+it('rejects an empty sizes list', () => {
+  expect(() =>
+    loadImageProviderConfigs(
+      env({
+        AI_IMAGE_PROVIDERS: JSON.stringify([
+          {
+            id: 'sdxl',
+            label: 'sdxl',
+            baseUrl: 'https://sdxl.example.com',
+            sizes: [],
+          },
+        ]),
+      })
+    )
+  ).toThrow(/AI_IMAGE_PROVIDERS is invalid/);
+});
+
+it('allows background in omitBodyFields', () => {
+  const [provider] = loadImageProviderConfigs(
+    env({
+      AI_IMAGE_PROVIDERS: JSON.stringify([
+        {
+          id: 'wan',
+          label: 'wan',
+          baseUrl: 'https://wan.example.com',
+          omitBodyFields: ['background'],
+        },
+      ]),
+    })
+  );
+
+  expect(provider?.omitBodyFields).toEqual(['background']);
 });
 
 it('reads omitBodyFields and drops duplicates', () => {

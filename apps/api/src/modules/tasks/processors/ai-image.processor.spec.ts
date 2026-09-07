@@ -89,6 +89,7 @@ it('generates an image and stores it against the task owner', async () => {
     expect.objectContaining({
       mode: 'text_to_image',
       prompt: '一只柴犬',
+      // schema 默认值是具体档位("auto" 仅 gpt-image-1 族网关认可)。
       size: '1024x1024',
       quality: 'high',
       inputFileCount: 0,

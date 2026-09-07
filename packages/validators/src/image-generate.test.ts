@@ -16,9 +16,97 @@ describe('imageGenerateTaskConfigSchema', () => {
       inputFileCount: 0,
     });
 
+    // 默认尺寸是具体档位而非 "auto":"auto" 只是 gpt-image-1 一族的语义,
+    // 漏发 size 的客户端不该默认拿到一个大多数网关不认的值。
     expect(parsed.size).toBe('1024x1024');
     expect(parsed.quality).toBe('high');
     expect(parsed.style).toBeUndefined();
+    expect(parsed.background).toBeUndefined();
+    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.clientGroupId).toBeUndefined();
+  });
+
+  it('accepts concrete WxH sizes and auto', () => {
+    for (const size of ['1024x1024', '1024x1536', '1536x1024', 'auto']) {
+      const parsed = imageGenerateTaskConfigSchema.parse({
+        ...base,
+        size,
+        inputFileCount: 0,
+      });
+
+      expect(parsed.size).toBe(size);
+    }
+  });
+
+  it('rejects malformed sizes', () => {
+    for (const size of [
+      'square',
+      '1024',
+      '1024x',
+      'x1024',
+      'ax1024',
+      '1024x1024x768',
+      '',
+    ]) {
+      expect(
+        imageGenerateTaskConfigSchema.safeParse({
+          ...base,
+          size,
+          inputFileCount: 0,
+        }).success
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the auto quality', () => {
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      quality: 'auto',
+      inputFileCount: 0,
+    });
+
+    expect(parsed.quality).toBe('auto');
+  });
+
+  it('accepts a transparent background and rejects unknown values', () => {
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      background: 'transparent',
+      inputFileCount: 0,
+    });
+
+    expect(parsed.background).toBe('transparent');
+
+    expect(
+      imageGenerateTaskConfigSchema.safeParse({
+        ...base,
+        background: 'gradient',
+        inputFileCount: 0,
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts uuid session and client group ids and rejects other shapes', () => {
+    const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
+    const clientGroupId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a002';
+
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      sessionId,
+      clientGroupId,
+      inputFileCount: 0,
+    });
+
+    expect(parsed.sessionId).toBe(sessionId);
+    expect(parsed.clientGroupId).toBe(clientGroupId);
+
+    expect(
+      imageGenerateTaskConfigSchema.safeParse({
+        ...base,
+        sessionId: 'not-a-uuid',
+        inputFileCount: 0,
+      }).success
+    ).toBe(false);
   });
 
   it('rejects an empty prompt', () => {

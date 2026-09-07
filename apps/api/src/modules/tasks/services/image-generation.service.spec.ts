@@ -80,6 +80,83 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     });
   });
 
+  it('sends the transparent background when one is selected', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate({ ...config, background: 'transparent' });
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.background).toBe('transparent');
+  });
+
+  it('omits the background field entirely when none is selected', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(config);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body).not.toHaveProperty('background');
+  });
+
+  it('drops the background when the provider omits it', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      omitBodyFields: ['background'],
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate({ ...config, background: 'transparent' });
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body).not.toHaveProperty('background');
+  });
+
+  it('sends size auto as-is', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate({ ...config, size: 'auto' });
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.size).toBe('auto');
+  });
+
   it('drops the body fields the provider cannot accept', async () => {
     // wan 一类网关对请求体做严格校验:多一个不认识的字段就整个 400
     // (「请求包含未知字段」)。omitBodyFields 让这类来源不必改代码。
@@ -587,11 +664,17 @@ describe('ImageGenerationService (multi provider registry)', () => {
   function stub(
     id: string,
     capabilities: Array<'generate' | 'edit'> = ['generate', 'edit'],
-    model = 'gpt-image-1'
+    model = 'gpt-image-1',
+    sizes: string[] = ['1024x1024', '1024x1536', '1536x1024']
   ) {
     return {
       generate: vi.fn(async () => Buffer.from(id)),
-      descriptor: { id, label: `${id} label`, capabilities },
+      descriptor: {
+        id,
+        label: `${id} label`,
+        capabilities,
+        sizes,
+      },
       model,
     };
   }
@@ -672,13 +755,67 @@ describe('ImageGenerationService (multi provider registry)', () => {
     const listed = service.listProviders();
 
     expect(listed).toEqual([
-      { id: 'alpha', label: 'alpha label', capabilities: ['generate', 'edit'] },
-      { id: 'kmage', label: 'kmage label', capabilities: ['generate'] },
+      {
+        id: 'alpha',
+        label: 'alpha label',
+        capabilities: ['generate', 'edit'],
+        // stub 的 descriptor 不带 sizes,回落默认三档。
+        sizes: ['1024x1024', '1024x1536', '1536x1024'],
+      },
+      {
+        id: 'kmage',
+        label: 'kmage label',
+        capabilities: ['generate'],
+        sizes: ['1024x1024', '1024x1536', '1536x1024'],
+      },
     ]);
     // baseUrl / apiKey 属于服务端配置,出现在这里就是外泄。
     const serialized = JSON.stringify(listed);
     expect(serialized).not.toContain('baseUrl');
     expect(serialized).not.toContain('apiKey');
+  });
+
+  it('lists provider-declared sizes when the descriptor carries them', () => {
+    const provider = stub('wide', ['generate', 'edit'], 'gpt-image-1', [
+      'auto',
+      '1024x1024',
+      '1024x1536',
+      '1536x1024',
+      '1344x768',
+    ]);
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    expect(service.listProviders()[0]?.sizes).toContain('1344x768');
+  });
+
+  it('rejects a size the provider does not declare', async () => {
+    const provider = stub('strict', ['generate', 'edit'], 'gpt-image-1', [
+      '1024x1024',
+    ]);
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    const error = (await service
+      .generate({ ...config, size: '1536x1024' })
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE);
+    expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  it('passes a declared size through to the provider', async () => {
+    const provider = stub('strict', ['generate', 'edit'], 'gpt-image-1', [
+      '1024x1024',
+      '1344x768',
+    ]);
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    const result = await service.generate({ ...config, size: '1344x768' });
+
+    expect(provider.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ size: '1344x768' }),
+      undefined
+    );
+    expect(result.buffer.toString()).toBe('strict');
   });
 
   it('reports unconfigured when the injected provider list is empty', async () => {

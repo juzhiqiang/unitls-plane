@@ -50,7 +50,7 @@ export interface TaskStatusDto {
 export interface ImageGenerateProviderDto {
   id: string;
   label: string;
-  capabilities: Array<'generate' | 'edit'>;
+  capabilities: Array<'generate' | 'edit' | 'inpaint'>;
   /** 该来源支持的尺寸("auto" 或 "WxH"),画面比例档位由它派生。 */
   sizes: string[];
 }

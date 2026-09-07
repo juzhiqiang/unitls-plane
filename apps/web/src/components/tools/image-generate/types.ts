@@ -23,8 +23,11 @@ export interface ImageGenerateChatDraft {
 export interface GenerationMessageGroup {
   clientGroupId: string;
   prompt: string;
-  mode: 'text_to_image' | 'image_to_image';
-  /** 图生图/融合时的参考图 fileId 列表(已上传),消息里显示缩略图用。 */
+  mode: 'text_to_image' | 'image_to_image' | 'inpaint';
+  /**
+   * 图生图/融合时的参考图 fileId 列表(已上传),消息里显示缩略图用;
+   * inpaint 时是 [原图, 蒙版],第一个元素是编辑底图(对比弹窗的"前")。
+   */
   referenceFileIds: string[];
   taskIds: string[];
   /** 乐观消息在服务端数据回来前没有任务详情,只有任务 id 占位。 */

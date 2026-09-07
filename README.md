@@ -202,7 +202,7 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 `POST /v1/images/generations`）与图生图（页面上传一张参考图并可预览）；图生图按来源分支：`multipart`
 走 `POST /v1/images/edits`，`generations_ref` 也走 `POST /v1/images/generations` 并把参考图以 data
 URL 放进 `reference_images` 数组（`image.dddd.zone`
-一类网关没有 edits 端点）。局部重绘尚未实现。页面在配置了多个来源时展示来源选择器，选中的来源随
+一类网关没有 edits 端点）。局部重绘需要来源声明 `"inpaint"` 能力（`capabilities: ["generate","edit","inpaint"]`，依赖 edits 端点的 `mask` 字段；实测 kmage 可用、wan 系不支持）。页面在配置了多个来源时展示来源选择器，选中的来源随
 `inputConfig.providerId` 提交；来源不支持图生图时该模式被禁用。无论来源返回 `b64_json` 还是
 `url`，产物都会落到 MinIO，用户拿到的始终是本站文件地址。每日生成张数上限是全局的（不按来源区分），在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。

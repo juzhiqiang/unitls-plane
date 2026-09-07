@@ -143,6 +143,39 @@ vi.mock('@/components/tools/image-generate-compare', () => ({
     React.createElement('div', { 'data-testid': 'compare-slider' }, title),
 }));
 
+// 蒙版编辑器依赖真实 canvas(画笔/撤销),jsdom 里没有:这里打桩成"一键提交",
+// 页面接线(编辑入口 → inpaint 任务创建)由此覆盖,画布交互走浏览器 E2E。
+vi.mock('@/components/tools/image-generate/mask-editor', () => ({
+  MaskEditor: ({
+    open,
+    onSubmit,
+  }: {
+    open: boolean;
+    onSubmit: (payload: {
+      maskBlob: Blob;
+      prompt: string;
+      width: number;
+      height: number;
+    }) => void;
+  }) =>
+    open
+      ? React.createElement(
+          'button',
+          {
+            'data-testid': 'stub-inpaint-submit',
+            onClick: () =>
+              onSubmit({
+                maskBlob: new Blob(['mask-bytes']),
+                prompt: 'make it a night sky',
+                width: 1024,
+                height: 1024,
+              }),
+          },
+          'stub-inpaint-submit'
+        )
+      : null,
+}));
+
 type ServerTask = {
   id: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -677,6 +710,110 @@ describe('ImageGeneratePage', () => {
     // 删除的是当前会话:query 切到新的本地会话 id。
     const lastId = mocks.sessionTasks.mock.calls.at(-1)?.[0];
     expect(lastId).not.toBe(sessionId);
+  });
+
+  it('edits a completed image via the mask editor and submits an inpaint task', async () => {
+    // 来源声明 inpaint 能力,编辑入口才会出现。
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        {
+          id: 'kmage',
+          label: 'Kmage',
+          capabilities: ['generate', 'edit', 'inpaint'] as const,
+          sizes: ['auto', '1024x1024'],
+        },
+      ],
+    });
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    refreshSessionTasks(rerender);
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'ready', url: 'blob:image-1' },
+    });
+    rerender();
+
+    // 编辑入口 → 打桩的编辑器 → 提交。
+    fireEvent.click(screen.getByRole('button', { name: 'Edit region' }));
+    const stubSubmit = await screen.findByTestId('stub-inpaint-submit');
+
+    // 原图从 blob url 取回:给一个可用的全局 fetch。
+    let uploads = 100;
+    mocks.uploadFile.mockImplementation(async () => {
+      uploads += 1;
+      return { id: `file-${uploads}` };
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        blob: async () => new Blob(['image-bytes'], { type: 'image/png' }),
+      }))
+    );
+
+    fireEvent.click(stubSubmit);
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
+    const [payload] = mocks.createTask.mock.calls[1];
+    expect(payload).toMatchObject({
+      type: 'image_generate',
+      inputFileIds: ['file-101', 'file-102'],
+    });
+    expect(payload.inputConfig).toMatchObject({
+      mode: 'inpaint',
+      prompt: 'make it a night sky',
+      // 原始 1024x1024 在来源 sizes 里,原样下发。
+      size: '1024x1024',
+    });
+  });
+
+  it('hides the edit entry when the provider has no inpaint capability', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    refreshSessionTasks(rerender);
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'ready', url: 'blob:image-1' },
+    });
+    rerender();
+
+    expect(
+      screen.queryByRole('button', { name: 'Edit region' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens a before/after compare dialog when clicking an inpaint result', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    (task.inputConfig as Record<string, unknown>).mode = 'inpaint';
+    task.inputFileIds = ['file-base-1', 'file-mask-1'];
+    refreshSessionTasks(rerender);
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'ready', url: 'blob:image-1' },
+    });
+    rerender();
+
+    // inpaint 结果的点击语义是「修改前后对比」,不再走放大预览。
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Before / after edit' })
+    );
+    expect(await screen.findByTestId('compare-slider')).toBeInTheDocument();
   });
 
   it('fills the prompt when picking a template from the empty state', () => {

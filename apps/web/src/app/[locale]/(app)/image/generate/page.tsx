@@ -26,6 +26,7 @@ import {
 } from '@/components/tools/image-generate/generation-message';
 import { PromptComposer } from '@/components/tools/image-generate/prompt-composer';
 import { EmptyState } from '@/components/tools/image-generate/empty-state';
+import { MaskEditor } from '@/components/tools/image-generate/mask-editor';
 import type {
   GenerationMessageGroup,
   GenerationMessageTask,
@@ -72,7 +73,9 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
       typeof config.clientGroupId === 'string' ? config.clientGroupId : task.id;
     const prompt = typeof config.prompt === 'string' ? config.prompt : '';
     const mode =
-      config.mode === 'image_to_image' ? 'image_to_image' : 'text_to_image';
+      config.mode === 'image_to_image' || config.mode === 'inpaint'
+        ? config.mode
+        : 'text_to_image';
     const entry: GenerationMessageTask = {
       taskId: task.id,
       status: task.status,
@@ -91,7 +94,7 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
         prompt,
         mode,
         referenceFileIds:
-          mode === 'image_to_image' ? (task.inputFileIds as string[]) : [],
+          mode === 'text_to_image' ? [] : (task.inputFileIds as string[]),
         taskIds: [task.id],
         tasks: [entry],
       });
@@ -128,6 +131,9 @@ export default function ImageGeneratePage() {
     null
   );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // 局部重绘:正在编辑的结果图 blob url(null = 编辑器关闭)。
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
+  const [inpaintBusy, setInpaintBusy] = useState(false);
 
   const output = useTaskOutputPreviews();
   // 已发起产物下载的 taskId:切会话后 previews 被清空,这个集合也要跟着重置。
@@ -138,6 +144,10 @@ export default function ImageGeneratePage() {
     providers.find(item => item.id === draft.providerId) ?? providers[0];
   const editSupported =
     !selectedProvider || selectedProvider.capabilities.includes('edit');
+  // 局部重绘依赖来源的 mask 传输能力(wan 系网关没有,kmage 的 gpt-image-2 有):
+  // 不支持时编辑入口整体不出现,而不是点了才报错。
+  const inpaintSupported =
+    !selectedProvider || selectedProvider.capabilities.includes('inpaint');
 
   // 新会话在服务端没有任务,query 返回空列表,与「未启用」效果一致,无需额外门控。
   const sessionTasksQuery = useImageGenerateSessionTasks(activeSessionId);
@@ -295,6 +305,97 @@ export default function ImageGeneratePage() {
     });
   };
 
+  /**
+   * 局部重绘提交:编辑器产出的蒙版 + 原图一起上传,作为同会话里的新消息。
+   *
+   * 尺寸取原图的原始宽高(蒙版与原图逐像素对齐,输出尺寸也跟随原图);
+   * 不在来源支持列表时回落到第一档,与普通提交同一条解析路径。
+   */
+  const submitInpaint = async ({
+    maskBlob,
+    prompt,
+    width,
+    height,
+  }: {
+    maskBlob: Blob;
+    prompt: string;
+    width: number;
+    height: number;
+  }) => {
+    if (requireLogin(TOOL_HREF) || !editingImageUrl) return;
+
+    const clientGroupId = globalThis.crypto.randomUUID();
+    setFailure(null);
+    setInpaintBusy(true);
+    setOptimistic({
+      clientGroupId,
+      prompt,
+      mode: 'inpaint',
+      referenceFileIds: [],
+      taskIds: [],
+      tasks: [
+        { taskId: `${clientGroupId}-optimistic-0`, status: 'pending' },
+      ],
+    });
+
+    try {
+      // 原图从 blob url 取回(展示用的就是原始产物,无需再加工)。
+      const imageResponse = await fetch(editingImageUrl);
+      if (!imageResponse.ok) throw new Error('fetch failed');
+      const imageBlob = await imageResponse.blob();
+      const baseFile = new File([imageBlob], 'inpaint-base.png', {
+        type: imageBlob.type || 'image/png',
+      });
+      const maskFile = new File([maskBlob], 'inpaint-mask.png', {
+        type: 'image/png',
+      });
+
+      // 上传顺序即语义顺序:inputFileIds = [原图, 蒙版]。
+      const baseUploaded = (await uploadFile.mutateAsync(
+        baseFile
+      )) as unknown as { id: string };
+      const maskUploaded = (await uploadFile.mutateAsync(
+        maskFile
+      )) as unknown as { id: string };
+
+      setOptimistic(current =>
+        current && current.clientGroupId === clientGroupId
+          ? { ...current, referenceFileIds: [baseUploaded.id] }
+          : current
+      );
+
+      const requestedSize = `${width}x${height}`;
+      const size = resolveDraftSize(requestedSize, selectedProvider?.sizes);
+
+      await createTask.mutateAsync({
+        type: 'image_generate',
+        inputFileIds: [baseUploaded.id, maskUploaded.id],
+        inputConfig: {
+          mode: 'inpaint',
+          prompt,
+          size,
+          quality: draft.quality,
+          ...(draft.background ? { background: draft.background } : {}),
+          ...(draft.providerId ? { providerId: draft.providerId } : {}),
+          sessionId: activeSessionId,
+          clientGroupId,
+        },
+      });
+      setEditingImageUrl(null);
+    } catch (error) {
+      setFailure({
+        key: SUBMIT_ERROR_KEYS[errorCodeOf(error)] ?? 'uploadFailed',
+        code: errorCodeOf(error),
+      });
+      setOptimistic(null);
+    } finally {
+      setInpaintBusy(false);
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.imageGenerateSessions(),
+      });
+    }
+  };
+
   const inFlight = messageGroups.some(group =>
     (group.tasks ?? []).some(
       task => task.status === 'pending' || task.status === 'processing'
@@ -309,7 +410,7 @@ export default function ImageGeneratePage() {
         (output.previews[task.taskId]?.state ?? 'loading') === 'loading'
     )
   );
-  const busy = submitting || inFlight || fetchingResults;
+  const busy = submitting || inFlight || fetchingResults || inpaintBusy;
 
   const activeSessionTitle =
     activeSessionId === newSessionId
@@ -377,6 +478,7 @@ export default function ImageGeneratePage() {
             onRetryFetch={(taskId, outputFileId) =>
               void output.load(taskId, outputFileId)
             }
+            onEditImage={inpaintSupported ? setEditingImageUrl : undefined}
           />
         ))}
         {failure && <SystemNotice message={t(failure.key)} onRetry={submit} />}
@@ -428,6 +530,15 @@ export default function ImageGeneratePage() {
           </div>
         </div>
       </div>
+
+      {/* 局部重绘蒙版编辑器。 */}
+      <MaskEditor
+        open={Boolean(editingImageUrl)}
+        imageUrl={editingImageUrl ?? ''}
+        onClose={() => setEditingImageUrl(null)}
+        onSubmit={payload => void submitInpaint(payload)}
+        busy={inpaintBusy}
+      />
 
       {/* 移动端会话侧栏。DialogTitle 是 Radix 的无障碍要求(DialogContent 必须有标题)。 */}
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>

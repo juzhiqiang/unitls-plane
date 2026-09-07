@@ -231,8 +231,6 @@ describe('ImageGeneratePage', () => {
     expect(screen.queryByText('Generating')).not.toBeInTheDocument();
   });
 
-  // __NEW_TESTS__
-
   it('renders the MinIO example image for presets that ship one', async () => {
     renderPage();
 
@@ -478,7 +476,6 @@ describe('ImageGeneratePage', () => {
 
     vi.unstubAllGlobals();
   });
-  // __NEW_TESTS_3__
 
   it('includes the chosen style in the task input config', async () => {
     renderPage();

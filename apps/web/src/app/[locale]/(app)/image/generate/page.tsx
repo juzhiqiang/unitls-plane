@@ -548,7 +548,9 @@ export default function ImageGeneratePage() {
         </div>
 
         <div className="min-h-0 flex-1">
-          <MessageCanvas>{canvas}</MessageCanvas>
+          <MessageCanvas messageCount={messageGroups.length}>
+            {canvas}
+          </MessageCanvas>
         </div>
 
         <div className="shrink-0 p-3 lg:p-4">

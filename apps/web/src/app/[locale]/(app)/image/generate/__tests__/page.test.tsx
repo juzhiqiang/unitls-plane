@@ -316,6 +316,12 @@ describe('ImageGeneratePage', () => {
 
     await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
 
+    // 发送成功后输入框清空,专注看结果流。
+    const composer = screen.getByPlaceholderText(
+      /Describe the image you want/
+    ) as HTMLTextAreaElement;
+    expect(composer.value).toBe('');
+
     const configs = mocks.createTask.mock.calls.map(
       ([payload]) => payload.inputConfig
     );
@@ -358,6 +364,11 @@ describe('ImageGeneratePage', () => {
       ).toBeInTheDocument()
     );
     expect(mocks.createTask).toHaveBeenCalledTimes(1);
+    // 一张都没建出来:输入保留,改完直接重发。
+    const composer = screen.getByPlaceholderText(
+      /Describe the image you want/
+    ) as HTMLTextAreaElement;
+    expect(composer.value).toBe('a shiba inu');
   });
 
   it('renders a failure notice when the session task query keeps erroring', async () => {
@@ -402,6 +413,10 @@ describe('ImageGeneratePage', () => {
       mode: 'image_to_image',
     });
     expect(mocks.uploadFile).toHaveBeenCalledTimes(1);
+    // 发送成功后参考图 chips 清空。
+    expect(
+      screen.queryByRole('button', { name: 'Remove reference image' })
+    ).not.toBeInTheDocument();
   });
 
   it('removing the reference chip falls back to text_to_image', async () => {
@@ -511,6 +526,9 @@ describe('ImageGeneratePage', () => {
       'task-1': { state: 'ready', url: 'blob:image-1' },
     });
     rerender();
+    // 提交成功后输入框已清空(空 prompt 也禁用按钮):重新填词后,
+    // busy 解除与否就只取决于取回状态。
+    setPrompt('anything else');
     expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
   });
 

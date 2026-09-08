@@ -271,6 +271,7 @@ export default function ImageGeneratePage() {
     }
 
     let failureCode: string | null = null;
+    let createdCount = 0;
 
     // 串行(而非 Promise.all)创建:createTask 只是入队(廉价 insert),真正生成在
     // worker 并发跑,N 张只多几次入队往返。串行才能让配额判定确定 —— 每次都看到
@@ -292,11 +293,19 @@ export default function ImageGeneratePage() {
             clientGroupId,
           },
         });
+        createdCount += 1;
       } catch (error) {
         // 部分超额不整批回滚:已建出的任务继续跑,剩下的报错。
         failureCode = errorCodeOf(error);
         break;
       }
+    }
+
+    // 至少建出一个任务就算"发出去了":清空输入框与参考图,用户专注看结果流。
+    // 一张都没建出来(配额耗尽、来源不可用)时保留原输入,改完直接重发。
+    if (createdCount > 0) {
+      setDraft(current => ({ ...current, prompt: '' }));
+      setReferenceFiles([]);
     }
 
     setFailure(

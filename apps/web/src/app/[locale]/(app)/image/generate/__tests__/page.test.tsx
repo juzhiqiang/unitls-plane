@@ -625,6 +625,29 @@ describe('ImageGeneratePage', () => {
     // 'Default' 同时是背景默认 chip 与当前来源名;下拉内容(Radix)关闭时不渲染,
     // 这里断言触发器显示当前来源即可。
     expect(screen.getAllByText('Default').length).toBeGreaterThanOrEqual(1);
+    // 触发器上的能力后缀:DEFAULT_PROVIDER 支持 edit → image-to-image。
+    expect(screen.getAllByText('image-to-image').length).toBeGreaterThanOrEqual(
+      1
+    );
+  });
+
+  it('marks text-only providers in the model dropdown', () => {
+    // 纯文生图来源排在首位(默认选中):触发器上的能力后缀应显示 text-only。
+    mocks.imageGenerateProviders.mockReturnValue({
+      data: [
+        {
+          id: 't2i-only',
+          label: 'Text Only Model',
+          capabilities: ['generate'] as const,
+          sizes: ['auto', '1024x1024'],
+        },
+        DEFAULT_PROVIDER,
+      ],
+    });
+    renderPage();
+    openSettings();
+
+    expect(screen.getByText('text-only')).toBeInTheDocument();
   });
 
   it('caps the count stepper at the remaining quota', () => {

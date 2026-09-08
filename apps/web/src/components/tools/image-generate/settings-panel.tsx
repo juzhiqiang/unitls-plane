@@ -20,9 +20,16 @@ interface SettingsPanelProps {
   quotaRemaining?: number;
 }
 
+/** 模型名后的能力后缀:支持图生图(含融合) / 仅文生图。 */
+function capabilityLabel(capabilities: Array<'generate' | 'edit' | 'inpaint'>) {
+  const t = useTranslations('ImageGenerate');
+  return capabilities.includes('edit')
+    ? t('providerCapEdit')
+    : t('providerCapTextOnly');
+}
+
 /** chips 单选项,样式沿用旧 RadioRow 的胶囊模式(sr-only radio + has-checked 边框)。 */
-function ChipRow<T extends string | number>({
-  legend,
+function ChipRow<T extends string | number>({  legend,
   options,
   selected,
   disabled,
@@ -91,7 +98,8 @@ export function SettingsPanel({
 
   return (
     <div className="absolute bottom-full left-0 right-0 mb-2 space-y-4 rounded-lg border border-border bg-card p-4 shadow-lg">
-      {/* 模型 = 来源。单来源部署不渲染这一行(选一项的单选是噪音)。 */}
+      {/* 模型 = 来源。单来源部署不渲染这一行(选一项的单选是噪音)。
+          名称后缀标注能力:支持图生图 / 仅文生图,选型时不用猜。 */}
       {providers.length > 1 && (
         <div className="space-y-1.5">
           <p className="text-xs text-muted-foreground">{t('modelLabel')}</p>
@@ -100,16 +108,24 @@ export function SettingsPanel({
               disabled={disabled}
               className="flex h-8 w-full items-center justify-between rounded-md border border-border px-3 text-sm data-[state=open]:border-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {selectedProvider?.label ?? value.providerId}
+              <span className="truncate">
+                {selectedProvider?.label ?? value.providerId}
+                <span className="ml-1 text-xs text-muted-foreground">
+                  {capabilityLabel(selectedProvider?.capabilities ?? [])}
+                </span>
+              </span>
               <span aria-hidden className="text-muted-foreground">▾</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-64">
               {providers.map(provider => (
                 <DropdownMenuItem
                   key={provider.id}
                   onClick={() => onChange({ ...value, providerId: provider.id })}
                 >
-                  {provider.label}
+                  <span className="truncate">{provider.label}</span>
+                  <span className="ml-auto pl-2 text-xs text-muted-foreground">
+                    {capabilityLabel(provider.capabilities)}
+                  </span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

@@ -888,6 +888,8 @@
     "presetExampleAlt": "{title} 示例图",
     "providerHint": "不同来源使用不同的模型，出图风格与支持的能力也不一样；产物都会保存到你的账号文件。",
     "providerNoEditHint": "当前来源不支持图生图，请换一个来源。",
+    "providerCapEdit": "支持图生图",
+    "providerCapTextOnly": "仅文生图",
     "providerNoInpaintHint": "当前来源不支持局部修改，请在「生成设置 → 模型」切换到支持的来源（如 KMage）后再试。",
     "sourcePreviewAlt": "参考图预览",
     "uploadFailed": "参考图上传失败，请重试。",

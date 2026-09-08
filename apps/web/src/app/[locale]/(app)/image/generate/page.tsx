@@ -207,6 +207,31 @@ export default function ImageGeneratePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageGroups]);
 
+  // 生图失败返还额度:后端计数排除 failed(countTasksCreatedToday 的
+  // ne(status,'failed')),任务转失败后当日已用自动回退;但额度快照只在建任务
+  // 时刷新 —— 这里观察到新失败就失效额度查询,「今日剩余」立即回涨,
+  // 而不是等下次进页面才对上账。
+  const failedSeenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    let hasNewFailure = false;
+    for (const group of messageGroups) {
+      for (const task of group.tasks ?? []) {
+        if (
+          task.status === 'failed' &&
+          !failedSeenRef.current.has(task.taskId)
+        ) {
+          failedSeenRef.current.add(task.taskId);
+          hasNewFailure = true;
+        }
+      }
+    }
+    if (hasNewFailure) {
+      void queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.imageGenerateQuota(),
+      });
+    }
+  }, [messageGroups, queryClient]);
+
   const startNewChat = () => {
     const id = randomUUID();
     setNewSessionId(id);

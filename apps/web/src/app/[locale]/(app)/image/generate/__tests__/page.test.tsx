@@ -573,6 +573,15 @@ describe('ImageGeneratePage', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
     expect(mocks.retryTask).toHaveBeenCalledWith('task-1');
+    // 失败返还额度:后端计数排除 failed,任务转失败后页面要失效额度快照,
+    // 「今日剩余」立即回涨。
+    await waitFor(() =>
+      expect(mocks.invalidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: expect.arrayContaining(['image-generate', 'quota']),
+        })
+      )
+    );
   });
 
   it('derives ratio chips from provider sizes and hides the model row for a single provider', () => {

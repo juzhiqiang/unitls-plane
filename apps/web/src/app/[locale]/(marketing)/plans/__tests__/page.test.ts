@@ -33,8 +33,8 @@ describe('public plans page', () => {
     expect(plans.title).toBeTruthy();
     expect(plans.intro).toBeTruthy();
     expect(plans.betaNote).toBeTruthy();
-    expect(Object.keys(plans.planLabels)).toHaveLength(6);
-    expect(Object.keys(plans.planNotes)).toHaveLength(6);
+    expect(Object.keys(plans.planLabels)).toHaveLength(7);
+    expect(Object.keys(plans.planNotes)).toHaveLength(7);
     expect(plans.columns.plan).toBeTruthy();
     expect(plans.columns.uploadLimit).toBeTruthy();
     expect(plans.columns.imageGenerate).toBeTruthy();

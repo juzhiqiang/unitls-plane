@@ -376,6 +376,7 @@
       "plan": "当前套餐",
       "planValues": {
         "free": "免费公测（Free Beta）",
+        "beta_preview": "公测先锋（Beta Preview）",
         "pro_preview": "免费公测顶额权益（Pro Preview）",
         "pro": "专业版（Pro）",
         "team": "团队版（Team）",
@@ -1791,6 +1792,7 @@
       "planLabels": {
         "free": "匿名用户（Anonymous）",
         "signed_in": "免费登录用户（Free Beta）",
+        "beta_preview": "公测先锋（Beta Preview）",
         "pro_preview": "免费公测顶额权益（Pro Preview）",
         "pro": "专业版（Pro）",
         "team": "团队版（Team）",
@@ -1799,6 +1801,7 @@
       "planNotes": {
         "free": "无需登录，浏览器本地处理",
         "signed_in": "登录后的免费公测账号",
+        "beta_preview": "公测先锋专属权益，介于登录用户与专业版之间",
         "pro_preview": "公测期间使用与 Private 相同的顶额权益",
         "pro": "专业版套餐",
         "team": "团队版套餐",

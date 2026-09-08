@@ -9,6 +9,7 @@ describe('plan display limits', () => {
     expect(PLAN_DISPLAY_ORDER).toEqual([
       'free',
       'signed_in',
+      'beta_preview',
       'pro_preview',
       'pro',
       'team',
@@ -22,6 +23,8 @@ describe('plan display limits', () => {
 
     expect(byPlan.free.uploadMaxFileSize).toBe(10 * 1024 * 1024);
     expect(byPlan.signed_in.uploadMaxFileSize).toBe(50 * 1024 * 1024);
+    // 公测先锋:单文件 80MB,介于登录用户与专业版之间。
+    expect(byPlan.beta_preview.uploadMaxFileSize).toBe(80 * 1024 * 1024);
     expect(byPlan.pro_preview.uploadMaxFileSize).toBe(250 * 1024 * 1024);
     expect(byPlan.pro.uploadMaxFileSize).toBe(100 * 1024 * 1024);
     expect(byPlan.team.uploadMaxFileSize).toBe(150 * 1024 * 1024);
@@ -34,6 +37,8 @@ describe('plan display limits', () => {
 
     expect(byPlan.free.imageGenerateDailyCount).toBe(0);
     expect(byPlan.signed_in.imageGenerateDailyCount).toBe(10);
+    // 公测先锋:每日生图 30 次。
+    expect(byPlan.beta_preview.imageGenerateDailyCount).toBe(30);
     expect(byPlan.pro_preview.imageGenerateDailyCount).toBe(100);
     expect(byPlan.pro.imageGenerateDailyCount).toBe(50);
     expect(byPlan.team.imageGenerateDailyCount).toBe(80);

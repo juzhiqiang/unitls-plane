@@ -28,6 +28,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const PLAN_LABEL_KEYS = {
   free: 'free',
+  beta_preview: 'beta_preview',
   pro_preview: 'pro_preview',
   pro: 'pro',
   team: 'team',

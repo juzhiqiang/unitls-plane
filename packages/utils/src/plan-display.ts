@@ -4,6 +4,7 @@ import { LIMITS } from './entitlements';
 export const PLAN_DISPLAY_ORDER: EntitlementPlan[] = [
   'free',
   'signed_in',
+  'beta_preview',
   'pro_preview',
   'pro',
   'team',

@@ -376,6 +376,7 @@
       "plan": "Current plan",
       "planValues": {
         "free": "Free beta (Free Beta)",
+        "beta_preview": "Beta Pioneer (Beta Preview)",
         "pro_preview": "Free beta with top limits (Pro Preview)",
         "pro": "Professional (Pro)",
         "team": "Team (Team)",
@@ -1793,6 +1794,7 @@
       "planLabels": {
         "free": "Anonymous",
         "signed_in": "Free Beta",
+        "beta_preview": "Beta Pioneer (Beta Preview)",
         "pro_preview": "Pro Preview",
         "pro": "Pro",
         "team": "Team",
@@ -1801,6 +1803,7 @@
       "planNotes": {
         "free": "No login required; browser-only processing",
         "signed_in": "Signed-in free beta account",
+        "beta_preview": "Early-adopter tier between signed-in and Pro",
         "pro_preview": "Top-tier allowance during the public beta",
         "pro": "Professional plan",
         "team": "Team plan",

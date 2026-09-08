@@ -179,6 +179,33 @@ describe('imageGenerateTaskConfigSchema', () => {
     ).toThrow('1-4');
   });
 
+  it('accepts 2 to 3 input files for inpaint', () => {
+    for (const inputFileCount of [2, 3]) {
+      const parsed = imageGenerateTaskConfigSchema.parse({
+        mode: 'inpaint',
+        prompt: 'x',
+        inputFileCount,
+      });
+
+      expect(parsed.inputFileCount).toBe(inputFileCount);
+    }
+
+    expect(() =>
+      imageGenerateTaskConfigSchema.parse({
+        mode: 'inpaint',
+        prompt: 'x',
+        inputFileCount: 1,
+      })
+    ).toThrow('inpaint');
+    expect(() =>
+      imageGenerateTaskConfigSchema.parse({
+        mode: 'inpaint',
+        prompt: 'x',
+        inputFileCount: 4,
+      })
+    ).toThrow('2-3');
+  });
+
   it('requires exactly two input files for inpaint', () => {
     expect(() =>
       imageGenerateTaskConfigSchema.parse({

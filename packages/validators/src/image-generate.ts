@@ -56,9 +56,22 @@ export const imageGenerateProviderIdSchema = z
 export const IMAGE_GENERATE_MAX_REFERENCE_IMAGES = 4;
 
 /**
+ * 局部重绘「红标记通道」的固定提示词前缀。
+ *
+ * inpaint 默认走官方 mask 通道(image + 透明蒙版,无需前缀);网关拒绝 mask 字段时
+ * 回退为 [原图, 带红色标记的原图] 两张参考图,此时红色区域的含义必须靠这段文字向
+ * 模型说明。前端消息气泡展示时用它反向剥出用户原文。由前后端共享,勿改措辞
+ * (存量任务的提示词里已经带着它)。
+ */
+export const IMAGE_GENERATE_INPAINT_PROMPT_PREFIX =
+  '你会收到两张参考图：第一张是原图，第二张是带红色标记的原图。只修改红色标记覆盖的局部区域，红色标记只是区域说明，不要出现在最终图片里。未标记区域尽量保持与第一张原图一致。局部修改要求：';
+
+/**
  * 每个 mode 允许的输入文件数量范围,用于把模式契约收在一处。
  *
- * image_to_image 是 1..N:单张是常规图生图,多张是图片融合(全部参考图一起发给上游)。
+ * - image_to_image 是 1..N:单张是常规图生图,多张是图片融合。
+ * - inpaint 是 2..3:3 = [原图, 透明蒙版, 红标记图](先官方 mask 通道、被拒再回退
+ *   红标记通道);2 = [原图, 红标记图] 的旧格式(仅走红标记通道,兼容存量任务)。
  */
 export const IMAGE_GENERATE_INPUT_FILE_COUNT: Record<
   z.infer<typeof imageGenerateModeEnum>,
@@ -66,7 +79,7 @@ export const IMAGE_GENERATE_INPUT_FILE_COUNT: Record<
 > = {
   text_to_image: { min: 0, max: 0 },
   image_to_image: { min: 1, max: IMAGE_GENERATE_MAX_REFERENCE_IMAGES },
-  inpaint: { min: 2, max: 2 },
+  inpaint: { min: 2, max: 3 },
 };
 
 export const imageGenerateTaskConfigSchema = z

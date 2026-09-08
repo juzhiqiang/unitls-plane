@@ -1,7 +1,8 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import type {
-  ImageGenerateStyle,
-  ImageGenerateTaskConfig,
+import {
+  IMAGE_GENERATE_INPAINT_PROMPT_PREFIX,
+  type ImageGenerateStyle,
+  type ImageGenerateTaskConfig,
 } from '@utils-plane/validators';
 import sharp from 'sharp';
 import { ErrorCodes } from '../../../common/errors/error-codes';
@@ -39,6 +40,11 @@ const CONTENT_REJECTION_MARKERS = [
   'moderation',
   'violation',
 ];
+
+function isContentRejectionBody(body: string): boolean {
+  const lowered = body.toLowerCase();
+  return CONTENT_REJECTION_MARKERS.some(marker => lowered.includes(marker));
+}
 
 const STYLE_PROMPT_PREFIX: Record<ImageGenerateStyle, string> = {
   photographic:
@@ -295,10 +301,10 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
   }
 
   /**
-   * 图生图 / 图片融合。端点与传图方式按来源配置分支;文生图则所有来源共用 /v1/images/generations。
+   * 图生图 / 图片融合 / 局部重绘。端点与传图方式按来源配置分支;文生图则所有来源共用 /v1/images/generations。
    *
-   * 参考图先过 sharp:统一转 PNG、按 EXIF 方向摆正、压平透明通道并剥掉元数据,
-   * 细节见 postEdit 内的注释。
+   * 参考图先过 sharp:统一转 PNG、按 EXIF 方向摆正、压平透明通道并剥掉元数据
+   * (局部重绘的透明蒙版例外 —— flatten 会把要重绘的透明区填成白色)。
    */
   private async postEdit(
     config: ImageGenerateTaskConfig,
@@ -315,89 +321,48 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       );
     }
 
-    // 局部重绘:references = [原图, 蒙版]。蒙版的透明区是要重绘的区域(OpenAI 语义),
-    // 不能压平 alpha;原图与普通图生图一样压平(wan 系拒绝带 alpha 的图)。
-    // generations_ref 传图是 JSON 数组,表达不了"哪张是蒙版",明确不支持。
-    let mask: Buffer | undefined;
-    let images = loaded;
     if (config.mode === 'inpaint') {
-      if (loaded.length !== 2) {
-        this.logger.warn(
-          `AI image inpaint requires exactly 2 inputs (image + mask), got ${loaded.length}`
-        );
-        throw new ImageGenerationError(
-          ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-          'Image generation failed'
-        );
-      }
-      if (this.editTransport === 'generations_ref') {
-        this.logger.warn(
-          `Image provider ${this.descriptor.id} cannot transport an inpaint mask over generations_ref`
-        );
-        throw new ImageGenerationError(
-          ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
-          'The selected image provider does not support this mode'
-        );
-      }
-      [images, mask] = [loaded.slice(0, 1), loaded[1]];
+      return this.postInpaint(config, loaded);
     }
+    return this.postReferencesEdit(config, loaded, config.prompt);
+  }
 
-    // 统一转 PNG(上游只认少数格式)、按 EXIF 方向摆正、压平透明通道
-    // (wan2.7 一类网关直接拒绝带 alpha 的 PNG),sharp 默认不透传元数据,
-    // 不会把用户照片里的 GPS 发给 provider。
-    const normalized = await Promise.all(
-      images.map(buffer =>
-        sharp(buffer)
-          .rotate()
-          .flatten({ background: '#ffffff' })
-          .png()
-          .toBuffer()
-      )
-    );
-    const normalizedMask = mask
-      ? await sharp(mask).rotate().png().toBuffer()
-      : undefined;
+  /** 单张参考图归一:统一 PNG、EXIF 摆正、剥元数据;默认压平透明通道(wan 系网关拒收带 alpha 的图)。 */
+  private async normalizeReference(
+    buffer: Buffer,
+    keepAlpha = false
+  ): Promise<Buffer> {
+    const pipeline = sharp(buffer).rotate();
+    return (keepAlpha ? pipeline : pipeline.flatten({ background: '#ffffff' }))
+      .png()
+      .toBuffer();
+  }
 
-    // kmage 一类网关没有 /v1/images/edits:图生图也走 generations,参考图放进 JSON 数组,
-    // 多张融合天然就是数组多放几个元素。
-    if (this.editTransport === 'generations_ref') {
-      const encoded = normalized.map(buffer => {
-        const base64 = buffer.toString('base64');
-        return this.refImageEncoding === 'base64'
-          ? base64
-          : `data:image/png;base64,${base64}`;
-      });
-      return this.postGeneration(config, {
-        [this.refImagesField]: encoded,
-      });
-    }
-
-    // 不要手写 Content-Type:multipart 的 boundary 只有 FormData 自己知道。
-    // 多图融合按重复 image 字段上传(实测 wan 系网关认这个,OpenAI 官方语义的
-    // image[] 反而会被「未知文件字段」拒掉),单图/多图同名字段,网关按出现次数收集。
+  /** multipart 编辑表单:重复 image 字段(实测 wan 系网关认这个,OpenAI 官方的 image[] 反而会被拒)。 */
+  private buildEditForm(
+    config: ImageGenerateTaskConfig,
+    images: Buffer[],
+    prompt: string
+  ): FormData {
     const form = new FormData();
     form.set('model', this.model);
-    normalized.forEach((buffer, index) => {
+    images.forEach((buffer, index) => {
       form.append(
         'image',
         new Blob([new Uint8Array(buffer)], { type: 'image/png' }),
         `source-${index + 1}.png`
       );
     });
-    if (normalizedMask) {
-      // 蒙版透明区 = 重绘区(OpenAI 语义);kmage 的 gpt-image-2 实测接受。
-      form.append(
-        'mask',
-        new Blob([new Uint8Array(normalizedMask)], { type: 'image/png' }),
-        'mask.png'
-      );
-    }
-    form.set('prompt', buildImageGenerationPrompt(config));
+    form.set('prompt', prompt);
     for (const [field, value] of this.optionalBodyFields(config)) {
       if (value === undefined) continue;
       if (!this.omitBodyFields.has(field)) form.set(field, String(value));
     }
+    return form;
+  }
 
+  private async postForm(form: FormData): Promise<Response> {
+    // 不要手写 Content-Type:multipart 的 boundary 只有 FormData 自己知道。
     return this.fetchWithTimeout(this.editUrl, {
       method: 'POST',
       headers: {
@@ -405,6 +370,142 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       },
       body: form,
     });
+  }
+
+  /**
+   * 普通图生图 / 多图融合:全部参考图原样下发,提示词用用户原文(经 style 前缀组装)。
+   * generations_ref 来源走 generations 端点的 JSON 数组。
+   */
+  private async postReferencesEdit(
+    config: ImageGenerateTaskConfig,
+    loaded: Buffer[],
+    prompt: string
+  ): Promise<Response> {
+    const normalized = await Promise.all(
+      loaded.map(buffer => this.normalizeReference(buffer))
+    );
+
+    if (this.editTransport === 'generations_ref') {
+      // postGeneration 内部会再走一次 buildImageGenerationPrompt(style 前缀),
+      // 这里只覆写 prompt 原文,避免双重前缀。
+      return this.postGeneration(
+        { ...config, prompt },
+        { [this.refImagesField]: this.encodeReferences(normalized) }
+      );
+    }
+
+    return this.postForm(
+      this.buildEditForm(
+        config,
+        normalized,
+        buildImageGenerationPrompt({ ...config, prompt })
+      )
+    );
+  }
+
+  private encodeReferences(images: Buffer[]): string[] {
+    return images.map(buffer => {
+      const base64 = buffer.toString('base64');
+      return this.refImageEncoding === 'base64'
+        ? base64
+        : `data:image/png;base64,${base64}`;
+    });
+  }
+
+  /**
+   * 局部重绘双通道,官方优先:
+   *
+   * - 3 输入 = [原图, 透明蒙版, 红标记图]:先试官方 mask 通道(image + mask,
+   *   蒙版透明区 = 重绘区,prompt 用用户原文);网关以确定性 4xx 且与内容策略
+   *   无关的方式拒绝(典型:wan 系「未知文件字段:mask」)时,回退红标记通道。
+   * - 2 输入 = [原图, 红标记图](旧格式):只走红标记通道。
+   * - 红标记通道 = 两张普通参考图 + 固定提示词前缀(IMAGE_GENERATE_INPAINT_PROMPT_PREFIX)
+   *   向模型说明红色区域的含义;generations_ref 表达不了 mask,一律走这条通道。
+   */
+  private async postInpaint(
+    config: ImageGenerateTaskConfig,
+    loaded: Buffer[]
+  ): Promise<Response> {
+    if (loaded.length !== 2 && loaded.length !== 3) {
+      this.logger.warn(
+        `AI image inpaint requires 2-3 inputs (image [mask] marked image), got ${loaded.length}`
+      );
+      throw new ImageGenerationError(
+        ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+        'Image generation failed'
+      );
+    }
+
+    const hasMask = loaded.length === 3;
+    const maskEntry = hasMask ? loaded[1] : undefined;
+    const markedEntry = loaded[hasMask ? 2 : 1];
+    const baseEntry = loaded[0];
+    if (!baseEntry || !markedEntry) {
+      throw new ImageGenerationError(
+        ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+        'Image generation failed'
+      );
+    }
+    const base = await this.normalizeReference(baseEntry);
+    const mask = maskEntry
+      ? await this.normalizeReference(maskEntry, true)
+      : undefined;
+    const marked = await this.normalizeReference(markedEntry);
+
+    // 红标记通道的提示词 = 固定前缀 + 用户原文;存量任务的 prompt 可能已带前缀,勿重复拼。
+    const markedPrompt = config.prompt.startsWith(
+      IMAGE_GENERATE_INPAINT_PROMPT_PREFIX
+    )
+      ? config.prompt
+      : `${IMAGE_GENERATE_INPAINT_PROMPT_PREFIX}${config.prompt}`;
+
+    if (this.editTransport === 'generations_ref') {
+      return this.postGeneration(
+        { ...config, prompt: markedPrompt },
+        { [this.refImagesField]: this.encodeReferences([base, marked]) }
+      );
+    }
+
+    // 官方 mask 通道优先。
+    if (mask) {
+      const form = this.buildEditForm(
+        config,
+        [base],
+        buildImageGenerationPrompt(config)
+      );
+      form.append(
+        'mask',
+        new Blob([new Uint8Array(mask)], { type: 'image/png' }),
+        'mask.png'
+      );
+
+      const response = await this.postForm(form);
+      if (response.ok) return response;
+
+      const status = response.status;
+      const body = await this.readBody(response);
+      // 回退条件:确定性 4xx 且与内容策略无关(换了通道也一样/不该再烧一次钱);
+      // 瞬时故障(5xx/408/425/429)交给任务级重试,原通道再试即可。
+      const fallbackEligible =
+        status >= 400 &&
+        status < 500 &&
+        status !== 408 &&
+        status !== 425 &&
+        status !== 429 &&
+        !isContentRejectionBody(body);
+      if (!fallbackEligible) {
+        throw this.toSanitizedError(status, body);
+      }
+
+      this.logger.warn(
+        `Inpaint mask channel rejected by provider ${this.descriptor.id} (status=${status}), falling back to marked-image channel`
+      );
+    }
+
+    // 红标记通道:双参考图 + 前缀提示词,与融合同传输。
+    return this.postForm(
+      this.buildEditForm(config, [base, marked], markedPrompt)
+    );
   }
 
   private async readBody(response: Response): Promise<string> {

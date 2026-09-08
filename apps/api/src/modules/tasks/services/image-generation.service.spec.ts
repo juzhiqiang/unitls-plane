@@ -444,7 +444,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     });
 
     const error = (await provider
-      .generate(editConfig, Buffer.from('not-an-image'))
+      .generate(editConfig, [Buffer.from('not-an-image')])
       .catch(caught => caught)) as Error;
 
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -561,8 +561,112 @@ describe('OpenAiCompatibleImageGenerationProvider (multi-image fusion)', () => {
     expect(form.getAll('image')).toHaveLength(2);
   });
 
-  /** 局部重绘:multipart 带 mask 字段,蒙版不压平 alpha。 */
-  it('posts the inpaint mask alongside the base image', async () => {
+  /** 3 输入(原图+蒙版+红标记图):官方 mask 通道优先,prompt 用用户原文。 */
+  it('posts inpaint through the official mask channel first', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await provider.generate(
+      {
+        ...config,
+        mode: 'inpaint' as const,
+        prompt: '把圈出的区域改成夜空',
+        inputFileCount: 3,
+      },
+      [await referencePng(), await referencePng(), await referencePng()]
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe('https://api.test/v1/images/edits');
+    const form = init.body as FormData;
+    expect(form.getAll('image')).toHaveLength(1);
+    expect(form.get('mask')).toBeInstanceOf(Blob);
+    expect(String(form.get('prompt'))).toBe('把圈出的区域改成夜空');
+  });
+
+  /** mask 通道被网关以确定性 4xx 拒绝(wan 系「未知文件字段:mask」)→ 回退红标记通道。 */
+  it('falls back to the marked-image channel when the mask field is rejected', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { code: 'BAD_REQUEST', message: '未知文件字段：mask' },
+          400
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+      );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const buffer = await provider.generate(
+      {
+        ...config,
+        mode: 'inpaint' as const,
+        prompt: '把圈出的区域改成夜空',
+        inputFileCount: 3,
+      },
+      [await referencePng(), await referencePng(), await referencePng()]
+    );
+
+    expect(buffer.toString('utf8')).toBe('hello');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [, retryInit] = fetchImpl.mock.calls[1] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const retryForm = retryInit.body as FormData;
+    // 回退 = 双参考图 + 固定前缀提示词,不再带 mask。
+    expect(retryForm.getAll('image')).toHaveLength(2);
+    expect(retryForm.get('mask')).toBeNull();
+    expect(String(retryForm.get('prompt'))).toMatch(
+      /^你会收到两张参考图：.*局部修改要求：把圈出的区域改成夜空$/
+    );
+  });
+
+  /** 内容策略拒绝换通道也一样,不回退(避免再烧一次上游调用)。 */
+  it('does not fall back when the mask channel hit a content policy rejection', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(
+        {
+          error: {
+            message: 'prompt was rejected by our safety system',
+            code: 'content_policy_violation',
+          },
+        },
+        400
+      )
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(
+        { ...config, mode: 'inpaint' as const, prompt: 'x', inputFileCount: 3 },
+        [await referencePng(), await referencePng(), await referencePng()]
+      )
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_CONTENT_REJECTED);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  /** 2 输入(旧格式,原图+红标记图):只走红标记通道。 */
+  it('posts legacy two-file inpaint through the marked-image channel only', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
     );
@@ -581,38 +685,48 @@ describe('OpenAiCompatibleImageGenerationProvider (multi-image fusion)', () => {
       [await referencePng(), await referencePng()]
     );
 
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
       string,
       RequestInit,
     ];
     const form = init.body as FormData;
-    expect(form.getAll('image')).toHaveLength(1);
-    expect(form.get('mask')).toBeInstanceOf(Blob);
+    expect(form.getAll('image')).toHaveLength(2);
+    expect(form.get('mask')).toBeNull();
+    expect(String(form.get('prompt'))).toMatch(
+      /局部修改要求：把圈出的区域改成夜空$/
+    );
   });
 
-  it('rejects inpaint on generations_ref providers instead of guessing', async () => {
+  it('carries both inpaint images in the refImagesField for generations_ref', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
+    );
     const provider = new OpenAiCompatibleImageGenerationProvider({
       id: 'kmage',
       baseUrl: 'https://image.dddd.zone',
       editTransport: 'generations_ref',
-      fetch: (async () => {
-        throw new Error('should not reach upstream');
-      }) as unknown as typeof fetch,
+      fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    const error = (await provider
-      .generate(
-        {
-          ...config,
-          mode: 'inpaint' as const,
-          prompt: 'x',
-          inputFileCount: 2,
-        },
-        [await referencePng(), await referencePng()]
-      )
-      .catch(caught => caught)) as ImageGenerationError;
+    await provider.generate(
+      {
+        ...config,
+        mode: 'inpaint' as const,
+        prompt: 'x',
+        inputFileCount: 3,
+      },
+      [await referencePng(), await referencePng(), await referencePng()]
+    );
 
-    expect(error.code).toBe(ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    // generations_ref 表达不了 mask:两张参考图(原图 + 红标记图)+ 前缀提示词。
+    expect(body.reference_images).toHaveLength(2);
+    expect(body.prompt).toMatch(/^你会收到两张参考图：/);
   });
 
   it('sends every reference in the refImagesField array for generations_ref', async () => {

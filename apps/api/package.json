@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "scripts": {
-    "dev": "nodemon --signal SIGTERM --watch src --ext ts --exec 'bun src/main.ts'",
+    "dev": "nodemon --signal SIGTERM --watch src --watch ../../.env.local --ext ts,local --exec 'bun src/main.ts'",
     "build": "nest build",
     "start": "bun dist/main.js",
     "openapi:export": "bun src/scripts/export-openapi.ts",

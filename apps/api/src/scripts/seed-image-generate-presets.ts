@@ -1,3 +1,6 @@
+// 必须是第一个 import:加载仓库根目录 .env.local(详见 env-loader 注释)。
+import '../env-loader';
+
 import { Logger } from '@nestjs/common';
 import {
   S3Client,

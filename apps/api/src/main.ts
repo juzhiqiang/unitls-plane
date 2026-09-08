@@ -1,10 +1,7 @@
-import * as path from 'node:path';
-import * as dotenv from 'dotenv';
-import compression from 'compression';
+// 必须是第一个 import:加载仓库根目录 .env.local(详见 env-loader 注释)。
+import './env-loader';
 
-const repoRoot = path.resolve(__dirname, '../../..');
-dotenv.config({ path: path.join(repoRoot, '.env.local') });
-dotenv.config({ path: path.join(repoRoot, '.env') });
+import compression from 'compression';
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';

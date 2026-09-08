@@ -1584,6 +1584,41 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.7.0",
+          "date": "2026-09-08",
+          "title": "AI image generation rebuilt as a chat-style workbench",
+          "summary": "The AI image generation page is rebuilt around conversations: session history on the left, a message stream in the middle, and a composer at the bottom. Multi-image fusion, brush-based region editing, more aspect ratios, transparent backgrounds, and the Beta Pioneer tier arrive in this release, alongside quota and interaction polish.",
+          "groups": [
+            {
+              "title": "New features",
+              "items": [
+                "Chat-style image generation workbench: session history sidebar (new chat, search, delete), message stream, and bottom composer; user and assistant avatars, results as thumbnails with click-to-enlarge.",
+                "Multi-image fusion: attach up to 4 reference images in one generation, via file picker, paste, or drag-and-drop.",
+                "Region editing: paint or drag a rectangle over the area to regenerate, with per-step undo (Ctrl+Z supported); prefers the official mask channel and falls back to the marked-image approach when the gateway rejects masks; edited results offer a before/after comparison slider.",
+                "Four new aspect ratios (3:4, 4:3, 9:16, 16:9), plus transparent background and auto quality options.",
+                "New Beta Pioneer (Beta Preview) tier: files up to 80MB and 30 AI generations per day."
+              ]
+            },
+            {
+              "title": "Improvements",
+              "items": [
+                "The composer and reference images clear automatically after a successful submission; input is kept when nothing was created so you can retry directly.",
+                "Failed generations refund the daily quota immediately and the remaining count updates in real time.",
+                "New messages scroll to the bottom automatically; scrolling up through history is never interrupted.",
+                "The settings panel collapses when clicking outside of it; Esc works too."
+              ]
+            },
+            {
+              "title": "Bug fixes",
+              "items": [
+                "Fixed the image generation page failing to open on IP + HTTP deployments (missing random UUID API in insecure contexts).",
+                "Fixed the region editor keeping strokes from the previous session when reopened.",
+                "Fixed the session list scrollbar scrolling together with the message stream."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.6.0",
           "date": "2026-08-28",
           "title": "More generation providers and a fixed result hand-off",

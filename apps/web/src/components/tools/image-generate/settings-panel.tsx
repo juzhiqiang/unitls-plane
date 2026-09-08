@@ -20,14 +20,6 @@ interface SettingsPanelProps {
   quotaRemaining?: number;
 }
 
-/** 模型名后的能力后缀:支持图生图(含融合) / 仅文生图。 */
-function capabilityLabel(capabilities: Array<'generate' | 'edit' | 'inpaint'>) {
-  const t = useTranslations('ImageGenerate');
-  return capabilities.includes('edit')
-    ? t('providerCapEdit')
-    : t('providerCapTextOnly');
-}
-
 /** chips 单选项,样式沿用旧 RadioRow 的胶囊模式(sr-only radio + has-checked 边框)。 */
 function ChipRow<T extends string | number>({  legend,
   options,
@@ -84,6 +76,11 @@ export function SettingsPanel({
   quotaRemaining,
 }: SettingsPanelProps) {
   const t = useTranslations('ImageGenerate');
+  /** 模型名后的能力后缀:支持图生图(含融合) / 仅文生图。 */
+  const capabilityText = (capabilities: Array<'generate' | 'edit' | 'inpaint'>) =>
+    capabilities.includes('edit')
+      ? t('providerCapEdit')
+      : t('providerCapTextOnly');
 
   // 画面比例档位由当前来源的 sizes 派生(自动 + 每个 WxH 约分后的比例标签);
   // 选中值始终存原始 size 串,提交时不需要二次换算。
@@ -111,7 +108,7 @@ export function SettingsPanel({
               <span className="truncate">
                 {selectedProvider?.label ?? value.providerId}
                 <span className="ml-1 text-xs text-muted-foreground">
-                  {capabilityLabel(selectedProvider?.capabilities ?? [])}
+                  {capabilityText(selectedProvider?.capabilities ?? [])}
                 </span>
               </span>
               <span aria-hidden className="text-muted-foreground">▾</span>
@@ -124,7 +121,7 @@ export function SettingsPanel({
                 >
                   <span className="truncate">{provider.label}</span>
                   <span className="ml-auto pl-2 text-xs text-muted-foreground">
-                    {capabilityLabel(provider.capabilities)}
+                    {capabilityText(provider.capabilities)}
                   </span>
                 </DropdownMenuItem>
               ))}

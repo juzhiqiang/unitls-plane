@@ -40,6 +40,7 @@ import {
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DialogTitle } from '@/components/ui/dialog';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
+import { randomUUID } from '@/lib/random-uuid';
 
 const TOOL_HREF = '/image/generate';
 
@@ -122,7 +123,7 @@ export default function ImageGeneratePage() {
 
   // 会话:新对话在本地生成 uuid,提交首个任务后才出现在服务端列表里。
   const [newSessionId, setNewSessionId] = useState(() =>
-    globalThis.crypto.randomUUID()
+    randomUUID()
   );
   const [activeSessionId, setActiveSessionId] = useState(newSessionId);
   const [draft, setDraft] = useState<ImageGenerateChatDraft>(INITIAL_DRAFT);
@@ -207,7 +208,7 @@ export default function ImageGeneratePage() {
   }, [messageGroups]);
 
   const startNewChat = () => {
-    const id = globalThis.crypto.randomUUID();
+    const id = randomUUID();
     setNewSessionId(id);
     setActiveSessionId(id);
     setReferenceFiles([]);
@@ -228,7 +229,7 @@ export default function ImageGeneratePage() {
 
     const mode =
       referenceFiles.length > 0 ? 'image_to_image' : 'text_to_image';
-    const clientGroupId = globalThis.crypto.randomUUID();
+    const clientGroupId = randomUUID();
     const prompt = draft.prompt.trim();
     // 草稿尺寸(默认 auto)不在当前来源支持列表时回落到第一档,免得提交一个
     // 会在 processor 被尺寸交叉校验拒掉的值。
@@ -350,7 +351,7 @@ export default function ImageGeneratePage() {
   }) => {
     if (requireLogin(TOOL_HREF) || !editingImageUrl) return;
 
-    const clientGroupId = globalThis.crypto.randomUUID();
+    const clientGroupId = randomUUID();
     // inputConfig.prompt 存用户原文:后端默认走官方 mask 通道(无需前缀),
     // 网关拒绝 mask 时才回退红标记通道并自行拼固定前缀。
     setFailure(null);

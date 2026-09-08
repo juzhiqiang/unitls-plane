@@ -32,7 +32,11 @@ import type {
   GenerationMessageTask,
   ImageGenerateChatDraft,
 } from '@/components/tools/image-generate/types';
-import { resolveDraftSize } from '@/components/tools/image-generate/types';
+import {
+  INPAINT_PROMPT_PREFIX,
+  resolveDraftSize,
+  stripInpaintPromptPrefix,
+} from '@/components/tools/image-generate/types';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DialogTitle } from '@/components/ui/dialog';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
@@ -71,11 +75,13 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
     // 旧客户端的任务没有 clientGroupId,单任务自成一组。
     const clientGroupId =
       typeof config.clientGroupId === 'string' ? config.clientGroupId : task.id;
-    const prompt = typeof config.prompt === 'string' ? config.prompt : '';
+    const rawPrompt = typeof config.prompt === 'string' ? config.prompt : '';
     const mode =
       config.mode === 'image_to_image' || config.mode === 'inpaint'
         ? config.mode
         : 'text_to_image';
+    // inpaint 的 prompt 带固定前缀(发给上游用的),气泡里只显示用户输入的部分。
+    const prompt = stripInpaintPromptPrefix(rawPrompt, mode);
     const entry: GenerationMessageTask = {
       taskId: task.id,
       status: task.status,
@@ -331,11 +337,13 @@ export default function ImageGeneratePage() {
    */
   const submitInpaint = async ({
     maskBlob,
+    markedBlob,
     prompt,
     width,
     height,
   }: {
     maskBlob: Blob;
+    markedBlob: Blob;
     prompt: string;
     width: number;
     height: number;
@@ -343,6 +351,8 @@ export default function ImageGeneratePage() {
     if (requireLogin(TOOL_HREF) || !editingImageUrl) return;
 
     const clientGroupId = globalThis.crypto.randomUUID();
+    // inputConfig.prompt 存用户原文:后端默认走官方 mask 通道(无需前缀),
+    // 网关拒绝 mask 时才回退红标记通道并自行拼固定前缀。
     setFailure(null);
     setInpaintBusy(true);
     setOptimistic({
@@ -367,13 +377,20 @@ export default function ImageGeneratePage() {
       const maskFile = new File([maskBlob], 'inpaint-mask.png', {
         type: 'image/png',
       });
+      const markedFile = new File([markedBlob], 'inpaint-marked.png', {
+        type: 'image/png',
+      });
 
-      // 上传顺序即语义顺序:inputFileIds = [原图, 蒙版]。
+      // 上传顺序即语义顺序:inputFileIds = [原图, 透明蒙版, 红标记图],
+      // 后端先走官方 mask 通道,被拒时用红标记图回退。
       const baseUploaded = (await uploadFile.mutateAsync(
         baseFile
       )) as unknown as { id: string };
       const maskUploaded = (await uploadFile.mutateAsync(
         maskFile
+      )) as unknown as { id: string };
+      const markedUploaded = (await uploadFile.mutateAsync(
+        markedFile
       )) as unknown as { id: string };
 
       setOptimistic(current =>
@@ -387,7 +404,7 @@ export default function ImageGeneratePage() {
 
       await createTask.mutateAsync({
         type: 'image_generate',
-        inputFileIds: [baseUploaded.id, maskUploaded.id],
+        inputFileIds: [baseUploaded.id, maskUploaded.id, markedUploaded.id],
         inputConfig: {
           mode: 'inpaint',
           prompt,

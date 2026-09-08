@@ -15,8 +15,10 @@ type Stroke =
   | { type: 'rect'; x: number; y: number; width: number; height: number };
 
 export interface MaskEditorSubmitPayload {
-  /** 蒙版 PNG:透明区 = 要重绘的区域(OpenAI 语义),与原图同尺寸。 */
+  /** 透明蒙版 PNG:透明区 = 要重绘的区域(官方 mask 通道用)。 */
   maskBlob: Blob;
+  /** 带红色标记的原图(与用户在画布上看到的选区一致),回退通道的第二张参考图。 */
+  markedBlob: Blob;
   prompt: string;
   width: number;
   height: number;
@@ -32,11 +34,12 @@ interface MaskEditorProps {
 }
 
 /**
- * 局部重绘蒙版编辑器:画笔涂抹或矩形圈选标记重绘区域。
+ * 局部重绘圈选编辑器:画笔涂抹或矩形圈选标记重绘区域。
  *
- * - 每一笔(一次涂抹/一个矩形)是一个可撤销步骤,撤销弹栈、清空归零;
- * - 显示层用半透明红色描出选区,导出层用 destination-out 在白底上挖出透明区;
- * - canvas 内部尺寸 = 原图原始尺寸,蒙版与原图逐像素对齐(mask 尺寸必须与原图一致)。
+ * - 每一笔(一次涂抹/一个矩形)是一个可撤销步骤,撤销弹栈、清空归零(含 Ctrl/Cmd+Z);
+ * - 选区以半透明红显示,提交时导出「原图 + 红色标记」整图作为第二张参考图,
+ *   由提示词前缀(page 的 INPAINT_PROMPT_PREFIX)向模型说明红色区域的含义;
+ * - canvas 内部尺寸 = 原图原始尺寸,标记与原图逐像素对齐。
  */
 export function MaskEditor({
   open,
@@ -57,13 +60,11 @@ export function MaskEditor({
   // 正在画的那一笔:未提交前不进 strokes,这样"步骤撤销"的粒度就是完整的一笔。
   const drawingRef = useRef<Stroke | null>(null);
 
-  /** 把一笔画到 ctx。display=true 用半透明红;false 时假定 ctx 已配置 destination-out。 */
+  /** 把一笔画到 ctx。style 决定画法:红标记(预览与红标记图)或纯色(蒙版导出时配合 destination-out)。 */
   const drawStroke = useCallback(
-    (ctx: CanvasRenderingContext2D, stroke: Stroke, display: boolean) => {
-      if (display) {
-        ctx.fillStyle = 'rgba(239,68,68,0.45)';
-        ctx.strokeStyle = 'rgba(239,68,68,0.45)';
-      }
+    (ctx: CanvasRenderingContext2D, stroke: Stroke, style: 'red' | 'plain') => {
+      ctx.fillStyle = style === 'red' ? 'rgba(239,68,68,0.45)' : '#ffffff';
+      ctx.strokeStyle = style === 'red' ? 'rgba(239,68,68,0.45)' : '#ffffff';
       if (stroke.type === 'brush') {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -97,7 +98,7 @@ export function MaskEditor({
     const all = drawingRef.current
       ? [...strokes, drawingRef.current]
       : strokes;
-    for (const stroke of all) drawStroke(ctx, stroke, true);
+    for (const stroke of all) drawStroke(ctx, stroke, 'red');
   }, [strokes, drawStroke]);
 
   useEffect(() => {
@@ -172,26 +173,49 @@ export function MaskEditor({
 
   const submit = async () => {
     if (strokes.length === 0 || prompt.trim().length === 0) return;
+    const image = imageRef.current;
     const { width, height } = imageSize;
-    if (!width || !height) return;
+    if (!image || !width || !height) return;
 
-    // 导出蒙版:白底不透明,选区用 destination-out 挖成透明(= 重绘区域)。
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = width;
-    exportCanvas.height = height;
-    const ctx = exportCanvas.getContext('2d');
-    if (!ctx) return;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-    ctx.globalCompositeOperation = 'destination-out';
-    for (const stroke of strokes) drawStroke(ctx, stroke, false);
+    // 同时导出两份,后端按网关能力选择通道:
+    // 1. 透明蒙版(官方 mask 通道):白底不透明,选区用 destination-out 挖成透明;
+    // 2. 带红色标记的原图(回退通道):原图打底 + 红色选区,所见即所得。
+    const toBlob = (canvas: HTMLCanvasElement) =>
+      new Promise<Blob | null>(resolve =>
+        canvas.toBlob(resolve, 'image/png')
+      );
 
-    const maskBlob = await new Promise<Blob | null>(resolve =>
-      exportCanvas.toBlob(resolve, 'image/png')
-    );
-    if (!maskBlob) return;
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const maskCtx = maskCanvas.getContext('2d');
+    if (!maskCtx) return;
+    maskCtx.fillStyle = '#ffffff';
+    maskCtx.fillRect(0, 0, width, height);
+    maskCtx.globalCompositeOperation = 'destination-out';
+    for (const stroke of strokes) drawStroke(maskCtx, stroke, 'plain');
 
-    onSubmit({ maskBlob, prompt: prompt.trim(), width, height });
+    const markedCanvas = document.createElement('canvas');
+    markedCanvas.width = width;
+    markedCanvas.height = height;
+    const markedCtx = markedCanvas.getContext('2d');
+    if (!markedCtx) return;
+    markedCtx.drawImage(image, 0, 0, width, height);
+    for (const stroke of strokes) drawStroke(markedCtx, stroke, 'red');
+
+    const [maskBlob, markedBlob] = await Promise.all([
+      toBlob(maskCanvas),
+      toBlob(markedCanvas),
+    ]);
+    if (!maskBlob || !markedBlob) return;
+
+    onSubmit({
+      maskBlob,
+      markedBlob,
+      prompt: prompt.trim(),
+      width,
+      height,
+    });
   };
 
   return (

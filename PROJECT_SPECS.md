@@ -210,7 +210,7 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   `POST /v1/images/generations`，参考图以 data URL 放进 `refImagesField` 数组（`image.dddd.zone`
   一类网关没有 `/v1/images/edits`）。两者都是
   `n=1`，一张图对应一个任务，参考图先经 sharp 统一转 PNG、压平透明通道并剥掉原图元数据。多图融合按重复 `image` 字段上传（实测 wan 系网关认这个，OpenAI 官方的 `image[]` 反而会被拒）。
-- 局部重绘（inpaint）已实现：前端在结果图上用画笔/矩形圈选蒙版（每步可撤销），`inputFileIds = [原图, 蒙版]`，multipart 走 `image` + `mask` 字段（蒙版透明区 = 重绘区，OpenAI 语义；kmage 的 gpt-image-2 实测可用）。`generations_ref` 传图表达不了蒙版，明确以 `AI_IMAGE_PROVIDER_UNAVAILABLE` 拒绝。来源能力位 `inpaint` 需显式声明（默认不含；wan 系网关的 edits 端点不认 `mask` 字段）。
+- 局部重绘（inpaint）已实现，双通道官方优先：前端在结果图上圈选（每步可撤销，Ctrl/Cmd+Z），`inputFileIds = [原图, 透明蒙版, 红标记图]`，`inputConfig.prompt` 存用户原文。后端先走官方 mask 通道（`image` + `mask`，透明区=重绘区，无需前缀）；网关以确定性 4xx 且非内容策略的方式拒绝 mask 字段时（如 wan 系「未知文件字段：mask」）自动回退红标记通道（双参考图 + 固定提示词前缀 `IMAGE_GENERATE_INPAINT_PROMPT_PREFIX`，由 validators 包共享，存量 2 输入旧格式任务与 `generations_ref` 来源一律直接走红标记通道）。内容策略拒绝与瞬时故障（5xx/408/425/429）不回退，交给任务级重试。来源能力位 `inpaint` 需显式声明（默认不含）。
 - `GET /tasks/image-generate/providers` 返回可用来源，需登录，只下发 `id` / `label` /
   `capabilities` / `sizes`；`baseUrl` 与 `apiKey` 属于服务端配置，不出网。前端只有一个来源时不展示模型行。
 - 前端把选中的来源作为 `inputConfig.providerId`

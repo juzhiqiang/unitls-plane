@@ -153,6 +153,7 @@ vi.mock('@/components/tools/image-generate/mask-editor', () => ({
     open: boolean;
     onSubmit: (payload: {
       maskBlob: Blob;
+      markedBlob: Blob;
       prompt: string;
       width: number;
       height: number;
@@ -166,6 +167,7 @@ vi.mock('@/components/tools/image-generate/mask-editor', () => ({
             onClick: () =>
               onSubmit({
                 maskBlob: new Blob(['mask-bytes']),
+                markedBlob: new Blob(['marked-bytes']),
                 prompt: 'make it a night sky',
                 width: 1024,
                 height: 1024,
@@ -780,10 +782,13 @@ describe('ImageGeneratePage', () => {
     const [payload] = mocks.createTask.mock.calls[1];
     expect(payload).toMatchObject({
       type: 'image_generate',
-      inputFileIds: ['file-101', 'file-102'],
+      // [原图, 透明蒙版, 红标记图]:后端先走官方 mask 通道,被拒时用红标记图回退。
+      inputFileIds: ['file-101', 'file-102', 'file-103'],
     });
     expect(payload.inputConfig).toMatchObject({
       mode: 'inpaint',
+      // 提示词 = 固定前缀(向模型说明两张参考图与红色标记含义) + 用户输入。
+      // 提示词存用户原文:官方 mask 通道无需前缀,回退时由后端拼固定前缀。
       prompt: 'make it a night sky',
       // 原始 1024x1024 在来源 sizes 里,原样下发。
       size: '1024x1024',

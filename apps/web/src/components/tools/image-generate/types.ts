@@ -1,4 +1,5 @@
 import type { ImageGenerateBackground, ImageGenerateQuality } from '@utils-plane/validators';
+import { IMAGE_GENERATE_INPAINT_PROMPT_PREFIX } from '@utils-plane/validators';
 
 /**
  * 对话式生图页的输入草稿。
@@ -26,7 +27,7 @@ export interface GenerationMessageGroup {
   mode: 'text_to_image' | 'image_to_image' | 'inpaint';
   /**
    * 图生图/融合时的参考图 fileId 列表(已上传),消息里显示缩略图用;
-   * inpaint 时是 [原图, 蒙版],第一个元素是编辑底图(对比弹窗的"前")。
+   * inpaint 时是 [原图, 带红色标记的原图],第一个元素是编辑底图(对比弹窗的"前")。
    */
   referenceFileIds: string[];
   taskIds: string[];
@@ -41,6 +42,20 @@ export interface GenerationMessageTask {
   progress?: number;
   outputFileId?: string;
   errorCode?: string;
+}
+
+/**
+ * 兼容别名:局部重绘红标记通道的固定提示词前缀已上收到 @utils-plane/validators
+ * (前后端共享同一份措辞,回退通道由后端拼接;展示层用它剥离存量任务里的前缀)。
+ */
+export const INPAINT_PROMPT_PREFIX = IMAGE_GENERATE_INPAINT_PROMPT_PREFIX;
+
+/** inpaint 消息展示时剥掉固定前缀,只给用户看自己输入的部分。 */
+export function stripInpaintPromptPrefix(prompt: string, mode: string): string {
+  if (mode !== 'inpaint') return prompt;
+  return prompt.startsWith(INPAINT_PROMPT_PREFIX)
+    ? prompt.slice(INPAINT_PROMPT_PREFIX.length)
+    : prompt;
 }
 
 /** 由 size 串派生画面比例标签:"1024x1536" → "2:3";无法解析时回退原串。 */

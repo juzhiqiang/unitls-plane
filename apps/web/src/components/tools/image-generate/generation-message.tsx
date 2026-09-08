@@ -252,7 +252,9 @@ export function GenerationMessage({
                         : t('enlargeResult')
                     }
                     onClick={() => {
-                      if (group.mode === 'inpaint' && baseImageForCompare) {
+                      // inpaint 无条件开对比弹窗:底图预览是异步取回的,若在这里等它,
+                      // 首次点击会误入放大预览分支,用户要再点一次才能看到对比。
+                      if (group.mode === 'inpaint') {
                         setCompareOpen(true);
                       } else {
                         setLightbox({
@@ -320,7 +322,7 @@ export function GenerationMessage({
         </div>
       </div>
 
-      {/* inpaint 结果的前后对比弹窗:底图 vs 结果。 */}
+      {/* inpaint 结果的前后对比弹窗:底图 vs 结果。底图异步取回,未就绪时给占位。 */}
       <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
         <DialogContent
           closeLabel={t('lightboxClose')}
@@ -329,12 +331,21 @@ export function GenerationMessage({
           <DialogTitle className="sr-only">
             {t('compareEditedTitle')}
           </DialogTitle>
-          {baseImageForCompare && firstUrl && (
+          {baseImageForCompare && firstUrl ? (
             <ImageGenerateCompare
               beforeUrl={baseImageForCompare}
               afterUrl={firstUrl}
               title={t('compareEditedTitle')}
             />
+          ) : (
+            <div
+              role="status"
+              className="flex h-64 items-center justify-center"
+            >
+              <span className="animate-pulse font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                {t('resultFetching')}
+              </span>
+            </div>
           )}
         </DialogContent>
       </Dialog>

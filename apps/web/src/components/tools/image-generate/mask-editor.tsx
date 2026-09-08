@@ -158,6 +158,19 @@ export function MaskEditor({
 
   const undo = () => setStrokes(previous => previous.slice(0, -1));
 
+  // 每次打开都从干净状态开始:编辑器组件常驻挂载,上次会话的笔画/提示词若不重置
+  // 会残留到新图上;且画布随 Dialog 卸载重建后重绘 effect 不会重跑(依赖未变),
+  // 残留笔画要等下一次落笔触发 redraw 才突然冒出来 —— 必须在开门沿清空。
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setStrokes([]);
+      setPrompt('');
+      drawingRef.current = null;
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
   // Ctrl/Cmd+Z 撤销一步:编辑器的核心交互,除了按钮还要给键盘快捷键。
   useEffect(() => {
     if (!open) return;

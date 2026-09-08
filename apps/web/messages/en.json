@@ -887,6 +887,7 @@
     "presetExampleAlt": "{title} example",
     "providerHint": "Sources use different models, so output style and capabilities differ; results are always saved to your account files.",
     "providerNoEditHint": "The selected source does not support image to image. Pick another source.",
+    "providerNoInpaintHint": "The selected source does not support region editing. Switch the model in generation settings (e.g. KMage) and try again.",
     "sourcePreviewAlt": "Reference image preview",
     "uploadFailed": "Uploading the reference image failed. Please try again.",
     "referenceTooLarge": "The reference image exceeds the size limit. Pick a smaller one.",

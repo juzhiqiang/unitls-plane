@@ -157,6 +157,19 @@ export function MaskEditor({
 
   const undo = () => setStrokes(previous => previous.slice(0, -1));
 
+  // Ctrl/Cmd+Z 撤销一步:编辑器的核心交互,除了按钮还要给键盘快捷键。
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        setStrokes(previous => previous.slice(0, -1));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
   const submit = async () => {
     if (strokes.length === 0 || prompt.trim().length === 0) return;
     const { width, height } = imageSize;

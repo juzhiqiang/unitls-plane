@@ -57,7 +57,10 @@ interface GenerationMessageProps {
   previews: Record<string, TaskOutputPreview>;
   /** 单张取回失败时给「重试取回」而不是重新生成。 */
   onRetryFetch: (taskId: string, outputFileId: string) => void;
-  /** 来源支持局部重绘时提供编辑入口(undefined = 不出现编辑按钮)。 */
+  /**
+   * 局部重绘入口:常显(来源不支持时由页面给切换引导),undefined = 完全不出
+   * (只有一种情况:连来源列表都还没回来)。
+   */
   onEditImage?: (url: string) => void;
 }
 
@@ -241,14 +244,14 @@ export function GenerationMessage({
                     />
                   </button>
 
-                  {/* 局部重绘入口:来源支持时 hover 出现。 */}
+                  {/* 局部重绘入口:常显(触摸设备没有 hover,来源不支持时点击给引导)。 */}
                   {onEditImage && (
                     <button
                       type="button"
                       aria-label={t('editImage')}
                       title={t('editImage')}
                       onClick={() => onEditImage(preview.url!)}
-                      className="absolute left-2 top-2 rounded-md bg-background/90 p-1.5 text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
+                      className="absolute left-2 top-2 rounded-md bg-background/90 p-1.5 text-foreground shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -257,7 +260,7 @@ export function GenerationMessage({
                   <a
                     href={preview.url}
                     download={`ai-image-${index + 1}.png`}
-                    className="absolute bottom-2 right-2 rounded-md bg-background/90 px-2 py-1 text-xs text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
+                    className="absolute bottom-2 right-2 rounded-md bg-background/90 px-2 py-1 text-xs text-foreground shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100"
                   >
                     {t('downloadImage')}
                   </a>

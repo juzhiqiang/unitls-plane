@@ -772,7 +772,7 @@ describe('ImageGeneratePage', () => {
     });
   });
 
-  it('hides the edit entry when the provider has no inpaint capability', async () => {
+  it('keeps the edit entry visible without inpaint support and shows a hint', async () => {
     const { rerender } = renderPage();
     setPrompt('a shiba inu');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
@@ -787,9 +787,11 @@ describe('ImageGeneratePage', () => {
     });
     rerender();
 
+    // 入口常显:不支持时点击给「换来源」引导,而不是让功能凭空消失。
+    fireEvent.click(screen.getByRole('button', { name: 'Edit region' }));
     expect(
-      screen.queryByRole('button', { name: 'Edit region' })
-    ).not.toBeInTheDocument();
+      screen.getByText(/does not support region editing/)
+    ).toBeInTheDocument();
   });
 
   it('opens a before/after compare dialog when clicking an inpaint result', async () => {

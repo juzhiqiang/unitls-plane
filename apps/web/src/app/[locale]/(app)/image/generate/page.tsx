@@ -145,9 +145,18 @@ export default function ImageGeneratePage() {
   const editSupported =
     !selectedProvider || selectedProvider.capabilities.includes('edit');
   // 局部重绘依赖来源的 mask 传输能力(wan 系网关没有,kmage 的 gpt-image-2 有):
-  // 不支持时编辑入口整体不出现,而不是点了才报错。
+  // 入口始终展示,不支持的来源点击时给「换来源」引导,而不是让功能凭空消失。
   const inpaintSupported =
     !selectedProvider || selectedProvider.capabilities.includes('inpaint');
+
+  /** 编辑入口统一走这里:支持的来源打开编辑器,不支持的给切换引导。 */
+  const handleEditImage = (url: string) => {
+    if (inpaintSupported) {
+      setEditingImageUrl(url);
+    } else {
+      setFailure({ key: 'providerNoInpaintHint' });
+    }
+  };
 
   // 新会话在服务端没有任务,query 返回空列表,与「未启用」效果一致,无需额外门控。
   const sessionTasksQuery = useImageGenerateSessionTasks(activeSessionId);
@@ -478,7 +487,7 @@ export default function ImageGeneratePage() {
             onRetryFetch={(taskId, outputFileId) =>
               void output.load(taskId, outputFileId)
             }
-            onEditImage={inpaintSupported ? setEditingImageUrl : undefined}
+            onEditImage={handleEditImage}
           />
         ))}
         {failure && <SystemNotice message={t(failure.key)} onRetry={submit} />}
@@ -487,8 +496,10 @@ export default function ImageGeneratePage() {
     );
 
   return (
-    // 负 margin 吃掉 (app) main 的 padding:对话页需要贴边的全高布局。
-    <div className="-m-4 flex min-h-0 flex-1 overflow-hidden lg:-m-6">
+    // 负 margin 吃掉 (app) main 的 padding;高度取「视口 − header(3.5rem) − main 上下 padding」:
+    // 必须是确定高度而不是 flex-1 自适应 —— 否则内容(长消息流/会话列表)会把整页撑高,
+    // 浏览器窗口滚动条出现,会话列表跟着内容区一起滚(两者都被窗口滚动带着走)。
+    <div className="-m-4 flex h-[calc(100dvh-3.5rem-2rem)] overflow-hidden lg:-m-6 lg:h-[calc(100dvh-3.5rem-3rem)]">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border lg:flex">
         {sidebar}
       </aside>

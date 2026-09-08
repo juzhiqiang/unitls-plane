@@ -55,7 +55,44 @@ export function PromptComposer({
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 设置面板与触发按钮:点击这两者之外的任何地方都收起面板。
+  const settingsWrapRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const referenceUrls = useObjectUrls(referenceFiles);
+
+  // 点外部 / Esc 收起设置面板。用 mousedown 而不是 click:面板内的下拉菜单
+  // (Radix)会在 click 前把自己关掉并移出 DOM,那时 contains 判定已失真。
+  useEffect(() => {
+    if (!settingsOpen) return;
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (settingsWrapRef.current?.contains(target)) return;
+      // 触发按钮本身交给它的 onClick 处理 toggle,这里放行避免关了又立刻开。
+      if (settingsButtonRef.current?.contains(target)) return;
+      // Radix 的下拉内容渲染在 portal(body 下),不在 wrap 里:按 data 属性放行。
+      if (
+        target instanceof Element &&
+        target.closest('[data-radix-popper-content-wrapper]')
+      ) {
+        return;
+      }
+      setSettingsOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false);
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [settingsOpen]);
 
   // 自动增高:每次内容变化后重置高度再按 scrollHeight 撑开,上限 10rem。
   useEffect(() => {
@@ -125,13 +162,15 @@ export function PromptComposer({
       }}
     >
       {settingsOpen && (
-        <SettingsPanel
-          value={draft}
-          onChange={onDraftChange}
-          disabled={busy}
-          providers={providers}
-          quotaRemaining={quota?.remaining}
-        />
+        <div ref={settingsWrapRef}>
+          <SettingsPanel
+            value={draft}
+            onChange={onDraftChange}
+            disabled={busy}
+            providers={providers}
+            quotaRemaining={quota?.remaining}
+          />
+        </div>
       )}
 
       <div
@@ -231,6 +270,7 @@ export function PromptComposer({
           />
 
           <button
+            ref={settingsButtonRef}
             type="button"
             aria-label={t('settingsTitle')}
             aria-pressed={settingsOpen}

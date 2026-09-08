@@ -488,6 +488,7 @@ export default function ImageGeneratePage() {
               void output.load(taskId, outputFileId)
             }
             onEditImage={handleEditImage}
+            user={session?.user}
           />
         ))}
         {failure && <SystemNotice message={t(failure.key)} onRetry={submit} />}

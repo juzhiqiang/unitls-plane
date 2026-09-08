@@ -818,6 +818,37 @@ describe('ImageGeneratePage', () => {
     expect(await screen.findByTestId('compare-slider')).toBeInTheDocument();
   });
 
+  it('renders user and assistant avatars around each message', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    syncServerTasks(rerender);
+
+    // 用户侧回落到首字母(mock session 没有 name/email/image → 'U'),AI 侧是星芒标记。
+    expect(screen.getByText('U')).toBeInTheDocument();
+    expect(screen.getByLabelText('AI generated')).toBeInTheDocument();
+  });
+
+  it('closes the settings panel when clicking outside of it', () => {
+    renderPage();
+    openSettings();
+    expect(screen.getByText('Aspect ratio')).toBeInTheDocument();
+
+    // 点面板与触发按钮之外的地方(这里用 document.body)应收起面板。
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText('Aspect ratio')).not.toBeInTheDocument();
+  });
+
+  it('closes the settings panel on Escape', () => {
+    renderPage();
+    openSettings();
+    expect(screen.getByText('Aspect ratio')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('Aspect ratio')).not.toBeInTheDocument();
+  });
+
   it('fills the prompt when picking a template from the empty state', () => {
     renderPage();
 

@@ -921,6 +921,8 @@
     "compareTitle": "Before / after",
     "compareToggle": "Compare with reference",
     "enlargeResult": "Enlarge image",
+    "userAvatarAlt": "Your avatar",
+    "assistantAvatarAlt": "AI generated",
     "editImage": "Edit region",
     "compareEditedTitle": "Before / after edit",
     "editorTitle": "Mark the region to edit",

@@ -921,6 +921,8 @@
     "compareTitle": "改动对比",
     "compareToggle": "对比原图",
     "enlargeResult": "放大查看",
+    "userAvatarAlt": "我的头像",
+    "assistantAvatarAlt": "AI 生成",
     "editImage": "局部修改",
     "compareEditedTitle": "修改前后对比",
     "editorTitle": "圈选要修改的区域",

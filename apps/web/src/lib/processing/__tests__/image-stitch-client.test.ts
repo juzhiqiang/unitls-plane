@@ -183,7 +183,7 @@ describe('image stitch client helpers', () => {
     );
 
     expect(source).toContain(
-      'const { data: session, isPending: sessionLoading } = authClient.useSession();'
+      'const { session, sessionLoading, requireLogin } = useRequireLogin();'
     );
     expect(source).toContain(
       'const controlsDisabled = processing || sessionLoading;'

@@ -25,12 +25,16 @@ const { AuthGuard } = await import('./auth.guard');
 function createContext(
   request: Record<string, unknown>,
   handler: (...args: never[]) => unknown = vi.fn(),
-  controller: object = class TestController {}
+  controller: object = class TestController {},
+  response: Record<string, unknown> = {}
 ) {
   return {
     getHandler: () => handler,
     getClass: () => controller,
-    switchToHttp: () => ({ getRequest: () => request }),
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => response,
+    }),
   };
 }
 
@@ -50,13 +54,18 @@ it('rejects a stale cookie-cache session after the database session is gone', as
   const context = {
     getHandler: vi.fn(),
     getClass: vi.fn(),
-    switchToHttp: () => ({ getRequest: () => request }),
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => ({}),
+    }),
   };
   const reflector = { getAllAndOverride: vi.fn(() => false) };
   const guard = new AuthGuard(reflector as never);
   const getSession = vi
     .spyOn(auth.api, 'getSession')
     .mockResolvedValue(cachedSession as never);
+
+  verifySession.mockResolvedValue(null);
 
   await expect(guard.canActivate(context as never)).rejects.toBeInstanceOf(
     UnauthorizedException
@@ -96,7 +105,7 @@ it('keeps resolving optional sessions for ordinary public routes', async () => {
     user: { id: 'user-1', email: 'owner@example.com' },
     session: { id: 'session-1', userId: 'user-1' },
   };
-  verifySession.mockResolvedValue(session);
+  verifySession.mockResolvedValue({ session, headers: undefined });
   const reflector = {
     getAllAndOverride: vi.fn((key: string) => key === IS_PUBLIC_KEY),
   };
@@ -127,4 +136,104 @@ it('allows health requests without verifying a rejecting cookie session', async 
 
   expect(verifySession).not.toHaveBeenCalled();
   expect(request).not.toHaveProperty('user');
+});
+
+it('forwards renewal set-cookie headers from verifySession to the response', async () => {
+  const request: Record<string, unknown> = {
+    headers: { cookie: 'better-auth.session_token=active-token' },
+  };
+  const renewalHeaders = new Headers();
+  renewalHeaders.append(
+    'set-cookie',
+    'better-auth.session_token=renewed-token; Path=/; HttpOnly; SameSite=Lax'
+  );
+  renewalHeaders.append(
+    'set-cookie',
+    'better-auth.session_data=renewed-data; Path=/; HttpOnly; SameSite=Lax'
+  );
+  const session = {
+    user: { id: 'user-1', email: 'owner@example.com' },
+    session: { id: 'session-1', userId: 'user-1' },
+  };
+  verifySession.mockResolvedValue({ session, headers: renewalHeaders });
+  const response = {
+    setHeader: vi.fn(),
+    getHeader: vi.fn(() => undefined),
+  };
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(
+      createContext(request, vi.fn(), class {}, response) as never
+    )
+  ).resolves.toBe(true);
+
+  expect(request.user).toBe(session.user);
+  expect(request.session).toBe(session.session);
+  expect(response.setHeader).toHaveBeenCalledTimes(1);
+  expect(response.setHeader).toHaveBeenCalledWith('set-cookie', [
+    'better-auth.session_token=renewed-token; Path=/; HttpOnly; SameSite=Lax',
+    'better-auth.session_data=renewed-data; Path=/; HttpOnly; SameSite=Lax',
+  ]);
+});
+
+it('appends renewal cookies when the response already carries set-cookie', async () => {
+  const request: Record<string, unknown> = {
+    headers: { cookie: 'better-auth.session_token=active-token' },
+  };
+  const renewalHeaders = new Headers();
+  renewalHeaders.append(
+    'set-cookie',
+    'better-auth.session_token=renewed-token; Path=/; HttpOnly; SameSite=Lax'
+  );
+  verifySession.mockResolvedValue({
+    session: {
+      user: { id: 'user-1', email: 'owner@example.com' },
+      session: { id: 'session-1', userId: 'user-1' },
+    },
+    headers: renewalHeaders,
+  });
+  const existing = ['better-auth.session_data=existing; Path=/'];
+  const response = {
+    setHeader: vi.fn(),
+    getHeader: vi.fn(() => existing),
+  };
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(
+      createContext(request, vi.fn(), class {}, response) as never
+    )
+  ).resolves.toBe(true);
+
+  expect(response.setHeader).toHaveBeenCalledWith('set-cookie', [
+    'better-auth.session_data=existing; Path=/',
+    'better-auth.session_token=renewed-token; Path=/; HttpOnly; SameSite=Lax',
+  ]);
+});
+
+it('writes no cookie headers when verifySession returns no set-cookie', async () => {
+  const request: Record<string, unknown> = {
+    headers: { cookie: 'better-auth.session_token=active-token' },
+  };
+  verifySession.mockResolvedValue({
+    session: {
+      user: { id: 'user-1', email: 'owner@example.com' },
+      session: { id: 'session-1', userId: 'user-1' },
+    },
+    headers: new Headers(),
+  });
+  const response = {
+    setHeader: vi.fn(),
+    getHeader: vi.fn(),
+  };
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(
+      createContext(request, vi.fn(), class {}, response) as never
+    )
+  ).resolves.toBe(true);
+
+  expect(response.setHeader).not.toHaveBeenCalled();
 });

@@ -74,12 +74,27 @@ export {
 } from './origins';
 export { sendExistingUserVerificationEmail };
 
-export async function verifySession(headers: Headers) {
-  const session = await auth.api.getSession({
-    headers,
-    query: { disableCookieCache: true },
-  });
-  return session;
+export interface VerifySessionResult {
+  session: Session | null;
+  headers?: Headers;
+}
+
+export async function verifySession(
+  headers: Headers
+): Promise<VerifySessionResult> {
+  try {
+    const { response, headers: responseHeaders } = await auth.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
+      returnHeaders: true,
+    });
+    return {
+      session: response ?? null,
+      headers: responseHeaders instanceof Headers ? responseHeaders : undefined,
+    };
+  } catch {
+    return { session: null, headers: undefined };
+  }
 }
 
 export async function getSessionCookieExpirationHeaders(

@@ -37,15 +37,42 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    const session = await verifySession(headers);
+    const verified = await verifySession(headers);
+    const { session, headers: responseHeaders } = verified ?? {
+      session: null,
+      headers: undefined,
+    };
 
     if (!session) {
       if (isPublic) return true;
       throw new UnauthorizedException('Not authenticated');
     }
 
+    this.forwardRenewedSessionCookies(context, responseHeaders);
+
     request.user = session.user;
     request.session = session.session;
     return true;
+  }
+
+  private forwardRenewedSessionCookies(
+    context: ExecutionContext,
+    responseHeaders: Headers | undefined
+  ) {
+    if (!(responseHeaders instanceof Headers)) return;
+    const cookies = responseHeaders.getSetCookie();
+    if (cookies.length === 0) return;
+
+    const response = context.switchToHttp().getResponse();
+    const existing = response.getHeader('set-cookie');
+    const merged = [
+      ...(Array.isArray(existing)
+        ? existing.map(String)
+        : existing
+          ? [String(existing)]
+          : []),
+      ...cookies,
+    ];
+    response.setHeader('set-cookie', merged);
   }
 }

@@ -28,7 +28,65 @@ it('forces protected session verification to bypass the cookie cache', async () 
   expect(getSession).toHaveBeenCalledWith({
     headers,
     query: { disableCookieCache: true },
+    returnHeaders: true,
   });
+});
+
+it('returns session with renewal headers so callers can forward Set-Cookie', async () => {
+  const session = {
+    user: { id: 'user-1', email: 'owner@example.com' },
+    session: { id: 'session-1', userId: 'user-1' },
+  };
+  const renewalHeaders = new Headers();
+  renewalHeaders.append(
+    'set-cookie',
+    'better-auth.session_token=renewed-token; Path=/; HttpOnly'
+  );
+  renewalHeaders.append(
+    'set-cookie',
+    'better-auth.session_data=renewed-data; Path=/; HttpOnly'
+  );
+  vi.spyOn(auth.api, 'getSession').mockResolvedValue({
+    response: session,
+    headers: renewalHeaders,
+  } as never);
+
+  const result = await verifySession(
+    new Headers({ cookie: 'better-auth.session_token=active-token' })
+  );
+
+  expect(result.session).toEqual(session);
+  expect(result.headers).toBeInstanceOf(Headers);
+  expect(result.headers?.getSetCookie()).toEqual([
+    'better-auth.session_token=renewed-token; Path=/; HttpOnly',
+    'better-auth.session_data=renewed-data; Path=/; HttpOnly',
+  ]);
+});
+
+it('still resolves to a null session with headers when Better Auth has none', async () => {
+  vi.spyOn(auth.api, 'getSession').mockResolvedValue({
+    response: null,
+    headers: new Headers(),
+  } as never);
+
+  const result = await verifySession(new Headers());
+
+  expect(result.session).toBeNull();
+  expect(result.headers).toBeInstanceOf(Headers);
+  expect(result.headers?.getSetCookie()).toEqual([]);
+});
+
+it('keeps treating an unexpectedly throwing getSession as unauthenticated', async () => {
+  vi.spyOn(auth.api, 'getSession').mockRejectedValue(
+    new Error('session backend unavailable')
+  );
+
+  const result = await verifySession(
+    new Headers({ cookie: 'better-auth.session_token=broken' })
+  );
+
+  expect(result.session).toBeNull();
+  expect(result.headers).toBeUndefined();
 });
 
 it('uses Better-Auth to expire token, cache, and chunked session cookies', async () => {

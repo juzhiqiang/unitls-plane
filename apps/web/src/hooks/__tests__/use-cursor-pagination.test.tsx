@@ -35,4 +35,25 @@ describe('cursor pagination', () => {
     act(() => result.current.next(null));
     expect(result.current.page).toBe(2);
   });
+  it('ignores navigation callbacks captured by an older scope', () => {
+    let renders = 0;
+    const { result, rerender } = renderHook(
+      ({ scope }) => {
+        renders += 1;
+        return useCursorPagination(scope);
+      },
+      { initialProps: { scope: 'a' } }
+    );
+    act(() => result.current.next('one'));
+    const staleNext = result.current.next;
+    rerender({ scope: 'b' });
+    act(() => {});
+    const rendersBeforeStaleNavigation = renders;
+
+    act(() => staleNext('stale'));
+
+    expect(renders).toBe(rendersBeforeStaleNavigation);
+    expect(result.current.cursor).toBe('');
+    expect(result.current.page).toBe(1);
+  });
 });

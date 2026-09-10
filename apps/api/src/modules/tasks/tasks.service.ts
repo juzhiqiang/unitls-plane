@@ -14,7 +14,21 @@ import {
   getLimit,
   type EntitlementUser,
 } from '@utils-plane/utils';
-import { eq, desc, asc, and, isNotNull, sql } from 'drizzle-orm';
+import {
+  eq,
+  desc,
+  asc,
+  and,
+  inArray,
+  isNotNull,
+  sql,
+  getTableColumns,
+} from 'drizzle-orm';
+import {
+  cursorCondition,
+  finishPage,
+  paginationOptions,
+} from '../../common/database/list-pagination';
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
   CreateTaskInput,
@@ -145,6 +159,41 @@ export class TasksService {
     }
 
     return task;
+  }
+
+  async getStatuses(ids: string[]): Promise<
+    Array<{
+      taskId: string;
+      status: Task['status'] | 'not_found';
+      progress: number;
+      outputFileId?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    }>
+  > {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+
+    const rows = await db
+      .select({
+        id: tasks.id,
+        status: tasks.status,
+        progress: tasks.progress,
+        outputFileId: tasks.outputFileId,
+        errorCode: tasks.errorCode,
+        errorMessage: tasks.errorMessage,
+      })
+      .from(tasks)
+      .where(inArray(tasks.id, uniqueIds));
+    const byId = new Map(rows.map(row => [row.id, row]));
+
+    return uniqueIds.map(taskId => {
+      const row = byId.get(taskId);
+      if (!row) return { taskId, status: 'not_found' as const, progress: 0 };
+      const { id: _id, ...status } = row;
+      void _id;
+      return { taskId, ...status, progress: status.progress ?? 0 };
+    });
   }
 
   /**
@@ -333,9 +382,27 @@ export class TasksService {
 
   async listByUser(
     userId: string,
-    query: { page: number; limit: number; status?: TaskStatus; type?: TaskType }
-  ): Promise<{ tasks: Task[]; total: number }> {
-    const offset = (query.page - 1) * query.limit;
+    query: {
+      page: number;
+      limit: number;
+      status?: TaskStatus;
+      type?: TaskType;
+      cursor?: string;
+    }
+  ): Promise<{ tasks: Task[]; total: number; nextCursor: string | null }> {
+    const { offset, limit } = paginationOptions(query.page, query.limit);
+    const scope = JSON.stringify([
+      'tasks',
+      userId,
+      query.status ?? '',
+      query.type ?? '',
+    ]);
+    const cursor = cursorCondition(
+      query.cursor,
+      scope,
+      tasks.createdAt,
+      tasks.id
+    );
 
     const conditions = [eq(tasks.userId, userId)];
     if (query.status) {
@@ -347,20 +414,25 @@ export class TasksService {
 
     const [tasksList, countResult] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(tasks),
+          cursorTime: sql<string>`${tasks.createdAt}::text`,
+        })
         .from(tasks)
-        .where(and(...conditions))
-        .orderBy(desc(tasks.createdAt))
-        .limit(query.limit)
-        .offset(offset),
+        .where(and(...conditions, cursor))
+        .orderBy(desc(tasks.createdAt), desc(tasks.id))
+        .limit(limit + 1)
+        .offset(query.cursor !== undefined ? 0 : offset),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(tasks)
         .where(and(...conditions)),
     ]);
 
+    const result = finishPage(tasksList, limit, scope);
     return {
-      tasks: tasksList,
+      tasks: result.items,
+      nextCursor: result.nextCursor,
       total: countResult[0]?.count ?? 0,
     };
   }

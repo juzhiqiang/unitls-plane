@@ -4,11 +4,17 @@ import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
 import { MinioService } from './minio.service';
 import { CleanupObligationService } from './cleanup-obligation.service';
+import { UploadBudgetInterceptor } from './upload-budget.interceptor';
 
 @Module({
   imports: [BullModule.registerQueue({ name: 'cleanup-queue' })],
   controllers: [FilesController],
-  providers: [CleanupObligationService, FilesService, MinioService],
+  providers: [
+    CleanupObligationService,
+    FilesService,
+    MinioService,
+    UploadBudgetInterceptor,
+  ],
   exports: [CleanupObligationService, FilesService, MinioService],
 })
 export class FilesModule {}

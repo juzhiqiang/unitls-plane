@@ -124,6 +124,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get multiple task statuses (lightweight) */
+        get: operations["TasksController_getStatuses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}": {
         parameters: {
             query?: never;
@@ -594,6 +611,17 @@ export interface components {
             /** @description 会话内任务总数（返回条数上限 200） */
             total: number;
         };
+        BatchTaskStatusDto: {
+            /** @enum {string} */
+            status: "pending" | "processing" | "completed" | "failed" | "not_found";
+            progress: number;
+            /** Format: uuid */
+            outputFileId?: string;
+            errorCode?: string;
+            errorMessage?: string;
+            /** Format: uuid */
+            taskId: string;
+        };
         TaskStatusDto: {
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
@@ -672,6 +700,8 @@ export interface operations {
     TasksController_list: {
         parameters: {
             query?: {
+                /** @description Stable cursor from nextCursor; empty string starts cursor pagination */
+                cursor?: string;
                 page?: number;
                 limit?: number;
                 status?: "pending" | "processing" | "completed" | "failed";
@@ -688,7 +718,13 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        tasks: components["schemas"]["TaskResponseDto"][];
+                        total: number;
+                        nextCursor: string | null;
+                    };
+                };
             };
         };
     };
@@ -903,6 +939,29 @@ export interface operations {
             };
         };
     };
+    TasksController_getStatuses: {
+        parameters: {
+            query: {
+                /** @description Comma-separated UUIDs, at most 100 unique IDs */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task statuses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchTaskStatusDto"][];
+                };
+            };
+        };
+    };
     TasksController_getOne: {
         parameters: {
             query?: never;
@@ -1039,6 +1098,7 @@ export interface operations {
             query: {
                 page: string;
                 limit: string;
+                cursor: string;
             };
             header?: never;
             path?: never;
@@ -1050,7 +1110,15 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        files: {
+                            [key: string]: unknown;
+                        }[];
+                        total: number;
+                        nextCursor: string | null;
+                    };
+                };
             };
         };
     };
@@ -1141,6 +1209,7 @@ export interface operations {
                 limit: string;
                 mimeType: string;
                 search: string;
+                cursor: string;
             };
             header?: never;
             path?: never;
@@ -1152,7 +1221,15 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        files: {
+                            [key: string]: unknown;
+                        }[];
+                        total: number;
+                        nextCursor: string | null;
+                    };
+                };
             };
         };
     };

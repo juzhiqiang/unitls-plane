@@ -7,7 +7,11 @@
  */
 
 import type { EncodableImageType } from './image-encoding-support';
-import type { ImageStitchLayout } from './image-stitch-client';
+import type {
+  ImageStitchLayout,
+  ImageStitchOptions,
+  ImageStitchPlanLimits,
+} from './image-stitch-client';
 import type { RenderWatermarkOptions } from './image-watermark-client';
 import type {
   AnimationCompressOptions,
@@ -16,6 +20,12 @@ import type {
 } from './image-animation-client';
 
 export type ImageWorkerJob =
+  | {
+      op: 'stitch-plan';
+      blobs: Blob[];
+      options: ImageStitchOptions;
+      limits: ImageStitchPlanLimits;
+    }
   | {
       op: 'convert';
       blob: Blob;

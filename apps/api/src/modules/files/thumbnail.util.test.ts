@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import sharp from 'sharp';
+import { Readable } from 'node:stream';
 import {
   THUMBNAIL_MAX_EDGE,
   THUMBNAIL_SOURCE_MAX_BYTES,
@@ -7,6 +8,36 @@ import {
   isThumbnailableMimeType,
   renderThumbnail,
 } from './thumbnail.util';
+
+describe('stream thumbnails', () => {
+  it('renders a streamed image and releases the source', async () => {
+    const png = await sharp({
+      create: { width: 500, height: 200, channels: 3, background: 'red' },
+    })
+      .png()
+      .toBuffer();
+    const source = Readable.from([png.subarray(0, 50), png.subarray(50)]);
+    const result = await renderThumbnail(source);
+    expect((await sharp(result).metadata()).width).toBe(320);
+    expect(source.destroyed).toBe(true);
+  });
+  it('rejects source errors and byte budget overruns', async () => {
+    const source = Readable.from(
+      (async function* () {
+        yield Buffer.alloc(0);
+        throw new Error('source failed');
+      })()
+    );
+    await expect(renderThumbnail(source)).rejects.toThrow('source failed');
+    const oversized = Readable.from([
+      Buffer.alloc(THUMBNAIL_SOURCE_MAX_BYTES + 1),
+    ]);
+    await expect(renderThumbnail(oversized)).rejects.toThrow(
+      'Thumbnail source is too large'
+    );
+    expect(oversized.destroyed).toBe(true);
+  });
+});
 
 describe('isThumbnailableMimeType', () => {
   it('accepts the image types the browser also renders inline', () => {

@@ -603,6 +603,34 @@ describe('TasksService task creation', () => {
   });
 });
 
+describe('TasksService batch status lookup', () => {
+  it('returns one lightweight status for each requested id and marks missing rows', async () => {
+    selectRows = [
+      {
+        id: 'task-1',
+        status: 'processing',
+        progress: 25,
+        outputFileId: null,
+        errorCode: null,
+        errorMessage: null,
+      },
+    ];
+    const { service } = createService();
+
+    await expect(service.getStatuses(['task-1', 'missing'])).resolves.toEqual([
+      {
+        taskId: 'task-1',
+        status: 'processing',
+        progress: 25,
+        outputFileId: null,
+        errorCode: null,
+        errorMessage: null,
+      },
+      { taskId: 'missing', status: 'not_found', progress: 0 },
+    ]);
+  });
+});
+
 describe('TasksService image generation quota snapshot', () => {
   // getImageGenerateQuota 是只读快照:用全局 db 直接 count,既不进事务,也不持有 user 行锁。
   // 这里只验证 limit/used/remaining 三个数字算对了,真正的并发超额拦截仍由 create() 在事务里兜底。

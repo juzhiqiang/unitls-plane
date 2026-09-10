@@ -34,7 +34,7 @@ type AiImageTask = {
  * 不与 image-queue 共用:那里的 concurrency 是为 sharp/ONNX 的 CPU 负载调的。
  */
 @Processor('ai-queue', {
-  concurrency: 8,
+  concurrency: workerConcurrency('AI_WORKER_CONCURRENCY', 8),
   lockDuration: 600000,
 })
 export class AiImageProcessor extends WorkerHost {
@@ -227,3 +227,4 @@ export class AiImageProcessor extends WorkerHost {
     this.logger.warn(`Job ${jobId} stalled — will be retried by BullMQ`);
   }
 }
+import { workerConcurrency } from '../../../config/worker-concurrency';

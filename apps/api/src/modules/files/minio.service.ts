@@ -96,12 +96,16 @@ export class MinioService implements OnModuleInit {
     });
   }
 
-  async downloadStream(key: string): Promise<Readable> {
+  async downloadStream(
+    key: string,
+    signal?: globalThis.AbortSignal
+  ): Promise<Readable> {
     const response = await this.client.send(
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
-      })
+      }),
+      { abortSignal: signal }
     );
     if (!response.Body) throw new Error('Object body is empty');
     return response.Body as Readable;

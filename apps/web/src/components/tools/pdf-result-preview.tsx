@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { PdfPagePreviewImage } from './pdf-page-preview-image';
+import { usePdfThumbnailWindow } from './use-pdf-thumbnail-window';
 
 type RenderPdfPage =
   (typeof import('@/lib/processing/pdf-client'))['renderPdfPage'];
@@ -49,6 +50,8 @@ export function PdfResultPreview({
   const [loading, setLoading] = useState(true);
   const activePdfRef = useRef<PDFDocumentProxy | null>(null);
   const renderPdfPageRef = useRef<RenderPdfPage | null>(null);
+  const thumbnailWorkRef = useRef<Promise<unknown>>(Promise.resolve());
+  const window = usePdfThumbnailWindow(pdf?.numPages ?? 0, currentPage, file);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +63,7 @@ export function PdfResultPreview({
     setError(null);
     setLoading(true);
     renderPdfPageRef.current = null;
+    thumbnailWorkRef.current = Promise.resolve();
 
     const previousPdf = activePdfRef.current;
     activePdfRef.current = null;
@@ -98,11 +102,18 @@ export function PdfResultPreview({
     if (!pdf || !renderPdfPage) return;
     let cancelled = false;
     setMainCanvas(null);
+    let renderedCanvas: HTMLCanvasElement | null = null;
 
     Promise.resolve()
       .then(() => renderPdfPage(pdf, currentPage, 0.7))
       .then(canvas => {
-        if (!cancelled) setMainCanvas(canvas);
+        if (!cancelled) {
+          renderedCanvas = canvas;
+          setMainCanvas(canvas);
+        } else {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
       })
       .catch(err => {
         if (!cancelled) setError((err as Error).message);
@@ -110,6 +121,10 @@ export function PdfResultPreview({
 
     return () => {
       cancelled = true;
+      if (renderedCanvas) {
+        renderedCanvas.width = 0;
+        renderedCanvas.height = 0;
+      }
     };
   }, [pdf, currentPage]);
 
@@ -117,7 +132,7 @@ export function PdfResultPreview({
     const renderPdfPage = renderPdfPageRef.current;
     if (!pdf || !renderPdfPage) return;
     let cancelled = false;
-    let nextPage = 1;
+    let nextPage = window.start;
     const nextThumbnails: Record<number, HTMLCanvasElement> = {};
     const nextThumbnailErrors: Record<number, string> = {};
 
@@ -127,11 +142,14 @@ export function PdfResultPreview({
     const renderNext = async () => {
       while (!cancelled) {
         const page = nextPage++;
-        if (page > pdf.numPages) return;
+        if (page > window.end) return;
         try {
           const canvas = await renderPdfPage(pdf, page, 0.2);
           if (!cancelled) {
             nextThumbnails[page] = canvas;
+          } else {
+            canvas.width = 0;
+            canvas.height = 0;
           }
         } catch (err) {
           if (!cancelled) {
@@ -141,19 +159,29 @@ export function PdfResultPreview({
       }
     };
 
-    void Promise.all(
-      Array.from({ length: Math.min(3, pdf.numPages) }, () => renderNext())
-    ).then(() => {
-      if (!cancelled) {
-        setThumbnails(nextThumbnails);
-        setThumbnailErrors(nextThumbnailErrors);
-      }
-    });
+    const previousWork = thumbnailWorkRef.current;
+    const work = previousWork
+      .then(() =>
+        Promise.all(
+          Array.from({ length: Math.min(3, pdf.numPages) }, () => renderNext())
+        )
+      )
+      .then(() => {
+        if (!cancelled) {
+          setThumbnails(nextThumbnails);
+          setThumbnailErrors(nextThumbnailErrors);
+        }
+      });
+    thumbnailWorkRef.current = work;
 
     return () => {
       cancelled = true;
+      Object.values(nextThumbnails).forEach(canvas => {
+        canvas.width = 0;
+        canvas.height = 0;
+      });
     };
-  }, [pdf]);
+  }, [pdf, window.start, window.end]);
 
   const totalPages = pdf?.numPages ?? 0;
   const mainPlaceholder = loading ? loadingLabel : (error ?? loadingLabel);
@@ -222,43 +250,57 @@ export function PdfResultPreview({
             </button>
           </div>
 
-          <div className="mt-3 max-h-[360px] overflow-y-auto">
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-              {Array.from({ length: totalPages }, (_, index) => index + 1).map(
-                page => {
-                  const thumbnail = thumbnails[page];
-                  const thumbnailError = thumbnailErrors[page];
-                  const labelForPage = thumbnailLabel(page);
-                  return (
-                    <button
-                      key={page}
-                      type="button"
-                      onClick={() => setCurrentPage(page)}
-                      className={`flex min-h-20 items-center justify-center rounded border p-1 transition-colors ${
-                        currentPage === page
-                          ? 'border-foreground bg-muted'
-                          : 'border-border hover:border-foreground/60'
-                      }`}
-                      aria-label={labelForPage}
-                      title={labelForPage}
-                      aria-current={currentPage === page ? 'page' : undefined}
-                    >
-                      {thumbnail ? (
-                        <PdfPagePreviewImage
-                          canvas={thumbnail}
-                          alt={labelForPage}
-                          className="h-auto max-w-full w-auto object-contain"
-                        />
-                      ) : (
-                        <span className="px-1 text-center text-[10px] font-mono text-muted-foreground">
-                          {thumbnailError ? labelForPage : loadingLabel}
-                        </span>
-                      )}
-                    </button>
-                  );
-                }
-              )}
+          <div
+            ref={window.ref}
+            onScroll={window.onScroll}
+            data-testid="pdf-thumbnail-scroll"
+            className="mt-3 max-h-[360px] overflow-y-auto"
+          >
+            <div style={{ height: window.before }} />
+            <div
+              className="grid gap-x-2"
+              style={{
+                gridTemplateColumns: `repeat(${window.columns}, minmax(0, 1fr))`,
+                gridAutoRows: '128px',
+              }}
+            >
+              {Array.from(
+                { length: Math.max(0, window.end - window.start + 1) },
+                (_, index) => index + window.start
+              ).map(page => {
+                const thumbnail = thumbnails[page];
+                const thumbnailError = thumbnailErrors[page];
+                const labelForPage = thumbnailLabel(page);
+                return (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`mb-2 flex min-h-20 overflow-hidden items-center justify-center rounded border p-1 transition-colors ${
+                      currentPage === page
+                        ? 'border-foreground bg-muted'
+                        : 'border-border hover:border-foreground/60'
+                    }`}
+                    aria-label={labelForPage}
+                    title={labelForPage}
+                    aria-current={currentPage === page ? 'page' : undefined}
+                  >
+                    {thumbnail ? (
+                      <PdfPagePreviewImage
+                        canvas={thumbnail}
+                        alt={labelForPage}
+                        className="h-auto max-h-full max-w-full w-auto object-contain"
+                      />
+                    ) : (
+                      <span className="px-1 text-center text-[10px] font-mono text-muted-foreground">
+                        {thumbnailError ? labelForPage : loadingLabel}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+            <div style={{ height: window.after }} />
           </div>
         </>
       )}

@@ -40,21 +40,34 @@ export function useTaskGroupProgress(
 
   const query = useQuery({
     queryKey: ['task-group-progress', groupKey],
-    queryFn: async () =>
-      Promise.all(
-        taskIds.map(async taskId => {
-          const { data, error } = await api.GET('/tasks/{id}/status', {
-            params: { path: { id: taskId } },
-          });
-          if (error) throw error;
-          return { taskId, ...(data as TaskStatusDto) };
-        })
-      ),
+    queryFn: async () => {
+      const { data, error } = await api.GET('/tasks/status', {
+        params: { query: { ids: taskIds.join(',') } },
+      });
+      if (error) throw error;
+      const rows = data ?? [];
+      const byId = new Map(rows.map(row => [row.taskId, row]));
+      return taskIds.map((taskId): TaskGroupProgressItem => {
+        const row = byId.get(taskId);
+        if (!row) throw new Error('Incomplete task status response');
+        if (row.status === 'not_found') {
+          return {
+            taskId,
+            status: 'failed',
+            progress: 0,
+            errorCode: 'TASK_NOT_FOUND',
+            errorMessage: 'Task not found',
+          };
+        }
+        return { ...row, status: row.status };
+      });
+    },
     enabled: taskIds.length > 0,
     refetchInterval: q => {
       const items = q.state.data;
       if (items && items.every(item => isTerminal(item.status))) return false;
-      return interval;
+      const round = Math.max(0, q.state.dataUpdateCount - 1);
+      return Math.min(interval * ([1, 2, 3, 5][Math.min(round, 3)] ?? 5), 5000);
     },
     refetchIntervalInBackground: false,
   });

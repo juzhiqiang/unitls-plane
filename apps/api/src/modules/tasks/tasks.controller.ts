@@ -6,9 +6,9 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   Req,
   UnauthorizedException,
+  BadRequestException,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
@@ -16,8 +16,10 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { isUUID } from 'class-validator';
 import { TasksService } from './tasks.service';
 import { ImageGenerationService } from './services/image-generation.service';
 import { ImageGeneratePresetsService } from './services/image-generate-presets.service';
@@ -26,6 +28,7 @@ import {
   TaskQueryDto,
   TaskResponseDto,
   TaskStatusDto,
+  BatchTaskStatusDto,
   ImageGenerateQuotaDto,
   ImageGenerateProviderDto,
   ImageGeneratePresetDto,
@@ -197,6 +200,40 @@ export class TasksController {
     );
   }
 
+  @Get('status')
+  @Public()
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @ApiQuery({
+    name: 'ids',
+    type: String,
+    required: true,
+    description: 'Comma-separated UUIDs, at most 100 unique IDs',
+  })
+  @ApiOperation({ summary: 'Get multiple task statuses (lightweight)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Task statuses',
+    type: BatchTaskStatusDto,
+    isArray: true,
+  })
+  async getStatuses(@Query('ids') idsQuery?: string) {
+    if (typeof idsQuery !== 'string' || idsQuery.length > 10_000) {
+      throw new BadRequestException('Invalid task ids');
+    }
+    const ids = idsQuery
+      .split(',')
+      .map(id => id.trim().toLowerCase())
+      .filter(Boolean);
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0 || uniqueIds.length > 100) {
+      throw new BadRequestException('Provide between 1 and 100 task ids');
+    }
+    if (uniqueIds.some(id => !isUUID(id))) {
+      throw new BadRequestException('Task ids must be UUIDs');
+    }
+    return this.tasksService.getStatuses(uniqueIds);
+  }
+
   @Get(':id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get task by ID' })
@@ -214,10 +251,10 @@ export class TasksController {
 
   @Get(':id/status')
   @Public()
-  @SkipThrottle()
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   @ApiOperation({ summary: 'Get task status (lightweight)' })
   @ApiResponse({ status: 200, description: 'Task status', type: TaskStatusDto })
-  async getStatus(@Param('id') id: string) {
+  async getStatus(@Param('id', new ParseUUIDPipe()) id: string) {
     const task = await this.tasksService.getById(id);
     return {
       status: task.status,
@@ -231,17 +268,33 @@ export class TasksController {
   @Get()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List user tasks' })
-  @ApiResponse({ status: 200, description: 'Task list' })
+  @ApiResponse({
+    status: 200,
+    description: 'Task list',
+    schema: {
+      type: 'object',
+      properties: {
+        tasks: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/TaskResponseDto' },
+        },
+        total: { type: 'number' },
+        nextCursor: { type: 'string', nullable: true },
+      },
+      required: ['tasks', 'total', 'nextCursor'],
+    },
+  })
   async list(@Query() query: TaskQueryDto, @Req() req: AuthenticatedRequest) {
     const userId = req.user?.id;
     if (!userId) {
-      return { tasks: [], total: 0 };
+      return { tasks: [], total: 0, nextCursor: null };
     }
     return this.tasksService.listByUser(userId, {
       page: query.page ?? 1,
       limit: query.limit ?? 20,
       status: query.status,
       type: query.type,
+      cursor: query.cursor,
     });
   }
 

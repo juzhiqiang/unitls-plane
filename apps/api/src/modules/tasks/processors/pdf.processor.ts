@@ -80,7 +80,7 @@ function normalizePdfFilename(
 }
 
 @Processor('pdf-queue', {
-  concurrency: 2,
+  concurrency: workerConcurrency('PDF_WORKER_CONCURRENCY', 2),
   lockDuration: 300000,
 })
 export class PdfProcessor extends WorkerHost {
@@ -896,3 +896,4 @@ export class PdfProcessor extends WorkerHost {
     this.logger.warn(`Job ${jobId} stalled — will be retried by BullMQ`);
   }
 }
+import { workerConcurrency } from '../../../config/worker-concurrency';

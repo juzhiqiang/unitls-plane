@@ -13,7 +13,7 @@ import {
   renderCompressedAnimation,
 } from './image-animation-client';
 import { renderConvert } from './image-convert-client';
-import { renderStitchLayout } from './image-stitch-client';
+import { renderStitch, renderStitchLayout } from './image-stitch-client';
 import { renderWatermark } from './image-watermark-client';
 import type {
   ImageWorkerRequest,
@@ -47,6 +47,8 @@ async function run(
         job.outputType,
         job.quality
       );
+    case 'stitch-plan':
+      return renderStitch(job.blobs, job.options, job.limits);
     default: {
       const never: never = job;
       throw new Error(`Unsupported job: ${JSON.stringify(never)}`);

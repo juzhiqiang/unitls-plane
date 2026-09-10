@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
@@ -44,9 +44,70 @@ describe('useTaskGroupProgress', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
+  it('settles a missing task with a specific error', async () => {
+    mockGet.mockResolvedValue({
+      data: [{ taskId: 'missing', status: 'not_found', progress: 0 }],
+      error: undefined,
+    } as any);
+    const onItemFailed = vi.fn();
+    const { result } = renderHook(
+      () => useTaskGroupProgress(['missing'], { onItemFailed }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.settled).toBe(true));
+    expect(onItemFailed).toHaveBeenCalledWith('missing', {
+      code: 'TASK_NOT_FOUND',
+      message: 'Task not found',
+    });
+  });
+
+  it('backs off after completed requests and resets for a different group', async () => {
+    vi.useFakeTimers();
+    mockGet.mockImplementation((async (_path: string, init: any) => ({
+      data: [
+        { taskId: init.params.query.ids, status: 'processing', progress: 10 },
+      ],
+    })) as any);
+    const { rerender, unmount } = renderHook(
+      ({ id }) => useTaskGroupProgress([id]),
+      { initialProps: { id: 'task-1' }, wrapper: createWrapper() }
+    );
+    try {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(mockGet).toHaveBeenCalledTimes(1);
+      for (const [delay, count] of [
+        [1000, 2],
+        [2000, 3],
+        [3000, 4],
+        [5000, 5],
+      ] as const) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(delay);
+        });
+        expect(mockGet).toHaveBeenCalledTimes(count);
+      }
+      rerender({ id: 'task-2' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(mockGet).toHaveBeenCalledTimes(6);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(mockGet).toHaveBeenCalledTimes(7);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('returns one item per task id, keyed in input order', async () => {
     mockGet.mockImplementation((async (_path: string, init: any) => ({
-      data: statusFor(init.params.path.id),
+      data: (init.params.query.ids as string)
+        .split(',')
+        .map((id: string) => ({ taskId: id, ...statusFor(id) })),
       error: undefined,
     })) as any);
 
@@ -66,11 +127,15 @@ describe('useTaskGroupProgress', () => {
     expect(result.current.completedCount).toBe(1);
     expect(result.current.failedCount).toBe(1);
     expect(result.current.settled).toBe(true);
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockGet.mock.calls[0]?.[0]).toBe('/tasks/status');
   });
 
   it('stops polling once every task reaches a terminal state', async () => {
     mockGet.mockImplementation((async (_path: string, init: any) => ({
-      data: statusFor(init.params.path.id),
+      data: (init.params.query.ids as string)
+        .split(',')
+        .map((id: string) => ({ taskId: id, ...statusFor(id) })),
       error: undefined,
     })) as any);
 
@@ -93,7 +158,9 @@ describe('useTaskGroupProgress', () => {
     const onItemCompleted = vi.fn();
     const onItemFailed = vi.fn();
     mockGet.mockImplementation((async (_path: string, init: any) => ({
-      data: statusFor(init.params.path.id),
+      data: (init.params.query.ids as string)
+        .split(',')
+        .map((id: string) => ({ taskId: id, ...statusFor(id) })),
       error: undefined,
     })) as any);
 
@@ -128,30 +195,36 @@ describe('useTaskGroupProgress', () => {
     // task-1 首轮就完成;task-2 前两轮 processing,第 3 轮才失败。
     // task-2 每轮 progress 递增,避免 react-query 结构共享让 data 引用保持不变,
     // 这样上报 effect 每轮都会重跑 —— 去重失效时 task-1 会被重复上报。
+    let batchRound = 0;
     mockGet.mockImplementation((async (_path: string, init: any) => {
-      const id = init.params.path.id as string;
-      roundsPerTask[id] = (roundsPerTask[id] ?? 0) + 1;
-      const round = roundsPerTask[id];
-
-      if (id === 'task-1') {
-        return {
-          data: { status: 'completed', progress: 100, outputFileId: 'file-1' },
-          error: undefined,
-        };
-      }
-      if (round < 3) {
-        return {
-          data: { status: 'processing', progress: round * 20 },
-          error: undefined,
-        };
-      }
+      batchRound += 1;
+      const ids = (init.params.query.ids as string).split(',') as string[];
       return {
-        data: {
-          status: 'failed',
-          progress: 0,
-          errorCode: 'AI_IMAGE_GENERATION_FAILED',
-          errorMessage: 'Image generation failed',
-        },
+        data: ids.map(id => {
+          roundsPerTask[id] = (roundsPerTask[id] ?? 0) + 1;
+          if (id === 'task-1') {
+            return {
+              taskId: id,
+              status: 'completed',
+              progress: 100,
+              outputFileId: 'file-1',
+            };
+          }
+          if (batchRound < 3) {
+            return {
+              taskId: id,
+              status: 'processing',
+              progress: batchRound * 20,
+            };
+          }
+          return {
+            taskId: id,
+            status: 'failed',
+            progress: 0,
+            errorCode: 'AI_IMAGE_GENERATION_FAILED',
+            errorMessage: 'Image generation failed',
+          };
+        }),
         error: undefined,
       };
     }) as any);

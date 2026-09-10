@@ -3,7 +3,7 @@ import {
   getEntitlementUserFromSession,
   type EntitlementSession,
 } from '@/lib/entitlement-session';
-import { decodeImage } from './image-bitmap';
+import { decodeImage, type DecodedImage } from './image-bitmap';
 import { createSurface } from './canvas-surface';
 import { runInImageWorker } from './image-worker-client';
 import { resolveCanvasPixelLimit } from './canvas-limits';
@@ -152,27 +152,64 @@ export async function renderStitchLayout(
   sources: Blob[],
   layout: ImageStitchLayout,
   outputType: string,
-  quality?: number
+  quality?: number,
+  takeImage: (index: number) => Promise<DecodedImage> = index =>
+    decodeImage(sources[index]!)
 ): Promise<Blob> {
-  const images = await Promise.all(sources.map(decodeImage));
-  try {
-    const surface = createSurface(layout.width, layout.height);
-    const { ctx } = surface;
+  const surface = createSurface(layout.width, layout.height);
+  const { ctx } = surface;
 
-    if (layout.background !== 'transparent') {
-      ctx.fillStyle = layout.background;
-      ctx.fillRect(0, 0, layout.width, layout.height);
-    }
+  if (layout.background !== 'transparent') {
+    ctx.fillStyle = layout.background;
+    ctx.fillRect(0, 0, layout.width, layout.height);
+  }
 
-    layout.items.forEach(item => {
-      const image = images[item.sourceIndex]!;
+  for (const item of layout.items) {
+    const image = await takeImage(item.sourceIndex);
+    try {
       ctx.drawImage(image.source, item.x, item.y, item.width, item.height);
-    });
+    } finally {
+      image.close();
+    }
+  }
 
-    return await surface.toBlob(outputType, quality);
+  return await surface.toBlob(outputType, quality);
+}
+
+/** 尺寸与绘制在同一线程完成，最多缓存 64 MiB 解码像素；大图逐张重解并立即释放。 */
+export async function renderStitch(
+  sources: Blob[],
+  options: ImageStitchOptions,
+  limits: ImageStitchPlanLimits
+): Promise<Blob> {
+  const cache = new Map<number, DecodedImage>();
+  const sizes: ImageStitchSource[] = [];
+  let bytes = 0;
+  try {
+    for (let index = 0; index < sources.length; index++) {
+      const image = await decodeImage(sources[index]!);
+      sizes.push({ width: image.width, height: image.height });
+      const cost = image.width * image.height * 4;
+      if (bytes + cost <= 64 * 1024 * 1024) {
+        cache.set(index, image);
+        bytes += cost;
+      } else image.close();
+    }
+    const layout = buildImageStitchLayout(sizes, options);
+    validateImageStitchLayout(layout, limits);
+    return await renderStitchLayout(
+      sources,
+      layout,
+      options.outputType,
+      options.outputType === 'image/png' ? undefined : options.quality,
+      async index => {
+        const cached = cache.get(index);
+        cache.delete(index);
+        return cached ?? decodeImage(sources[index]!);
+      }
+    );
   } finally {
-    // 长图往往一次解十几张,不显式释放会把解码后的位图全堆在内存里。
-    images.forEach(image => image.close());
+    cache.forEach(image => image.close());
   }
 }
 
@@ -183,32 +220,14 @@ export async function stitchImages(
 ): Promise<File> {
   validateImageStitchInputs(files, limits);
 
-  // 布局需要每张图的尺寸,先解一轮拿尺寸;renderStitchLayout 内部会再解一次,
-  // 换来的是 Worker 与主线程共用同一份绘制实现。
-  const sizes = await Promise.all(
-    files.map(async file => {
-      const image = await decodeImage(file);
-      try {
-        return { width: image.width, height: image.height };
-      } finally {
-        image.close();
-      }
-    })
-  );
-  const layout = buildImageStitchLayout(sizes, options);
-  validateImageStitchLayout(layout, limits);
-
-  const quality =
-    options.outputType === 'image/png' ? undefined : options.quality;
   const blob = await runInImageWorker(
     {
-      op: 'stitch',
+      op: 'stitch-plan',
       blobs: files,
-      layout,
-      outputType: options.outputType,
-      quality,
+      options,
+      limits,
     },
-    () => renderStitchLayout(files, layout, options.outputType, quality)
+    () => renderStitch(files, options, limits)
   );
 
   return new File(

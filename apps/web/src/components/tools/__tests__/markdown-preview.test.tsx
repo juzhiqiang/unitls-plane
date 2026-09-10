@@ -33,8 +33,8 @@ function createCanvas(
 ) {
   const canvas = targetCanvas ?? document.createElement('canvas');
   Object.defineProperties(canvas, {
-    width: { configurable: true, value: 600 },
-    height: { configurable: true, value: 840 },
+    width: { configurable: true, writable: true, value: 600 },
+    height: { configurable: true, writable: true, value: 840 },
     toDataURL: {
       configurable: true,
       value: () => `data:image/png;base64,${prefix}-${pageNumber}`,
@@ -122,6 +122,38 @@ describe('MarkdownPreview', () => {
 });
 
 describe('PdfResultPreview', () => {
+  it('windows a 300-page PDF and releases canvases when scrolling away', async () => {
+    pdfClientMocks.loadPdf.mockResolvedValue(createPdf(300));
+    const canvases: HTMLCanvasElement[] = [];
+    pdfClientMocks.renderPdfPage.mockImplementation(
+      async (_pdf: MockPdf, page: number, scale: number) => {
+        const canvas = createCanvas(page);
+        if (scale === 0.2) canvases.push(canvas);
+        return canvas;
+      }
+    );
+    renderPdfPreview();
+    await waitFor(() => expect(canvases.length).toBe(15));
+    expect(screen.getAllByRole('button', { name: /页缩略图$/ })).toHaveLength(
+      15
+    );
+    const first = canvases[0]!;
+    fireEvent.scroll(screen.getByTestId('pdf-thumbnail-scroll'), {
+      target: { scrollTop: 1280 },
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '第 28 页缩略图' })
+      ).toBeInTheDocument()
+    );
+    await waitFor(() => expect(first.width).toBe(0));
+    expect(
+      screen.queryByRole('button', { name: '第 1 页缩略图' })
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /页缩略图$/ })).toHaveLength(
+      15
+    );
+  });
   it('renders three thumbnails and navigates the selected page', async () => {
     renderPdfPreview();
 

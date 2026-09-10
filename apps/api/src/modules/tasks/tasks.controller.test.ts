@@ -1,10 +1,11 @@
 import { beforeEach, expect, it, vi } from 'bun:test';
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { TasksController } from './tasks.controller';
 
 // 控制器很薄:只负责把 currentUser 透传给 service,并在未登录时抛 401。
 // quota 的数字计算由 tasks.service.test.ts 覆盖,这里只断言转发行为。
 const tasksService = {
+  getStatuses: vi.fn(),
   getImageGenerateQuota: vi.fn(),
   listImageGenerateSessions: vi.fn(),
   listImageGenerateSessionTasks: vi.fn(),
@@ -18,12 +19,14 @@ const imageGenerationService = {
 function createController() {
   return new TasksController(
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    {} as never
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  tasksService.getStatuses.mockResolvedValue([]);
   tasksService.getImageGenerateQuota.mockResolvedValue({
     limit: 10,
     used: 3,
@@ -37,6 +40,46 @@ beforeEach(() => {
       sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
     },
   ]);
+});
+
+it('returns a deduplicated batch of task statuses', async () => {
+  const first = '00000000-0000-4000-8000-000000000001';
+  const missing = '00000000-0000-4000-8000-000000000002';
+  tasksService.getStatuses.mockResolvedValue([
+    { taskId: 'task-1', status: 'processing', progress: 25 },
+    { taskId: 'missing', status: 'not_found', progress: 0 },
+  ]);
+
+  const result = await createController().getStatuses(
+    `${first},${first},${missing}`
+  );
+
+  expect(tasksService.getStatuses).toHaveBeenCalledWith([first, missing]);
+  expect(result).toEqual([
+    { taskId: 'task-1', status: 'processing', progress: 25 },
+    { taskId: 'missing', status: 'not_found', progress: 0 },
+  ]);
+});
+
+it('rejects an empty or oversized batch of task status ids', async () => {
+  await expect(createController().getStatuses('')).rejects.toThrow(
+    BadRequestException
+  );
+  const ids = Array.from({ length: 101 }, (_, index) => `task-${index}`);
+  await expect(createController().getStatuses(ids.join(','))).rejects.toThrow(
+    BadRequestException
+  );
+  expect(tasksService.getStatuses).not.toHaveBeenCalled();
+});
+
+it('rejects malformed ids and repeated query parameters before database work', async () => {
+  await expect(createController().getStatuses('not-a-uuid')).rejects.toThrow(
+    BadRequestException
+  );
+  await expect(
+    createController().getStatuses(['x', 'y'] as never)
+  ).rejects.toThrow(BadRequestException);
+  expect(tasksService.getStatuses).not.toHaveBeenCalled();
 });
 
 it('returns the quota snapshot for an authenticated user', async () => {

@@ -1,4 +1,6 @@
 import sharp from 'sharp';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 /**
  * 列表缩略图。
@@ -51,12 +53,34 @@ export function canThumbnailFile(file: {
  * `failOn: 'none'` 让轻微损坏的图也能出图,而不是整格变成图标。
  */
 export async function renderThumbnail(
-  source: Buffer,
+  source: Buffer | Readable,
   maxEdge: number = THUMBNAIL_MAX_EDGE
 ): Promise<Buffer> {
-  return sharp(source, { failOn: 'none' })
+  const transformer = (
+    Buffer.isBuffer(source)
+      ? sharp(source, { failOn: 'none' })
+      : sharp({ failOn: 'none' })
+  )
     .rotate()
     .resize(maxEdge, maxEdge, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 70 })
-    .toBuffer();
+    .webp({ quality: 70 });
+  if (Buffer.isBuffer(source)) return transformer.toBuffer();
+  let bytes = 0;
+  const limiter = new Transform({
+    transform(chunk, _encoding, callback) {
+      bytes += chunk.length;
+      callback(
+        bytes > THUMBNAIL_SOURCE_MAX_BYTES
+          ? new Error('Thumbnail source is too large')
+          : null,
+        chunk
+      );
+    },
+  });
+  const output = transformer.toBuffer();
+  const [, result] = await Promise.all([
+    pipeline(source, limiter, transformer),
+    output,
+  ]);
+  return result;
 }

@@ -20,7 +20,13 @@ import {
   or,
   sql,
   type SQL,
+  getTableColumns,
 } from 'drizzle-orm';
+import {
+  cursorCondition,
+  finishPage,
+  paginationOptions,
+} from '../../common/database/list-pagination';
 import { db, files, type File, type NewFile, type User } from '@utils-plane/db';
 import { getLimit, type EntitlementUser } from '@utils-plane/utils';
 import { MinioService } from './minio.service';
@@ -261,12 +267,16 @@ export class FilesService {
     return this.minioService.download(storageKey);
   }
 
+  downloadStream(storageKey: string, signal?: globalThis.AbortSignal) {
+    return this.minioService.downloadStream(storageKey, signal);
+  }
+
   /**
    * 列表缩略图。原图从 MinIO 取回后就地缩,不落盘也不入库:
    * 文件内容不会变,缓存交给 HTTP(见 controller 的 Cache-Control/ETag)。
    */
   async thumbnail(storageKey: string): Promise<Buffer> {
-    const source = await this.minioService.download(storageKey);
+    const source = await this.minioService.downloadStream(storageKey);
     return renderThumbnail(source);
   }
 
@@ -282,11 +292,22 @@ export class FilesService {
       limit?: number;
       mimeType?: string;
       search?: string;
+      cursor?: string;
     } = {}
-  ): Promise<{ files: File[]; total: number }> {
-    const page = options.page ?? 1;
-    const limit = options.limit ?? 20;
-    const offset = (page - 1) * limit;
+  ): Promise<{ files: File[]; total: number; nextCursor: string | null }> {
+    const { limit, offset } = paginationOptions(options.page, options.limit);
+    const scope = JSON.stringify([
+      'files',
+      userId,
+      options.mimeType ?? '',
+      options.search ?? '',
+    ]);
+    const cursor = cursorCondition(
+      options.cursor,
+      scope,
+      files.createdAt,
+      files.id
+    );
 
     const conditions = [
       eq(files.userId, userId),
@@ -304,20 +325,25 @@ export class FilesService {
 
     const [fileList, countResult] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(files),
+          cursorTime: sql<string>`${files.createdAt}::text`,
+        })
         .from(files)
-        .where(where)
-        .orderBy(desc(files.createdAt))
-        .limit(limit)
-        .offset(offset),
+        .where(and(where, cursor))
+        .orderBy(desc(files.createdAt), desc(files.id))
+        .limit(limit + 1)
+        .offset(options.cursor !== undefined ? 0 : offset),
       db
         .select({ count: sql<number>`count(*)` })
         .from(files)
         .where(where),
     ]);
 
+    const result = finishPage(fileList, limit, scope);
     return {
-      files: fileList.map(normalizeFileRecord),
+      files: result.items.map(normalizeFileRecord),
+      nextCursor: result.nextCursor,
       total: countResult[0]?.count ?? 0,
     };
   }
@@ -406,11 +432,16 @@ export class FilesService {
 
   async listTrashed(
     userId: string,
-    options: { page?: number; limit?: number } = {}
-  ): Promise<{ files: File[]; total: number }> {
-    const page = options.page ?? 1;
-    const limit = options.limit ?? 20;
-    const offset = (page - 1) * limit;
+    options: { page?: number; limit?: number; cursor?: string } = {}
+  ): Promise<{ files: File[]; total: number; nextCursor: string | null }> {
+    const { limit, offset } = paginationOptions(options.page, options.limit);
+    const scope = JSON.stringify(['trash', userId]);
+    const cursor = cursorCondition(
+      options.cursor,
+      scope,
+      files.deletedAt,
+      files.id
+    );
 
     const where = and(
       eq(files.userId, userId),
@@ -420,20 +451,25 @@ export class FilesService {
 
     const [fileList, countResult] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(files),
+          cursorTime: sql<string>`${files.deletedAt}::text`,
+        })
         .from(files)
-        .where(where)
-        .orderBy(desc(files.deletedAt))
-        .limit(limit)
-        .offset(offset),
+        .where(and(where, cursor))
+        .orderBy(desc(files.deletedAt), desc(files.id))
+        .limit(limit + 1)
+        .offset(options.cursor !== undefined ? 0 : offset),
       db
         .select({ count: sql<number>`count(*)` })
         .from(files)
         .where(where),
     ]);
 
+    const result = finishPage(fileList, limit, scope);
     return {
-      files: fileList.map(normalizeFileRecord),
+      files: result.items.map(normalizeFileRecord),
+      nextCursor: result.nextCursor,
       total: countResult[0]?.count ?? 0,
     };
   }

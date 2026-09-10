@@ -1,5 +1,3 @@
-import * as opentype from 'opentype.js';
-
 export interface FontInfo {
   fontFamily: string;
   fontSubfamily: string;
@@ -15,6 +13,7 @@ export interface GlyphInfo {
 }
 
 export async function loadFontInfo(file: File): Promise<FontInfo> {
+  const opentype = await import('opentype.js');
   const buffer = await file.arrayBuffer();
   const font = opentype.parse(buffer);
   return {
@@ -27,6 +26,7 @@ export async function loadFontInfo(file: File): Promise<FontInfo> {
 }
 
 export async function loadFontGlyphs(file: File): Promise<GlyphInfo[]> {
+  const opentype = await import('opentype.js');
   const buffer = await file.arrayBuffer();
   const font = opentype.parse(buffer);
   const glyphs: GlyphInfo[] = [];

@@ -1,5 +1,9 @@
 # Utils-Plane 工具平台
 
+性能优化结果与验证限制见
+[性能审计与实施结果](./docs/performance-audit-2026-09-09.md)，接口兼容约定见
+[项目规范](./PROJECT_SPECS.md)。
+
 Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片、PDF、字体、文件管理和异步任务处理。项目包含 Next.js 前端、NestJS
 API、PostgreSQL、Redis、MinIO 和 BullMQ 队列。
 
@@ -184,13 +188,15 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 - `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级。
 - 每项字段：`id`、`label`（必填，展示名，会下发前端）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
   `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`，只支持文生图写
-  `["generate"]`）、`sizes`（默认 `["1024x1024","1024x1536","1536x1024"]`，页面画面比例档位由它派生，SDXL 系网关可声明更多
-  WxH 档位；gpt-image-1 类来源想要「自动」档需显式加 `"auto"`，严格网关收到 `"auto"` 会 400）、`editTransport`（`multipart` 默认 / `generations_ref`）、`refImagesField`（默认
-  `reference_images`）、`refImageEncoding`（`data_url` 默认 /
-  `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
+  `["generate"]`）、`sizes`（默认
+  `["1024x1024","1024x1536","1536x1024"]`，页面画面比例档位由它派生，SDXL 系网关可声明更多 WxH 档位；gpt-image-1 类来源想要「自动」档需显式加
+  `"auto"`，严格网关收到 `"auto"` 会 400）、`editTransport`（`multipart` 默认 /
+  `generations_ref`）、`refImagesField`（默认 `reference_images`）、`refImageEncoding`（`data_url`
+  默认 / `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
   `size`/`quality`/`response_format`/`n`/`background`）。
 - `omitBodyFields` 用于请求体校验严格的网关：默认按 OpenAI 发全套
-  `size`/`quality`/`response_format`/`n`（透明背景时另有 `background`），但有些网关多一个不认识的字段就整个 400（wan 回「请求包含未知字段」），gpt-image-1 本身也不再接受
+  `size`/`quality`/`response_format`/`n`（透明背景时另有
+  `background`），但有些网关多一个不认识的字段就整个 400（wan 回「请求包含未知字段」），gpt-image-1 本身也不再接受
   `response_format`。把对应字段列进去即可，不必改代码；`model` 与 `prompt` 不可省略。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到单来源变量
   `AI_IMAGE_BASE_URL`、`AI_IMAGE_API_KEY`、`AI_IMAGE_MODEL`、`AI_IMAGE_RESPONSE_FORMAT`、`AI_IMAGE_LABEL`，等价于一个
@@ -201,8 +207,11 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 当前支持文生图（所有来源统一
 `POST /v1/images/generations`）与图生图（页面上传一张参考图并可预览）；图生图按来源分支：`multipart`
 走 `POST /v1/images/edits`，`generations_ref` 也走 `POST /v1/images/generations` 并把参考图以 data
-URL 放进 `reference_images` 数组（`image.dddd.zone`
-一类网关没有 edits 端点）。局部重绘需要来源声明 `"inpaint"` 能力（`capabilities: ["generate","edit","inpaint"]`），gpt-image-2 一类完整来源（kmage、鲁批）可声明。实现为双通道官方优先：先走 edits 端点的 `image`+`mask`（透明区=重绘区）；网关以确定性 4xx 拒绝 `mask` 字段时自动回退「原图 + 红标记图」两张参考图加固定提示词前缀。页面上「局部修改」入口常显，来源不支持时点击会提示切换来源。页面在配置了多个来源时展示来源选择器，选中的来源随
+URL 放进 `reference_images` 数组（`image.dddd.zone` 一类网关没有 edits 端点）。局部重绘需要来源声明
+`"inpaint"`
+能力（`capabilities: ["generate","edit","inpaint"]`），gpt-image-2 一类完整来源（kmage、鲁批）可声明。实现为双通道官方优先：先走 edits 端点的
+`image`+`mask`（透明区=重绘区）；网关以确定性 4xx 拒绝 `mask`
+字段时自动回退「原图 + 红标记图」两张参考图加固定提示词前缀。页面上「局部修改」入口常显，来源不支持时点击会提示切换来源。页面在配置了多个来源时展示来源选择器，选中的来源随
 `inputConfig.providerId` 提交；来源不支持图生图时该模式被禁用。无论来源返回 `b64_json` 还是
 `url`，产物都会落到 MinIO，用户拿到的始终是本站文件地址。每日生成张数上限是全局的（不按来源区分），在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。

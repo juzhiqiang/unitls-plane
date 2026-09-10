@@ -59,7 +59,23 @@ export const tasks = pgTable(
     sessionId: text('session_id'),
   },
   t => ({
-    userCreatedIdx: index('tasks_user_created_idx').on(t.userId, t.createdAt),
+    userCreatedIdx: index('tasks_user_created_idx').on(
+      t.userId,
+      t.createdAt,
+      t.id
+    ),
+    userStatusCreatedIdx: index('tasks_user_status_created_idx').on(
+      t.userId,
+      t.status,
+      t.createdAt,
+      t.id
+    ),
+    userTypeCreatedIdx: index('tasks_user_type_created_idx').on(
+      t.userId,
+      t.type,
+      t.createdAt,
+      t.id
+    ),
     statusIdx: index('tasks_status_idx').on(t.status),
     sessionIdx: index('tasks_session_idx').on(t.userId, t.sessionId),
   })

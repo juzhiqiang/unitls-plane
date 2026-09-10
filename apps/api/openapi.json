@@ -41,6 +41,15 @@
         "operationId": "TasksController_list",
         "parameters": [
           {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Stable cursor from nextCursor; empty string starts cursor pagination",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "required": false,
             "in": "query",
@@ -103,7 +112,34 @@
         ],
         "responses": {
           "200": {
-            "description": "Task list"
+            "description": "Task list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TaskResponseDto"
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "tasks",
+                    "total",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -330,6 +366,41 @@
         ]
       }
     },
+    "/tasks/status": {
+      "get": {
+        "operationId": "TasksController_getStatuses",
+        "parameters": [
+          {
+            "name": "ids",
+            "required": true,
+            "in": "query",
+            "description": "Comma-separated UUIDs, at most 100 unique IDs",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task statuses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BatchTaskStatusDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get multiple task statuses (lightweight)",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/tasks/{id}": {
       "get": {
         "operationId": "TasksController_getOne",
@@ -503,11 +574,47 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "files",
+                    "total",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -666,11 +773,47 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "files",
+                    "total",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1403,6 +1546,45 @@
         "required": [
           "tasks",
           "total"
+        ]
+      },
+      "BatchTaskStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed",
+              "not_found"
+            ]
+          },
+          "progress": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "outputFileId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "status",
+          "progress",
+          "taskId"
         ]
       },
       "TaskStatusDto": {

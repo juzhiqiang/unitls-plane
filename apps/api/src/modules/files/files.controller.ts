@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import { FilesService } from './files.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -25,6 +27,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiQuery,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { normalizeUploadedFilename } from './filename.util';
 import {
@@ -37,6 +40,7 @@ import {
   resolveContentDispositionType,
 } from './content-disposition.util';
 import { FileIdsDto } from './dto/file-ids.dto';
+import { UploadBudgetInterceptor } from './upload-budget.interceptor';
 
 const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(
   { userId: 'transport-cap', plan: 'private' },
@@ -63,8 +67,14 @@ export class FilesController {
   @Public()
   @Post('upload')
   @UseInterceptors(
+    UploadBudgetInterceptor,
     FileInterceptor('file', {
-      limits: { fileSize: MAX_UPLOAD_TRANSPORT_SIZE },
+      limits: {
+        fileSize: MAX_UPLOAD_TRANSPORT_SIZE,
+        files: 1,
+        fields: 10,
+        fieldSize: 64 * 1024,
+      },
     })
   )
   @ApiOperation({ summary: 'Upload a file' })
@@ -89,18 +99,35 @@ export class FilesController {
 
   @Get('trash')
   @ApiOperation({ summary: 'List trashed files for current user' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'object', additionalProperties: true },
+        },
+        total: { type: 'number' },
+        nextCursor: { type: 'string', nullable: true },
+      },
+      required: ['files', 'total', 'nextCursor'],
+    },
+  })
   @ApiBearerAuth()
   async listTrash(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @CurrentUser() user?: User
+    @CurrentUser() user?: User,
+    @Query('cursor') cursor?: string
   ) {
     if (!user) {
       throw new BadRequestException('User required for listing trash');
     }
     return this.filesService.listTrashed(user.id, {
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      page: page !== undefined ? Number(page) : undefined,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      cursor,
     });
   }
 
@@ -153,20 +180,37 @@ export class FilesController {
 
   @Get()
   @ApiOperation({ summary: 'List files for current user' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'object', additionalProperties: true },
+        },
+        total: { type: 'number' },
+        nextCursor: { type: 'string', nullable: true },
+      },
+      required: ['files', 'total', 'nextCursor'],
+    },
+  })
   @ApiBearerAuth()
   async list(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('mimeType') mimeType?: string,
     @Query('search') search?: string,
-    @CurrentUser() user?: User
+    @CurrentUser() user?: User,
+    @Query('cursor') cursor?: string
   ) {
     if (!user) {
       throw new BadRequestException('User required for listing files');
     }
     return this.filesService.listByUser(user.id, {
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      page: page !== undefined ? Number(page) : undefined,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      cursor,
       mimeType,
       search,
     });
@@ -195,22 +239,40 @@ export class FilesController {
     @Res() res?: Response
   ) {
     const file = await this.filesService.getById(id, user?.id);
-    const buffer = await this.filesService.download(file.storageKey);
 
     if (!res) {
       return { url: await this.filesService.getSignedUrl(id, user?.id) };
     }
 
-    const dispositionType = resolveContentDispositionType(download);
-
-    res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Content-Length', buffer.length.toString());
-    res.setHeader(
-      'Content-Disposition',
-      buildContentDisposition(file.filename, dispositionType)
-    );
-    res.setHeader('Cache-Control', 'private, max-age=300');
-    return res.end(buffer);
+    if (res.destroyed) return;
+    const abort = new globalThis.AbortController();
+    const onClose = () => abort.abort();
+    res.once('close', onClose);
+    let source: Readable | undefined;
+    try {
+      source = await this.filesService.downloadStream(
+        file.storageKey,
+        abort.signal
+      );
+      if (res.destroyed || abort.signal.aborted) {
+        source.destroy();
+        return;
+      }
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Content-Length', String(file.originalSize));
+      res.setHeader(
+        'Content-Disposition',
+        buildContentDisposition(
+          file.filename,
+          resolveContentDispositionType(download)
+        )
+      );
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      await pipeline(source, res);
+    } finally {
+      source?.destroy();
+      res.off('close', onClose);
+    }
   }
 
   /**

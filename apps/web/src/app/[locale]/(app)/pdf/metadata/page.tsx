@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { PDFDocument } from 'pdf-lib';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
@@ -78,6 +77,8 @@ export default function MetadataPage() {
     let cancelled = false;
     (async () => {
       try {
+        const { PDFDocument } = await import('pdf-lib');
+        if (cancelled) return;
         const ab = await file.arrayBuffer();
         const doc = await PDFDocument.load(ab, { updateMetadata: false });
         if (cancelled) return;

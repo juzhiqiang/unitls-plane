@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { Response } from 'express';
 import { FilesController } from './files.controller';
 import type { FilesService } from './files.service';
+import { PassThrough, Readable, Writable } from 'node:stream';
 
 describe('FilesController route order', () => {
   it('declares static trash routes before dynamic id routes', () => {
@@ -92,7 +93,13 @@ describe('FilesController route order', () => {
     expect(source).toContain("import { getLimit } from '@utils-plane/utils'");
     expect(source).toContain('const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(');
     expect(source).toContain("plan: 'private'");
-    expect(source).toContain('limits: { fileSize: MAX_UPLOAD_TRANSPORT_SIZE }');
+    expect(source).toContain('fileSize: MAX_UPLOAD_TRANSPORT_SIZE');
+    expect(
+      source.indexOf(
+        'UploadBudgetInterceptor,',
+        source.indexOf('@UseInterceptors(')
+      )
+    ).toBeLessThan(source.indexOf("FileInterceptor('file'"));
     expect(source).not.toContain('50 * 1024 * 1024');
   });
 
@@ -124,8 +131,8 @@ describe('FilesController route order', () => {
 describe('FilesController download disposition', () => {
   function createController(file: { filename: string; mimeType: string }) {
     const service = {
-      getById: async () => file,
-      download: async () => Buffer.from('payload'),
+      getById: async () => ({ ...file, originalSize: 7 }),
+      downloadStream: async () => Readable.from(Buffer.from('payload')),
       getSignedUrl: async () => 'https://signed.example/file',
     } as unknown as FilesService;
 
@@ -134,13 +141,19 @@ describe('FilesController download disposition', () => {
 
   function createResponse() {
     const headers = new Map<string, string>();
-    const res = {
-      setHeader: (name: string, value: string) => {
-        headers.set(name, value);
-        return res;
-      },
-      end: (body: unknown) => body,
-    };
+    const res = Object.assign(
+      new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      }),
+      {
+        setHeader: (name: string, value: string) => {
+          headers.set(name, value);
+          return res;
+        },
+      }
+    );
 
     return { res: res as unknown as Response, headers };
   }
@@ -171,6 +184,56 @@ describe('FilesController download disposition', () => {
       'attachment; filename="__.pdf"; filename*=UTF-8\'\'%E5%8F%91%E7%A5%A8.pdf'
     );
     expect(headers.get('Content-Length')).toBe('7');
+  });
+});
+
+describe('FilesController stream lifecycle', () => {
+  function setup(source: Readable) {
+    const controller = new FilesController({
+      getById: async () => ({
+        storageKey: 'key',
+        filename: 'a.pdf',
+        mimeType: 'application/pdf',
+        originalSize: 7,
+      }),
+      downloadStream: async () => source,
+    } as unknown as FilesService);
+    const res = Object.assign(
+      new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      }),
+      { setHeader() {} }
+    );
+    return {
+      res,
+      run: () =>
+        controller.download(
+          'id',
+          undefined,
+          undefined,
+          res as unknown as Response
+        ),
+    };
+  }
+  it('destroys the response when the source fails', async () => {
+    const source = new PassThrough();
+    const { res, run } = setup(source);
+    const pending = run().catch(error => error as Error);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    source.destroy(new Error('source failed'));
+    expect((await pending)?.message).toBe('source failed');
+    expect(res.destroyed).toBe(true);
+  });
+  it('destroys the source when the client disconnects', async () => {
+    const source = new PassThrough();
+    const { res, run } = setup(source);
+    const pending = run().catch(error => error as Error);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    res.destroy();
+    expect(await pending).toBeInstanceOf(Error);
+    expect(source.destroyed).toBe(true);
   });
 });
 

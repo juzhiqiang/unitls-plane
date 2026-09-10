@@ -14,6 +14,8 @@ import {
   IsNumber,
   Min,
   Max,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 
 export const taskQuerySchema = z.object({
@@ -45,6 +47,15 @@ export class CreateTaskDto {
 }
 
 export class TaskQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Stable cursor from nextCursor; empty string starts cursor pagination',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  cursor?: string;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)
@@ -137,6 +148,14 @@ export class TaskStatusDto {
 
   @ApiPropertyOptional({ type: String })
   errorMessage?: string;
+}
+
+export class BatchTaskStatusDto extends TaskStatusDto {
+  @ApiProperty({ type: String, format: 'uuid' })
+  taskId!: string;
+
+  @ApiProperty({ type: String, enum: [...TASK_STATUSES, 'not_found'] })
+  declare status: string;
 }
 
 export class ImageGenerateQuotaDto {

@@ -1,5 +1,25 @@
 # Utils-Plane 性能巡检报告（2026-09-09）
 
+## 最新收尾结果（2026-09-10）
+
+以下为最终实施记录；后文审计和第一轮限制保留历史状态。
+
+- 按锁文件执行 `bun install --frozen-lockfile` 补齐本地缺失依赖，未修改 bun.lock。Nest
+  API 构建现已通过，ajv 缺项不再阻塞。
+- 拼图尺寸探测与绘制在同一 Worker 流程执行，主线程回退复用同一实现。64
+  MiB 解码缓存内的图片仅解码一次；超预算图逐张探测和重解绘制。失败释放位图，预算不包括单图解码瞬时峰值和输出画布。
+- PdfResultPreview 采用 3–6 列、5 行滚动窗口，最多挂载 15–30 个缩略图。离窗清零画布，缩略图并发最多 3；新文档销毁旧 PDF 并拒绝迟到结果。页码导航和缩略图选页继续可用。
+- Multer 前新增每进程上传并发限制（默认 2），超限返回 503，成功/异常/取消归还容量；限制 multipart 文件数、字段数及字段大小。上传仍是内存缓冲。
+- `.env.example` 新增 `UPLOAD_MAX_CONCURRENT`、`PERFORMANCE_MEMORY_LOG` 和四类
+  `*_WORKER_CONCURRENCY`；范围 1–32，队列默认并发不变。可选日志记录 RSS/heap/external，无文件名/正文；不是集群级内存配额。
+- 最新验证：API **490** 项、Web **541** 项测试通过；Web/API
+  build 和 lint 均退出码 0，保留 1/271 条既有 lint 警告。300 页窗口、40 张超预算图片逐张释放、缓存错误清理和上传容量归还均有回归测试；OpenAPI/client 已重新生成。
+- 构建结果：PDF 元数据页 180 kB、字体页 182
+  kB。未做生产 RSS/GC/P95 压测及真实 300 页浏览器 FPS 验收。旧的未引用 PdfPreview 和拆分/重排工具页不属于本次结果窗口改造范围。
+- 剩余：Windows standalone symlink
+  EPERM、ONNX/循环 chunk/PWA 大 chunk 告警；旧页码 UI 和 COUNT 成本仍存在。
+- Git 写入权限已恢复，本轮与上一轮已验证修改一并提交。
+
 ## 结论摘要
 
 当前代码已经具备不少性能基础设施：React
@@ -239,3 +259,42 @@ key，不能合并 N 个不同任务 ID 的 HTTP 请求。
 - 本地 PostgreSQL 当前仅有 141 个 files、85 个 tasks、1 个 user；`EXPLAIN`
   结果只用于确认查询形状和排序/过滤路径，不能作为生产基准。
 - 本报告只新增文档，不修改业务代码、schema、配置或依赖。
+
+## 第一批实施结果（2026-09-10）
+
+以上为初始审计记录；用户批准后已实施以下优化：
+
+| 项目          | 实施结果                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| 任务组轮询    | 每轮 N 个请求改为 1 个批量请求；实际完成轮次驱动 1/2/3/5 秒退避，终态停止、后台暂停                   |
+| 状态接口保护  | UUID 校验、100 个去重 ID 上限、每用户/IP 每接口 120 次/分钟；缺失项返回 not_found                     |
+| 文件/任务列表 | 保留 page/limit 和 total，增加 nextCursor；时间与 UUID 稳定排序，保留微秒精度，游标绑定用户及筛选条件 |
+| 数据库索引    | 活动文件/回收站部分索引，任务用户/时间/ID 及状态、类型复合索引；0018 迁移已在本地应用                 |
+| 文件传输      | 普通下载以 pipeline 传输对象流，响应断开及源异常释放流；缩略图流输入、32 MiB 实际读取限制             |
+| PDF 元数据页  | pdf-lib 交互加载，First Load JS 从审计时 355 kB 降为约 180 kB（约 49%）                               |
+| 字体页        | opentype.js 交互加载，本轮拆分前 247 kB，拆分后 182 kB（约 26%）                                      |
+
+### 验证证据
+
+- 共享包 96 项、API 489 项、Web
+  537 项测试通过；新增覆盖缺失任务、退避及重置、分页微秒精度、非法游标、源流异常、客户端断开、缩略图输入字节上限。
+- 本地游标遍历 120 个活动文件、69 个用户任务，无重复/遗漏；回收站为 0 条，空列表路径通过。读取现有 MinIO 对象 661927 字节，与数据库 originalSize 一致。
+- 自然查询计划：小表仍会选择顺序扫描加排序；回收站使用 files_trash_list_idx。仅在核对事务内关闭顺序扫描时，活动文件命中 files_active_list_idx，任务状态查询命中 tasks_user_status_created_idx（Bitmap
+  Scan）。不将这些结果作为大数据量性能基准。
+- Web 生产构建完成；API 生产源码 `tsc -p tsconfig.build.json --noEmit` 通过。Web/API
+  lint 无错误，分别保留 1/271 条既有警告。
+- 已重新导出 OpenAPI 并生成 typed
+  client。复现本地迁移、EXPLAIN、分页遍历及对象流检查：在 apps/api 运行
+  `bun src/scripts/verify-performance.ts`。脚本限定本地数据库，应用待执行迁移后做只读验证。
+- 详细本地输出位于 `log/performance-*.log`（不提交）。
+
+### 剩余限制
+
+- `nest build` 仍因现有依赖安装缺少 `ajv/dist/compile/codegen`
+  而失败；未改依赖锁文件。直接包含测试文件的全库 tsc 仍有既有测试类型错误，不能宣称全库类型检查通过。
+- Web 仍有 ONNX Runtime 动态依赖、循环 chunk、约 3 MB chunk 不预缓存和 Windows standalone symlink
+  EPERM 警告。
+- 游标 API 已就绪，现有页码 UI 未切换；total 仍需 COUNT。未做生产压测、P95/RSS 实测或大表基准。
+- Sharp 不是恒定内存解码器；Multer 上传缓冲、并发内存预算/观测配置未在本批扩展，需结合真实部署容量另行配置。图片解码复用与 PDF 缩略图虚拟化仍属第二批。
+- Git 暂存实际返回
+  `.git/index.lock: Permission denied`；当前会话不允许提权，修改尚未提交。权限恢复后需创建中文 Git 提交。

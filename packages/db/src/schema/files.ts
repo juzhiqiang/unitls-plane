@@ -29,6 +29,12 @@ export const files = pgTable(
   },
   t => ({
     userCreatedIdx: index('files_user_created_idx').on(t.userId, t.createdAt),
+    activeListIdx: index('files_active_list_idx')
+      .on(t.userId, t.createdAt, t.id)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.purgeStartedAt} IS NULL`),
+    trashListIdx: index('files_trash_list_idx')
+      .on(t.userId, t.deletedAt, t.id)
+      .where(sql`${t.deletedAt} IS NOT NULL AND ${t.purgeStartedAt} IS NULL`),
     expiresIdx: index('files_expires_idx')
       .on(t.expiresAt)
       .where(sql`expires_at IS NOT NULL`),

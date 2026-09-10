@@ -41,6 +41,16 @@
         "operationId": "TasksController_list",
         "parameters": [
           {
+            "name": "includeTotal",
+            "required": false,
+            "in": "query",
+            "description": "Cursor 模式是否返回 total；旧分页默认 true",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
             "name": "cursor",
             "required": false,
             "in": "query",
@@ -125,7 +135,8 @@
                       }
                     },
                     "total": {
-                      "type": "number"
+                      "type": "number",
+                      "nullable": true
                     },
                     "nextCursor": {
                       "type": "string",
@@ -582,6 +593,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "includeTotal",
+            "required": false,
+            "in": "query",
+            "description": "Cursor 模式是否返回 total；旧分页默认 true",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -600,7 +620,8 @@
                       }
                     },
                     "total": {
-                      "type": "number"
+                      "type": "number",
+                      "nullable": true
                     },
                     "nextCursor": {
                       "type": "string",
@@ -781,6 +802,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "includeTotal",
+            "required": false,
+            "in": "query",
+            "description": "Cursor 模式是否返回 total；旧分页默认 true",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -799,7 +829,8 @@
                       }
                     },
                     "total": {
-                      "type": "number"
+                      "type": "number",
+                      "nullable": true
                     },
                     "nextCursor": {
                       "type": "string",

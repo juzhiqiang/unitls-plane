@@ -6,6 +6,8 @@ import {
   useBatchPermanentDeleteFiles,
   useBatchRestoreFiles,
   useEmptyTrash,
+  useFiles,
+  useTrashedFiles,
 } from '../use-files';
 import { accountQueryKeys } from '../query-keys';
 
@@ -13,6 +15,7 @@ vi.mock('@/lib/api-client', () => ({
   api: {
     DELETE: vi.fn(),
     POST: vi.fn(),
+    GET: vi.fn(),
   },
 }));
 
@@ -20,6 +23,7 @@ import { api } from '@/lib/api-client';
 
 const mockDelete = vi.mocked(api.DELETE);
 const mockPost = vi.mocked(api.POST);
+const mockGet = vi.mocked(api.GET);
 
 function createWrapper(queryClient = new QueryClient()) {
   // eslint-disable-next-line react/display-name
@@ -102,5 +106,53 @@ describe('file trash mutations', () => {
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['files'] })
     );
+  });
+});
+
+describe('file list cursor queries', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGet.mockResolvedValue({
+      data: { files: [], total: null, nextCursor: null },
+      error: undefined,
+    } as never);
+  });
+
+  it('uses cursor-only totals for active file pagination', async () => {
+    const { result } = renderHook(
+      () => useFiles({ cursor: 'cursor-1', limit: 20 }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith('/files', {
+      params: {
+        query: {
+          page: '1',
+          limit: '20',
+          cursor: 'cursor-1',
+          includeTotal: 'false',
+        },
+      },
+    });
+  });
+
+  it('uses cursor-only totals for trash pagination', async () => {
+    const { result } = renderHook(
+      () => useTrashedFiles({ cursor: 'cursor-1', limit: 20 }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith('/files/trash', {
+      params: {
+        query: {
+          page: '1',
+          limit: '20',
+          cursor: 'cursor-1',
+          includeTotal: 'false',
+        },
+      },
+    });
   });
 });

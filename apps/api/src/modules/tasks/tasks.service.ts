@@ -388,8 +388,13 @@ export class TasksService {
       status?: TaskStatus;
       type?: TaskType;
       cursor?: string;
+      includeTotal?: boolean;
     }
-  ): Promise<{ tasks: Task[]; total: number; nextCursor: string | null }> {
+  ): Promise<{
+    tasks: Task[];
+    total: number | null;
+    nextCursor: string | null;
+  }> {
     const { offset, limit } = paginationOptions(query.page, query.limit);
     const scope = JSON.stringify([
       'tasks',
@@ -423,17 +428,19 @@ export class TasksService {
         .orderBy(desc(tasks.createdAt), desc(tasks.id))
         .limit(limit + 1)
         .offset(query.cursor !== undefined ? 0 : offset),
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(tasks)
-        .where(and(...conditions)),
+      query.includeTotal === false
+        ? Promise.resolve([] as { count: number }[])
+        : db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(tasks)
+            .where(and(...conditions)),
     ]);
 
     const result = finishPage(tasksList, limit, scope);
     return {
       tasks: result.items,
       nextCursor: result.nextCursor,
-      total: countResult[0]?.count ?? 0,
+      total: query.includeTotal === false ? null : (countResult[0]?.count ?? 0),
     };
   }
 

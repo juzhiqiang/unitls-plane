@@ -19,7 +19,8 @@ export interface FileRecord {
 
 export interface FileListResponse {
   files: FileRecord[];
-  total: number;
+  total: number | null;
+  nextCursor: string | null;
 }
 
 export interface FileQuery {
@@ -27,6 +28,8 @@ export interface FileQuery {
   limit?: number;
   mimeType?: string;
   search?: string;
+  cursor?: string;
+  includeTotal?: boolean;
 }
 
 function refreshFileQueries(queryClient: ReturnType<typeof useQueryClient>) {
@@ -52,6 +55,12 @@ export function useFiles(query?: FileQuery) {
       };
       if (query?.mimeType) params.mimeType = query.mimeType;
       if (query?.search) params.search = query.search;
+      if (query?.cursor !== undefined) {
+        params.cursor = query.cursor;
+        params.includeTotal = String(query.includeTotal ?? false);
+      } else if (query?.includeTotal !== undefined) {
+        params.includeTotal = String(query.includeTotal);
+      }
 
       const { data, error } = await api.GET('/files', {
         params: { query: params as any },
@@ -62,7 +71,12 @@ export function useFiles(query?: FileQuery) {
   });
 }
 
-export function useTrashedFiles(query?: { page?: number; limit?: number }) {
+export function useTrashedFiles(query?: {
+  page?: number;
+  limit?: number;
+  cursor?: string;
+  includeTotal?: boolean;
+}) {
   return useQuery({
     queryKey: ['files', 'trash', query],
     queryFn: async () => {
@@ -71,6 +85,10 @@ export function useTrashedFiles(query?: { page?: number; limit?: number }) {
           query: {
             page: String(query?.page ?? 1),
             limit: String(query?.limit ?? 10),
+            ...(query?.cursor !== undefined ? { cursor: query.cursor } : {}),
+            ...(query?.cursor !== undefined || query?.includeTotal !== undefined
+              ? { includeTotal: String(query.includeTotal ?? false) }
+              : {}),
           },
         },
       });

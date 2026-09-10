@@ -16,6 +16,12 @@ const cursorSchema = z.object({
   id: z.string().uuid(),
 });
 
+export function parseIncludeTotal(value: unknown): boolean {
+  if (value === undefined || value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  throw new BadRequestException('Invalid includeTotal');
+}
+
 export function paginationOptions(page = 1, limit = 20) {
   if (
     !Number.isSafeInteger(page) ||

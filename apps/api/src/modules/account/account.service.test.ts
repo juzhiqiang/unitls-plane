@@ -99,6 +99,67 @@ it('returns full counts instead of deriving them from recent rows', async () => 
   await expect(createService().getSummary('user-1')).resolves.toBe(summary);
 });
 
+it('reuses an account summary briefly to avoid repeated aggregate queries', async () => {
+  const summary = {
+    activeTaskCount: 1,
+    failedTaskCount: 0,
+    activeFileCount: 2,
+    activeFileBytes: 3,
+    recentTasks: [],
+    recentFiles: [],
+  };
+  repository.getSummary.mockResolvedValue(summary);
+  const service = createService();
+  await expect(service.getSummary('user-1')).resolves.toBe(summary);
+  await expect(service.getSummary('user-1')).resolves.toBe(summary);
+  expect(repository.getSummary).toHaveBeenCalledTimes(1);
+});
+
+it('does not share account summaries between users', async () => {
+  repository.getSummary.mockImplementation(async (userId: string) => ({
+    userId,
+  }));
+  const service = createService();
+  await service.getSummary('user-1');
+  await service.getSummary('user-2');
+  expect(repository.getSummary).toHaveBeenCalledTimes(2);
+});
+
+it('shares an in-flight account summary request between concurrent callers', async () => {
+  let resolveSummary!: (value: unknown) => void;
+  repository.getSummary.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        resolveSummary = resolve;
+      })
+  );
+  const service = createService();
+  const first = service.getSummary('user-1');
+  const second = service.getSummary('user-1');
+
+  expect(repository.getSummary).toHaveBeenCalledTimes(1);
+  const summary = { activeTaskCount: 1 };
+  resolveSummary(summary);
+  await expect(Promise.all([first, second])).resolves.toEqual([
+    summary,
+    summary,
+  ]);
+});
+
+it('invalidates the account summary cache after account deletion', async () => {
+  const firstSummary = { activeTaskCount: 1 };
+  const secondSummary = { activeTaskCount: 0 };
+  repository.getSummary
+    .mockResolvedValueOnce(firstSummary)
+    .mockResolvedValueOnce(secondSummary);
+  const service = createService();
+
+  await service.getSummary('user-1');
+  await service.deleteAccount('user-1', 'owner@example.com');
+  await expect(service.getSummary('user-1')).resolves.toBe(secondSummary);
+  expect(repository.getSummary).toHaveBeenCalledTimes(2);
+});
+
 it('confirms the email before persisting deletion state', async () => {
   await expect(
     createService().deleteAccount('user-1', ' other@example.com ')

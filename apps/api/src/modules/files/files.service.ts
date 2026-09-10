@@ -293,8 +293,13 @@ export class FilesService {
       mimeType?: string;
       search?: string;
       cursor?: string;
+      includeTotal?: boolean;
     } = {}
-  ): Promise<{ files: File[]; total: number; nextCursor: string | null }> {
+  ): Promise<{
+    files: File[];
+    total: number | null;
+    nextCursor: string | null;
+  }> {
     const { limit, offset } = paginationOptions(options.page, options.limit);
     const scope = JSON.stringify([
       'files',
@@ -334,17 +339,20 @@ export class FilesService {
         .orderBy(desc(files.createdAt), desc(files.id))
         .limit(limit + 1)
         .offset(options.cursor !== undefined ? 0 : offset),
-      db
-        .select({ count: sql<number>`count(*)` })
-        .from(files)
-        .where(where),
+      options.includeTotal === false
+        ? Promise.resolve([] as { count: number }[])
+        : db
+            .select({ count: sql<number>`count(*)` })
+            .from(files)
+            .where(where),
     ]);
 
     const result = finishPage(fileList, limit, scope);
     return {
       files: result.items.map(normalizeFileRecord),
       nextCursor: result.nextCursor,
-      total: countResult[0]?.count ?? 0,
+      total:
+        options.includeTotal === false ? null : (countResult[0]?.count ?? 0),
     };
   }
 
@@ -432,8 +440,17 @@ export class FilesService {
 
   async listTrashed(
     userId: string,
-    options: { page?: number; limit?: number; cursor?: string } = {}
-  ): Promise<{ files: File[]; total: number; nextCursor: string | null }> {
+    options: {
+      page?: number;
+      limit?: number;
+      cursor?: string;
+      includeTotal?: boolean;
+    } = {}
+  ): Promise<{
+    files: File[];
+    total: number | null;
+    nextCursor: string | null;
+  }> {
     const { limit, offset } = paginationOptions(options.page, options.limit);
     const scope = JSON.stringify(['trash', userId]);
     const cursor = cursorCondition(
@@ -460,17 +477,20 @@ export class FilesService {
         .orderBy(desc(files.deletedAt), desc(files.id))
         .limit(limit + 1)
         .offset(options.cursor !== undefined ? 0 : offset),
-      db
-        .select({ count: sql<number>`count(*)` })
-        .from(files)
-        .where(where),
+      options.includeTotal === false
+        ? Promise.resolve([] as { count: number }[])
+        : db
+            .select({ count: sql<number>`count(*)` })
+            .from(files)
+            .where(where),
     ]);
 
     const result = finishPage(fileList, limit, scope);
     return {
       files: result.items.map(normalizeFileRecord),
       nextCursor: result.nextCursor,
-      total: countResult[0]?.count ?? 0,
+      total:
+        options.includeTotal === false ? null : (countResult[0]?.count ?? 0),
     };
   }
 

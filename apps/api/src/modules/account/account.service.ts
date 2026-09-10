@@ -7,8 +7,17 @@ import { MinioService } from '../files/minio.service';
 import { AccountTaskQueueService } from './account-task-queue.service';
 import { AccountRepository } from './account.repository';
 
+type AccountSummary = Awaited<ReturnType<AccountRepository['getSummary']>>;
+type SummaryCacheEntry = {
+  expiresAt: number;
+  value?: AccountSummary;
+  pending?: Promise<AccountSummary>;
+};
+
 @Injectable()
 export class AccountService {
+  private readonly summaryCache = new Map<string, SummaryCacheEntry>();
+
   constructor(
     private readonly repository: AccountRepository,
     private readonly minio: MinioService,
@@ -16,7 +25,38 @@ export class AccountService {
   ) {}
 
   getSummary(userId: string) {
-    return this.repository.getSummary(userId);
+    const now = Date.now();
+    const cached = this.summaryCache.get(userId);
+    if (cached?.pending) return cached.pending;
+    if (cached?.value && cached.expiresAt > now) {
+      return Promise.resolve(cached.value);
+    }
+    if (cached) this.summaryCache.delete(userId);
+
+    let pending: Promise<AccountSummary>;
+    pending = this.repository.getSummary(userId).then(
+      value => {
+        const current = this.summaryCache.get(userId);
+        if (current?.pending === pending) {
+          this.summaryCache.set(userId, {
+            value,
+            expiresAt: Date.now() + 2_000,
+          });
+        }
+        return value;
+      },
+      error => {
+        const current = this.summaryCache.get(userId);
+        if (current?.pending === pending) this.summaryCache.delete(userId);
+        throw error;
+      }
+    );
+    this.summaryCache.set(userId, { expiresAt: now + 2_000, pending });
+    return pending;
+  }
+
+  private invalidateSummary(userId: string): void {
+    this.summaryCache.delete(userId);
   }
 
   async deleteAccount(
@@ -29,6 +69,7 @@ export class AccountService {
       throw new BadRequestException('Confirmation email does not match');
     }
 
+    this.invalidateSummary(userId);
     await this.repository.markDeletionStarted(userId);
     const snapshot = await this.repository.getDeletionSnapshot(userId);
     await this.taskQueues.assertNoActiveAndRemove(userId, snapshot.tasks);
@@ -42,5 +83,6 @@ export class AccountService {
     }
 
     await this.repository.deleteAccountRecords(userId);
+    this.invalidateSummary(userId);
   }
 }

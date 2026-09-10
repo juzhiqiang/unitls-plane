@@ -16,7 +16,9 @@ import {
   Max,
   IsString,
   MaxLength,
+  IsBoolean,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export const taskQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -47,6 +49,19 @@ export class CreateTaskDto {
 }
 
 export class TaskQueryDto {
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Cursor 模式是否返回 total；旧分页默认 true',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeTotal?: boolean = true;
+
   @ApiPropertyOptional({
     description:
       'Stable cursor from nextCursor; empty string starts cursor pagination',

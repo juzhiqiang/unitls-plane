@@ -700,6 +700,8 @@ export interface operations {
     TasksController_list: {
         parameters: {
             query?: {
+                /** @description Cursor 模式是否返回 total；旧分页默认 true */
+                includeTotal?: boolean;
                 /** @description Stable cursor from nextCursor; empty string starts cursor pagination */
                 cursor?: string;
                 page?: number;
@@ -721,7 +723,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         tasks: components["schemas"]["TaskResponseDto"][];
-                        total: number;
+                        total: number | null;
                         nextCursor: string | null;
                     };
                 };
@@ -1099,6 +1101,8 @@ export interface operations {
                 page: string;
                 limit: string;
                 cursor: string;
+                /** @description Cursor 模式是否返回 total；旧分页默认 true */
+                includeTotal?: boolean;
             };
             header?: never;
             path?: never;
@@ -1115,7 +1119,7 @@ export interface operations {
                         files: {
                             [key: string]: unknown;
                         }[];
-                        total: number;
+                        total: number | null;
                         nextCursor: string | null;
                     };
                 };
@@ -1210,6 +1214,8 @@ export interface operations {
                 mimeType: string;
                 search: string;
                 cursor: string;
+                /** @description Cursor 模式是否返回 total；旧分页默认 true */
+                includeTotal?: boolean;
             };
             header?: never;
             path?: never;
@@ -1226,7 +1232,7 @@ export interface operations {
                         files: {
                             [key: string]: unknown;
                         }[];
-                        total: number;
+                        total: number | null;
                         nextCursor: string | null;
                     };
                 };

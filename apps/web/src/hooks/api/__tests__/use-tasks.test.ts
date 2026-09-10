@@ -3,7 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountQueryKeys, taskQueryKeys } from '../query-keys';
-import { useCreateTask, useImageGenerateQuota, useRetryTask } from '../use-tasks';
+import {
+  useCreateTask,
+  useImageGenerateQuota,
+  useRetryTask,
+  useTasks,
+} from '../use-tasks';
 
 // useImageGenerateQuota 依赖 useSession 决定是否启用查询,用 hoisted 状态在用例间切换登录态。
 const sessionState = vi.hoisted(() => ({
@@ -108,6 +113,37 @@ describe('task mutations', () => {
     });
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: taskQueryKeys.imageGenerateQuota(),
+    });
+  });
+});
+
+describe('task list cursor queries', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGet.mockResolvedValue({
+      data: { tasks: [], total: null, nextCursor: null },
+      error: undefined,
+    } as never);
+  });
+
+  it('uses cursor-only totals for task pagination', async () => {
+    const { result } = renderHook(
+      () => useTasks({ cursor: 'cursor-1', limit: 20 }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith('/tasks', {
+      params: {
+        query: {
+          page: undefined,
+          limit: 20,
+          status: undefined,
+          type: undefined,
+          cursor: 'cursor-1',
+          includeTotal: false,
+        },
+      },
     });
   });
 });

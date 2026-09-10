@@ -41,6 +41,7 @@ import {
 } from './content-disposition.util';
 import { FileIdsDto } from './dto/file-ids.dto';
 import { UploadBudgetInterceptor } from './upload-budget.interceptor';
+import { parseIncludeTotal } from '../../common/database/list-pagination';
 
 const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(
   { userId: 'transport-cap', plan: 'private' },
@@ -108,18 +109,25 @@ export class FilesController {
           type: 'array',
           items: { type: 'object', additionalProperties: true },
         },
-        total: { type: 'number' },
+        total: { type: 'number', nullable: true },
         nextCursor: { type: 'string', nullable: true },
       },
       required: ['files', 'total', 'nextCursor'],
     },
   })
   @ApiBearerAuth()
+  @ApiQuery({
+    name: 'includeTotal',
+    required: false,
+    type: Boolean,
+    description: 'Cursor 模式是否返回 total；旧分页默认 true',
+  })
   async listTrash(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @CurrentUser() user?: User,
-    @Query('cursor') cursor?: string
+    @Query('cursor') cursor?: string,
+    @Query('includeTotal') includeTotal?: string
   ) {
     if (!user) {
       throw new BadRequestException('User required for listing trash');
@@ -128,6 +136,7 @@ export class FilesController {
       page: page !== undefined ? Number(page) : undefined,
       limit: limit !== undefined ? Number(limit) : undefined,
       cursor,
+      includeTotal: parseIncludeTotal(includeTotal),
     });
   }
 
@@ -189,20 +198,27 @@ export class FilesController {
           type: 'array',
           items: { type: 'object', additionalProperties: true },
         },
-        total: { type: 'number' },
+        total: { type: 'number', nullable: true },
         nextCursor: { type: 'string', nullable: true },
       },
       required: ['files', 'total', 'nextCursor'],
     },
   })
   @ApiBearerAuth()
+  @ApiQuery({
+    name: 'includeTotal',
+    required: false,
+    type: Boolean,
+    description: 'Cursor 模式是否返回 total；旧分页默认 true',
+  })
   async list(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('mimeType') mimeType?: string,
     @Query('search') search?: string,
     @CurrentUser() user?: User,
-    @Query('cursor') cursor?: string
+    @Query('cursor') cursor?: string,
+    @Query('includeTotal') includeTotal?: string
   ) {
     if (!user) {
       throw new BadRequestException('User required for listing files');
@@ -213,6 +229,7 @@ export class FilesController {
       cursor,
       mimeType,
       search,
+      includeTotal: parseIncludeTotal(includeTotal),
     });
   }
 

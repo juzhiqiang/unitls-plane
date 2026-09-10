@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Response } from 'express';
@@ -125,6 +125,81 @@ describe('FilesController route order', () => {
       "Pick<User, 'id' | 'plan' | 'role'> | string | null"
     );
     expect(uploadSource).not.toContain("typeof uploadUser === 'string'");
+  });
+});
+
+describe('FilesController list pagination options', () => {
+  function createController() {
+    const service = {
+      listByUser: vi.fn().mockResolvedValue({
+        files: [],
+        total: null,
+        nextCursor: null,
+      }),
+      listTrashed: vi.fn().mockResolvedValue({
+        files: [],
+        total: null,
+        nextCursor: null,
+      }),
+    } as unknown as FilesService;
+
+    return { controller: new FilesController(service), service };
+  }
+
+  it('forwards cursor-only mode to the active file list', async () => {
+    const { controller, service } = createController();
+    const user = { id: 'user-1' } as never;
+
+    await controller.list(
+      undefined,
+      '20',
+      undefined,
+      undefined,
+      user,
+      'cursor-1',
+      'false'
+    );
+
+    expect(service.listByUser).toHaveBeenCalledWith('user-1', {
+      page: undefined,
+      limit: 20,
+      cursor: 'cursor-1',
+      mimeType: undefined,
+      search: undefined,
+      includeTotal: false,
+    });
+  });
+
+  it('forwards cursor-only mode to the trash list', async () => {
+    const { controller, service } = createController();
+    const user = { id: 'user-1' } as never;
+
+    await controller.listTrash(undefined, undefined, user, 'cursor-1', 'false');
+
+    expect(service.listTrashed).toHaveBeenCalledWith('user-1', {
+      page: undefined,
+      limit: undefined,
+      cursor: 'cursor-1',
+      includeTotal: false,
+    });
+  });
+
+  it('rejects an invalid includeTotal query value', async () => {
+    const { controller, service } = createController();
+    const user = { id: 'user-1' } as never;
+
+    await expect(
+      controller.list(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        user,
+        undefined,
+        'sometimes'
+      )
+    ).rejects.toThrow('Invalid includeTotal');
+    expect(service.listByUser).not.toHaveBeenCalled();
   });
 });
 

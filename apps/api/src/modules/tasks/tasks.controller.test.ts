@@ -6,6 +6,7 @@ import { TasksController } from './tasks.controller';
 // quota 的数字计算由 tasks.service.test.ts 覆盖,这里只断言转发行为。
 const tasksService = {
   getStatuses: vi.fn(),
+  listByUser: vi.fn(),
   getImageGenerateQuota: vi.fn(),
   listImageGenerateSessions: vi.fn(),
   listImageGenerateSessionTasks: vi.fn(),
@@ -27,6 +28,11 @@ function createController() {
 beforeEach(() => {
   vi.clearAllMocks();
   tasksService.getStatuses.mockResolvedValue([]);
+  tasksService.listByUser.mockResolvedValue({
+    tasks: [],
+    total: null,
+    nextCursor: null,
+  });
   tasksService.getImageGenerateQuota.mockResolvedValue({
     limit: 10,
     used: 3,
@@ -40,6 +46,28 @@ beforeEach(() => {
       sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
     },
   ]);
+});
+
+it('forwards includeTotal=false to the task list service', async () => {
+  const user = { id: 'user-1' } as never;
+
+  await createController().list(
+    {
+      page: 1,
+      limit: 20,
+      includeTotal: false,
+    } as never,
+    { user } as never
+  );
+
+  expect(tasksService.listByUser).toHaveBeenCalledWith('user-1', {
+    page: 1,
+    limit: 20,
+    status: undefined,
+    type: undefined,
+    cursor: undefined,
+    includeTotal: false,
+  });
 });
 
 it('returns a deduplicated batch of task statuses', async () => {

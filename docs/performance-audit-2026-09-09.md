@@ -293,8 +293,32 @@ key，不能合并 N 个不同任务 ID 的 HTTP 请求。
 - `nest build` 仍因现有依赖安装缺少 `ajv/dist/compile/codegen`
   而失败；未改依赖锁文件。直接包含测试文件的全库 tsc 仍有既有测试类型错误，不能宣称全库类型检查通过。
 - Web 仍有 ONNX Runtime 动态依赖、循环 chunk、约 3 MB chunk 不预缓存和 Windows standalone symlink
-  EPERM 警告。
-- 游标 API 已就绪，现有页码 UI 未切换；total 仍需 COUNT。未做生产压测、P95/RSS 实测或大表基准。
-- Sharp 不是恒定内存解码器；Multer 上传缓冲、并发内存预算/观测配置未在本批扩展，需结合真实部署容量另行配置。图片解码复用与 PDF 缩略图虚拟化仍属第二批。
+  EPERM 警告；ONNX critical dependency 文本告警已按模块和消息精确过滤。
+- 游标 API 已就绪，现有页码 UI 未切换；默认仍计算 total，使用 `includeTotal=false` 时跳过 COUNT。未做生产压测、P95/RSS 实测或大表基准。
+- Sharp 不是恒定内存解码器；Multer 上传缓冲、并发内存预算/观测配置未在本批扩展，需结合真实部署容量另行配置。
 - Git 暂存实际返回
   `.git/index.lock: Permission denied`；当前会话不允许提权，修改尚未提交。权限恢复后需创建中文 Git 提交。
+
+## 第二批实施结果（2026-09-10）
+
+在第一批列表、传输和前端资源优化的基础上，本批继续控制 `COUNT(*)` 和账号摘要的重复聚合，并处理已确认的构建告警。
+
+| 项目 | 实施结果 |
+| --- | --- |
+| Cursor 列表计数 | `/files`、`/files/trash`、`/tasks` 新增 `includeTotal`。缺省保持旧行为；cursor 请求默认可关闭总数查询，响应 `total` 为 `null`，避免大表上的 `COUNT(*)`。非法值统一返回 400。 |
+| 账号摘要缓存 | API 进程内按用户缓存 2 秒；并发请求共享 in-flight Promise，查询失败不污染缓存。账号删除开始和完成时清理对应用户缓存。 |
+| 前端查询契约 | 文件和任务 hooks 增加 `cursor`、`includeTotal` 及 nullable `total` 类型；只有使用 cursor 时才默认关闭总数，页码调用保持兼容。 |
+| ONNX 构建告警 | 仅在 webpack 配置中精确过滤 `onnxruntime-web` 的 critical dependency 文本，循环 chunk、PWA 大 chunk 和既有 Hook 告警继续保留。 |
+
+### 第二批验证
+
+- API 测试：501 项通过；packages 测试：96 项通过；Web 测试：545 项通过。
+- API `nest build` 退出码 0，API lint 退出码 0（保留项目既有 warning）。
+- Web `next build` 退出码 0；ONNX critical dependency 告警已消失。Windows standalone trace 仍可能因本机 symlink 权限输出 `EPERM`，不影响编译产物。
+- OpenAPI 与 `packages/api-client/src/schema.ts` 已重新生成，三组列表接口的 query/nullable 响应保持一致。
+
+### 剩余限制
+
+- 现有页面仍以 page/limit 为主，cursor API 已提供但未强制迁移全部 UI。
+- 账号摘要缓存是单进程内存缓存，多实例部署需要共享缓存或按实例接受短暂不一致。
+- 未进行生产规模压测，`COUNT(*)`、RSS、P95 和深分页收益仍需 staging 数据验证。

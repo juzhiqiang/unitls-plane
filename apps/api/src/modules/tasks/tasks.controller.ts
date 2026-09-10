@@ -278,7 +278,7 @@ export class TasksController {
           type: 'array',
           items: { $ref: '#/components/schemas/TaskResponseDto' },
         },
-        total: { type: 'number' },
+        total: { type: 'number', nullable: true },
         nextCursor: { type: 'string', nullable: true },
       },
       required: ['tasks', 'total', 'nextCursor'],
@@ -295,6 +295,7 @@ export class TasksController {
       status: query.status,
       type: query.type,
       cursor: query.cursor,
+      includeTotal: query.includeTotal,
     });
   }
 

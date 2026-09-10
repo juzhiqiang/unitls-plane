@@ -52,7 +52,8 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 - `GET /files`、`GET /files/trash`、`GET /tasks` 保留 page/limit，新增 cursor 和响应
   `nextCursor`。首次可传
   `cursor=`，随后传上一页游标；末页为 null。游标绑定用户及筛选条件并保留数据库微秒时间，普通列表按 createdAt/id 降序，回收站按 deletedAt/id 降序；非法游标返回 400。
-- 旧页码 UI 继续兼容；游标模式跳过深层 offset，但仍返回 total，因此计数成本仍存在。并发新增/删除时不提供快照一致性。
+- 旧页码 UI 继续兼容；游标模式跳过深层 offset。列表支持 `includeTotal=false`，此时跳过 `COUNT(*)` 并返回 `total: null`；缺省值仍为 true。并发新增/删除时不提供快照一致性。
+- 账号摘要在 API 进程内按用户短缓存 2 秒，并合并同一用户的并发 in-flight 请求；账号删除开始/完成时清理缓存。多实例部署不共享该进程内缓存。
 - 普通文件下载直接传输对象存储流，断流时释放源流。缩略图使用 Sharp 流输入并保持 32
   MiB 源限制；Sharp 仍会缓冲输入及解码像素，不能视为恒定内存。
 - PDF 元数据的 `pdf-lib`、字体解析的 `opentype.js` 改为交互时加载。对应数据库迁移为

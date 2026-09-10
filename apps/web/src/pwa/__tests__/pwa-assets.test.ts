@@ -194,4 +194,14 @@ describe('PWA assets', () => {
     expect(nextConfig).toContain('aggressiveFrontEndNavCaching: true');
     expect(nextConfig).toContain('reloadOnOnline: true');
   });
+
+  it('filters only the known onnxruntime-web critical dependency warning', () => {
+    const nextConfig = readFileSync(join(appRoot, 'next.config.mjs'), 'utf8');
+
+    expect(nextConfig).toContain('ignoreWarnings');
+    expect(nextConfig).toContain('onnxruntime-web');
+    expect(nextConfig).toContain(
+      'Critical dependency: require function is used in a way in which dependencies cannot be statically extracted'
+    );
+  });
 });

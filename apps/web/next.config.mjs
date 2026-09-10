@@ -51,6 +51,15 @@ export default {
     return [...(inheritedHeaders ?? []), ...staticAssetHeaders];
   },
   webpack(config, options) {
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      {
+        module: /[\\/]onnxruntime-web[\\/]/,
+        message:
+          /Critical dependency: require function is used in a way in which dependencies cannot be statically extracted/,
+      },
+    ];
+
     // next-pwa 只产出 client 侧的 Service Worker,对 server 编译没有意义,却会污染
     // server 的 chunk 图:证件照页与 /_not-found 的 prerender 报
     // "Cannot read properties of undefined (reading 'call')",build-manifest 里也

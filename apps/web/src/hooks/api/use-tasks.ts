@@ -21,6 +21,8 @@ export interface TaskQuery {
   limit?: number;
   status?: TaskStatus;
   type?: TaskType;
+  cursor?: string;
+  includeTotal?: boolean;
 }
 
 function refreshTaskQueries(queryClient: ReturnType<typeof useQueryClient>) {
@@ -48,11 +50,19 @@ export function useTasks(query?: TaskQuery) {
             limit: query?.limit,
             status: query?.status,
             type: query?.type,
+            cursor: query?.cursor,
+            includeTotal: query?.cursor !== undefined
+              ? (query.includeTotal ?? false)
+              : query?.includeTotal,
           } as any,
         },
       });
       if (error) throw error;
-      return data as unknown as { tasks: TaskResponseDto[]; total: number };
+      return data as unknown as {
+        tasks: TaskResponseDto[];
+        total: number | null;
+        nextCursor: string | null;
+      };
     },
     refetchInterval: q => {
       const tasks = (q.state.data as any)?.tasks as
@@ -232,9 +242,9 @@ export function useImageGenerateSessionTasks(sessionId: string) {
     },
     enabled: !sessionPending && !!userId && !!sessionId,
     refetchInterval: query => {
-      const tasks = (query.state.data as
-        | { tasks?: TaskResponseDto[] }
-        | undefined)?.tasks;
+      const tasks = (
+        query.state.data as { tasks?: TaskResponseDto[] } | undefined
+      )?.tasks;
       if (
         tasks?.some(t => t.status === 'pending' || t.status === 'processing')
       ) {

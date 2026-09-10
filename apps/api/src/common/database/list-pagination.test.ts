@@ -4,6 +4,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   cursorCondition,
   finishPage,
+  parseIncludeTotal,
   paginationOptions,
 } from './list-pagination';
 
@@ -49,5 +50,15 @@ describe('list pagination', () => {
     for (const limit of [0, 101, NaN, 1.5])
       expect(() => paginationOptions(1, limit)).toThrow();
     expect(cursorCondition('', 'files', table.time, table.id)).toBeUndefined();
+  });
+
+  it('keeps totals by default and accepts an explicit cursor-only mode', () => {
+    expect(parseIncludeTotal(undefined)).toBe(true);
+    expect(parseIncludeTotal('true')).toBe(true);
+    expect(parseIncludeTotal('false')).toBe(false);
+    expect(parseIncludeTotal(false)).toBe(false);
+    expect(() => parseIncludeTotal('sometimes')).toThrow(
+      'Invalid includeTotal'
+    );
   });
 });

@@ -130,6 +130,7 @@ const values = vi.fn((file: Record<string, unknown>) => {
 
 const insert = vi.fn(() => ({ values }));
 const findFirst = vi.fn(() => selectedFile);
+const defaultSelectImplementation = () => ({ from: selectFrom });
 
 mock.module('drizzle-orm', () => ({
   and: (...conditions: unknown[]) => conditions,
@@ -144,6 +145,7 @@ mock.module('drizzle-orm', () => ({
   lte,
   or: (...conditions: unknown[]) => conditions,
   sql: vi.fn(),
+  getTableColumns: vi.fn(() => ({})),
 }));
 
 mock.module('@utils-plane/db', () => ({
@@ -776,6 +778,57 @@ describe('FilesService file access checks', () => {
       id: 'file-1',
       userId: 'user-1',
     });
+  });
+});
+
+describe('FilesService list totals', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    select.mockImplementation(defaultSelectImplementation);
+  });
+
+  it('skips the count query when listing files in cursor-only mode', async () => {
+    const rows = [userFile({ id: 'file-1', deletedAt: null })];
+    const offset = vi.fn(async () => rows);
+    const limit = vi.fn(() => ({ offset }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    select.mockImplementationOnce(() => ({ from }));
+
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.listByUser('user-1', { cursor: undefined, includeTotal: false })
+    ).resolves.toMatchObject({ files: rows, total: null, nextCursor: null });
+    expect(select).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the count query when listing trash in cursor-only mode', async () => {
+    const rows = [
+      userFile({ deletedAt: new Date('2026-07-01T00:00:00.000Z') }),
+    ];
+    const offset = vi.fn(async () => rows);
+    const limit = vi.fn(() => ({ offset }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    select.mockImplementationOnce(() => ({ from }));
+
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.listTrashed('user-1', { cursor: undefined, includeTotal: false })
+    ).resolves.toMatchObject({ files: rows, total: null, nextCursor: null });
+    expect(select).toHaveBeenCalledTimes(1);
   });
 });
 

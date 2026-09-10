@@ -1,4 +1,13 @@
 {
+  "Pagination": {
+    "label": "List pagination",
+    "first": "First",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page}",
+    "error": "Failed to load the list.",
+    "retry": "Retry"
+  },
   "Common": {
     "units": {
       "b": "B",

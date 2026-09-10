@@ -39,6 +39,7 @@ import {
 import { normalizeUploadedFilename } from './filename.util';
 import { renderThumbnail } from './thumbnail.util';
 import { CleanupObligationService } from './cleanup-obligation.service';
+import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
 
 const ALLOWED_MIME_TYPES = [
   'image/png',
@@ -63,6 +64,7 @@ type FileEligibility = SQL<unknown>;
 type FilePurgeResult = 'deleted' | 'in-progress' | 'missing';
 type FilePurgeClaim = {
   id: string;
+  userId: string | null;
   storageKey: string;
   purgeStartedAt: Date;
 };
@@ -102,7 +104,8 @@ export class FilesService {
   constructor(
     private readonly minioService: MinioService,
     @InjectQueue('cleanup-queue') private readonly cleanupQueue: Queue,
-    private readonly cleanupObligationService: CleanupObligationService
+    private readonly cleanupObligationService: CleanupObligationService,
+    private readonly summaryCache: AccountSummaryCache = new AccountSummaryCache()
   ) {}
 
   async upload(
@@ -182,6 +185,7 @@ export class FilesService {
       throw error;
     }
 
+    this.summaryCache.invalidate(newFile.userId);
     this.logger.log(
       `Uploaded file ${newFile.id} by user ${entitlementUser?.id ?? 'anonymous'}`
     );
@@ -370,6 +374,7 @@ export class FilesService {
         )
       );
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Soft deleted file ${id}`);
   }
 
@@ -399,6 +404,7 @@ export class FilesService {
         )
       );
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Batch soft deleted ${validIds.length} files`);
   }
 
@@ -418,6 +424,7 @@ export class FilesService {
       )
       .returning({ id: files.id });
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Batch restored ${restored.length} files`);
   }
 
@@ -435,6 +442,7 @@ export class FilesService {
       });
     }
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Restored file ${id}`);
   }
 
@@ -729,6 +737,7 @@ export class FilesService {
         )
         .returning({
           id: files.id,
+          userId: files.userId,
           storageKey: files.storageKey,
           purgeStartedAt: files.purgeStartedAt,
         });
@@ -766,6 +775,7 @@ export class FilesService {
         .where(this.filePurgeClaimEligibility(claim))
         .returning({ id: files.id })
     );
+    if (deleted.length === 1) this.summaryCache.invalidate(claim.userId);
     return deleted.length === 1 ? 'deleted' : 'in-progress';
   }
 

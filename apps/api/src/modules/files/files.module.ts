@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccountSummaryCacheModule } from '../../common/cache/account-summary-cache.module';
 import { BullModule } from '@nestjs/bullmq';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
@@ -7,7 +8,10 @@ import { CleanupObligationService } from './cleanup-obligation.service';
 import { UploadBudgetInterceptor } from './upload-budget.interceptor';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: 'cleanup-queue' })],
+  imports: [
+    AccountSummaryCacheModule,
+    BullModule.registerQueue({ name: 'cleanup-queue' }),
+  ],
   controllers: [FilesController],
   providers: [
     CleanupObligationService,

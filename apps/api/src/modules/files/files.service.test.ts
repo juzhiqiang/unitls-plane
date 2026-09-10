@@ -1,7 +1,30 @@
 import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
 import type { File } from '@utils-plane/db';
+import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
 
 let insertedFile: Record<string, unknown> | null = null;
+it('invalidates a warmed summary after restoring a file', async () => {
+  const cache = new AccountSummaryCache();
+  const read = vi.fn(async () => ({
+    activeTaskCount: 0,
+    failedTaskCount: 0,
+    activeFileCount: 1,
+    activeFileBytes: 0,
+    recentTasks: [],
+    recentFiles: [],
+  }));
+  await cache.get('user-1', read);
+  restoredRows = [{ id: 'file-1' }];
+  const service = new FilesService(
+    minioService as never,
+    cleanupQueue as never,
+    cleanupObligationService as never,
+    cache
+  );
+  await service.restore('file-1', 'user-1');
+  await cache.get('user-1', read);
+  expect(read).toHaveBeenCalledTimes(2);
+});
 let selectedFile: Record<string, unknown> | null = null;
 let selectedRows: Record<string, unknown>[] = [];
 let lockedRows: Record<string, unknown>[] = [];
@@ -217,10 +240,84 @@ const PURGE_CLAIMED_AT = new Date('2026-07-31T00:00:00.000Z');
 function purgeClaim(file: File = userFile()) {
   return {
     id: file.id,
+    userId: file.userId,
     storageKey: file.storageKey,
     purgeStartedAt: PURGE_CLAIMED_AT,
   };
 }
+
+describe('summary invalidation after committed file writes', () => {
+  const value = {
+    activeTaskCount: 0,
+    failedTaskCount: 0,
+    activeFileCount: 1,
+    activeFileBytes: 1,
+    recentTasks: [],
+    recentFiles: [],
+  };
+  it('keeps the cache until upload transaction commits', async () => {
+    const cache = new AccountSummaryCache();
+    const read = vi.fn(async () => value);
+    await cache.get('user-1', read);
+    let commit!: () => void;
+    const gate = new Promise<void>(resolve => {
+      commit = resolve;
+    });
+    withActiveUserTransaction.mockImplementationOnce(async (_, operation) => {
+      const result = await operation(transaction);
+      await cache.get('user-1', read);
+      expect(read).toHaveBeenCalledTimes(1);
+      await gate;
+      return result;
+    });
+    const service = new FilesService(
+      { upload: vi.fn(async () => {}) } as never,
+      cleanupQueue as never,
+      cleanupObligationService as never,
+      cache
+    );
+    const upload = service.upload(
+      Buffer.from('x'),
+      { filename: 'x.png', mimeType: 'image/png', size: 1 },
+      { id: 'user-1', plan: 'free', role: 'user' }
+    );
+    commit();
+    await upload;
+    await cache.get('user-1', read);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates a successful purge even if the next batch item fails', async () => {
+    const cache = new AccountSummaryCache();
+    const read = vi.fn(async () => value);
+    await cache.get('user-1', read);
+    const first = userFile();
+    const second = userFile({ id: 'file-2' });
+    selectedRows = [first, second];
+    transactionLock
+      .mockResolvedValueOnce([first])
+      .mockResolvedValueOnce([second]);
+    transactionUpdateReturning
+      .mockResolvedValueOnce([purgeClaim(first)])
+      .mockResolvedValueOnce([purgeClaim(second)]);
+    transactionDeleteReturning.mockResolvedValueOnce([{ id: first.id }]);
+    minioService.delete
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('storage'));
+    minioService.probeObjectExists.mockResolvedValueOnce(true);
+    const service = new FilesService(
+      minioService as never,
+      cleanupQueue as never,
+      cleanupObligationService as never,
+      cache
+    );
+    await expect(
+      service.batchPermanentDelete(['file-1', 'file-2'], 'user-1')
+    ).rejects.toThrow('storage');
+    await cache.get('user-1', read);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+});
 
 function deferred() {
   let resolve!: () => void;

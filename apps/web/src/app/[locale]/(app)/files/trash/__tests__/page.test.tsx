@@ -10,6 +10,9 @@ import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../../../../messages/en.json';
 import TrashPage from '../page';
+vi.mock('@/lib/auth-client', () => ({
+  useSession: () => ({ data: { user: { id: 'user-1' } } }),
+}));
 
 const mocks = vi.hoisted(() => ({
   useTrashedFiles: vi.fn(),
@@ -32,7 +35,7 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
-  useTrashedFiles: () => mocks.useTrashedFiles(),
+  useTrashedFiles: (query: unknown) => mocks.useTrashedFiles(query),
   useRestoreFile: () => ({
     mutate: mocks.restoreMutate,
     isPending: false,
@@ -94,6 +97,33 @@ function renderTrashPage() {
   );
 }
 
+it('requests cursor pages without counts and supports back navigation', () => {
+  mocks.useTrashedFiles.mockReturnValue({
+    data: { files: trashedFiles, total: null, nextCursor: 'next-boundary' },
+    isLoading: false,
+  });
+  renderTrashPage();
+  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
+    cursor: '',
+    limit: 12,
+    includeTotal: false,
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
+    cursor: 'next-boundary',
+    limit: 12,
+    includeTotal: false,
+  });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Previous', exact: true })
+  );
+  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
+    cursor: '',
+    limit: 12,
+    includeTotal: false,
+  });
+});
+
 describe('TrashPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -112,17 +142,31 @@ describe('TrashPage', () => {
   });
 
   it('batch restores selected trashed files', async () => {
+    mocks.useTrashedFiles.mockReturnValue({
+      data: { files: trashedFiles, total: null, nextCursor: 'boundary' },
+      isLoading: false,
+    });
     renderTrashPage();
-
+    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
     fireEvent.click(screen.getByLabelText('Select report.pdf'));
     fireEvent.click(screen.getByRole('button', { name: 'Restore selected' }));
 
     await waitFor(() => {
       expect(mocks.batchRestoreMutateAsync).toHaveBeenCalledWith(['file-1']);
+      expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
+        cursor: '',
+        limit: 12,
+        includeTotal: false,
+      });
+      expect(screen.getByLabelText('Select report.pdf')).not.toBeChecked();
     });
   });
 
   it('confirms before batch permanent delete and empty trash', async () => {
+    mocks.useTrashedFiles.mockReturnValue({
+      data: { files: trashedFiles, total: null, nextCursor: 'boundary' },
+      isLoading: false,
+    });
     renderTrashPage();
 
     fireEvent.click(screen.getByLabelText('Select report.pdf'));
@@ -141,6 +185,7 @@ describe('TrashPage', () => {
       ]);
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Empty trash' }));
     fireEvent.click(
       screen.getByRole('button', { name: 'Confirm empty trash' })
@@ -148,6 +193,11 @@ describe('TrashPage', () => {
 
     await waitFor(() => {
       expect(mocks.emptyTrashMutateAsync).toHaveBeenCalledTimes(1);
+      expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
+        cursor: '',
+        limit: 12,
+        includeTotal: false,
+      });
     });
   });
 });

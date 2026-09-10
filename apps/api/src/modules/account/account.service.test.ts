@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'bun:test';
+import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
 
 const { AccountService } = await import('./account.service');
 
@@ -52,7 +53,8 @@ function createService() {
   return new AccountService(
     repository as never,
     minio as never,
-    taskQueues as never
+    taskQueues as never,
+    new AccountSummaryCache()
   );
 }
 

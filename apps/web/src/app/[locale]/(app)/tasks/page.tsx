@@ -1,6 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from '@/lib/auth-client';
+import { useCursorPagination } from '@/hooks/use-cursor-pagination';
+import {
+  CursorPagination,
+  ListQueryError,
+} from '@/components/ui/CursorPagination';
 import { useTranslations } from 'next-intl';
 import {
   useTasks,
@@ -254,21 +260,26 @@ export default function TasksPage() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [page, setPage] = useState(1);
+  const { data: session } = useSession();
+  const pagination = useCursorPagination(
+    JSON.stringify([session?.user.id, statusFilter, typeFilter])
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const query: TaskQuery = {
-    page,
+    cursor: pagination.cursor,
+    includeTotal: false,
     limit: 20,
     status: statusFilter === 'all' ? undefined : statusFilter,
   };
 
-  const { data, isLoading } = useTasks(query);
+  const { data, isLoading, isFetching, isError, refetch } = useTasks(query);
   const retryTask = useRetryTask();
 
   const tasks = data?.tasks ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.ceil(total / 20);
+  useEffect(() => {
+    setExpandedId(null);
+  }, [pagination.cursor, session?.user.id, statusFilter, typeFilter]);
 
   const filteredTasks =
     typeFilter === 'all'
@@ -315,7 +326,7 @@ export default function TasksPage() {
               type="button"
               onClick={() => {
                 setStatusFilter(f.value);
-                setPage(1);
+                pagination.reset();
               }}
               className={`px-3 h-8 text-[11px] font-mono uppercase tracking-wider transition-colors relative ${
                 statusFilter === f.value
@@ -339,7 +350,7 @@ export default function TasksPage() {
               type="button"
               onClick={() => {
                 setTypeFilter(f.value);
-                setPage(1);
+                pagination.reset();
               }}
               className={`px-3 h-8 text-[11px] font-mono uppercase tracking-wider transition-colors relative ${
                 typeFilter === f.value
@@ -357,7 +368,8 @@ export default function TasksPage() {
       </div>
 
       {/* Empty state */}
-      {filteredTasks.length === 0 && !isLoading && (
+      {isError && <ListQueryError retry={() => void refetch()} />}
+      {filteredTasks.length === 0 && !isLoading && !isError && (
         <p className="text-sm text-muted-foreground py-12 text-center">
           {t('empty')}
         </p>
@@ -580,24 +592,14 @@ export default function TasksPage() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPage(p)}
-              className={`h-7 w-7 text-xs font-mono rounded-md transition-colors ${
-                p === page
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:text-foreground border border-border'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      )}
+      <CursorPagination
+        page={pagination.page}
+        hasNext={!isError && Boolean(data?.nextCursor)}
+        busy={Boolean(isFetching || isLoading)}
+        onFirst={pagination.reset}
+        onPrevious={pagination.previous}
+        onNext={() => pagination.next(data?.nextCursor)}
+      />
     </div>
   );
 }

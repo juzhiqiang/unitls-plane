@@ -1,8 +1,42 @@
 # Utils-Plane 性能巡检报告（2026-09-09）
 
-## 最新收尾结果（2026-09-10）
+## 当前收尾状态（2026-09-10，第三批）
 
-以下为最终实施记录；后文审计和第一轮限制保留历史状态。
+以下是当前状态；后面的初始审计、第一批、第二批及历史收尾记录保留当时事实，不代表仍然未修复，也不能替代本轮验收。
+
+- 文件、回收站、任务页面已实际接入 cursor 和
+  `includeTotal=false`，不再依赖 COUNT 和深层 offset，提供首页、上一页、下一页与当前页号。筛选或账号变化重置游标；删除、恢复、清空成功后回首页，翻页清理选择，错误展示重试。任务类别筛选保持既有的当前页客户端筛选，未扩展为服务端类别查询。
+- 摘要缓存提取到独立 Nest 模块，成功结果 TTL
+  2 秒，容量 1000 条（含 pending），LRU 淘汰、每 5 秒主动清理及生命周期释放。文件和任务成功提交后失效，包含 Worker 产物、进度、丢失任务失败、清理和批量部分成功路径；条目身份校验防止旧请求回填。
+- 本轮测试：API **510** 项、Web **553** 项、packages **96**
+  项通过。覆盖缓存过期/容量/合并/旧请求、文件提交后失效及批量部分成功、游标导航/筛选/账号重置、删除选择清理、恢复/清空回首页及错误重试。
+- API 构建与 API/Web lint 退出码 0，API
+  lint 保留 283 条警告，Web 保留既有 Hook 警告；OpenAPI 与 client 重新生成后无契约差异，client 构建通过。Web 构建退出码 0，但仍出现 Windows
+  standalone traced files symlink `EPERM`，**不能认定 standalone 发布包完整可用**。循环 chunk、PWA 3
+  MB chunk 不预缓存也仍存在。
+- 本轮没有修改上传内存缓冲架构，没有完成真实大文件 RSS/GC、300 页浏览器 FPS 或生产并发验收。账号缓存仍是单进程；跨实例不共享失效，2 秒 TTL 不等于界面最多延迟 2 秒。
+- 子代理工具返回 unsupported，独立审查未执行；已本地核对提交时机、模块依赖、缓存竞态及页面调用，不将自审冒充独立审查。
+
+### 本地合成数据基准
+
+复现：在 `apps/api` 执行
+`bun src/scripts/benchmark-list-pagination.ts`。脚本仅允许 localhost/127.0.0.1，创建连接私有临时表，事务结束自动删除，不读取/灌入业务数据、不运行迁移。临时表 10 万行，单用户，128 字符 payload，时间/id 复合索引，跳过 9 万行后取 21 条，预热后每种查询 30 次采样。
+
+| 查询         | P50      | P95      |
+| ------------ | -------- | -------- |
+| offset 90000 | 10.20 ms | 12.98 ms |
+| cursor       | 0.78 ms  | 1.85 ms  |
+| 单独 COUNT   | 10.23 ms | 11.38 ms |
+
+两种分页查询已断言返回相同 21 条 ID；EXPLAIN 显示 offset 扫描 90021 行，cursor 扫描 21 行。耗时包含本地客户端往返，不是 HTTP 延迟。COUNT 单独测量，不将三个 P95 简单相加。合成数据使用 bigint
+ID 与简化列，不代表真实多用户 UUID 业务表、并发负载或生产 SLA。
+
+首次试跑因 postgres.js 按 timestamp 参数类型转换导致时间偏移、游标返回 0 行，数据已弃用；脚本改为保留微秒文本并显式
+`text::timestamp`，加相同行断言后才记录上述结果。该修改只针对本次基准脚本。
+
+## 历史收尾结果（2026-09-10，第一批补充）
+
+以下为当时的实施记录；最新事实以顶部第三批状态为准。
 
 - 按锁文件执行 `bun install --frozen-lockfile` 补齐本地缺失依赖，未修改 bun.lock。Nest
   API 构建现已通过，ajv 缺项不再阻塞。
@@ -294,28 +328,33 @@ key，不能合并 N 个不同任务 ID 的 HTTP 请求。
   而失败；未改依赖锁文件。直接包含测试文件的全库 tsc 仍有既有测试类型错误，不能宣称全库类型检查通过。
 - Web 仍有 ONNX Runtime 动态依赖、循环 chunk、约 3 MB chunk 不预缓存和 Windows standalone symlink
   EPERM 警告；ONNX critical dependency 文本告警已按模块和消息精确过滤。
-- 游标 API 已就绪，现有页码 UI 未切换；默认仍计算 total，使用 `includeTotal=false` 时跳过 COUNT。未做生产压测、P95/RSS 实测或大表基准。
+- 游标 API 已就绪，现有页码 UI 未切换；默认仍计算 total，使用 `includeTotal=false`
+  时跳过 COUNT。未做生产压测、P95/RSS 实测或大表基准。
 - Sharp 不是恒定内存解码器；Multer 上传缓冲、并发内存预算/观测配置未在本批扩展，需结合真实部署容量另行配置。
 - Git 暂存实际返回
   `.git/index.lock: Permission denied`；当前会话不允许提权，修改尚未提交。权限恢复后需创建中文 Git 提交。
 
 ## 第二批实施结果（2026-09-10）
 
-在第一批列表、传输和前端资源优化的基础上，本批继续控制 `COUNT(*)` 和账号摘要的重复聚合，并处理已确认的构建告警。
+在第一批列表、传输和前端资源优化的基础上，本批继续控制 `COUNT(*)`
+和账号摘要的重复聚合，并处理已确认的构建告警。
 
-| 项目 | 实施结果 |
-| --- | --- |
+| 项目            | 实施结果                                                                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cursor 列表计数 | `/files`、`/files/trash`、`/tasks` 新增 `includeTotal`。缺省保持旧行为；cursor 请求默认可关闭总数查询，响应 `total` 为 `null`，避免大表上的 `COUNT(*)`。非法值统一返回 400。 |
-| 账号摘要缓存 | API 进程内按用户缓存 2 秒；并发请求共享 in-flight Promise，查询失败不污染缓存。账号删除开始和完成时清理对应用户缓存。 |
-| 前端查询契约 | 文件和任务 hooks 增加 `cursor`、`includeTotal` 及 nullable `total` 类型；只有使用 cursor 时才默认关闭总数，页码调用保持兼容。 |
-| ONNX 构建告警 | 仅在 webpack 配置中精确过滤 `onnxruntime-web` 的 critical dependency 文本，循环 chunk、PWA 大 chunk 和既有 Hook 告警继续保留。 |
+| 账号摘要缓存    | API 进程内按用户缓存 2 秒；并发请求共享 in-flight Promise，查询失败不污染缓存。账号删除开始和完成时清理对应用户缓存。                                                        |
+| 前端查询契约    | 文件和任务 hooks 增加 `cursor`、`includeTotal` 及 nullable `total` 类型；只有使用 cursor 时才默认关闭总数，页码调用保持兼容。                                                |
+| ONNX 构建告警   | 仅在 webpack 配置中精确过滤 `onnxruntime-web` 的 critical dependency 文本，循环 chunk、PWA 大 chunk 和既有 Hook 告警继续保留。                                               |
 
 ### 第二批验证
 
 - API 测试：501 项通过；packages 测试：96 项通过；Web 测试：545 项通过。
 - API `nest build` 退出码 0，API lint 退出码 0（保留项目既有 warning）。
-- Web `next build` 退出码 0；ONNX critical dependency 告警已消失。Windows standalone trace 仍可能因本机 symlink 权限输出 `EPERM`，不影响编译产物。
-- OpenAPI 与 `packages/api-client/src/schema.ts` 已重新生成，三组列表接口的 query/nullable 响应保持一致。
+- Web `next build` 退出码 0；ONNX critical
+  dependency 告警经精确过滤后不再输出（不是底层依赖修复）。Windows standalone
+  trace 因本机 symlink 权限输出 `EPERM`，standalone 发布包完整性尚未验证。
+- OpenAPI 与 `packages/api-client/src/schema.ts`
+  已重新生成，三组列表接口的 query/nullable 响应保持一致。
 
 ### 剩余限制
 

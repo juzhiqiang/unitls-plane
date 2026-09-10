@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccountSummaryCacheModule } from '../../common/cache/account-summary-cache.module';
 import { BullModule } from '@nestjs/bullmq';
 import { FilesModule } from '../files/files.module';
 import { AccountExportService } from './account-export.service';
@@ -9,6 +10,7 @@ import { AccountTaskQueueService } from './account-task-queue.service';
 
 @Module({
   imports: [
+    AccountSummaryCacheModule,
     FilesModule,
     BullModule.registerQueue(
       { name: 'image-queue' },

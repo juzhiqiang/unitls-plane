@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../../../messages/en.json';
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   useFile: vi.fn(),
   searchParams: new URLSearchParams(),
   replace: vi.fn(),
+  deleteFile: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -23,9 +24,9 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
-  useFiles: () => mocks.useFiles(),
+  useFiles: (query: unknown) => mocks.useFiles(query),
   useFile: (id: string) => mocks.useFile(id),
-  useDeleteFile: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteFile: () => ({ mutate: mocks.deleteFile, isPending: false }),
   useBatchDeleteFiles: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUploadFile: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -89,6 +90,55 @@ beforeEach(() => {
 });
 
 describe('FilesPage preview', () => {
+  it('resets the cursor and selection when searching from a later page', () => {
+    mocks.useFiles.mockReturnValue({
+      data: { files: [smallImage], total: null, nextCursor: 'boundary' },
+      isLoading: false,
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    expect(mocks.useFiles).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'boundary', includeTotal: false })
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.change(screen.getByPlaceholderText(en.FilesTool.search), {
+      target: { value: 'report' },
+    });
+    expect(mocks.useFiles).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: '', search: 'report' })
+    );
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('clears selection when a single selected file is deleted on the first page', () => {
+    mocks.useFiles.mockReturnValue({
+      data: { files: [smallImage], total: null, nextCursor: null },
+      isLoading: false,
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByLabelText('Delete shot.png'));
+    const options = mocks.deleteFile.mock.lastCall?.[1];
+    act(() => options.onSuccess());
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    expect(
+      screen.getByRole('button', { name: 'Next', exact: true })
+    ).toBeDisabled();
+  });
+
+  it('shows retry rather than an empty state when loading fails', () => {
+    const refetch = vi.fn();
+    mocks.useFiles.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+    renderPage();
+    expect(screen.getByRole('alert')).toHaveTextContent(en.Pagination.error);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
   it('renders server-side thumbnails for images regardless of a few MB', () => {
     renderPage();
 

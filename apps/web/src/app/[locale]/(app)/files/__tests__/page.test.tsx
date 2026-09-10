@@ -24,15 +24,17 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
-  useFiles: (query: unknown) => mocks.useFiles(query),
-  useFile: (id: string) => mocks.useFile(id),
+  useFiles: (query: unknown, userId: string | undefined) =>
+    mocks.useFiles(query, userId),
+  useFile: (id: string, userId: string | undefined) =>
+    mocks.useFile(id, userId),
   useDeleteFile: () => ({ mutate: mocks.deleteFile, isPending: false }),
   useBatchDeleteFiles: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUploadFile: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock('@/lib/auth-client', () => ({
-  authClient: { useSession: () => ({ data: null }) },
+  authClient: { useSession: () => ({ data: { user: { id: 'user-1' } } }) },
 }));
 
 const smallImage = {
@@ -98,14 +100,16 @@ describe('FilesPage preview', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
     expect(mocks.useFiles).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cursor: 'boundary', includeTotal: false })
+      expect.objectContaining({ cursor: 'boundary', includeTotal: false }),
+      'user-1'
     );
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.change(screen.getByPlaceholderText(en.FilesTool.search), {
       target: { value: 'report' },
     });
     expect(mocks.useFiles).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cursor: '', search: 'report' })
+      expect.objectContaining({ cursor: '', search: 'report' }),
+      'user-1'
     );
     expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
@@ -169,7 +173,7 @@ describe('FilesPage preview', () => {
     fireEvent.click(screen.getAllByLabelText('Preview shot.png')[0]!);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(mocks.useFile).toHaveBeenCalledWith('');
+    expect(mocks.useFile).toHaveBeenCalledWith('', 'user-1');
   });
 
   it('opens the preview dialog from a ?preview= deep link and fetches that file', () => {
@@ -181,7 +185,7 @@ describe('FilesPage preview', () => {
 
     renderPage();
 
-    expect(mocks.useFile).toHaveBeenCalledWith('file-9');
+    expect(mocks.useFile).toHaveBeenCalledWith('file-9', 'user-1');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByAltText('from-task.png')).toBeInTheDocument();
   });

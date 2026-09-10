@@ -45,9 +45,9 @@ function refreshActiveFileQueries(
   });
 }
 
-export function useFiles(query?: FileQuery) {
+export function useFiles(query?: FileQuery, userId?: string) {
   return useQuery({
-    queryKey: ['files', query],
+    queryKey: ['files', userId, query],
     queryFn: async () => {
       const params: Record<string, string> = {
         page: String(query?.page ?? 1),
@@ -71,14 +71,17 @@ export function useFiles(query?: FileQuery) {
   });
 }
 
-export function useTrashedFiles(query?: {
-  page?: number;
-  limit?: number;
-  cursor?: string;
-  includeTotal?: boolean;
-}) {
+export function useTrashedFiles(
+  query?: {
+    page?: number;
+    limit?: number;
+    cursor?: string;
+    includeTotal?: boolean;
+  },
+  userId?: string
+) {
   return useQuery({
-    queryKey: ['files', 'trash', query],
+    queryKey: ['files', 'trash', userId, query],
     queryFn: async () => {
       const { data, error } = await api.GET('/files/trash' as any, {
         params: {
@@ -116,9 +119,9 @@ export function useUploadFile() {
   });
 }
 
-export function useFile(fileId: string) {
+export function useFile(fileId: string, userId?: string) {
   return useQuery({
-    queryKey: ['files', fileId],
+    queryKey: ['files', userId, fileId],
     queryFn: async () => {
       const { data, error } = await api.GET('/files/{id}', {
         params: { path: { id: fileId } },

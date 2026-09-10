@@ -42,11 +42,14 @@ export default function TrashPage() {
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
 
-  const { data, isLoading, isFetching, isError, refetch } = useTrashedFiles({
-    cursor: pagination.cursor,
-    includeTotal: false,
-    limit: 12,
-  });
+  const { data, isLoading, isFetching, isError, refetch } = useTrashedFiles(
+    {
+      cursor: pagination.cursor,
+      includeTotal: false,
+      limit: 12,
+    },
+    session?.user.id
+  );
   const restoreFile = useRestoreFile();
   const permanentDelete = usePermanentDeleteFile();
   const batchRestore = useBatchRestoreFiles();

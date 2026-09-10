@@ -15,12 +15,14 @@ import { accountQueryKeys, taskQueryKeys } from './query-keys';
 
 export type TaskType = TaskTypeValue;
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type TaskCategory = 'image' | 'pdf' | 'font';
 
 export interface TaskQuery {
   page?: number;
   limit?: number;
   status?: TaskStatus;
   type?: TaskType;
+  category?: TaskCategory;
   cursor?: string;
   includeTotal?: boolean;
 }
@@ -39,9 +41,9 @@ function refreshTaskQueries(queryClient: ReturnType<typeof useQueryClient>) {
   });
 }
 
-export function useTasks(query?: TaskQuery) {
+export function useTasks(query?: TaskQuery, userId?: string) {
   return useQuery({
-    queryKey: ['tasks', query],
+    queryKey: ['tasks', userId, query],
     queryFn: async () => {
       const { data, error } = await api.GET('/tasks', {
         params: {
@@ -50,10 +52,12 @@ export function useTasks(query?: TaskQuery) {
             limit: query?.limit,
             status: query?.status,
             type: query?.type,
+            ...(query?.category ? { category: query.category } : {}),
             cursor: query?.cursor,
-            includeTotal: query?.cursor !== undefined
-              ? (query.includeTotal ?? false)
-              : query?.includeTotal,
+            includeTotal:
+              query?.cursor !== undefined
+                ? (query.includeTotal ?? false)
+                : query?.includeTotal,
           } as any,
         },
       });
@@ -145,7 +149,7 @@ export function useImageGenerateQuota() {
   const userId = session?.user.id;
 
   return useQuery({
-    queryKey: taskQueryKeys.imageGenerateQuota(),
+    queryKey: taskQueryKeys.imageGenerateQuota(userId),
     queryFn: async () => {
       const { data, error } = await api.GET('/tasks/image-generate/quota');
       if (error) throw error;
@@ -209,7 +213,7 @@ export function useImageGenerateSessions() {
   const userId = session?.user.id;
 
   return useQuery({
-    queryKey: taskQueryKeys.imageGenerateSessions(),
+    queryKey: taskQueryKeys.imageGenerateSessions(userId),
     queryFn: async () => {
       const { data, error } = await api.GET(
         '/tasks/image-generate/sessions' as any,
@@ -231,7 +235,7 @@ export function useImageGenerateSessionTasks(sessionId: string) {
   const userId = session?.user.id;
 
   return useQuery({
-    queryKey: taskQueryKeys.imageGenerateSessionTasks(sessionId),
+    queryKey: taskQueryKeys.imageGenerateSessionTasks(sessionId, userId),
     queryFn: async () => {
       const { data, error } = await api.GET(
         '/tasks/image-generate/sessions/{sessionId}/tasks' as any,

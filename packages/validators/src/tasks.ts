@@ -42,6 +42,10 @@ export const taskStatusEnum = z.enum([
   'failed',
 ]);
 
+export const TASK_CATEGORIES = ['image', 'pdf', 'font'] as const;
+
+export const taskCategoryEnum = z.enum(TASK_CATEGORIES);
+
 export const TASK_STATUSES = [
   'pending',
   'processing',
@@ -51,4 +55,5 @@ export const TASK_STATUSES = [
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type TaskType = z.infer<typeof taskTypeEnum>;
+export type TaskCategory = z.infer<typeof taskCategoryEnum>;
 export type TaskStatus = z.infer<typeof taskStatusEnum>;

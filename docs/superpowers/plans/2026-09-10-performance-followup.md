@@ -1,6 +1,6 @@
 # 摘要缓存与页面游标分页实施计划
 
-> 执行方式：原计划使用 subagent-driven-development 分工与独立审查，但子代理工具实际返回 unsupported，改为本地实施与自审，独立审查未执行。使用 test-driven-development 增加回归。用户已确认设计并要求执行；本轮在当前目录的独立分支实施，不推送或更改部署环境。
+> 执行方式：原计划使用 subagent-driven-development 分工与独立审查，但子代理工具最初返回 unsupported，改为本地实施；收尾阶段已补充独立审查并按反馈修复。使用 test-driven-development 增加回归。用户已确认设计并要求执行；本轮在当前目录的独立分支实施，不推送或更改部署环境。
 
 ## 执行记录
 
@@ -8,6 +8,11 @@
 - API 510 / Web 554 / packages 96 项通过，API/Web
   lint 无错误；API、client 构建通过，Web 构建退出码 0 但 standalone
   EPERM 仍未解决。OpenAPI/client 重新生成无契约变化。
+- 2026-09-11 后续修复补齐了列表查询按账号隔离的 React Query
+  key，并将任务页 image/pdf/font 类别筛选下沉到 API `category` 参数；API 515、Web 560、packages
+  96 项通过，OpenAPI 与 api-client 已同步新增查询契约。
+- 独立审查继续发现生图额度、会话列表和会话任务 key 未带账号；已补齐账号后缀并增加账号切换回归测试，同时修复共享任务 Zod
+  schema 丢弃精确 `type` 的问题。最新 API 516、Web 563、packages 96 项通过。
 - 增加本地临时表基准脚本并验证 10 万行深页查询，详细数据与限制见性能审计顶部。大文件内存与浏览器性能验收未执行。
 - 下面保留执行前清单，未执行的独立审查不得标记完成。
 

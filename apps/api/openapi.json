@@ -92,6 +92,19 @@
             }
           },
           {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "image",
+                "pdf",
+                "font"
+              ]
+            }
+          },
+          {
             "name": "type",
             "required": false,
             "in": "query",

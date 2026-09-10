@@ -35,7 +35,8 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 vi.mock('@/hooks/api/use-files', () => ({
-  useTrashedFiles: (query: unknown) => mocks.useTrashedFiles(query),
+  useTrashedFiles: (query: unknown, userId: string | undefined) =>
+    mocks.useTrashedFiles(query, userId),
   useRestoreFile: () => ({
     mutate: mocks.restoreMutate,
     isPending: false,
@@ -103,25 +104,34 @@ it('requests cursor pages without counts and supports back navigation', () => {
     isLoading: false,
   });
   renderTrashPage();
-  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
-    cursor: '',
-    limit: 12,
-    includeTotal: false,
-  });
+  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith(
+    {
+      cursor: '',
+      limit: 12,
+      includeTotal: false,
+    },
+    'user-1'
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
-  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
-    cursor: 'next-boundary',
-    limit: 12,
-    includeTotal: false,
-  });
+  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith(
+    {
+      cursor: 'next-boundary',
+      limit: 12,
+      includeTotal: false,
+    },
+    'user-1'
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Previous', exact: true })
   );
-  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
-    cursor: '',
-    limit: 12,
-    includeTotal: false,
-  });
+  expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith(
+    {
+      cursor: '',
+      limit: 12,
+      includeTotal: false,
+    },
+    'user-1'
+  );
 });
 
 describe('TrashPage', () => {
@@ -153,11 +163,14 @@ describe('TrashPage', () => {
 
     await waitFor(() => {
       expect(mocks.batchRestoreMutateAsync).toHaveBeenCalledWith(['file-1']);
-      expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
-        cursor: '',
-        limit: 12,
-        includeTotal: false,
-      });
+      expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith(
+        {
+          cursor: '',
+          limit: 12,
+          includeTotal: false,
+        },
+        'user-1'
+      );
       expect(screen.getByLabelText('Select report.pdf')).not.toBeChecked();
     });
   });
@@ -193,11 +206,14 @@ describe('TrashPage', () => {
 
     await waitFor(() => {
       expect(mocks.emptyTrashMutateAsync).toHaveBeenCalledTimes(1);
-      expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith({
-        cursor: '',
-        limit: 12,
-        includeTotal: false,
-      });
+      expect(mocks.useTrashedFiles).toHaveBeenLastCalledWith(
+        {
+          cursor: '',
+          limit: 12,
+          includeTotal: false,
+        },
+        'user-1'
+      );
     });
   });
 });

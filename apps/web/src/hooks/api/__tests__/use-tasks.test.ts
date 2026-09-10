@@ -6,6 +6,8 @@ import { accountQueryKeys, taskQueryKeys } from '../query-keys';
 import {
   useCreateTask,
   useImageGenerateQuota,
+  useImageGenerateSessionTasks,
+  useImageGenerateSessions,
   useRetryTask,
   useTasks,
 } from '../use-tasks';
@@ -146,6 +148,65 @@ describe('task list cursor queries', () => {
       },
     });
   });
+
+  it('passes task category to the API without forwarding userId', async () => {
+    const { result } = renderHook(
+      () =>
+        useTasks(
+          { cursor: 'cursor-1', limit: 20, category: 'image' },
+          'user-1'
+        ),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith('/tasks', {
+      params: {
+        query: {
+          page: undefined,
+          limit: 20,
+          status: undefined,
+          type: undefined,
+          category: 'image',
+          cursor: 'cursor-1',
+          includeTotal: false,
+        },
+      },
+    });
+  });
+
+  it('isolates task list cache entries by userId', async () => {
+    const queryClient = new QueryClient();
+    const query = {
+      cursor: 'cursor-1',
+      limit: 20,
+      category: 'image',
+    } as const;
+
+    renderHook(() => useTasks(query, 'user-1'), {
+      wrapper: createWrapper(queryClient),
+    });
+    renderHook(() => useTasks(query, 'user-2'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryCache().findAll({ queryKey: ['tasks'] })
+      ).toHaveLength(2)
+    );
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['tasks'] })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['tasks', 'user-1', query],
+        ['tasks', 'user-2', query],
+      ])
+    );
+  });
 });
 
 describe('useImageGenerateQuota', () => {
@@ -216,5 +277,113 @@ describe('useImageGenerateQuota', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBe(error);
+  });
+
+  it('isolates quota cache entries by the authenticated user', async () => {
+    const queryClient = new QueryClient();
+    mockGet.mockResolvedValue({
+      data: { limit: 10, used: 3, remaining: 7 },
+      error: undefined,
+    } as never);
+
+    const { result, rerender } = renderHook(() => useImageGenerateQuota(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    sessionState.current = {
+      data: { user: { id: 'user-2' } },
+      isPending: false,
+    };
+    rerender();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['tasks', 'image-generate', 'quota'] })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['tasks', 'image-generate', 'quota', 'user-1'],
+        ['tasks', 'image-generate', 'quota', 'user-2'],
+      ])
+    );
+  });
+});
+
+describe('image generation session queries', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGet.mockResolvedValue({
+      data: [],
+      error: undefined,
+    } as never);
+    sessionState.current = {
+      data: { user: { id: 'user-1' } },
+      isPending: false,
+    };
+  });
+
+  it('isolates session list cache entries by the authenticated user', async () => {
+    const queryClient = new QueryClient();
+    const { result, rerender } = renderHook(() => useImageGenerateSessions(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    sessionState.current = {
+      data: { user: { id: 'user-2' } },
+      isPending: false,
+    };
+    rerender();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['tasks', 'image-generate', 'sessions'] })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['tasks', 'image-generate', 'sessions', 'user-1'],
+        ['tasks', 'image-generate', 'sessions', 'user-2'],
+      ])
+    );
+  });
+
+  it('isolates session task cache entries by the authenticated user', async () => {
+    const queryClient = new QueryClient();
+    mockGet.mockResolvedValue({
+      data: { tasks: [], total: 0 },
+      error: undefined,
+    } as never);
+
+    const { result, rerender } = renderHook(
+      () => useImageGenerateSessionTasks('session-1'),
+      { wrapper: createWrapper(queryClient) }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    sessionState.current = {
+      data: { user: { id: 'user-2' } },
+      isPending: false,
+    };
+    rerender();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({
+          queryKey: ['tasks', 'image-generate', 'sessions', 'session-1'],
+        })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['tasks', 'image-generate', 'sessions', 'session-1', 'tasks', 'user-1'],
+        ['tasks', 'image-generate', 'sessions', 'session-1', 'tasks', 'user-2'],
+      ])
+    );
   });
 });

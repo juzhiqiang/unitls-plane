@@ -32,6 +32,7 @@ import {
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
   CreateTaskInput,
+  TaskCategory,
   TaskType,
   TaskStatus,
 } from '@utils-plane/validators';
@@ -50,6 +51,31 @@ import {
   TaskJobReconciler,
   type TaskJobIdentity,
 } from './task-job-reconciler.service';
+
+const TASK_TYPES_BY_CATEGORY: Record<TaskCategory, readonly TaskType[]> = {
+  image: [
+    'compress',
+    'convert',
+    'image_watermark',
+    'image_id_photo',
+    'image_generate',
+  ],
+  pdf: [
+    'pdf_merge',
+    'pdf_split',
+    'pdf_to_image',
+    'pdf_to_text',
+    'image_to_pdf',
+    'pdf_rotate',
+    'pdf_watermark',
+    'pdf_encrypt',
+    'pdf_compress',
+    'pdf_metadata',
+    'pdf_rearrange',
+    'pdf_from_document',
+  ],
+  font: ['font_convert'],
+};
 
 @Injectable()
 export class TasksService {
@@ -391,6 +417,7 @@ export class TasksService {
       limit: number;
       status?: TaskStatus;
       type?: TaskType;
+      category?: TaskCategory;
       cursor?: string;
       includeTotal?: boolean;
     }
@@ -405,6 +432,7 @@ export class TasksService {
       userId,
       query.status ?? '',
       query.type ?? '',
+      query.category ?? '',
     ]);
     const cursor = cursorCondition(
       query.cursor,
@@ -416,6 +444,11 @@ export class TasksService {
     const conditions = [eq(tasks.userId, userId)];
     if (query.status) {
       conditions.push(eq(tasks.status, query.status));
+    }
+    if (query.category) {
+      conditions.push(
+        inArray(tasks.type, TASK_TYPES_BY_CATEGORY[query.category])
+      );
     }
     if (query.type) {
       conditions.push(eq(tasks.type, query.type));

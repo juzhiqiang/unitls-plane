@@ -98,7 +98,10 @@ function FilesPageContent() {
     search: search || undefined,
   };
 
-  const { data, isLoading, isFetching, isError, refetch } = useFiles(query);
+  const { data, isLoading, isFetching, isError, refetch } = useFiles(
+    query,
+    session?.user.id
+  );
   const deleteFile = useDeleteFile();
   const batchDelete = useBatchDeleteFiles();
   const uploadFile = useUploadFile();
@@ -112,7 +115,10 @@ function FilesPageContent() {
   const previewFromList = previewId
     ? (files.find(file => file.id === previewId) ?? null)
     : null;
-  const previewQuery = useFile(previewId && !previewFromList ? previewId : '');
+  const previewQuery = useFile(
+    previewId && !previewFromList ? previewId : '',
+    session?.user.id
+  );
   const previewFile =
     previewFromList ?? (previewQuery.data as FileRecord | undefined) ?? null;
 

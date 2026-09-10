@@ -271,22 +271,19 @@ export default function TasksPage() {
     includeTotal: false,
     limit: 20,
     status: statusFilter === 'all' ? undefined : statusFilter,
+    category: typeFilter === 'all' ? undefined : typeFilter,
   };
 
-  const { data, isLoading, isFetching, isError, refetch } = useTasks(query);
+  const { data, isLoading, isFetching, isError, refetch } = useTasks(
+    query,
+    session?.user.id
+  );
   const retryTask = useRetryTask();
 
   const tasks = data?.tasks ?? [];
   useEffect(() => {
     setExpandedId(null);
   }, [pagination.cursor, session?.user.id, statusFilter, typeFilter]);
-
-  const filteredTasks =
-    typeFilter === 'all'
-      ? tasks
-      : tasks.filter(
-          t => getTaskTypeCategory(t.type as TaskType) === typeFilter
-        );
 
   const handleDownload = (task: TaskResponseDto) => {
     if (!task.outputFileId) return;
@@ -369,14 +366,14 @@ export default function TasksPage() {
 
       {/* Empty state */}
       {isError && <ListQueryError retry={() => void refetch()} />}
-      {filteredTasks.length === 0 && !isLoading && !isError && (
+      {tasks.length === 0 && !isLoading && !isError && (
         <p className="text-sm text-muted-foreground py-12 text-center">
           {t('empty')}
         </p>
       )}
 
       {/* Table */}
-      {filteredTasks.length > 0 && (
+      {tasks.length > 0 && (
         <div>
           {/* Table header (md+) */}
           <div className="hidden md:grid grid-cols-[140px_90px_140px_80px_1fr_80px] gap-3 px-3 py-2 border-b border-border">
@@ -401,7 +398,7 @@ export default function TasksPage() {
           </div>
 
           {/* Rows */}
-          {filteredTasks.map(task => (
+          {tasks.map(task => (
             <div key={task.id}>
               {/* Mobile / tablet card layout */}
               <div

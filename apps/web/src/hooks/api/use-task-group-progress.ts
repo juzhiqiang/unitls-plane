@@ -5,6 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import type { TaskStatusDto } from './types';
 
+const TASK_STATUS_BATCH_SIZE = 100;
+const POLLING_BACKOFF_MULTIPLIERS = [1, 2, 3, 5] as const;
+const MAX_POLLING_INTERVAL = 5000;
+
 export interface TaskGroupProgressItem extends TaskStatusDto {
   taskId: string;
 }
@@ -20,6 +24,15 @@ export interface UseTaskGroupProgressOptions {
 
 function isTerminal(status: TaskStatusDto['status']): boolean {
   return status === 'completed' || status === 'failed';
+}
+
+function getPollingInterval(baseInterval: number, dataUpdateCount: number) {
+  const backoffIndex = Math.min(
+    Math.max(0, dataUpdateCount - 1),
+    POLLING_BACKOFF_MULTIPLIERS.length - 1
+  );
+  const multiplier = POLLING_BACKOFF_MULTIPLIERS[backoffIndex] ?? 5;
+  return Math.min(baseInterval * multiplier, MAX_POLLING_INTERVAL);
 }
 
 /**
@@ -41,11 +54,26 @@ export function useTaskGroupProgress(
   const query = useQuery({
     queryKey: ['task-group-progress', groupKey],
     queryFn: async () => {
-      const { data, error } = await api.GET('/tasks/status', {
-        params: { query: { ids: taskIds.join(',') } },
-      });
-      if (error) throw error;
-      const rows = data ?? [];
+      const chunks: string[][] = [];
+      for (
+        let index = 0;
+        index < taskIds.length;
+        index += TASK_STATUS_BATCH_SIZE
+      ) {
+        chunks.push(taskIds.slice(index, index + TASK_STATUS_BATCH_SIZE));
+      }
+
+      const responses = await Promise.all(
+        chunks.map(async chunk => {
+          const { data, error } = await api.GET('/tasks/status', {
+            params: { query: { ids: chunk.join(',') } },
+          });
+          if (error) throw error;
+          return data ?? [];
+        })
+      );
+
+      const rows = responses.flat();
       const byId = new Map(rows.map(row => [row.taskId, row]));
       return taskIds.map((taskId): TaskGroupProgressItem => {
         const row = byId.get(taskId);
@@ -66,8 +94,7 @@ export function useTaskGroupProgress(
     refetchInterval: q => {
       const items = q.state.data;
       if (items && items.every(item => isTerminal(item.status))) return false;
-      const round = Math.max(0, q.state.dataUpdateCount - 1);
-      return Math.min(interval * ([1, 2, 3, 5][Math.min(round, 3)] ?? 5), 5000);
+      return getPollingInterval(interval, q.state.dataUpdateCount);
     },
     refetchIntervalInBackground: false,
   });

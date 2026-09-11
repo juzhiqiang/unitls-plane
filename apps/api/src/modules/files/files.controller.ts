@@ -7,12 +7,13 @@ import {
   Query,
   Body,
   Res,
+  Req,
   UploadedFile,
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import { FilesService } from './files.service';
@@ -41,6 +42,11 @@ import {
 } from './content-disposition.util';
 import { FileIdsDto } from './dto/file-ids.dto';
 import { UploadBudgetInterceptor } from './upload-budget.interceptor';
+import {
+  createUploadTempStorage,
+  removeUploadTempFile,
+  resolveUploadMaxFileSize,
+} from './upload-temp-file';
 import { parseIncludeTotal } from '../../common/database/list-pagination';
 
 const MAX_UPLOAD_TRANSPORT_SIZE = getLimit(
@@ -57,7 +63,7 @@ interface FileMetadata {
   destination: string;
   filename: string;
   path: string;
-  buffer: Buffer;
+  buffer?: Buffer;
 }
 
 @ApiTags('files')
@@ -70,6 +76,7 @@ export class FilesController {
   @UseInterceptors(
     UploadBudgetInterceptor,
     FileInterceptor('file', {
+      storage: createUploadTempStorage(resolveUploadMaxFileSize),
       limits: {
         fileSize: MAX_UPLOAD_TRANSPORT_SIZE,
         files: 1,
@@ -80,22 +87,47 @@ export class FilesController {
   )
   @ApiOperation({ summary: 'Upload a file' })
   @ApiConsumes('multipart/form-data')
-  async upload(@UploadedFile() file: FileMetadata, @CurrentUser() user?: User) {
+  async upload(
+    @UploadedFile() file: FileMetadata,
+    @CurrentUser() user?: User,
+    @Req() request?: Request
+  ) {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
 
-    const result = await this.filesService.upload(
-      file.buffer,
-      {
-        filename: normalizeUploadedFilename(file.originalname),
-        mimeType: file.mimetype,
-        size: file.size,
-      },
-      user ?? null
-    );
+    const abortController = new globalThis.AbortController();
+    const onAborted = () => abortController.abort();
+    const onRequestError = () => abortController.abort();
+    const onRequestClosed = () => {
+      if (!request?.readableEnded) abortController.abort();
+    };
+    request?.once('aborted', onAborted);
+    request?.once('error', onRequestError);
+    request?.once('close', onRequestClosed);
+    if (request?.destroyed && !request.readableEnded) abortController.abort();
 
-    return result;
+    try {
+      return await this.filesService.upload(
+        { path: file.path, size: file.size },
+        {
+          filename: normalizeUploadedFilename(file.originalname),
+          mimeType: file.mimetype,
+          size: file.size,
+        },
+        user ?? null,
+        request ? abortController.signal : undefined
+      );
+    } finally {
+      request?.off('aborted', onAborted);
+      request?.off('error', onRequestError);
+      request?.off('close', onRequestClosed);
+      try {
+        await removeUploadTempFile(file.path);
+      } catch {
+        // Do not replace the upload error with a best-effort cleanup error.
+      }
+    }
   }
 
   @Get('trash')

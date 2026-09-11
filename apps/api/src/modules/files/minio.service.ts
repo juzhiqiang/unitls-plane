@@ -14,6 +14,13 @@ import type { Readable } from 'node:stream';
 export const MINIO_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 export const MINIO_DELETE_TIMEOUT_MS = 30 * 1000;
 
+function withUploadTimeout(signal?: globalThis.AbortSignal) {
+  const timeoutSignal = globalThis.AbortSignal.timeout(MINIO_UPLOAD_TIMEOUT_MS);
+  return signal
+    ? globalThis.AbortSignal.any([timeoutSignal, signal])
+    : timeoutSignal;
+}
+
 @Injectable()
 export class MinioService implements OnModuleInit {
   private readonly logger = new Logger(MinioService.name);
@@ -51,7 +58,7 @@ export class MinioService implements OnModuleInit {
   }
 
   async upload(key: string, body: Buffer, mimeType: string): Promise<void> {
-    const abortSignal = globalThis.AbortSignal.timeout(MINIO_UPLOAD_TIMEOUT_MS);
+    const abortSignal = withUploadTimeout();
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -60,6 +67,26 @@ export class MinioService implements OnModuleInit {
         ContentType: mimeType,
       }),
       { abortSignal }
+    );
+    this.logger.debug(`Uploaded ${key} to ${this.bucket}`);
+  }
+
+  async uploadStream(
+    key: string,
+    source: Readable,
+    size: number,
+    mimeType: string,
+    signal?: globalThis.AbortSignal
+  ): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: source,
+        ContentLength: size,
+        ContentType: mimeType,
+      }),
+      { abortSignal: withUploadTimeout(signal) }
     );
     this.logger.debug(`Uploaded ${key} to ${this.bucket}`);
   }

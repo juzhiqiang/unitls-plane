@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Response } from 'express';
 import { FilesController } from './files.controller';
 import type { FilesService } from './files.service';
+import { ensureUploadTempDir } from './upload-temp-file';
+import { EventEmitter } from 'node:events';
 import { PassThrough, Readable, Writable } from 'node:stream';
 
 describe('FilesController route order', () => {
@@ -125,6 +128,83 @@ describe('FilesController route order', () => {
       "Pick<User, 'id' | 'plan' | 'role'> | string | null"
     );
     expect(uploadSource).not.toContain("typeof uploadUser === 'string'");
+  });
+
+  it('passes a disk-backed upload and removes the temp file when service fails', async () => {
+    const directory = mkdtempSync(
+      join(ensureUploadTempDir(), 'utils-plane-controller-')
+    );
+    const path = join(directory, 'upload.bin');
+    writeFileSync(path, 'payload');
+    const service = {
+      upload: vi.fn(async (input: unknown) => {
+        expect(input).toEqual({ path, size: 7 });
+        throw new Error('storage unavailable');
+      }),
+    } as unknown as FilesService;
+    const controller = new FilesController(service);
+
+    await expect(
+      controller.upload(
+        {
+          originalname: 'upload.bin',
+          mimetype: 'application/octet-stream',
+          size: 7,
+          path,
+        } as never,
+        null as never
+      )
+    ).rejects.toThrow('storage unavailable');
+
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('aborts the service upload when the request closes before its body ends', async () => {
+    const directory = ensureUploadTempDir();
+    const path = join(directory, `controller-close-${Date.now()}`);
+    writeFileSync(path, 'payload');
+    const request = Object.assign(new EventEmitter(), {
+      readableEnded: false,
+      destroyed: false,
+    });
+    let resolveUpload!: () => void;
+    const uploadFinished = new Promise<void>(resolve => {
+      resolveUpload = resolve;
+    });
+    let receivedSignal: globalThis.AbortSignal | undefined;
+    const service = {
+      upload: vi.fn(
+        async (
+          _input: unknown,
+          _meta: unknown,
+          _user: unknown,
+          signal?: globalThis.AbortSignal
+        ) => {
+          receivedSignal = signal;
+          await uploadFinished;
+          return {};
+        }
+      ),
+    } as unknown as FilesService;
+    const controller = new FilesController(service);
+
+    const pending = controller.upload(
+      {
+        originalname: 'upload.bin',
+        mimetype: 'application/octet-stream',
+        size: 7,
+        path,
+      } as never,
+      null as never,
+      request as never
+    );
+
+    await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+    request.emit('close');
+    expect(receivedSignal?.aborted).toBe(true);
+    resolveUpload();
+    await pending;
+    expect(existsSync(path)).toBe(false);
   });
 });
 

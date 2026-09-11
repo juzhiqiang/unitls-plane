@@ -1,10 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-} from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../../../../messages/en.json';
@@ -237,10 +234,9 @@ function refreshSessionTasks(rerender: () => void) {
 }
 
 function setPrompt(value: string) {
-  fireEvent.change(
-    screen.getByPlaceholderText(/Describe the image you want/),
-    { target: { value } }
-  );
+  fireEvent.change(screen.getByPlaceholderText(/Describe the image you want/), {
+    target: { value },
+  });
 }
 
 function openSettings() {
@@ -270,7 +266,9 @@ beforeEach(() => {
   mocks.imageGenerateProviders.mockReturnValue({ data: [DEFAULT_PROVIDER] });
   mocks.imageGeneratePresets.mockReturnValue({ data: PRESETS });
   mocks.imageGenerateSessions.mockReturnValue({ data: [] });
-  mocks.sessionTasks.mockReturnValue({ data: { tasks: serverTasks, total: 0 } });
+  mocks.sessionTasks.mockReturnValue({
+    data: { tasks: serverTasks, total: 0 },
+  });
   mocks.previews.mockReturnValue({});
   mocks.outputLoad.mockResolvedValue(undefined);
   mocks.maxReferenceSize.mockReturnValue(1024 * 1024);
@@ -288,6 +286,17 @@ beforeEach(() => {
 });
 
 describe('ImageGeneratePage', () => {
+  it('memoizes the session task fallback before using it in message grouping', () => {
+    const pageSource = readFileSync(
+      join(process.cwd(), 'src/app/[locale]/(app)/image/generate/page.tsx'),
+      'utf8'
+    );
+
+    expect(pageSource).toMatch(
+      /const sessionTasks = useMemo\(\s*\(\) => sessionTasksQuery\.data\?\.tasks \?\? \[\],\s*\[sessionTasksQuery\.data\?\.tasks\]\s*\);/
+    );
+  });
+
   it('redirects an anonymous visitor to login instead of creating tasks', async () => {
     mocks.useSession.mockReturnValue({ data: null });
     renderPage();
@@ -313,7 +322,9 @@ describe('ImageGeneratePage', () => {
     setPrompt('a shiba inu');
 
     openSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Increase image count' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Increase image count' })
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
@@ -425,7 +436,9 @@ describe('ImageGeneratePage', () => {
     const { container } = renderPage();
     setPrompt('remix this');
     attachViaInput(container, referenceFile());
-    fireEvent.click(screen.getByRole('button', { name: 'Remove reference image' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove reference image' })
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
@@ -440,9 +453,7 @@ describe('ImageGeneratePage', () => {
     const { container } = renderPage();
     attachViaInput(container, referenceFile(2 * 1024 * 1024));
 
-    expect(
-      screen.getByText(/exceeds the size limit/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/exceeds the size limit/)).toBeInTheDocument();
     expect(screen.queryByAltText('source.png')).not.toBeInTheDocument();
   });
 
@@ -455,7 +466,9 @@ describe('ImageGeneratePage', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('Uploading the reference image failed. Please try again.')
+        screen.getByText(
+          'Uploading the reference image failed. Please try again.'
+        )
       ).toBeInTheDocument()
     );
     expect(mocks.createTask).not.toHaveBeenCalled();
@@ -549,9 +562,7 @@ describe('ImageGeneratePage', () => {
     });
     rerender();
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Retry fetch/ })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /Retry fetch/ }));
     expect(mocks.outputLoad).toHaveBeenCalledTimes(2);
     // 重试取回不再触发生成:总调用数不变。
     expect(mocks.createTask).toHaveBeenCalledTimes(1);
@@ -569,7 +580,9 @@ describe('ImageGeneratePage', () => {
     refreshSessionTasks(rerender);
 
     expect(
-      screen.getByText('The prompt was rejected by the content policy. Try rephrasing it.')
+      screen.getByText(
+        'The prompt was rejected by the content policy. Try rephrasing it.'
+      )
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
     expect(mocks.retryTask).toHaveBeenCalledWith('task-1');
@@ -718,14 +731,17 @@ describe('ImageGeneratePage', () => {
     const { container } = renderPage();
     attachViaInput(
       container,
-      Array.from({ length: 5 }, (_, i) => new File(['z'], `s${i}.png`, { type: 'image/png' }))
+      Array.from(
+        { length: 5 },
+        (_, i) => new File(['z'], `s${i}.png`, { type: 'image/png' })
+      )
     );
 
-    expect(
-      screen.getByText(/At most 4 reference images/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/At most 4 reference images/)).toBeInTheDocument();
     // 只收前 4 张:第 5 张没有缩略 chip。
-    expect(screen.getAllByRole('button', { name: 'Enlarge reference image' })).toHaveLength(4);
+    expect(
+      screen.getAllByRole('button', { name: 'Enlarge reference image' })
+    ).toHaveLength(4);
   });
 
   it('deletes a session after inline confirmation and switches to a new chat', async () => {
@@ -750,8 +766,12 @@ describe('ImageGeneratePage', () => {
     renderPage();
 
     // 点删除 → 行内确认 → 确认删除。
-    fireEvent.click(screen.getByRole('button', { name: 'Delete conversation' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete conversation' })
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete', exact: true })
+    );
 
     await waitFor(() =>
       expect(mocks.deleteSession).toHaveBeenCalledWith(

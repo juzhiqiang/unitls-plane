@@ -7,9 +7,65 @@ import { staticAssetHeaders } from './src/config/cache-headers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const TWO_MIB = 2 * 1024 * 1024;
+const staticChunkPattern = /(?:^|\/)(?:_next\/)?static\/chunks\/.+\.js$/i;
+const pageEntryPattern =
+  /\/(?:app|pages)\/.*\/(?:page|layout|not-found|error|_app|_error)(?:-[^/]*)?\.js$/i;
+const workerPattern = /(?:^|[\/_-])worker(?:[\/_\.-]|$)/i;
+
+export function getNextOutput(platform = process.platform) {
+  return platform === 'win32' ? undefined : 'standalone';
+}
+
+export function excludeLargeStaticJsChunk(entry) {
+  const asset = entry?.asset ?? entry;
+  const name =
+    typeof asset?.url === 'string'
+      ? asset.url
+      : typeof asset?.name === 'string'
+        ? asset.name
+        : '';
+  const size = getWebpackAssetSize(asset);
+  const normalizedName = name.replaceAll('\\', '/');
+
+  return (
+    size > TWO_MIB &&
+    staticChunkPattern.test(normalizedName) &&
+    !pageEntryPattern.test(normalizedName) &&
+    !workerPattern.test(normalizedName)
+  );
+}
+
+function getWebpackAssetSize(asset) {
+  if (typeof asset?.size === 'number') return asset.size;
+  if (typeof asset?.source?.size !== 'function') return 0;
+  try {
+    return asset.source.size();
+  } catch {
+    return 0;
+  }
+}
+
+export const staticChunkRuntimeCaching = {
+  urlPattern: /\/_next\/static\/chunks\/.+\.js$/i,
+  handler: 'CacheFirst',
+  options: {
+    cacheName: 'next-static-js-assets',
+    expiration: {
+      maxAgeSeconds: 7 * 24 * 60 * 60,
+      maxEntries: 20,
+    },
+  },
+};
+
+export const pwaWorkboxOptions = {
+  exclude: [excludeLargeStaticJsChunk],
+  runtimeCaching: [staticChunkRuntimeCaching],
+};
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: getNextOutput(),
   transpilePackages: [
     '@utils-plane/db',
     '@utils-plane/validators',
@@ -33,7 +89,9 @@ const withPwa = withPWA({
   fallbacks: {
     document: '/_offline',
   },
+  extendDefaultRuntimeCaching: true,
   workboxOptions: {
+    ...pwaWorkboxOptions,
     disableDevLogs: true,
   },
 });

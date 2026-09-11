@@ -8,4 +8,6 @@ it('registers the cleanup queue used for durable upload compensation', () => {
   expect(source).toContain(
     "BullModule.registerQueue({ name: 'cleanup-queue' })"
   );
+  expect(source).toContain('implements OnModuleInit');
+  expect(source).toContain('initializeUploadTempDir();');
 });

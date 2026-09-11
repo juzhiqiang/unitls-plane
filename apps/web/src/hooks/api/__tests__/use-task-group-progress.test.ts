@@ -254,4 +254,59 @@ describe('useTaskGroupProgress', () => {
       message: 'Image generation failed',
     });
   });
+
+  it('splits more than 100 task ids into ordered requests', async () => {
+    const taskIds = Array.from({ length: 205 }, (_, index) => `task-${index}`);
+    mockGet.mockImplementation(async (_path: string, init: any) => {
+      const ids = (init.params.query.ids as string).split(',');
+      return {
+        data: ids
+          .reverse()
+          .map(taskId => ({ taskId, status: 'completed', progress: 100 })),
+        error: undefined,
+      } as any;
+    });
+
+    const { result } = renderHook(() => useTaskGroupProgress(taskIds), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.items).toHaveLength(205));
+
+    expect(mockGet).toHaveBeenCalledTimes(3);
+    expect(
+      mockGet.mock.calls.map(
+        call => (call[1] as any).params.query.ids.split(',').length
+      )
+    ).toEqual([100, 100, 5]);
+    expect(result.current.items.map(item => item.taskId)).toEqual(taskIds);
+  });
+
+  it('fails the whole group when any status chunk fails', async () => {
+    const taskIds = Array.from({ length: 205 }, (_, index) => `task-${index}`);
+    mockGet.mockImplementation(async (_path: string, init: any) => {
+      const ids = (init.params.query.ids as string).split(',');
+      if (ids.includes('task-100')) {
+        throw new Error('status chunk failed');
+      }
+      return {
+        data: ids.map(taskId => ({
+          taskId,
+          status: 'processing',
+          progress: 10,
+        })),
+        error: undefined,
+      } as any;
+    });
+
+    const { result } = renderHook(() => useTaskGroupProgress(taskIds), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.query.isError).toBe(true));
+    expect(result.current.query.error).toEqual(
+      new Error('status chunk failed')
+    );
+    expect(mockGet).toHaveBeenCalledTimes(3);
+  });
 });

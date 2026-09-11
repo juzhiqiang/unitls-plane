@@ -39,16 +39,17 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 
 ### 性能优化接口约定（2026-09-10）
 
-- 上传通过
-  `UPLOAD_MAX_CONCURRENT`（默认 2，1–32）在 Multer 解析前限制每进程并发，超限返回 503；`PERFORMANCE_MEMORY_LOG=true`
+- 上传通过受控临时目录落盘，再以可中止的流上传 MinIO；`UPLOAD_TEMP_DIR`
+  可指定目录，留空时使用系统临时目录下的
+  `utils-plane-uploads`。`UPLOAD_MAX_CONCURRENT`（默认 2，1–32）在 Multer 写入临时文件前限制每进程并发，超限返回 503；`PERFORMANCE_MEMORY_LOG=true`
   可记录上传完成时的内存指标。四类 Worker 并发通过 `.env.example` 中 `*_WORKER_CONCURRENCY`
-  配置，默认值保持不变。这些限制不是集群级字节配额。
+  配置，默认值保持不变。这些限制不是集群级字节配额。API 启动时创建临时目录并回收超过 24 小时的孤儿文件；请求完成、失败或中断后都会尝试删除对应文件。
 - 拼图在 Worker 内使用 64
   MiB 有界解码缓存，超预算输入逐张处理；结果 PDF 缩略图按滚动窗口挂载最多 15–30 项，离窗释放画布。源文件、输出画布和 PDF.js 内部缓存仍有额外内存成本。
 
 - `GET /tasks/status?ids=<uuid>,...` 最多接受 100 个去重 UUID，返回轻量状态数组，缺失任务返回
   `not_found`。单任务和批量状态接口分别按用户/IP 限流，每分钟 120 次，保留匿名访问。
-- 任务组每轮一个请求，按 1/2/3/5 秒退避，全部终态停止、后台暂停。单任务 hook 保留原有轮询行为。
+- 任务组每轮按最多 100 个 ID 分块并行请求，按 1/2/3/5 秒退避，全部终态停止、后台暂停。单任务 hook 复用批量状态接口。
 - `GET /files`、`GET /files/trash`、`GET /tasks` 保留 page/limit，新增 cursor 和响应
   `nextCursor`。首次可传
   `cursor=`，随后传上一页游标；末页为 null。游标绑定用户及筛选条件并保留数据库微秒时间，普通列表按 createdAt/id 降序，回收站按 deletedAt/id 降序；非法游标返回 400。
@@ -60,11 +61,18 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 - Web 私有 React
   Query 查询按账号分区，文件列表/回收站/文件详情、任务列表、生图额度、会话列表和会话任务的 query
   key 均包含当前 `userId`；跨账号失效使用公共前缀，不会复用旧账号缓存。
-- 账号摘要由独立缓存模块在 API 进程内按用户缓存 2 秒，合并同用户 in-flight 请求；最多保留 1000 条（包括 pending），使用 LRU 淘汰，每 5 秒主动清理过期成功结果。定时器在模块关闭时释放。文件上传/删除/恢复/清理以及任务创建/删除/状态/进度写入成功提交后失效；注销开始/完成时失效，旧 Promise 不会回填被淘汰或失效的条目。多实例部署不共享缓存，界面更新还取决于客户端下一次刷新。
+- 账号摘要由独立缓存模块在 API 进程内按用户缓存 2 秒，合并同用户 in-flight 请求；最多保留 1000 条（包括 pending），使用 LRU 淘汰，每 5 秒主动清理过期成功结果。配置
+  `REDIS_URL` 且未设置 `ACCOUNT_SUMMARY_REDIS=false`
+  时，Redis 作为跨实例共享层并广播失效；Redis 故障自动回退到本地缓存和数据库。定时器与 Redis 连接在模块关闭时释放。文件上传/删除/恢复/清理以及任务创建/删除/状态/进度写入成功提交后失效；注销开始/完成时失效，旧 Promise 不会回填被淘汰或失效的条目。模块销毁时先禁止新 Redis 操作，等待进行中的操作最多 1 秒，再关闭普通客户端和订阅客户端。
+- 文件名包含搜索继续使用 `%term%` 语义，并通过 `pg_trgm` GIN 索引 `files_filename_trgm_idx`
+  加速；迁移只增加扩展和索引，不修改业务数据。
 - 普通文件下载直接传输对象存储流，断流时释放源流。缩略图使用 Sharp 流输入并保持 32
   MiB 源限制；Sharp 仍会缓冲输入及解码像素，不能视为恒定内存。
 - PDF 元数据的 `pdf-lib`、字体解析的 `opentype.js` 改为交互时加载。对应数据库迁移为
   `0018_woozy_avengers.sql`。
+- Web Windows 本地构建使用普通 `.next` 输出，避免 standalone traced
+  files 的 symlink 权限问题；Linux/Docker 发布构建继续使用 `standalone`。超过 2 MiB 的普通静态 JS
+  chunk 不进入 PWA precache，但访问工具页后仍按运行时 CacheFirst 策略缓存。
 
 | 层级      | 技术                                                       |
 | --------- | ---------------------------------------------------------- |
@@ -127,6 +135,7 @@ DATABASE_URL=postgresql://utils:utils@localhost:5433/utils_plane
 
 # Redis
 REDIS_URL=redis://localhost:6379
+ACCOUNT_SUMMARY_REDIS=true
 
 # MinIO
 S3_ENDPOINT=http://localhost:9000
@@ -169,6 +178,11 @@ NODE_ENV=development
 RELEASE=dev
 BUILD_COMMIT=dev
 BUILD_TIME=
+
+# Uploads
+UPLOAD_TEMP_DIR=
+UPLOAD_MAX_CONCURRENT=2
+PERFORMANCE_MEMORY_LOG=false
 
 # ID photo AI cutout (optional, OpenAI-compatible)
 # chat_mask: /v1/chat/completions returns {"mask":"data:image/png;base64,..."}
@@ -445,8 +459,9 @@ cd packages/api-client && bun run generate
 
 ## 文件与任务策略
 
-- 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式
-  `pro_preview` 账号使用与 Private 相同的顶额权益，普通 `plan: free` 登录账号仍为 50MB。
+- 单文件额度使用二进制单位：匿名用户 **10 MiB**、普通登录用户（`plan: free`）**50 MiB**；Pro 100
+  MiB、Team 150 MiB，最高套餐 Private **250 MiB**。显式 `pro_preview`
+  账号使用与 Private 相同的最高额度。
 - 匿名文件保留 24 小时后永久删除，登录用户文件归入账号文件；回收站文件保留 30 天后永久删除。
 - 图片压缩、图片格式转换、长图拼接、GIF/APNG 制作优先支持浏览器本地处理；图片压缩的本地和服务端处理共同遵守当前账号的单文件额度。
 - Markdown 转 PDF 支持在线编辑、预览和本地导出；登录后可选择服务端导出。Word/DOCX 转 PDF 走服务端任务。

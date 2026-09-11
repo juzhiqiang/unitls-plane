@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { defer, finalize } from 'rxjs';
 
-/** 在 Multer 分配完整 Buffer 前限制进程内并发；不排队持有上传正文。 */
+/** 在 Multer 写入临时文件前限制进程内并发，不让上传正文排队驻留内存。 */
 @Injectable()
 export class UploadBudgetInterceptor implements NestInterceptor {
   private active = 0;

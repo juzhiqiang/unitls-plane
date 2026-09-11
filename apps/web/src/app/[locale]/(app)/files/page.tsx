@@ -21,6 +21,11 @@ import { canPreviewFile } from '@/lib/files/preview';
 import { authClient } from '@/lib/auth-client';
 import { Search, Grid3X3, List, Trash2, Download, Eye, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
+import { useCursorPagination } from '@/hooks/use-cursor-pagination';
+import {
+  CursorPagination,
+  ListQueryError,
+} from '@/components/ui/CursorPagination';
 
 type ViewMode = 'grid' | 'list';
 type TypeFilter = 'all' | 'image' | 'pdf' | 'font';
@@ -71,7 +76,9 @@ function FilesPageContent() {
   const [view, setView] = useState<ViewMode>('grid');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const pagination = useCursorPagination(
+    JSON.stringify([session?.user.id, typeFilter, search])
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // 任务页等入口通过 /files?preview=<fileId> 深链打开预览。
@@ -84,26 +91,34 @@ function FilesPageContent() {
   }, [previewParam]);
 
   const query: FileQuery = {
-    page,
+    cursor: pagination.cursor,
+    includeTotal: false,
     limit: 12,
     mimeType: getMimePrefix(typeFilter),
     search: search || undefined,
   };
 
-  const { data, isLoading } = useFiles(query);
+  const { data, isLoading, isFetching, isError, refetch } = useFiles(
+    query,
+    session?.user.id
+  );
   const deleteFile = useDeleteFile();
   const batchDelete = useBatchDeleteFiles();
   const uploadFile = useUploadFile();
 
   const files = data?.files ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.ceil(total / 12);
+  useEffect(() => {
+    setSelected(new Set());
+  }, [pagination.cursor, session?.user.id, typeFilter, search]);
 
   // 当前列表里已有的文件直接复用，深链才按 id 单独拉取。
   const previewFromList = previewId
     ? (files.find(file => file.id === previewId) ?? null)
     : null;
-  const previewQuery = useFile(previewId && !previewFromList ? previewId : '');
+  const previewQuery = useFile(
+    previewId && !previewFromList ? previewId : '',
+    session?.user.id
+  );
   const previewFile =
     previewFromList ?? (previewQuery.data as FileRecord | undefined) ?? null;
 
@@ -133,10 +148,16 @@ function FilesPageContent() {
     if (selected.size === 0) return;
     await batchDelete.mutateAsync(Array.from(selected));
     setSelected(new Set());
+    pagination.reset();
   };
 
   const handleDownload = (file: FileRecord) => {
     downloadStoredFile(file.id, file.filename);
+  };
+
+  const handleDeleteSuccess = () => {
+    setSelected(new Set());
+    pagination.reset();
   };
 
   const handleDrop = useCallback(
@@ -187,7 +208,7 @@ function FilesPageContent() {
             value={search}
             onChange={e => {
               setSearch(e.target.value);
-              setPage(1);
+              pagination.reset();
             }}
             placeholder={t('search')}
             className="w-full h-8 pl-9 pr-3 text-sm bg-transparent border border-border rounded-md focus:outline-none focus:border-accent transition-colors placeholder:text-muted-foreground"
@@ -202,7 +223,7 @@ function FilesPageContent() {
               type="button"
               onClick={() => {
                 setTypeFilter(f.value);
-                setPage(1);
+                pagination.reset();
               }}
               className={`px-3 h-8 text-[11px] font-mono uppercase tracking-wider transition-colors relative ${
                 typeFilter === f.value
@@ -289,29 +310,37 @@ function FilesPageContent() {
       </div>
 
       {/* Drop zone for upload */}
-      {files.length === 0 && !isLoading && !search && typeFilter === 'all' && (
-        <FileDropzone
-          accept={{
-            'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
-            'application/pdf': ['.pdf'],
-            'font/ttf': ['.ttf'],
-            'font/otf': ['.otf'],
-            'font/woff': ['.woff'],
-            'font/woff2': ['.woff2'],
-          }}
-          maxSize={50 * 1024 * 1024}
-          multiple
-          onDrop={handleDrop}
-          hint={t('dropToUpload')}
-        />
-      )}
+      {isError && <ListQueryError retry={() => void refetch()} />}
+      {files.length === 0 &&
+        !isLoading &&
+        !isError &&
+        !search &&
+        typeFilter === 'all' && (
+          <FileDropzone
+            accept={{
+              'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
+              'application/pdf': ['.pdf'],
+              'font/ttf': ['.ttf'],
+              'font/otf': ['.otf'],
+              'font/woff': ['.woff'],
+              'font/woff2': ['.woff2'],
+            }}
+            maxSize={50 * 1024 * 1024}
+            multiple
+            onDrop={handleDrop}
+            hint={t('dropToUpload')}
+          />
+        )}
 
       {/* Empty state */}
-      {files.length === 0 && !isLoading && (search || typeFilter !== 'all') && (
-        <p className="text-sm text-muted-foreground py-12 text-center">
-          {t('empty')}
-        </p>
-      )}
+      {files.length === 0 &&
+        !isLoading &&
+        !isError &&
+        (search || typeFilter !== 'all') && (
+          <p className="text-sm text-muted-foreground py-12 text-center">
+            {t('empty')}
+          </p>
+        )}
 
       {/* Grid view */}
       {view === 'grid' && files.length > 0 && (
@@ -366,7 +395,9 @@ function FilesPageContent() {
                     aria-label={t('deleteFile', { filename: file.filename })}
                     onClick={e => {
                       e.stopPropagation();
-                      deleteFile.mutate(file.id);
+                      deleteFile.mutate(file.id, {
+                        onSuccess: handleDeleteSuccess,
+                      });
                     }}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors"
                   >
@@ -484,7 +515,11 @@ function FilesPageContent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => deleteFile.mutate(file.id)}
+                    onClick={() =>
+                      deleteFile.mutate(file.id, {
+                        onSuccess: handleDeleteSuccess,
+                      })
+                    }
                     aria-label={t('deleteFile', { filename: file.filename })}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors"
                   >
@@ -498,24 +533,14 @@ function FilesPageContent() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPage(p)}
-              className={`h-7 w-7 text-xs font-mono rounded-md transition-colors ${
-                p === page
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:text-foreground border border-border'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      )}
+      <CursorPagination
+        page={pagination.page}
+        hasNext={!isError && Boolean(data?.nextCursor)}
+        busy={Boolean(isFetching || isLoading)}
+        onFirst={pagination.reset}
+        onPrevious={pagination.previous}
+        onNext={() => pagination.next(data?.nextCursor)}
+      />
 
       <FilePreviewDialog
         file={previewFile}

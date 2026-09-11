@@ -56,6 +56,8 @@ it('forwards includeTotal=false to the task list service', async () => {
       page: 1,
       limit: 20,
       includeTotal: false,
+      category: 'pdf',
+      type: 'pdf_merge',
     } as never,
     { user } as never
   );
@@ -64,7 +66,8 @@ it('forwards includeTotal=false to the task list service', async () => {
     page: 1,
     limit: 20,
     status: undefined,
-    type: undefined,
+    type: 'pdf_merge',
+    category: 'pdf',
     cursor: undefined,
     includeTotal: false,
   });

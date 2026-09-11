@@ -294,6 +294,7 @@ export class TasksController {
       limit: query.limit ?? 20,
       status: query.status,
       type: query.type,
+      category: query.category,
       cursor: query.cursor,
       includeTotal: query.includeTotal,
     });

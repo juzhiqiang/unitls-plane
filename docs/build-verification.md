@@ -4,7 +4,8 @@
 
 ## 结论
 
-**生产构建在 Linux（实际部署目标）下是干净的**；在 Windows 开发机上观察到的失败属于环境问题，不代表代码有问题。
+**生产构建在 Linux（实际部署目标）下使用 standalone；Windows 本地构建使用普通 `.next` 输出。**
+Windows 不再尝试生成依赖 symlink 的 standalone 目录，因此日常本地构建不应再因该权限问题失败；发布验收仍必须在 Linux/Docker 环境执行。
 
 Docker（`oven/bun:1` + `node:22-bookworm-slim`）实测：
 
@@ -21,7 +22,7 @@ docker build --target builder \
   -t utils-plane-buildcheck:latest -f Dockerfile .
 ```
 
-## Windows 上会遇到的两类失败
+## Windows 上的构建边界
 
 ### 1. `standalone` 输出的 EPERM symlink（确定性）
 
@@ -31,12 +32,13 @@ Error: ENOENT: no such file or directory, copyfile '.next/routes-manifest.json'
       -> '.next/standalone/.next/routes-manifest.json'
 ```
 
-`output: 'standalone'` 需要创建符号链接，Windows 默认不允许非管理员建 symlink。这会让
-`bun run build` 以退出码 1 结束，**即使 prerender 阶段 0 错误**。
+Linux 的 `output: 'standalone'` 需要创建符号链接；Windows 本地配置会选择普通输出，因此不会生成
+`.next/standalone`。如果在 Windows 上手动强制 standalone，仍可能遇到同样的 symlink 权限错误。
 
-要在 Windows 上跑通，需开启「开发者模式」或以管理员运行；否则请以 Docker 构建为准。
+Linux/Docker 发布构建必须保留 standalone 产物，不能用 Windows 普通输出替代。
 
-判断方法：先看 prerender 错误数，再看退出码。
+判断方法：Windows 先确认普通 `.next`
+构建退出码；Linux/Docker 再检查 standalone 文件完整性和 prerender 错误数。
 
 ```bash
 grep -c "Error occurred prerendering" build.log
@@ -78,5 +80,8 @@ Worker 只对 client 有意义），且已随上述 Docker 构建一并验证可
 ## 建议
 
 - 发版前的构建验收以 Docker/Linux 为准；
-- Windows 上日常用 `bun --cwd apps/web test` 与 `bun --cwd apps/web run lint`
-  即可，需要跑构建时以 prerender 错误数而非退出码作为主要信号。
+- Windows 上日常可运行 `bun --cwd apps/web test`、`bun --cwd apps/web run lint` 和普通
+  `bun --cwd apps/web build`；
+- 发布前在 Linux/Docker 中运行 standalone 构建，并核对
+  `server.js`、`.next/routes-manifest.json`、Service Worker 与预缓存清单。
+- staging 仍需执行上传并发、任务轮询和 Redis/PostgreSQL 指标验收；本地单元测试不能替代真实 RSS、P95 和 GC 数据。

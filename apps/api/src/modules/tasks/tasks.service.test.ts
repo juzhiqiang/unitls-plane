@@ -41,10 +41,18 @@ const transactionValues = vi.fn((task: Record<string, unknown>) => {
 const globalInsert = vi.fn(() => ({ values: globalValues }));
 /** markCompleted / markRetrying 只有 update:抓住 set 的载荷,断言写进去的字段。 */
 const updatedValues: Array<Record<string, unknown>> = [];
+const summaryInvalidation = vi.fn((_userId: string | null) => {
+  events.push('summary-invalidated');
+});
+it('invalidates the owner summary after task progress is persisted', async () => {
+  const { service } = createService();
+  await service.updateProgress(TASK_ID, 30);
+  expect(summaryInvalidation).toHaveBeenCalledWith('user-1');
+});
 const globalUpdate = vi.fn(() => ({
   set: (values: Record<string, unknown>) => {
     updatedValues.push(values);
-    return { where: () => undefined };
+    return { where: () => ({ returning: async () => [{ userId: 'user-1' }] }) };
   },
 }));
 const transactionInsert = vi.fn(() => ({ values: transactionValues }));
@@ -182,7 +190,8 @@ function createService(
       aiQueue as any,
       filesService as any,
       cleanupObligationService as any,
-      taskJobReconciler as any
+      taskJobReconciler as any,
+      { invalidate: summaryInvalidation } as any
     ),
     filesService,
     imageQueue,
@@ -277,6 +286,9 @@ describe('TasksService task creation', () => {
       { jobId: TASK_ID, delay: 1000 }
     );
     expect(events.indexOf('commit')).toBeLessThan(events.indexOf('queue-add'));
+    expect(events.indexOf('summary-invalidated')).toBeGreaterThan(
+      events.indexOf('commit')
+    );
   });
 
   it('rejects historical compression files above the current account limit', async () => {
@@ -362,6 +374,7 @@ describe('TasksService task creation', () => {
       'transaction-insert',
       'obligation-record',
       'commit',
+      'summary-invalidated',
       'queue-add',
       'obligation-clear',
     ]);

@@ -36,9 +36,13 @@ import {
   withProducerTransaction,
   type ActiveUserTransaction,
 } from '../../common/database/active-user-transaction';
+import { constants as fsConstants } from 'node:fs';
+import { lstat, open, type FileHandle } from 'node:fs/promises';
 import { normalizeUploadedFilename } from './filename.util';
 import { renderThumbnail } from './thumbnail.util';
 import { CleanupObligationService } from './cleanup-obligation.service';
+import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
+import { isUploadTempPath, removeUploadTempFile } from './upload-temp-file';
 
 const ALLOWED_MIME_TYPES = [
   'image/png',
@@ -63,6 +67,7 @@ type FileEligibility = SQL<unknown>;
 type FilePurgeResult = 'deleted' | 'in-progress' | 'missing';
 type FilePurgeClaim = {
   id: string;
+  userId: string | null;
   storageKey: string;
   purgeStartedAt: Date;
 };
@@ -95,6 +100,46 @@ export interface UploadMeta {
   size: number;
 }
 
+export interface TempUpload {
+  path: string;
+  size: number;
+}
+
+export type UploadInput = Buffer | TempUpload;
+
+async function openVerifiedTempUpload(
+  file: TempUpload,
+  expectedSize: number
+): Promise<FileHandle> {
+  if (file.size !== expectedSize) {
+    throw new BadRequestException('Upload temporary file size mismatch');
+  }
+
+  const pathStats = await lstat(file.path).catch(() => undefined);
+  if (!pathStats?.isFile()) {
+    throw new BadRequestException('Invalid upload temporary file');
+  }
+
+  const noFollowFlag = fsConstants.O_NOFOLLOW ?? 0;
+  let handle: FileHandle;
+  try {
+    handle = await open(file.path, fsConstants.O_RDONLY | noFollowFlag);
+  } catch {
+    throw new BadRequestException('Invalid upload temporary file');
+  }
+
+  try {
+    const fileStats = await handle.stat();
+    if (!fileStats.isFile() || fileStats.size !== expectedSize) {
+      throw new BadRequestException('Upload temporary file size mismatch');
+    }
+    return handle;
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+}
+
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
@@ -102,90 +147,128 @@ export class FilesService {
   constructor(
     private readonly minioService: MinioService,
     @InjectQueue('cleanup-queue') private readonly cleanupQueue: Queue,
-    private readonly cleanupObligationService: CleanupObligationService
+    private readonly cleanupObligationService: CleanupObligationService,
+    private readonly summaryCache: AccountSummaryCache = new AccountSummaryCache()
   ) {}
 
   async upload(
-    file: Buffer,
+    file: UploadInput,
     meta: UploadMeta,
-    user: Pick<User, 'id' | 'plan' | 'role'> | null
+    user: Pick<User, 'id' | 'plan' | 'role'> | null,
+    signal?: globalThis.AbortSignal
   ): Promise<File> {
-    let entitlementUser:
-      | (Pick<User, 'id' | 'plan' | 'role'> & EntitlementUser)
-      | null = user ?? null;
+    const tempPath = Buffer.isBuffer(file) ? undefined : file.path;
 
-    if (entitlementUser) {
-      entitlementUser = {
-        ...entitlementUser,
-        userId: entitlementUser.id,
+    try {
+      if (tempPath && !isUploadTempPath(tempPath)) {
+        throw new BadRequestException('Invalid upload temporary file');
+      }
+
+      let entitlementUser:
+        | (Pick<User, 'id' | 'plan' | 'role'> & EntitlementUser)
+        | null = user ?? null;
+
+      if (entitlementUser) {
+        entitlementUser = {
+          ...entitlementUser,
+          userId: entitlementUser.id,
+        };
+      }
+
+      // 验证文件类型
+      if (!this.isAllowedMimeType(meta.mimeType)) {
+        throw new BadRequestException({
+          code: ErrorCodes.INVALID_FILE_TYPE,
+          message: `File type ${meta.mimeType} is not allowed`,
+        });
+      }
+
+      // 验证文件大小
+      const maxSize = getLimit(entitlementUser, 'upload.maxFileSize');
+      if (meta.size > maxSize) {
+        throw new BadRequestException({
+          code: ErrorCodes.FILE_TOO_LARGE,
+          message: `File size exceeds limit of ${maxSize / 1024 / 1024}MB`,
+        });
+      }
+
+      const fileId = globalThis.crypto.randomUUID();
+      const prefix = entitlementUser?.id ?? 'anonymous';
+      const storageKey = `${prefix}/${fileId}/${meta.filename}`;
+
+      await this.cleanupObligationService.recordObject(fileId, storageKey);
+
+      // 上传到 MinIO
+      try {
+        if (Buffer.isBuffer(file)) {
+          await this.minioService.upload(storageKey, file, meta.mimeType);
+        } else {
+          const handle = await openVerifiedTempUpload(file, meta.size);
+          const source = handle.createReadStream();
+          try {
+            await this.minioService.uploadStream(
+              storageKey,
+              source,
+              file.size,
+              meta.mimeType,
+              signal
+            );
+          } finally {
+            source.destroy();
+            await handle.close();
+          }
+        }
+      } catch (error) {
+        await this.releaseObjectProduction(fileId);
+        throw error;
+      }
+
+      // 计算过期时间（匿名用户 24 小时）
+      const expiresAt = entitlementUser?.id
+        ? null
+        : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      // 写入数据库
+      const newFileValues: NewFile = {
+        id: fileId,
+        userId: entitlementUser?.id ?? null,
+        filename: meta.filename,
+        originalSize: meta.size,
+        storageKey,
+        mimeType: meta.mimeType,
+        expiresAt,
       };
+
+      let newFile: File;
+      try {
+        newFile = entitlementUser
+          ? await withActiveUserTransaction(entitlementUser.id, tx =>
+              this.insertUploadedFile(tx, newFileValues)
+            )
+          : await withProducerTransaction(tx =>
+              this.insertUploadedFile(tx, newFileValues)
+            );
+      } catch (error) {
+        await this.releaseObjectProduction(fileId);
+        throw error;
+      }
+
+      this.summaryCache.invalidate(newFile.userId);
+      this.logger.log(
+        `Uploaded file ${newFile.id} by user ${entitlementUser?.id ?? 'anonymous'}`
+      );
+      return normalizeFileRecord(newFile);
+    } finally {
+      if (tempPath) await this.cleanupTempUpload(tempPath);
     }
+  }
 
-    // 验证文件类型
-    if (!this.isAllowedMimeType(meta.mimeType)) {
-      throw new BadRequestException({
-        code: ErrorCodes.INVALID_FILE_TYPE,
-        message: `File type ${meta.mimeType} is not allowed`,
-      });
-    }
-
-    // 验证文件大小
-    const maxSize = getLimit(entitlementUser, 'upload.maxFileSize');
-    if (meta.size > maxSize) {
-      throw new BadRequestException({
-        code: ErrorCodes.FILE_TOO_LARGE,
-        message: `File size exceeds limit of ${maxSize / 1024 / 1024}MB`,
-      });
-    }
-
-    const fileId = globalThis.crypto.randomUUID();
-    const prefix = entitlementUser?.id ?? 'anonymous';
-    const storageKey = `${prefix}/${fileId}/${meta.filename}`;
-
-    await this.cleanupObligationService.recordObject(fileId, storageKey);
-
-    // 上传到 MinIO
+  private async cleanupTempUpload(filePath: string): Promise<void> {
     try {
-      await this.minioService.upload(storageKey, file, meta.mimeType);
-    } catch (error) {
-      await this.releaseObjectProduction(fileId);
-      throw error;
+      await removeUploadTempFile(filePath);
+    } catch {
+      this.logger.warn('Failed to remove upload temporary file');
     }
-
-    // 计算过期时间（匿名用户 24 小时）
-    const expiresAt = entitlementUser?.id
-      ? null
-      : new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    // 写入数据库
-    const newFileValues: NewFile = {
-      id: fileId,
-      userId: entitlementUser?.id ?? null,
-      filename: meta.filename,
-      originalSize: meta.size,
-      storageKey,
-      mimeType: meta.mimeType,
-      expiresAt,
-    };
-
-    let newFile: File;
-    try {
-      newFile = entitlementUser
-        ? await withActiveUserTransaction(entitlementUser.id, tx =>
-            this.insertUploadedFile(tx, newFileValues)
-          )
-        : await withProducerTransaction(tx =>
-            this.insertUploadedFile(tx, newFileValues)
-          );
-    } catch (error) {
-      await this.releaseObjectProduction(fileId);
-      throw error;
-    }
-
-    this.logger.log(
-      `Uploaded file ${newFile.id} by user ${entitlementUser?.id ?? 'anonymous'}`
-    );
-    return normalizeFileRecord(newFile);
   }
 
   private async insertUploadedFile(
@@ -370,6 +453,7 @@ export class FilesService {
         )
       );
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Soft deleted file ${id}`);
   }
 
@@ -399,6 +483,7 @@ export class FilesService {
         )
       );
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Batch soft deleted ${validIds.length} files`);
   }
 
@@ -418,6 +503,7 @@ export class FilesService {
       )
       .returning({ id: files.id });
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Batch restored ${restored.length} files`);
   }
 
@@ -435,6 +521,7 @@ export class FilesService {
       });
     }
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(`Restored file ${id}`);
   }
 
@@ -729,6 +816,7 @@ export class FilesService {
         )
         .returning({
           id: files.id,
+          userId: files.userId,
           storageKey: files.storageKey,
           purgeStartedAt: files.purgeStartedAt,
         });
@@ -766,6 +854,7 @@ export class FilesService {
         .where(this.filePurgeClaimEligibility(claim))
         .returning({ id: files.id })
     );
+    if (deleted.length === 1) this.summaryCache.invalidate(claim.userId);
     return deleted.length === 1 ? 'deleted' : 'in-progress';
   }
 

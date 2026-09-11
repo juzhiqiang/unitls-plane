@@ -1,5 +1,8 @@
 import {
   taskStatusEnum,
+  taskCategoryEnum,
+  taskTypeEnum,
+  TASK_CATEGORIES,
   TASK_TYPES,
   TASK_STATUSES,
 } from '@utils-plane/validators';
@@ -24,11 +27,14 @@ export const taskQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: taskStatusEnum.optional(),
+  category: taskCategoryEnum.optional(),
+  type: taskTypeEnum.optional(),
 });
 
 export type TaskQueryInput = z.infer<typeof taskQuerySchema>;
 
 type TaskTypeValue = (typeof TASK_TYPES)[number];
+type TaskCategoryValue = (typeof TASK_CATEGORIES)[number];
 type TaskStatusValue = (typeof TASK_STATUSES)[number];
 
 export class CreateTaskDto {
@@ -92,6 +98,11 @@ export class TaskQueryDto {
   @IsOptional()
   @IsEnum(TASK_STATUSES)
   status?: TaskStatusValue;
+
+  @ApiPropertyOptional({ enum: TASK_CATEGORIES })
+  @IsOptional()
+  @IsEnum(TASK_CATEGORIES)
+  category?: TaskCategoryValue;
 
   @ApiPropertyOptional({
     enum: TASK_TYPES,

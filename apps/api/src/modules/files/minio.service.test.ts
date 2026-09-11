@@ -1,4 +1,8 @@
-import { HeadBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import {
+  HeadBucketCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'bun:test';
 import { Readable } from 'node:stream';
 import {
@@ -69,6 +73,30 @@ describe('MinioService upload timeout', () => {
     expect(MINIO_UPLOAD_TIMEOUT_MS).toBeLessThan(60 * 60 * 1000);
     expect(timeout).toHaveBeenCalledWith(MINIO_UPLOAD_TIMEOUT_MS);
     expect(send.mock.calls[0]?.[1]).toEqual({ abortSignal });
+  });
+});
+
+describe('MinioService streamed upload', () => {
+  it('passes a readable body and exact content length to S3', async () => {
+    const send = vi.fn(async () => ({}));
+    const service = withClient(send);
+    const source = Readable.from(Buffer.from('contents'));
+    const signal = new globalThis.AbortController().signal;
+
+    await service.uploadStream(
+      'user-1/file-1/report.pdf',
+      source,
+      8,
+      'application/pdf',
+      signal
+    );
+
+    const command = send.mock.calls[0]?.[0] as PutObjectCommand;
+    expect(command).toBeInstanceOf(PutObjectCommand);
+    expect(command.input.Body).toBe(source);
+    expect(command.input.ContentLength).toBe(8);
+    expect(command.input.ContentType).toBe('application/pdf');
+    expect(send.mock.calls[0]?.[1]?.abortSignal).toBeDefined();
   });
 });
 

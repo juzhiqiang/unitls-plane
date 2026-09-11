@@ -6,6 +6,7 @@ import {
   useBatchPermanentDeleteFiles,
   useBatchRestoreFiles,
   useEmptyTrash,
+  useFile,
   useFiles,
   useTrashedFiles,
 } from '../use-files';
@@ -153,6 +154,122 @@ describe('file list cursor queries', () => {
           includeTotal: 'false',
         },
       },
+    });
+  });
+
+  it('isolates active file list cache entries by userId without forwarding it to the API', async () => {
+    const queryClient = new QueryClient();
+    const query = { cursor: 'cursor-1', limit: 20 };
+
+    renderHook(() => useFiles(query, 'user-1'), {
+      wrapper: createWrapper(queryClient),
+    });
+    renderHook(() => useFiles(query, 'user-2'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryCache().findAll({ queryKey: ['files'] })
+      ).toHaveLength(2)
+    );
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['files'] })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['files', 'user-1', query],
+        ['files', 'user-2', query],
+      ])
+    );
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenNthCalledWith(1, '/files', {
+      params: {
+        query: {
+          page: '1',
+          limit: '20',
+          cursor: 'cursor-1',
+          includeTotal: 'false',
+        },
+      },
+    });
+  });
+
+  it('isolates trash file list cache entries by userId without forwarding it to the API', async () => {
+    const queryClient = new QueryClient();
+    const query = { cursor: 'cursor-1', limit: 20 };
+
+    renderHook(() => useTrashedFiles(query, 'user-1'), {
+      wrapper: createWrapper(queryClient),
+    });
+    renderHook(() => useTrashedFiles(query, 'user-2'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryCache().findAll({ queryKey: ['files', 'trash'] })
+      ).toHaveLength(2)
+    );
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['files', 'trash'] })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['files', 'trash', 'user-1', query],
+        ['files', 'trash', 'user-2', query],
+      ])
+    );
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenNthCalledWith(1, '/files/trash', {
+      params: {
+        query: {
+          page: '1',
+          limit: '20',
+          cursor: 'cursor-1',
+          includeTotal: 'false',
+        },
+      },
+    });
+  });
+
+  it('isolates file detail cache entries by userId without forwarding it to the API', async () => {
+    const queryClient = new QueryClient();
+    mockGet.mockResolvedValue({
+      data: { id: 'file-1', userId: 'user-1' },
+      error: undefined,
+    } as never);
+
+    renderHook(() => useFile('file-1', 'user-1'), {
+      wrapper: createWrapper(queryClient),
+    });
+    renderHook(() => useFile('file-1', 'user-2'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryCache().findAll({ queryKey: ['files'] })
+      ).toHaveLength(2)
+    );
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['files'] })
+        .map(entry => entry.queryKey)
+    ).toEqual(
+      expect.arrayContaining([
+        ['files', 'user-1', 'file-1'],
+        ['files', 'user-2', 'file-1'],
+      ])
+    );
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenNthCalledWith(1, '/files/{id}', {
+      params: { path: { id: 'file-1' } },
     });
   });
 });

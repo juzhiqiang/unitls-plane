@@ -122,9 +122,7 @@ export default function ImageGeneratePage() {
   const uploadFile = useUploadFile();
 
   // 会话:新对话在本地生成 uuid,提交首个任务后才出现在服务端列表里。
-  const [newSessionId, setNewSessionId] = useState(() =>
-    randomUUID()
-  );
+  const [newSessionId, setNewSessionId] = useState(() => randomUUID());
   const [activeSessionId, setActiveSessionId] = useState(newSessionId);
   const [draft, setDraft] = useState<ImageGenerateChatDraft>(INITIAL_DRAFT);
   // 参考图数组:0 张文生图、1 张图生图、多张融合。
@@ -167,7 +165,10 @@ export default function ImageGeneratePage() {
 
   // 新会话在服务端没有任务,query 返回空列表,与「未启用」效果一致,无需额外门控。
   const sessionTasksQuery = useImageGenerateSessionTasks(activeSessionId);
-  const sessionTasks = sessionTasksQuery.data?.tasks ?? [];
+  const sessionTasks = useMemo(
+    () => sessionTasksQuery.data?.tasks ?? [],
+    [sessionTasksQuery.data?.tasks]
+  );
 
   const messageGroups = useMemo(() => {
     const serverGroups = toMessageGroups(sessionTasks);
@@ -252,8 +253,7 @@ export default function ImageGeneratePage() {
   const submit = async () => {
     if (requireLogin(TOOL_HREF)) return;
 
-    const mode =
-      referenceFiles.length > 0 ? 'image_to_image' : 'text_to_image';
+    const mode = referenceFiles.length > 0 ? 'image_to_image' : 'text_to_image';
     const clientGroupId = randomUUID();
     const prompt = draft.prompt.trim();
     // 草稿尺寸(默认 auto)不在当前来源支持列表时回落到第一档,免得提交一个
@@ -283,9 +283,9 @@ export default function ImageGeneratePage() {
         // 把返回类型推成 undefined,这里先转 unknown 再断言,与 use-files 里同一处理方式。
         const uploadedIds: string[] = [];
         for (const file of referenceFiles) {
-          const uploaded = (await uploadFile.mutateAsync(
-            file
-          )) as unknown as { id: string };
+          const uploaded = (await uploadFile.mutateAsync(file)) as unknown as {
+            id: string;
+          };
           uploadedIds.push(uploaded.id);
         }
         inputFileIds = uploadedIds;
@@ -387,9 +387,7 @@ export default function ImageGeneratePage() {
       mode: 'inpaint',
       referenceFileIds: [],
       taskIds: [],
-      tasks: [
-        { taskId: `${clientGroupId}-optimistic-0`, status: 'pending' },
-      ],
+      tasks: [{ taskId: `${clientGroupId}-optimistic-0`, status: 'pending' }],
     });
 
     try {

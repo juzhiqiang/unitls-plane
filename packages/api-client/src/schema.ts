@@ -707,6 +707,7 @@ export interface operations {
                 page?: number;
                 limit?: number;
                 status?: "pending" | "processing" | "completed" | "failed";
+                category?: "image" | "pdf" | "font";
                 type?: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate";
             };
             header?: never;

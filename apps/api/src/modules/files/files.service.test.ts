@@ -1,7 +1,41 @@
 import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
+import {
+  existsSync,
+  mkdtempSync,
+  rmdirSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { File } from '@utils-plane/db';
+import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
+import { ensureUploadTempDir } from './upload-temp-file';
 
 let insertedFile: Record<string, unknown> | null = null;
+it('invalidates a warmed summary after restoring a file', async () => {
+  const cache = new AccountSummaryCache();
+  const read = vi.fn(async () => ({
+    activeTaskCount: 0,
+    failedTaskCount: 0,
+    activeFileCount: 1,
+    activeFileBytes: 0,
+    recentTasks: [],
+    recentFiles: [],
+  }));
+  await cache.get('user-1', read);
+  restoredRows = [{ id: 'file-1' }];
+  const service = new FilesService(
+    minioService as never,
+    cleanupQueue as never,
+    cleanupObligationService as never,
+    cache
+  );
+  await service.restore('file-1', 'user-1');
+  await cache.get('user-1', read);
+  expect(read).toHaveBeenCalledTimes(2);
+});
 let selectedFile: Record<string, unknown> | null = null;
 let selectedRows: Record<string, unknown>[] = [];
 let lockedRows: Record<string, unknown>[] = [];
@@ -107,6 +141,7 @@ const updateSet = vi.fn((values: Record<string, unknown>) => {
 });
 const update = vi.fn(() => ({ set: updateSet }));
 const inArray = vi.fn((_column: unknown, values: unknown) => values);
+const like = vi.fn((_column: unknown, value: unknown) => value);
 
 const returning = vi.fn(async () => [
   {
@@ -141,7 +176,7 @@ mock.module('drizzle-orm', () => ({
   inArray,
   isNotNull: (column: unknown) => column,
   isNull: (column: unknown) => column,
-  like: vi.fn(),
+  like,
   lte,
   or: (...conditions: unknown[]) => conditions,
   sql: vi.fn(),
@@ -163,6 +198,7 @@ mock.module('@utils-plane/db', () => ({
   files: {
     id: 'id',
     userId: 'userId',
+    filename: 'filename',
     expiresAt: 'expiresAt',
     deletedAt: 'deletedAt',
     purgeStartedAt: 'purgeStartedAt',
@@ -217,10 +253,84 @@ const PURGE_CLAIMED_AT = new Date('2026-07-31T00:00:00.000Z');
 function purgeClaim(file: File = userFile()) {
   return {
     id: file.id,
+    userId: file.userId,
     storageKey: file.storageKey,
     purgeStartedAt: PURGE_CLAIMED_AT,
   };
 }
+
+describe('summary invalidation after committed file writes', () => {
+  const value = {
+    activeTaskCount: 0,
+    failedTaskCount: 0,
+    activeFileCount: 1,
+    activeFileBytes: 1,
+    recentTasks: [],
+    recentFiles: [],
+  };
+  it('keeps the cache until upload transaction commits', async () => {
+    const cache = new AccountSummaryCache();
+    const read = vi.fn(async () => value);
+    await cache.get('user-1', read);
+    let commit!: () => void;
+    const gate = new Promise<void>(resolve => {
+      commit = resolve;
+    });
+    withActiveUserTransaction.mockImplementationOnce(async (_, operation) => {
+      const result = await operation(transaction);
+      await cache.get('user-1', read);
+      expect(read).toHaveBeenCalledTimes(1);
+      await gate;
+      return result;
+    });
+    const service = new FilesService(
+      { upload: vi.fn(async () => {}) } as never,
+      cleanupQueue as never,
+      cleanupObligationService as never,
+      cache
+    );
+    const upload = service.upload(
+      Buffer.from('x'),
+      { filename: 'x.png', mimeType: 'image/png', size: 1 },
+      { id: 'user-1', plan: 'free', role: 'user' }
+    );
+    commit();
+    await upload;
+    await cache.get('user-1', read);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates a successful purge even if the next batch item fails', async () => {
+    const cache = new AccountSummaryCache();
+    const read = vi.fn(async () => value);
+    await cache.get('user-1', read);
+    const first = userFile();
+    const second = userFile({ id: 'file-2' });
+    selectedRows = [first, second];
+    transactionLock
+      .mockResolvedValueOnce([first])
+      .mockResolvedValueOnce([second]);
+    transactionUpdateReturning
+      .mockResolvedValueOnce([purgeClaim(first)])
+      .mockResolvedValueOnce([purgeClaim(second)]);
+    transactionDeleteReturning.mockResolvedValueOnce([{ id: first.id }]);
+    minioService.delete
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('storage'));
+    minioService.probeObjectExists.mockResolvedValueOnce(true);
+    const service = new FilesService(
+      minioService as never,
+      cleanupQueue as never,
+      cleanupObligationService as never,
+      cache
+    );
+    await expect(
+      service.batchPermanentDelete(['file-1', 'file-2'], 'user-1')
+    ).rejects.toThrow('storage');
+    await cache.get('user-1', read);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+});
 
 function deferred() {
   let resolve!: () => void;
@@ -237,6 +347,193 @@ describe('FilesService upload entitlement limits', () => {
     uploadEvents.length = 0;
     insertSources.length = 0;
     vi.clearAllMocks();
+  });
+
+  it('streams a temp upload and removes the file after the object is stored', async () => {
+    const directory = mkdtempSync(
+      join(ensureUploadTempDir(), 'utils-plane-service-')
+    );
+    const path = join(directory, 'upload.bin');
+    writeFileSync(path, 'small-buffer');
+    const uploadStream = vi.fn(
+      async (_key: string, source: AsyncIterable<Uint8Array>) => {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of source) chunks.push(chunk);
+        expect(Buffer.concat(chunks).toString()).toBe('small-buffer');
+      }
+    );
+    const minioService = { uploadStream };
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await service.upload(
+      { path, size: 12 },
+      {
+        filename: 'streamed.bin',
+        mimeType: 'application/octet-stream',
+        size: 12,
+      },
+      null
+    );
+
+    expect(uploadStream).toHaveBeenCalledTimes(1);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('removes a temp upload when validation rejects it', async () => {
+    const directory = mkdtempSync(
+      join(ensureUploadTempDir(), 'utils-plane-service-')
+    );
+    const path = join(directory, 'upload.bin');
+    writeFileSync(path, 'small-buffer');
+    const service = new FilesService(
+      { uploadStream: vi.fn() } as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.upload(
+        { path, size: 12 },
+        {
+          filename: 'streamed.bin',
+          mimeType: 'application/x-invalid',
+          size: 12,
+        },
+        null
+      )
+    ).rejects.toThrow('not allowed');
+
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('removes a temp upload when object storage rejects the stream', async () => {
+    const directory = mkdtempSync(
+      join(ensureUploadTempDir(), 'utils-plane-service-')
+    );
+    const path = join(directory, 'upload.bin');
+    writeFileSync(path, 'small-buffer');
+    const uploadError = new Error('storage unavailable');
+    const service = new FilesService(
+      { uploadStream: vi.fn().mockRejectedValue(uploadError) } as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.upload(
+        { path, size: 12 },
+        {
+          filename: 'streamed.bin',
+          mimeType: 'application/octet-stream',
+          size: 12,
+        },
+        null
+      )
+    ).rejects.toBe(uploadError);
+
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('removes a temp upload when the file record transaction fails', async () => {
+    const directory = mkdtempSync(
+      join(ensureUploadTempDir(), 'utils-plane-service-')
+    );
+    const path = join(directory, 'upload.bin');
+    writeFileSync(path, 'small-buffer');
+    const databaseError = new Error('database unavailable');
+    returning.mockRejectedValueOnce(databaseError);
+    const service = new FilesService(
+      { uploadStream: vi.fn().mockResolvedValue(undefined) } as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.upload(
+        { path, size: 12 },
+        {
+          filename: 'streamed.bin',
+          mimeType: 'application/octet-stream',
+          size: 12,
+        },
+        null
+      )
+    ).rejects.toBe(databaseError);
+
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'does not upload an external symbolic link presented as a temp file',
+    async () => {
+      const directory = mkdtempSync(
+        join(ensureUploadTempDir(), 'utils-plane-service-')
+      );
+      const externalDirectory = mkdtempSync(
+        join(tmpdir(), 'utils-plane-external-')
+      );
+      const target = join(externalDirectory, 'external.bin');
+      const path = join(directory, 'upload.bin');
+      writeFileSync(target, 'external-content');
+      symlinkSync(target, path);
+      const uploadStream = vi.fn();
+      const service = new FilesService(
+        { uploadStream } as any,
+        cleanupQueue as any,
+        cleanupObligationService as any
+      );
+
+      await expect(
+        service.upload(
+          { path, size: 16 },
+          {
+            filename: 'streamed.bin',
+            mimeType: 'application/octet-stream',
+            size: 16,
+          },
+          null
+        )
+      ).rejects.toThrow();
+
+      expect(uploadStream).not.toHaveBeenCalled();
+      expect(existsSync(target)).toBe(true);
+      unlinkSync(path);
+      unlinkSync(target);
+      rmdirSync(externalDirectory);
+    }
+  );
+
+  it('rejects a temp upload whose actual size differs from its metadata', async () => {
+    const directory = mkdtempSync(
+      join(ensureUploadTempDir(), 'utils-plane-service-')
+    );
+    const path = join(directory, 'upload.bin');
+    writeFileSync(path, 'small-buffer');
+    const uploadStream = vi.fn();
+    const service = new FilesService(
+      { uploadStream } as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await expect(
+      service.upload(
+        { path, size: 12 },
+        {
+          filename: 'streamed.bin',
+          mimeType: 'application/octet-stream',
+          size: 99,
+        },
+        null
+      )
+    ).rejects.toThrow();
+
+    expect(uploadStream).not.toHaveBeenCalled();
+    expect(existsSync(path)).toBe(false);
   });
 
   it('rejects anonymous uploads over the free shared limit', async () => {
@@ -785,6 +1082,29 @@ describe('FilesService list totals', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     select.mockImplementation(defaultSelectImplementation);
+  });
+
+  it('keeps filename search as a contains match', async () => {
+    const rows = [userFile({ id: 'file-1', deletedAt: null })];
+    const offset = vi.fn(async () => rows);
+    const limit = vi.fn(() => ({ offset }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    select.mockImplementationOnce(() => ({ from }));
+
+    const service = new FilesService(
+      minioService as any,
+      cleanupQueue as any,
+      cleanupObligationService as any
+    );
+
+    await service.listByUser('user-1', {
+      search: 'term',
+      includeTotal: false,
+    });
+
+    expect(like).toHaveBeenCalledWith('filename', '%term%');
   });
 
   it('skips the count query when listing files in cursor-only mode', async () => {

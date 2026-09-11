@@ -22,10 +22,39 @@ async function main() {
       stdout: 'inherit',
       stderr: 'inherit',
     });
-    if (await child.exited) throw new Error('Migration failed');
+    if ((await child.exited) !== 0) throw new Error('Migration failed');
+    const [filenameSearchSchema] = await sql`
+      select
+        exists (
+          select 1
+          from pg_extension
+          where extname = 'pg_trgm'
+        ) as extension_exists,
+        exists (
+          select 1
+          from pg_indexes
+          where schemaname = current_schema()
+            and tablename = 'files'
+            and indexname = 'files_filename_trgm_idx'
+        ) as index_exists
+    `;
+    assert.equal(
+      filenameSearchSchema?.extension_exists,
+      true,
+      'pg_trgm extension is missing'
+    );
+    assert.equal(
+      filenameSearchSchema?.index_exists,
+      true,
+      'files filename trigram index is missing'
+    );
+    console.log(
+      'Filename search schema: pg_trgm and files_filename_trgm_idx exist'
+    );
     const queries = [
       `select id from files where user_id = (select id from "user" limit 1) and deleted_at is null and purge_started_at is null order by created_at desc, id desc limit 21`,
       `select id from files where user_id = (select id from "user" limit 1) and deleted_at is not null and purge_started_at is null order by deleted_at desc, id desc limit 21`,
+      `select id from files where user_id = (select id from "user" limit 1) and filename like '%sample%' and deleted_at is null and purge_started_at is null order by created_at desc, id desc limit 21`,
       `select id from tasks where user_id = (select id from "user" limit 1) and status = 'completed' order by created_at desc, id desc limit 21`,
     ];
     for (const query of queries) {

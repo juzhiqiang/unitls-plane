@@ -38,6 +38,10 @@ export const files = pgTable(
     expiresIdx: index('files_expires_idx')
       .on(t.expiresAt)
       .where(sql`expires_at IS NOT NULL`),
+    filenameTrgmIdx: index('files_filename_trgm_idx').using(
+      'gin',
+      t.filename.op('gin_trgm_ops')
+    ),
   })
 );
 

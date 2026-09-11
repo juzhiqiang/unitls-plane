@@ -5,6 +5,18 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import type { TaskStatusDto } from './types';
 
+const POLLING_BACKOFF_SECONDS = [1, 2, 3, 5] as const;
+const MAX_POLLING_INTERVAL = 5000;
+
+function getPollingInterval(baseInterval: number, dataUpdateCount: number) {
+  const backoffIndex = Math.min(
+    Math.max(0, dataUpdateCount - 1),
+    POLLING_BACKOFF_SECONDS.length - 1
+  );
+  const multiplier = POLLING_BACKOFF_SECONDS[backoffIndex] ?? 5;
+  return Math.min(baseInterval * multiplier, MAX_POLLING_INTERVAL);
+}
+
 export function useTaskProgress(
   taskId: string | null,
   options?: {
@@ -21,17 +33,24 @@ export function useTaskProgress(
   const query = useQuery({
     queryKey: ['task-progress', taskId],
     queryFn: async () => {
-      const { data, error } = await api.GET('/tasks/{id}/status', {
-        params: { path: { id: taskId! } },
+      const { data, error } = await api.GET('/tasks/status', {
+        params: { query: { ids: taskId! } },
       });
       if (error) throw error;
-      return data as TaskStatusDto;
+
+      const row = data?.find(item => item.taskId === taskId);
+      if (!row || row.status === 'not_found') {
+        throw new Error('Task not found');
+      }
+
+      const { taskId: _taskId, ...status } = row;
+      return status as TaskStatusDto;
     },
     enabled: !!taskId,
     refetchInterval: q => {
       const status = q.state.data?.status;
       if (status === 'completed' || status === 'failed') return false;
-      return interval;
+      return getPollingInterval(interval, q.state.dataUpdateCount);
     },
     refetchIntervalInBackground: false,
   });

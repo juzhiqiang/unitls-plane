@@ -1,6 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from '@/lib/auth-client';
+import { useCursorPagination } from '@/hooks/use-cursor-pagination';
+import {
+  CursorPagination,
+  ListQueryError,
+} from '@/components/ui/CursorPagination';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import {
@@ -29,13 +35,21 @@ function formatDate(dateStr: string): string {
 
 export default function TrashPage() {
   const t = useTranslations('FilesTool');
-  const [page, setPage] = useState(1);
+  const { data: session } = useSession();
+  const pagination = useCursorPagination(session?.user.id ?? '');
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
 
-  const { data, isLoading } = useTrashedFiles({ page, limit: 12 });
+  const { data, isLoading, isFetching, isError, refetch } = useTrashedFiles(
+    {
+      cursor: pagination.cursor,
+      includeTotal: false,
+      limit: 12,
+    },
+    session?.user.id
+  );
   const restoreFile = useRestoreFile();
   const permanentDelete = usePermanentDeleteFile();
   const batchRestore = useBatchRestoreFiles();
@@ -43,8 +57,12 @@ export default function TrashPage() {
   const emptyTrash = useEmptyTrash();
 
   const files = data?.files ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.ceil(total / 12);
+  useEffect(() => {
+    setSelected(new Set());
+    setConfirmId(null);
+    setConfirmBatchDelete(false);
+    setConfirmEmpty(false);
+  }, [pagination.cursor, session?.user.id]);
   const allVisibleSelected =
     files.length > 0 && files.every(file => selected.has(file.id));
 
@@ -80,6 +98,7 @@ export default function TrashPage() {
     if (selected.size === 0) return;
     await batchRestore.mutateAsync(Array.from(selected));
     clearSelection();
+    pagination.reset();
   };
 
   const handleBatchPermanentDelete = async () => {
@@ -93,6 +112,7 @@ export default function TrashPage() {
 
     await batchPermanentDelete.mutateAsync(Array.from(selected));
     clearSelection();
+    pagination.reset();
   };
 
   const handleEmptyTrash = async () => {
@@ -105,11 +125,13 @@ export default function TrashPage() {
 
     await emptyTrash.mutateAsync();
     clearSelection();
+    pagination.reset();
   };
 
   const handlePermanentDelete = async (id: string) => {
     if (confirmId === id) {
       await permanentDelete.mutateAsync(id);
+      pagination.reset();
       setSelected(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -167,7 +189,8 @@ export default function TrashPage() {
       </div>
 
       {/* Empty state */}
-      {files.length === 0 && !isLoading && (
+      {isError && <ListQueryError retry={() => void refetch()} />}
+      {files.length === 0 && !isLoading && !isError && (
         <p className="text-sm text-muted-foreground py-12 text-center">
           {t('trashEmpty')}
         </p>
@@ -282,7 +305,14 @@ export default function TrashPage() {
                 <div className="flex justify-end gap-1">
                   <button
                     type="button"
-                    onClick={() => restoreFile.mutate(file.id)}
+                    onClick={() =>
+                      restoreFile.mutate(file.id, {
+                        onSuccess: () => {
+                          clearSelection();
+                          pagination.reset();
+                        },
+                      })
+                    }
                     disabled={restoreFile.isPending}
                     className="inline-flex items-center gap-1 px-2 h-6 text-[10px] font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-foreground/20 transition-colors disabled:opacity-50"
                   >
@@ -312,24 +342,14 @@ export default function TrashPage() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPage(p)}
-              className={`h-7 w-7 text-xs font-mono rounded-md transition-colors ${
-                p === page
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:text-foreground border border-border'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      )}
+      <CursorPagination
+        page={pagination.page}
+        hasNext={!isError && Boolean(data?.nextCursor)}
+        busy={Boolean(isFetching || isLoading)}
+        onFirst={pagination.reset}
+        onPrevious={pagination.previous}
+        onNext={() => pagination.next(data?.nextCursor)}
+      />
     </div>
   );
 }

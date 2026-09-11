@@ -32,10 +32,12 @@ import {
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
   CreateTaskInput,
+  TaskCategory,
   TaskType,
   TaskStatus,
 } from '@utils-plane/validators';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
 import {
   withActiveUserTransaction,
   withProducerTransaction,
@@ -50,6 +52,31 @@ import {
   type TaskJobIdentity,
 } from './task-job-reconciler.service';
 
+const TASK_TYPES_BY_CATEGORY: Record<TaskCategory, readonly TaskType[]> = {
+  image: [
+    'compress',
+    'convert',
+    'image_watermark',
+    'image_id_photo',
+    'image_generate',
+  ],
+  pdf: [
+    'pdf_merge',
+    'pdf_split',
+    'pdf_to_image',
+    'pdf_to_text',
+    'image_to_pdf',
+    'pdf_rotate',
+    'pdf_watermark',
+    'pdf_encrypt',
+    'pdf_compress',
+    'pdf_metadata',
+    'pdf_rearrange',
+    'pdf_from_document',
+  ],
+  font: ['font_convert'],
+};
+
 @Injectable()
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
@@ -61,7 +88,8 @@ export class TasksService {
     @InjectQueue('ai-queue') private aiQueue: Queue,
     private readonly filesService: FilesService,
     private readonly cleanupObligationService: CleanupObligationService,
-    private readonly taskJobReconciler: TaskJobReconciler
+    private readonly taskJobReconciler: TaskJobReconciler,
+    private readonly summaryCache: AccountSummaryCache = new AccountSummaryCache()
   ) {}
 
   async create(
@@ -83,6 +111,7 @@ export class TasksService {
       ? await withActiveUserTransaction(user.id, operation)
       : await withProducerTransaction(operation);
 
+    this.summaryCache.invalidate(task.userId);
     let job: Job | null = null;
     try {
       job = await this.taskJobReconciler.reconcile(identity);
@@ -374,6 +403,7 @@ export class TasksService {
         )
       );
 
+    this.summaryCache.invalidate(userId);
     this.logger.log(
       `Deleted image generate session ${sessionId}: ${sessionTasks.length} tasks, ${fileIds.size} files purged`
     );
@@ -387,6 +417,7 @@ export class TasksService {
       limit: number;
       status?: TaskStatus;
       type?: TaskType;
+      category?: TaskCategory;
       cursor?: string;
       includeTotal?: boolean;
     }
@@ -401,6 +432,7 @@ export class TasksService {
       userId,
       query.status ?? '',
       query.type ?? '',
+      query.category ?? '',
     ]);
     const cursor = cursorCondition(
       query.cursor,
@@ -412,6 +444,11 @@ export class TasksService {
     const conditions = [eq(tasks.userId, userId)];
     if (query.status) {
       conditions.push(eq(tasks.status, query.status));
+    }
+    if (query.category) {
+      conditions.push(
+        inArray(tasks.type, TASK_TYPES_BY_CATEGORY[query.category])
+      );
     }
     if (query.type) {
       conditions.push(eq(tasks.type, query.type));
@@ -445,17 +482,21 @@ export class TasksService {
   }
 
   async updateProgress(id: string, progress: number): Promise<void> {
-    await db
+    const rows = await db
       .update(tasks)
       .set({ progress: Math.min(100, Math.max(0, progress)) })
-      .where(eq(tasks.id, id));
+      .where(eq(tasks.id, id))
+      .returning({ userId: tasks.userId });
+    for (const row of rows) this.summaryCache.invalidate(row.userId);
   }
 
   async markProcessing(id: string): Promise<void> {
-    await db
+    const rows = await db
       .update(tasks)
       .set({ status: 'processing' })
-      .where(eq(tasks.id, id));
+      .where(eq(tasks.id, id))
+      .returning({ userId: tasks.userId });
+    for (const row of rows) this.summaryCache.invalidate(row.userId);
   }
 
   /**
@@ -466,7 +507,7 @@ export class TasksService {
    * 退避期间 job 正处于 delayed,会被误判并清掉。pending + delayed 是它认可的健康组合。
    */
   async markRetrying(id: string): Promise<void> {
-    await db
+    const rows = await db
       .update(tasks)
       .set({
         status: 'pending',
@@ -475,11 +516,13 @@ export class TasksService {
         errorMessage: null,
         retryCount: sql`${tasks.retryCount} + 1`,
       })
-      .where(eq(tasks.id, id));
+      .where(eq(tasks.id, id))
+      .returning({ userId: tasks.userId });
+    for (const row of rows) this.summaryCache.invalidate(row.userId);
   }
 
   async markCompleted(id: string, outputFileId: string): Promise<void> {
-    await db
+    const rows = await db
       .update(tasks)
       .set({
         status: 'completed',
@@ -490,7 +533,9 @@ export class TasksService {
         errorCode: null,
         errorMessage: null,
       })
-      .where(eq(tasks.id, id));
+      .where(eq(tasks.id, id))
+      .returning({ userId: tasks.userId });
+    for (const row of rows) this.summaryCache.invalidate(row.userId);
   }
 
   async markFailed(
@@ -498,14 +543,16 @@ export class TasksService {
     errorCode: string,
     errorMessage: string
   ): Promise<void> {
-    await db
+    const rows = await db
       .update(tasks)
       .set({
         status: 'failed',
         errorCode,
         errorMessage,
       })
-      .where(eq(tasks.id, id));
+      .where(eq(tasks.id, id))
+      .returning({ userId: tasks.userId });
+    for (const row of rows) this.summaryCache.invalidate(row.userId);
   }
 
   async incrementRetry(id: string): Promise<number> {
@@ -517,6 +564,7 @@ export class TasksService {
       .where(eq(tasks.id, id))
       .returning();
 
+    this.summaryCache.invalidate(task?.userId);
     return task?.retryCount ?? 0;
   }
 

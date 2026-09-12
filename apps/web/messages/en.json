@@ -1616,8 +1616,7 @@
               "items": [
                 "Fixed leftover data from the previous account after switching: private frontend caches are now scoped per account.",
                 "Fixed sessions ending early during long active use: business requests no longer duplicate session lookups, and sliding session-renewal cookies work again.",
-                "Fixed occasional double page advances, stale callbacks bleeding between filters, and the task category filter not applying.",
-                "Fixed local development failing to start when the Web port was taken: the dev server now switches to an available port automatically."
+                "Fixed occasional double page advances, stale callbacks bleeding between filters, and the task category filter not applying."
               ]
             }
           ]

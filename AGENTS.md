@@ -40,6 +40,9 @@ Utils-Plane 是一个全栈文件处理工具平台，支持图片压缩/转换/
 - 新增或调整工具页时，同步检查
   `apps/web/src/lib/tools/tool-metadata.ts`、中英文 messages、任务类型、README 和
   `PROJECT_SPECS.md`。
+- 更新日志（页面 `PublicSite.changelog` 与根目录
+  `CHANGELOG.md`）只记录用户可感知的新功能、体验改进和问题修复；仅影响开发环境的行为（本地 dev
+  server、构建脚本、端口、测试与工具链调整等）不写进更新日志。
 - 本地优先工具优先在浏览器完成处理；服务端任务才进入文件上传、任务队列和登录/存储流程。
 
 ### 文件命名规范

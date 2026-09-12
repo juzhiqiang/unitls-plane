@@ -1595,6 +1595,34 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.8.0",
+          "date": "2026-09-12",
+          "title": "Speed and stability hardening across the board",
+          "summary": "A performance and reliability release: large lists move to cursor pagination with skipped total counts, task polling is batched with backoff, file search gains a name index, and uploads stream straight to object storage. It also fixes cross-account cache leakage, session keep-alive, and paging glitches.",
+          "groups": [
+            {
+              "title": "Improvements",
+              "items": [
+                "Files, trash, and task lists now use cursor pagination: page turns stay fast as data grows, and list requests skip total counts by default, so first paint is noticeably quicker for large accounts.",
+                "Task status polling is batched with rate limiting and backoff: running many tasks no longer multiplies requests, and polling stops as soon as a task finishes or fails.",
+                "Uploads stream directly to object storage with cleanup across every failure path; downloads and uploads gain concurrency budgets, keeping browser memory steadier.",
+                "File name search is backed by a dedicated index: same semantics, faster as the library grows.",
+                "Account summary data now uses a short-TTL cache with in-flight request de-duplication, so reopening pages stops re-fetching.",
+                "The model platform picker on the image generation page now labels each option \"supports image-to-image / text-to-image only\", so choosing is no longer guesswork."
+              ]
+            },
+            {
+              "title": "Bug fixes",
+              "items": [
+                "Fixed leftover data from the previous account after switching: private frontend caches are now scoped per account.",
+                "Fixed sessions ending early during long active use: business requests no longer duplicate session lookups, and sliding session-renewal cookies work again.",
+                "Fixed occasional double page advances, stale callbacks bleeding between filters, and the task category filter not applying.",
+                "Fixed local development failing to start when the Web port was taken: the dev server now switches to an available port automatically."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.7.0",
           "date": "2026-09-08",
           "title": "AI image generation rebuilt as a chat-style workbench",

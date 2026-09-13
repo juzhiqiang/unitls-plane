@@ -12,13 +12,27 @@ import { ImageLightbox } from './image-lightbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
-/** 服务端错误码 → 文案键。与页面提交路径的映射保持同一份语义。 */
+/**
+ * 服务端错误码 → 文案键。与页面提交路径的映射保持同一份语义。
+ * 映射表里的错误码用本地化文案;不在表里的失败优先展示服务端已脱敏的真实原因。
+ */
 export const MESSAGE_ERROR_KEYS: Record<string, string> = {
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
   AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
   AI_IMAGE_NOT_CONFIGURED: 'notConfigured',
   AI_IMAGE_PROVIDER_UNAVAILABLE: 'providerUnavailable',
 };
+
+/** 失败格子的文案:专属映射 → 本地化;否则展示服务端真实原因;再兜底通用失败。 */
+export function failureMessageKey(
+  errorCode: string | undefined,
+  errorMessage: string | undefined
+): { key?: string; detail?: string } {
+  const mapped = errorCode ? MESSAGE_ERROR_KEYS[errorCode] : undefined;
+  if (mapped) return { key: mapped };
+  if (errorMessage) return { detail: errorMessage };
+  return { key: 'failed' };
+}
 
 /** batch 级错误(配额耗尽、建任务失败等)以系统气泡挂在消息流末尾。 */
 export function SystemNotice({
@@ -203,13 +217,17 @@ export function GenerationMessage({
               const preview = previews[task.taskId];
 
               if (task.status === 'failed') {
+                const failure = failureMessageKey(
+                  task.errorCode,
+                  task.errorMessage
+                );
                 return (
                   <div
                     key={task.taskId}
                     className="flex h-32 w-32 flex-col items-center justify-center gap-1 rounded-md border border-destructive/50 bg-destructive/10 px-2 py-2 text-center text-[11px]"
                   >
                     <span className="text-foreground">
-                      {t(MESSAGE_ERROR_KEYS[task.errorCode ?? ''] ?? 'failed')}
+                      {failure.detail ?? t(failure.key ?? 'failed')}
                     </span>
                     <button
                       type="button"

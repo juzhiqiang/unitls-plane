@@ -182,6 +182,7 @@ type ServerTask = {
   inputFileIds: string[];
   outputFileId?: string;
   errorCode?: string;
+  errorMessage?: string;
 };
 
 let serverTasks: ServerTask[];
@@ -595,6 +596,46 @@ describe('ImageGeneratePage', () => {
         })
       )
     );
+  });
+
+  it('shows the sanitized upstream reason when the error code has no dedicated copy', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'failed';
+    task.errorCode = 'AI_IMAGE_GENERATION_FAILED';
+    task.errorMessage =
+      'Upstream returned HTTP 503: [redacted] gateway had no capacity';
+    refreshSessionTasks(rerender);
+
+    // 无专属映射的错误码直接展示服务端脱敏后的真实原因,而不是"生成失败,请重试"。
+    expect(
+      screen.getByText(
+        'Upstream returned HTTP 503: [redacted] gateway had no capacity'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Generation failed. Please try again.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('falls back to the generic copy when a failed task carries no reason', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'failed';
+    task.errorCode = 'AI_IMAGE_GENERATION_FAILED';
+    refreshSessionTasks(rerender);
+
+    expect(
+      screen.getByText('Generation failed. Please try again.')
+    ).toBeInTheDocument();
   });
 
   it('derives ratio chips from provider sizes and hides the model row for a single provider', () => {

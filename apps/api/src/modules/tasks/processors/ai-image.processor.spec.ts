@@ -138,7 +138,7 @@ it('marks the task failed with the provider error code and a fixed message', asy
   );
 });
 
-it('does not leak an unexpected error message into the task record', async () => {
+it('sanitizes an unexpected error message before storing it', async () => {
   const tasksService = createTasksService();
   const imageGenerationService = {
     generate: vi
@@ -156,8 +156,10 @@ it('does not leak an unexpected error message into the task record', async () =>
 
   const [, code, message] = tasksService.markFailed.mock.calls[0] as string[];
   expect(code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+  // 真实原因透出,但 prompt 回显被剥掉。
   expect(message).not.toContain('一只柴犬');
-  expect(message).not.toContain('boom');
+  expect(message).toContain('boom');
+  expect(message).toContain('[redacted]');
 });
 
 it('sends the uploaded reference image for image_to_image', async () => {

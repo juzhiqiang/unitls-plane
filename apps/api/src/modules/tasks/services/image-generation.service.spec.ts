@@ -334,7 +334,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.message).not.toContain('一只戴礼帽的柴犬');
   });
 
-  it('maps other upstream failures to a generic error without echoing the body', async () => {
+  it('maps other upstream failures to a sanitized reason without echoing the prompt', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse(
         { error: { message: 'prompt=一只戴礼帽的柴犬 upstream boom' } },
@@ -351,11 +351,14 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
       .catch(caught => caught)) as ImageGenerationError;
 
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+    // 真实原因透出给前端,但 prompt 回显被剥掉,状态码带上便于定位。
+    expect(error.message).toContain('Upstream returned HTTP 500');
+    expect(error.message).toContain('upstream boom');
     expect(error.message).not.toContain('一只戴礼帽的柴犬');
-    expect(error.message).not.toContain('upstream boom');
+    expect(error.retryable).toBe(true);
   });
 
-  it('maps a thrown fetch (timeout/network) to a generic error without leaking it', async () => {
+  it('maps a thrown fetch timeout to a readable retryable reason', async () => {
     // 挂死上游(连上 TLS、收了 body 却永不回响应)会让 fetch 一直挂到 keepalive。
     // 超时走 AbortSignal.timeout 抛 AbortError,这里直接模拟 fetch reject。
     const fetchImpl = vi.fn(async () => {
@@ -375,11 +378,33 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     expect(error).toBeInstanceOf(ImageGenerationError);
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
-    expect(error.message).toBe('Image generation failed');
-    expect(error.message).not.toContain('aborted');
+    expect(error.message).toBe('Upstream request timed out');
+    expect(error.retryable).toBe(true);
   });
 
-  it('maps an undecodable success payload to a generic sanitized error', async () => {
+  it('maps a thrown fetch network error to a sanitized reason', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error(
+        'connect ECONNREFUSED 10.0.0.1:443 for prompt 一只戴礼帽的柴犬'
+      );
+    });
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(config)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+    expect(error.message).toContain('Request failed:');
+    expect(error.message).toContain('ECONNREFUSED');
+    expect(error.message).not.toContain('一只戴礼帽的柴犬');
+    expect(error.retryable).toBe(true);
+  });
+
+  it('maps an undecodable success payload to a readable error', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ data: [{}] }));
     const provider = new OpenAiCompatibleImageGenerationProvider({
       baseUrl: 'https://api.test',
@@ -392,7 +417,8 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     expect(error).toBeInstanceOf(ImageGenerationError);
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
-    expect(error.message).toBe('Image generation failed');
+    expect(error.message).toBe('Unexpected response format from the provider');
+    expect(error.retryable).toBe(false);
   });
 
   const editConfig = {
@@ -451,7 +477,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.message).not.toContain('把背景换成海边');
   });
 
-  it('refuses image_to_image without a reference image and stays generic', async () => {
+  it('refuses image_to_image without a reference image with a readable reason', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ data: [{ b64_json: 'aGVsbG8=' }] })
     );
@@ -466,7 +492,9 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     expect(error).toBeInstanceOf(ImageGenerationError);
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
-    expect(error.message).toBe('Image generation failed');
+    expect(error.message).toBe(
+      'No reference image was available for this generation'
+    );
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 

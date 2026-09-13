@@ -89,6 +89,7 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
       progress: task.progress,
       outputFileId: task.outputFileId,
       errorCode: task.errorCode,
+      errorMessage: task.errorMessage,
     };
 
     const existing = groups.get(clientGroupId);

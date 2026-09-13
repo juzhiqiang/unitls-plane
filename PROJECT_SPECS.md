@@ -269,6 +269,9 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   提交。省略时用第一个来源；来源不存在、不支持该模式或不支持所请求尺寸时任务以
   `AI_IMAGE_PROVIDER_UNAVAILABLE` 失败，不会静默换成另一个来源。
 - 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。
+- 生图失败时，服务端把上游真实报错经 `apps/api/src/modules/tasks/services/image-error-sanitizer.ts`
+  脱敏（剥离 prompt 回显、`sk-`/Bearer 密钥形态与签名 URL，折叠单行并截断 280 字符）后写入
+  `tasks.errorMessage`；意外错误同样脱敏后透出，给不出内容时回退固定文案。前端对无专属文案的错误码直接展示该原因。
 
 生图页的「提示词模板」已从前端硬编码迁移到 DB + 对象存储，方便后续做后台动态运营：
 

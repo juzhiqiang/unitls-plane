@@ -1,4 +1,7 @@
-import type { ImageGenerateBackground, ImageGenerateQuality } from '@utils-plane/validators';
+import type {
+  ImageGenerateBackground,
+  ImageGenerateQuality,
+} from '@utils-plane/validators';
 import { IMAGE_GENERATE_INPAINT_PROMPT_PREFIX } from '@utils-plane/validators';
 
 /**
@@ -42,6 +45,11 @@ export interface GenerationMessageTask {
   progress?: number;
   outputFileId?: string;
   errorCode?: string;
+  /**
+   * 服务端已脱敏的真实失败原因(剥掉 prompt 回显与密钥)。
+   * 没有专属文案的错误码直接展示它,让用户看到到底是超时、限流还是上游报错。
+   */
+  errorMessage?: string;
 }
 
 /**

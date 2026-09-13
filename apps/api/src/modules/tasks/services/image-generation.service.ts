@@ -25,6 +25,7 @@ import {
   normalizeOpenAiCompatibleImageEditUrl,
   normalizeOpenAiCompatibleImageGenerationUrl,
 } from './openai-compatible-image';
+import { sanitizeImageError } from './image-error-sanitizer';
 
 export {
   DEFAULT_AI_IMAGE_MODEL,
@@ -224,22 +225,29 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       // provider 内部抛出的确定性错误(generations_ref 不支持局部重绘、缺参考图等)
       // 原样透传:它们不是网络故障,重试只会原样再失败一遍。
       if (error instanceof ImageGenerationError) throw error;
-      // fetch 抛错(含超时 AbortError、DNS、连接重置)统一走兜底文案,原文只进日志。
-      // 这类是瞬时故障,允许重试:实测网关偶发掐断连接,第二次往往就通了。
+      // fetch 抛错(超时、DNS、连接重置)脱敏成"哪类网络故障"的真实原因后透出,
+      // 原文只进日志 —— 这类是瞬时故障,允许重试:实测网关偶发掐断连接,第二次往往就通了。
+      const reason = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `AI image generation request failed: provider=${this.descriptor.id} error=${String(error instanceof Error ? error.message : error)}`
+        `AI image generation request failed: provider=${this.descriptor.id} error=${reason}`
       );
+      const isTimeout =
+        error instanceof Error &&
+        (error.name === 'AbortError' || error.name === 'TimeoutError');
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed',
+        isTimeout
+          ? 'Upstream request timed out'
+          : `Request failed: ${sanitizeImageError(reason, [config.prompt])}`,
         true
       );
     }
 
     if (!response.ok) {
-      throw this.toSanitizedError(
+      throw this.toUpstreamError(
         response.status,
-        await this.readBody(response)
+        await this.readBody(response),
+        config.prompt
       );
     }
 
@@ -252,10 +260,13 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       this.logger.warn(
         `AI image generation response could not be decoded: ${String(error)}`
       );
-      // 图没取回来(网关抖动)可以重试;响应结构不认识是确定性问题,重试只会再烧一次钱。
+      // 图没取回来(网关抖动)可以重试,透出取回失败的真实原因;
+      // 响应结构不认识是确定性问题,重试只会再烧一次钱。
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed',
+        error instanceof GeneratedImageDownloadError
+          ? sanitizeImageError(error.message)
+          : 'Unexpected response format from the provider',
         error instanceof GeneratedImageDownloadError
       );
     }
@@ -317,7 +328,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       );
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
+        'No reference image was available for this generation'
       );
     }
 
@@ -432,7 +443,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       );
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
+        'Inpaint requires the base image and the edited selection'
       );
     }
 
@@ -443,7 +454,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     if (!baseEntry || !markedEntry) {
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
+        'Inpaint requires the base image and the edited selection'
       );
     }
     const base = await this.normalizeReference(baseEntry);
@@ -494,7 +505,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
         status !== 429 &&
         !isContentRejectionBody(body);
       if (!fallbackEligible) {
-        throw this.toSanitizedError(status, body);
+        throw this.toUpstreamError(status, body, config.prompt);
       }
 
       this.logger.warn(
@@ -516,8 +527,18 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     }
   }
 
-  /** 上游原文只进日志。抛出的 message 必须是固定文案,它会经公开的任务状态接口外泄。 */
-  private toSanitizedError(status: number, body: string): ImageGenerationError {
+  /**
+   * 上游非 2xx → 带真实原因的脱敏错误。
+   *
+   * message 会经公开的任务状态接口外泄,所以只透出 `Upstream (HTTP <状态>): <脱敏摘要>`:
+   * prompt 回显与密钥在 sanitizeImageError 里剥掉,原文整体仍进日志。
+   * 内容策略拒绝重来一次也一样,不重试;其余按状态码判定瞬时性。
+   */
+  private toUpstreamError(
+    status: number,
+    body: string,
+    prompt: string
+  ): ImageGenerationError {
     this.logger.warn(
       `AI image generation upstream failed: provider=${this.descriptor.id} status=${status} body=${body.slice(0, 2000)}`
     );
@@ -526,16 +547,17 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     const rejected = CONTENT_REJECTION_MARKERS.some(marker =>
       lowered.includes(marker)
     );
+    const reason = sanitizeImageError(body, [prompt]);
+    const detail = reason ? `: ${reason}` : '';
 
-    // 内容策略拒绝重来一次也一样,不重试。其余按状态码判定瞬时性。
     return rejected
       ? new ImageGenerationError(
           ErrorCodes.AI_IMAGE_CONTENT_REJECTED,
-          'The prompt was rejected by the provider content policy'
+          `The prompt was rejected by the provider content policy${detail}`
         )
       : new ImageGenerationError(
           ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-          'Image generation failed',
+          `Upstream returned HTTP ${status}${detail}`,
           isTransientUpstreamStatus(status)
         );
   }

@@ -14,6 +14,7 @@ import {
   resolveAiImageModel,
 } from '../services/image-generation.service';
 import { TasksService } from '../tasks.service';
+import { sanitizeImageError } from '../services/image-error-sanitizer';
 import {
   isRetryableError,
   hasExhaustedAttempts,
@@ -28,6 +29,17 @@ type AiImageTask = {
   inputFileIds?: string[] | null;
   inputConfig?: unknown;
 };
+
+/**
+ * 任务里的用户 prompt,给失败脱敏用。
+ *
+ * 上游报错常把 prompt 原样回显,落库前必须整体剥掉;解析不出 config 时给空串,
+ * 脱敏器会跳过空 secret。
+ */
+function taskPrompt(task: AiImageTask): string {
+  const config = task.inputConfig as { prompt?: unknown } | null | undefined;
+  return typeof config?.prompt === 'string' ? config.prompt : '';
+}
 
 /**
  * 生图是远程 HTTP 等待型负载,并发可以开高,单任务耗时可能到分钟级。
@@ -65,7 +77,7 @@ export class AiImageProcessor extends WorkerHost {
           throw new Error(`Unknown AI image task type: ${task.type}`);
       }
     } catch (err) {
-      throw await this.settleFailedAttempt(taskId, job, err);
+      throw await this.settleFailedAttempt(taskId, job, err, taskPrompt(task));
     }
   }
 
@@ -82,14 +94,15 @@ export class AiImageProcessor extends WorkerHost {
   private async settleFailedAttempt(
     taskId: string,
     job: Job,
-    err: unknown
+    err: unknown,
+    prompt: string
   ): Promise<unknown> {
     if (!shouldRecordFailure(job, err)) {
       await this.markRetryingSafely(taskId);
       return err;
     }
 
-    await this.markFailedSafely(taskId, err);
+    await this.markFailedSafely(taskId, err, prompt);
     if (isRetryableError(err)) return err;
     return new UnrecoverableError(
       err instanceof Error ? err.message : 'Image generation failed'
@@ -108,22 +121,30 @@ export class AiImageProcessor extends WorkerHost {
 
   /**
    * markFailed 写入的 message 会经公开的 GET /tasks/:id/status 外泄。
-   * 只有 ImageGenerationError 的固定文案可以落库,其余一律换成通用文案,
-   * 原文进日志 —— provider 报错常回显用户 prompt。
+   * ImageGenerationError 的 message 已在来源层脱敏,直接落库;其余意外错误
+   * (sharp、MinIO、校验抛错)先剥掉 prompt 回显与密钥形态再透出,给不出内容时
+   * 回退通用文案 —— 原文始终进日志,真实原因不靠外泄。
    */
-  private async markFailedSafely(taskId: string, err: unknown): Promise<void> {
+  private async markFailedSafely(
+    taskId: string,
+    err: unknown,
+    prompt = ''
+  ): Promise<void> {
     const known = err instanceof ImageGenerationError;
     if (!known) {
       this.logger.error(
         `AI image task ${taskId} failed unexpectedly: ${String(err)}`
       );
     }
+    const sanitized = known
+      ? err.message
+      : sanitizeImageError(err instanceof Error ? err.message : err, [prompt]);
 
     try {
       await this.tasksService.markFailed(
         taskId,
         known ? err.code : ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        known ? err.message : 'Image generation failed'
+        sanitized || 'Image generation failed'
       );
     } catch (dbErr) {
       this.logger.error(
@@ -196,7 +217,7 @@ export class AiImageProcessor extends WorkerHost {
     if (fileIds.length === 0) {
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-        'Image generation failed'
+        'No reference image was available for this generation'
       );
     }
 

@@ -565,16 +565,17 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       lowered.includes(marker)
     );
     const reason = sanitizeImageError(body, [prompt]);
-    const detail = reason ? `: ${reason}` : '';
 
     return rejected
       ? new ImageGenerationError(
           ErrorCodes.AI_IMAGE_CONTENT_REJECTED,
-          `The prompt was rejected by the provider content policy${detail}`
+          // 上游给出的拒绝原文(常是中文)直接落库,前端原样展示;
+          // 只有抽不出原因时才用固定英文模板,由前端翻成本地化通用文案。
+          reason || 'The prompt was rejected by the provider content policy'
         )
       : new ImageGenerationError(
           ErrorCodes.AI_IMAGE_GENERATION_FAILED,
-          `Upstream returned HTTP ${status}${detail}`,
+          `Upstream returned HTTP ${status}${reason ? `: ${reason}` : ''}`,
           isTransientUpstreamStatus(status)
         );
   }

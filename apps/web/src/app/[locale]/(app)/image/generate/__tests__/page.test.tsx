@@ -598,6 +598,54 @@ describe('ImageGeneratePage', () => {
     );
   });
 
+  it('shows the upstream refusal text instead of the generic content-policy copy', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'failed';
+    task.errorCode = 'AI_IMAGE_CONTENT_REJECTED';
+    task.errorMessage =
+      '抱歉，我不能帮助生成裸体或露骨色情内容的图片。我可以改为生成这些版本：艺术剪影、时尚人像。';
+    refreshSessionTasks(rerender);
+
+    expect(
+      screen.getByText(
+        '抱歉，我不能帮助生成裸体或露骨色情内容的图片。我可以改为生成这些版本：艺术剪影、时尚人像。'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'The prompt was rejected by the content policy. Try rephrasing it.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the refusal text even when the server prefixes the content-policy template', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'failed';
+    task.errorCode = 'AI_IMAGE_CONTENT_REJECTED';
+    task.errorMessage =
+      'The prompt was rejected by the provider content policy: 抱歉，我不能帮助生成裸体或露骨色情内容的图片。';
+    refreshSessionTasks(rerender);
+
+    expect(
+      screen.getByText('抱歉，我不能帮助生成裸体或露骨色情内容的图片。')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /The prompt was rejected by the provider content policy/
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it('shows the sanitized upstream reason when the error code has no dedicated copy', async () => {
     const { rerender } = renderPage();
     setPrompt('a shiba inu');

@@ -33,6 +33,21 @@ const REQUEST_FAILED_RE = /^Request failed:\s*(.+)$/;
 const FETCH_IMAGE_FAILED_RE =
   /^Failed to download generated image(?::\s*(.+))?$/;
 
+/**
+ * 内容策略拒绝时,服务端可能把真实原因拼在固定模板后面
+ * (`The prompt was rejected…: 抱歉，我不能…`)。剥掉前缀后如果还有原文就展示它。
+ */
+function contentRejectionDetail(message: string): string | undefined {
+  const trimmed = message.trim();
+  const prefix = 'The prompt was rejected by the provider content policy';
+  if (trimmed === prefix) return undefined;
+  if (trimmed.startsWith(`${prefix}:`)) {
+    const rest = trimmed.slice(prefix.length + 1).trim();
+    return rest || undefined;
+  }
+  return trimmed;
+}
+
 /** 上游原因文本(小写)→ 本地化句子键;按序取第一个命中的。 */
 const REASON_PHRASE_KEYS: Array<[string[], string]> = [
   [['bad gateway'], 'reasonBadGateway'],
@@ -91,7 +106,15 @@ export function describeFailure(
   errorMessage: string | undefined
 ): FailureDisplay {
   const mapped = errorCode ? MESSAGE_ERROR_KEYS[errorCode] : undefined;
-  if (mapped) return { key: mapped };
+  if (mapped) {
+    // 内容策略拒绝:上游有时带回中文拒绝原文("抱歉,我不能…"),
+    // 这种具体原因比通用文案有用,直接展示;模板定式文案不发。
+    if (errorCode === 'AI_IMAGE_CONTENT_REJECTED' && errorMessage) {
+      const detail = contentRejectionDetail(errorMessage);
+      if (detail) return { detail };
+    }
+    return { key: mapped };
+  }
 
   if (errorMessage) {
     const upstream = UPSTREAM_HTTP_RE.exec(errorMessage);

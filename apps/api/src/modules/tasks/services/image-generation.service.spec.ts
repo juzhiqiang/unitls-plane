@@ -332,6 +332,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error).toBeInstanceOf(ImageGenerationError);
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_CONTENT_REJECTED);
     expect(error.message).not.toContain('一只戴礼帽的柴犬');
+    expect(error.message).toContain('was rejected by our safety system');
   });
 
   /** 阿里云内容安全(绿网)的措辞与 OpenAI 完全不同,也要归到内容策略拒绝。 */
@@ -357,8 +358,9 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_CONTENT_REJECTED);
     expect(error.retryable).toBe(false);
-    expect(error.message).toContain('content policy');
-    expect(error.message).toContain('inappropriate content');
+    expect(error.message).toBe(
+      'Green net check failed for text (input): Input data may contain inappropriate content.'
+    );
   });
 
   /** 模型自身的中文拒绝(部分网关甚至包在 502 里):同样归内容策略,不显示"网关错误"。 */
@@ -391,7 +393,9 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
 
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_CONTENT_REJECTED);
     expect(error.retryable).toBe(false);
-    expect(error.message).toContain('content policy');
+    expect(error.message).toBe(
+      '抱歉，我不能帮助生成裸体或露骨色情内容的图片。我可以改为生成这些版本：艺术剪影、时尚人像。'
+    );
   });
 
   /** 网关 502 常回整页 HTML:用户侧只留 title 摘要,绝不外发源码。 */

@@ -64,8 +64,28 @@ describe('sanitizeImageError', () => {
 
   it('truncates overly long messages', () => {
     const result = sanitizeImageError(`E`.padEnd(1000, 'x'));
-    expect(result.length).toBeLessThanOrEqual(280);
+    expect(result.length).toBeLessThanOrEqual(160);
     expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('reduces an html gateway page to its title without the status prefix', () => {
+    // 外层消息已经带 "Upstream returned HTTP 502",title 里的状态码前缀去掉避免重复。
+    const html = `<!DOCTYPE html><html class="no-js" lang="en-US"><head><title>502: Bad gateway</title><link rel="stylesheet" href="/cdn-cgi/styles/main.css"></head><body><h1>Bad gateway</h1><p>The web server returned an invalid response.</p><img src="/cdn-cgi/images/trace/502/edge.png"></body></html>`;
+    expect(sanitizeImageError(html)).toBe('Bad gateway');
+  });
+
+  it('returns empty for html without a usable title', () => {
+    const html =
+      '<html><body><p>Bad gateway</p><a href="https://support.example.com/x">details</a></body></html>';
+    expect(sanitizeImageError(html)).toBe('');
+  });
+
+  it('decodes basic entities in titles', () => {
+    expect(
+      sanitizeImageError(
+        '<html><title>504 &amp; Gateway Timeout</title></html>'
+      )
+    ).toBe('504 & Gateway Timeout');
   });
 
   it('accepts Error instances and returns empty for empty input', () => {

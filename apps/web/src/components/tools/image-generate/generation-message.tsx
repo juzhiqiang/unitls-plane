@@ -23,15 +23,104 @@ export const MESSAGE_ERROR_KEYS: Record<string, string> = {
   AI_IMAGE_PROVIDER_UNAVAILABLE: 'providerUnavailable',
 };
 
-/** 失败格子的文案:专属映射 → 本地化;否则展示服务端真实原因;再兜底通用失败。 */
-export function failureMessageKey(
+/**
+ * 服务端脱敏原因是固定英文模板(见 apps/api 的 image-generation.service),
+ * 纯前端反解成中文文案键 + 技术片段,让用户看到母语的失败原因而不是英文原文。
+ * 认不出的原因(内容策略附带的上游原文等)原样展示。
+ */
+const UPSTREAM_HTTP_RE = /^Upstream returned HTTP (\d{3})(?::\s*(.+))?$/;
+const REQUEST_FAILED_RE = /^Request failed:\s*(.+)$/;
+const FETCH_IMAGE_FAILED_RE =
+  /^Failed to download generated image(?::\s*(.+))?$/;
+
+/** 常见网关错误页 title 的文案键;不认识的原样展示。 */
+const GATEWAY_REASON_KEYS: Record<string, string> = {
+  'bad gateway': 'reasonBadGateway',
+  'gateway time-out': 'reasonGatewayTimeout',
+  'gateway timeout': 'reasonGatewayTimeout',
+  'service unavailable': 'reasonServiceUnavailable',
+  'internal server error': 'reasonInternalError',
+  'too many requests': 'reasonTooManyRequests',
+};
+
+/** 失败格子的展示描述:文案键(+参数)或直接文本。reasonKey 由组件翻成文本后填入 values。 */
+export interface FailureDisplay {
+  key?: string;
+  values?: Record<string, string>;
+  reasonKey?: string;
+  detail?: string;
+}
+
+/** 失败格子的文案:专属映射 → 本地化;否则翻译/展示服务端真实原因;再兜底通用失败。 */
+export function describeFailure(
   errorCode: string | undefined,
   errorMessage: string | undefined
-): { key?: string; detail?: string } {
+): FailureDisplay {
   const mapped = errorCode ? MESSAGE_ERROR_KEYS[errorCode] : undefined;
   if (mapped) return { key: mapped };
-  if (errorMessage) return { detail: errorMessage };
+
+  if (errorMessage) {
+    const upstream = UPSTREAM_HTTP_RE.exec(errorMessage);
+    if (upstream) {
+      const status = upstream[1] ?? '';
+      const reason = upstream[2]?.trim();
+      if (!reason) return { key: 'upstreamHttpBare', values: { status } };
+      const reasonKey = GATEWAY_REASON_KEYS[reason.toLowerCase()];
+      if (reasonKey)
+        return { key: 'upstreamHttp', values: { status }, reasonKey };
+      return { key: 'upstreamHttp', values: { status, reason } };
+    }
+    if (errorMessage === 'Upstream request timed out') {
+      return { key: 'upstreamTimeout' };
+    }
+    const requestFailed = REQUEST_FAILED_RE.exec(errorMessage);
+    if (requestFailed) {
+      return {
+        key: 'upstreamFailed',
+        values: { reason: requestFailed[1] ?? '' },
+      };
+    }
+    if (errorMessage === 'Unexpected response format from the provider') {
+      return { key: 'unexpectedResponse' };
+    }
+    if (
+      errorMessage === 'No reference image was available for this generation'
+    ) {
+      return { key: 'missingReference' };
+    }
+    if (
+      errorMessage ===
+      'Inpaint requires the base image and the edited selection'
+    ) {
+      return { key: 'inpaintInputsMissing' };
+    }
+    const fetchFailed = FETCH_IMAGE_FAILED_RE.exec(errorMessage);
+    if (fetchFailed) {
+      return {
+        key: 'imageFetchFailed',
+        values: { reason: fetchFailed[1] ?? '' },
+      };
+    }
+    // 无法识别的原因(内容策略附带的上游原文等)直接展示。
+    return { detail: errorMessage };
+  }
   return { key: 'failed' };
+}
+
+/** 把 describeFailure 的结果渲染成本地化文本。 */
+export function useFailureText(): (
+  errorCode: string | undefined,
+  errorMessage: string | undefined
+) => string {
+  const t = useTranslations('ImageGenerate');
+  return (errorCode, errorMessage) => {
+    const failure = describeFailure(errorCode, errorMessage);
+    if (failure.detail) return failure.detail;
+    const key = failure.key ?? 'failed';
+    const values = { ...failure.values };
+    if (failure.reasonKey) values.reason = t(failure.reasonKey);
+    return Object.keys(values).length ? t(key, values) : t(key);
+  };
 }
 
 /** batch 级错误(配额耗尽、建任务失败等)以系统气泡挂在消息流末尾。 */
@@ -153,6 +242,7 @@ export function GenerationMessage({
   user,
 }: GenerationMessageProps) {
   const t = useTranslations('ImageGenerate');
+  const failureText = useFailureText();
   const retryTask = useRetryTask();
   const [compareOpen, setCompareOpen] = useState(false);
   const [lightbox, setLightbox] = useState<{ url: string; alt: string } | null>(
@@ -217,17 +307,13 @@ export function GenerationMessage({
               const preview = previews[task.taskId];
 
               if (task.status === 'failed') {
-                const failure = failureMessageKey(
-                  task.errorCode,
-                  task.errorMessage
-                );
                 return (
                   <div
                     key={task.taskId}
                     className="flex h-32 w-32 flex-col items-center justify-center gap-1 rounded-md border border-destructive/50 bg-destructive/10 px-2 py-2 text-center text-[11px]"
                   >
                     <span className="text-foreground">
-                      {failure.detail ?? t(failure.key ?? 'failed')}
+                      {failureText(task.errorCode, task.errorMessage)}
                     </span>
                     <button
                       type="button"

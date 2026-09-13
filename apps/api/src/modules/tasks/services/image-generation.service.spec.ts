@@ -334,6 +334,62 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.message).not.toContain('一只戴礼帽的柴犬');
   });
 
+  /** 阿里云内容安全(绿网)的措辞与 OpenAI 完全不同,也要归到内容策略拒绝。 */
+  it('maps a green-net rejection to the content policy error code', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(
+        {
+          code: 'DataInspectionFailed',
+          message:
+            'Green net check failed for text (input): Input data may contain inappropriate content.',
+        },
+        400
+      )
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(config)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_CONTENT_REJECTED);
+    expect(error.retryable).toBe(false);
+    expect(error.message).toContain('content policy');
+    expect(error.message).toContain('inappropriate content');
+  });
+
+  /** 网关 502 常回整页 HTML:用户侧只留 title 摘要,绝不外发源码。 */
+  it('reduces an html gateway error page to its title', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 502,
+          json: async () => {
+            throw new Error('not json');
+          },
+          text: async () =>
+            '<!DOCTYPE html><html><head><title>502: Bad gateway</title></head><body><h1>Bad gateway</h1><p>cloudflare</p></body></html>',
+        }) as unknown as Response
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(config)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
+    expect(error.message).toBe('Upstream returned HTTP 502: Bad gateway');
+    expect(error.message).not.toContain('<html');
+    expect(error.retryable).toBe(true);
+  });
+
   it('maps other upstream failures to a sanitized reason without echoing the prompt', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse(

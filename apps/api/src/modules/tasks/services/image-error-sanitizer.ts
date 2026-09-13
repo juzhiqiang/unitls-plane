@@ -6,12 +6,13 @@
  * 这里负责把任意原始错误收敛成"可读、可外泄"的单行摘要:
  *
  * - 优先提取 JSON 报错体里的 message 字段,拿不到则用截断原文;
+ * - HTML 报错体(网关 502 错误页)只取 `<title>`,取不到就返回空,绝不外发源码;
  * - 剥离调用方声明的敏感串(用户 prompt)与密钥形态(sk-xxx / Bearer xxx);
  * - URL 只保留 host,避免签名地址外泄;
  * - 折叠空白并截断,给不出内容时返回空串,由调用方回退固定文案。
  */
 
-const MAX_MESSAGE_LENGTH = 280;
+const MAX_MESSAGE_LENGTH = 160;
 const REDACTED = '[redacted]';
 
 /** JSON 报错体里可能承载人读信息的字段,按优先级取第一个非空字符串。 */
@@ -44,6 +45,37 @@ function toSingleLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * HTML 报错体(网关 502/504 错误页)的提取:整页源码对用户毫无意义。
+ *
+ * 取 `<title>` 作为摘要(Cloudflare 是 "502: Bad gateway",状态码前缀去掉,
+ * 外层消息里已经带了),没有 title 就返回 undefined,让调用方回退固定文案。
+ */
+function extractHtmlTitle(text: string): string | undefined {
+  const match = /<title[^>]*>([^<]+)<\/title>/i.exec(text);
+  const title = match?.[1] && toSingleLine(decodeBasicEntities(match[1]));
+  if (!title) return undefined;
+  return (
+    title.replace(/^HTTP\s*\d{3}:\s*/i, '').replace(/^\d{3}:\s*/, '') ||
+    undefined
+  );
+}
+
+function looksLikeHtml(text: string): boolean {
+  const head = toSingleLine(text.slice(0, 200)).toLowerCase();
+  return head.startsWith('<!doctype html') || head.startsWith('<html');
+}
+
+function decodeBasicEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
 function truncate(text: string): string {
   if (text.length <= MAX_MESSAGE_LENGTH) return text;
   return `${text.slice(0, MAX_MESSAGE_LENGTH - 1)}…`;
@@ -66,8 +98,11 @@ export function sanitizeImageError(
     }
   }
 
-  // JSON 报错体优先取 message 字段;纯文本/解析失败则用原文兜底。
+  // HTML 报错体只取 title;JSON 报错体优先取 message 字段;纯文本用原文兜底。
   const trimmed = text.trim();
+  if (looksLikeHtml(trimmed)) {
+    return truncate(toSingleLine(extractHtmlTitle(trimmed) ?? ''));
+  }
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const extracted = extractMessageField(JSON.parse(trimmed));

@@ -270,8 +270,10 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   `AI_IMAGE_PROVIDER_UNAVAILABLE` 失败，不会静默换成另一个来源。
 - 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。
 - 生图失败时，服务端把上游真实报错经 `apps/api/src/modules/tasks/services/image-error-sanitizer.ts`
-  脱敏（剥离 prompt 回显、`sk-`/Bearer 密钥形态与签名 URL，折叠单行并截断 280 字符）后写入
-  `tasks.errorMessage`；意外错误同样脱敏后透出，给不出内容时回退固定文案。前端对无专属文案的错误码直接展示该原因。
+  脱敏（剥离 prompt 回显、`sk-`/Bearer 密钥形态与签名 URL，HTML 报错页只取 `<title>`，折叠单行并截断 160
+  字符）后写入 `tasks.errorMessage`；意外错误同样脱敏后透出，给不出内容时回退固定文案。前端对已知模板（`Upstream
+  returned HTTP <状态>`、超时、网络错误等）按当前语言本地化展示，网关 title（Bad gateway 等）有中文文案，认不出的原因原样展示。
+  内容策略标记表含阿里云绿网措辞（`green net`、`inappropriate content`、`data_inspection_failed`）。
 
 生图页的「提示词模板」已从前端硬编码迁移到 DB + 对象存储，方便后续做后台动态运营：
 

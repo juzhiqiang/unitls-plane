@@ -37,9 +37,16 @@ const CONTENT_REJECTION_MARKERS = [
   'content_policy',
   'content policy',
   'content_filter',
+  'content_safety',
   'safety system',
   'moderation',
   'violation',
+  // 阿里云内容安全(绿网):wan 系网关的审核拒绝措辞与 OpenAI 完全不同。
+  'green net',
+  'green_net',
+  'greenweb',
+  'inappropriate content',
+  'data_inspection_failed',
 ];
 
 function isContentRejectionBody(body: string): boolean {

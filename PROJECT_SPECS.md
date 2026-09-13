@@ -272,7 +272,8 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 - 生图失败时，服务端把上游真实报错经 `apps/api/src/modules/tasks/services/image-error-sanitizer.ts`
   脱敏（剥离 prompt 回显、`sk-`/Bearer 密钥形态与签名 URL，HTML 报错页只取
   `<title>`，折叠单行并截断 160 字符）后写入
-  `tasks.errorMessage`；意外错误同样脱敏后透出，给不出内容时回退固定文案。前端按固定模板反解并本地化成母语原因句子，HTTP状态码只用于分类、不展示给用户；认不出的原因原样展示。内容策略标记表含阿里云绿网措辞（`green net`、`inappropriate content`、`data_inspection_failed`）。
+  `tasks.errorMessage`；意外错误同样脱敏后透出，给不出内容时回退固定文案。前端按固定模板反解并本地化成母语原因句子，HTTP状态码只用于分类、不展示给用户；认不出的原因原样展示。内容策略标记表含阿里云绿网措辞（`green net`、`inappropriate content`、`data_inspection_failed`）与中文模型/网关的拒绝措辞（「抱歉，我不能」「色情」「违规」等），`error`
+  字段为纯字符串的报错体也能提取为原因。
 
 生图页的「提示词模板」已从前端硬编码迁移到 DB + 对象存储，方便后续做后台动态运营：
 

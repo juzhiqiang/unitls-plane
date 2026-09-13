@@ -29,6 +29,10 @@ function extractMessageField(parsed: unknown): string | undefined {
   if (typeof parsed !== 'object' || parsed === null) return undefined;
 
   const record = parsed as Record<string, unknown>;
+  // 网关常把 error 直接写成字符串({"error":"抱歉,我不能…"}),这本身就是原因。
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error;
+  }
   // OpenAI 兼容格式是 { error: { message } },网关变体常拍平或换名,两层都找。
   const candidates: unknown[] = [record, record.error];
   for (const candidate of candidates) {

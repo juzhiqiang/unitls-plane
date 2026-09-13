@@ -22,6 +22,15 @@ describe('sanitizeImageError', () => {
     );
   });
 
+  /** 有的网关把 error 直接写成字符串,这本身就是给用户的原因。 */
+  it('extracts a string error field', () => {
+    expect(
+      sanitizeImageError(
+        '{"error":"抱歉，我不能帮助生成裸体或露骨色情内容的图片。"}'
+      )
+    ).toBe('抱歉，我不能帮助生成裸体或露骨色情内容的图片。');
+  });
+
   it('falls back to truncated raw text when the body has no message field', () => {
     expect(sanitizeImageError('{"error":{"code":503}}')).toBe(
       '{"error":{"code":503}}'

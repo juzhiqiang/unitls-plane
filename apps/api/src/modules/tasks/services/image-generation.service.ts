@@ -47,6 +47,16 @@ const CONTENT_REJECTION_MARKERS = [
   'greenweb',
   'inappropriate content',
   'data_inspection_failed',
+  // 中文网关/模型自身的拒绝措辞(部分来源回 400 + 中文 message)。
+  '抱歉，我不能',
+  '不能帮助生成',
+  '涉嫌违规',
+  '违规内容',
+  '不当内容',
+  '不良信息',
+  '色情',
+  '低俗',
+  'nsfw',
 ];
 
 function isContentRejectionBody(body: string): boolean {

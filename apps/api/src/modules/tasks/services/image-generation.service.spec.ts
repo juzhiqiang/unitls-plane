@@ -361,6 +361,39 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.message).toContain('inappropriate content');
   });
 
+  /** 模型自身的中文拒绝(部分网关甚至包在 502 里):同样归内容策略,不显示"网关错误"。 */
+  it('maps a chinese model refusal to the content policy error code', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 502,
+          json: async () => {
+            throw new Error('not json');
+          },
+          text: async () =>
+            JSON.stringify({
+              error: {
+                message:
+                  '抱歉，我不能帮助生成裸体或露骨色情内容的图片。我可以改为生成这些版本：艺术剪影、时尚人像。',
+              },
+            }),
+        }) as unknown as Response
+    );
+    const provider = new OpenAiCompatibleImageGenerationProvider({
+      baseUrl: 'https://api.test',
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const error = (await provider
+      .generate(config)
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_CONTENT_REJECTED);
+    expect(error.retryable).toBe(false);
+    expect(error.message).toContain('content policy');
+  });
+
   /** 网关 502 常回整页 HTML:用户侧只留 title 摘要,绝不外发源码。 */
   it('reduces an html gateway error page to its title', async () => {
     const fetchImpl = vi.fn(

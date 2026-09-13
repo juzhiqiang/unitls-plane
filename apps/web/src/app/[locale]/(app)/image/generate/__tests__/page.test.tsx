@@ -610,15 +610,17 @@ describe('ImageGeneratePage', () => {
     task.errorMessage = 'Upstream returned HTTP 502: Bad gateway';
     refreshSessionTasks(rerender);
 
-    // 无专属映射的错误码展示本地化后的真实原因,而不是"生成失败,请重试"。
-    // 已知网关 title 会翻成站方文案("bad gateway"),状态码保留。
+    // 无专属映射的错误码展示母语的失败原因;状态码只用于分类,不给用户看。
     expect(
-      screen.getByText('The upstream service failed (HTTP 502): bad gateway')
+      screen.getByText(
+        'The generation service hit a bad gateway. Please try again later.'
+      )
     ).toBeInTheDocument();
     expect(
       screen.queryByText('Generation failed. Please try again.')
     ).not.toBeInTheDocument();
-    // 绝不让 HTML 源码或英文模板裸奔到页面上。
+    // 绝不让 HTML 源码、状态码或英文模板裸奔到页面上。
+    expect(screen.queryByText(/502/)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/Upstream returned HTTP/)
     ).not.toBeInTheDocument();

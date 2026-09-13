@@ -25,25 +25,59 @@ export const MESSAGE_ERROR_KEYS: Record<string, string> = {
 
 /**
  * 服务端脱敏原因是固定英文模板(见 apps/api 的 image-generation.service),
- * 纯前端反解成中文文案键 + 技术片段,让用户看到母语的失败原因而不是英文原文。
- * 认不出的原因(内容策略附带的上游原文等)原样展示。
+ * 前端按模板反解成母语文案:状态码只用于分类,不出现在用户界面里。
+ * 认不出的原因(如网关的中文报错原文)原样展示。
  */
 const UPSTREAM_HTTP_RE = /^Upstream returned HTTP (\d{3})(?::\s*(.+))?$/;
 const REQUEST_FAILED_RE = /^Request failed:\s*(.+)$/;
 const FETCH_IMAGE_FAILED_RE =
   /^Failed to download generated image(?::\s*(.+))?$/;
 
-/** 常见网关错误页 title 的文案键;不认识的原样展示。 */
-const GATEWAY_REASON_KEYS: Record<string, string> = {
-  'bad gateway': 'reasonBadGateway',
-  'gateway time-out': 'reasonGatewayTimeout',
-  'gateway timeout': 'reasonGatewayTimeout',
-  'service unavailable': 'reasonServiceUnavailable',
-  'internal server error': 'reasonInternalError',
-  'too many requests': 'reasonTooManyRequests',
+/** 上游原因文本(小写)→ 本地化句子键;按序取第一个命中的。 */
+const REASON_PHRASE_KEYS: Array<[string[], string]> = [
+  [['bad gateway'], 'reasonBadGateway'],
+  [['gateway time-out', 'gateway timeout', 'timeout'], 'reasonGatewayTimeout'],
+  [['service unavailable'], 'reasonServiceUnavailable'],
+  [['internal server error', 'server error'], 'reasonInternalError'],
+  [['too many requests', 'rate limit', 'ratelimit'], 'reasonRateLimited'],
+  [
+    ['api key', 'apikey', 'invalid token', 'unauthorized', 'authentication'],
+    'reasonAuthFailed',
+  ],
+  [
+    ['insufficient', 'balance', 'arrears', '欠费', '余额'],
+    'reasonInsufficientBalance',
+  ],
+];
+
+/** 只有状态码、没有可读原因时按状态码归类。 */
+const STATUS_REASON_KEYS: Record<string, string> = {
+  '401': 'reasonAuthFailed',
+  '403': 'reasonAuthFailed',
+  '429': 'reasonRateLimited',
+  '500': 'reasonInternalError',
+  '502': 'reasonBadGateway',
+  '503': 'reasonServiceUnavailable',
+  '504': 'reasonGatewayTimeout',
 };
 
-/** 失败格子的展示描述:文案键(+参数)或直接文本。reasonKey 由组件翻成文本后填入 values。 */
+function classifyReasonKey(
+  status: string,
+  reason: string | undefined
+): string | undefined {
+  if (reason) {
+    const lowered = reason.toLowerCase();
+    const hit = REASON_PHRASE_KEYS.find(([markers]) =>
+      markers.some(marker => lowered.includes(marker))
+    );
+    if (hit) return hit[1];
+    // 有原文但认不出类别:原文就是原因,直接展示。
+    return undefined;
+  }
+  return STATUS_REASON_KEYS[status];
+}
+
+/** 失败格子的展示描述:文案键或直接文本(reasonKey 是本地化句子键)。 */
 export interface FailureDisplay {
   key?: string;
   values?: Record<string, string>;
@@ -62,13 +96,13 @@ export function describeFailure(
   if (errorMessage) {
     const upstream = UPSTREAM_HTTP_RE.exec(errorMessage);
     if (upstream) {
-      const status = upstream[1] ?? '';
-      const reason = upstream[2]?.trim();
-      if (!reason) return { key: 'upstreamHttpBare', values: { status } };
-      const reasonKey = GATEWAY_REASON_KEYS[reason.toLowerCase()];
-      if (reasonKey)
-        return { key: 'upstreamHttp', values: { status }, reasonKey };
-      return { key: 'upstreamHttp', values: { status, reason } };
+      const [, status = '', rawReason] = upstream;
+      const reason = rawReason?.trim();
+      const reasonKey = classifyReasonKey(status, reason);
+      // 状态码只进分类,不给用户看。
+      if (reasonKey) return { reasonKey };
+      if (reason) return { detail: reason };
+      return { key: 'upstreamHttpBare' };
     }
     if (errorMessage === 'Upstream request timed out') {
       return { key: 'upstreamTimeout' };
@@ -96,10 +130,14 @@ export function describeFailure(
     }
     const fetchFailed = FETCH_IMAGE_FAILED_RE.exec(errorMessage);
     if (fetchFailed) {
-      return {
-        key: 'imageFetchFailed',
-        values: { reason: fetchFailed[1] ?? '' },
-      };
+      const raw = fetchFailed[1]?.trim();
+      // 取回失败常只带状态码("Failed to download generated image: 502"):按状态归类。
+      const asStatus = raw && /^\d{3}$/.test(raw) ? raw : undefined;
+      const reasonKey = asStatus
+        ? STATUS_REASON_KEYS[asStatus]
+        : classifyReasonKey('', raw);
+      if (reasonKey) return { reasonKey };
+      return { key: 'imageFetchFailed', values: { reason: raw ?? '' } };
     }
     // 无法识别的原因(内容策略附带的上游原文等)直接展示。
     return { detail: errorMessage };
@@ -116,9 +154,9 @@ export function useFailureText(): (
   return (errorCode, errorMessage) => {
     const failure = describeFailure(errorCode, errorMessage);
     if (failure.detail) return failure.detail;
+    if (failure.reasonKey) return t(failure.reasonKey);
     const key = failure.key ?? 'failed';
     const values = { ...failure.values };
-    if (failure.reasonKey) values.reason = t(failure.reasonKey);
     return Object.keys(values).length ? t(key, values) : t(key);
   };
 }

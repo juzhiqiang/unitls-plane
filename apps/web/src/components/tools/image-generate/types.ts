@@ -13,9 +13,9 @@ import { IMAGE_GENERATE_INPAINT_PROMPT_PREFIX } from '@utils-plane/validators';
  */
 export interface ImageGenerateChatDraft {
   prompt: string;
-  /** 省略时服务端用配置里的第一个来源;单来源部署不展示模型行。 */
-  providerId?: string;
-  /** "auto" 或 "WxH",选项由当前来源的 sizes 派生。 */
+  /** 省略时服务端用配置里第一个来源的第一个模型;单模型部署不展示模型行。 */
+  model?: string;
+  /** "auto" 或 "WxH",选项由当前模型的 sizes 派生。 */
   size: string;
   quality: ImageGenerateQuality;
   /** 省略 = 默认(不向上游发 background 字段)。 */
@@ -78,13 +78,13 @@ export function sizeToRatioLabel(size: string): string {
 }
 
 /**
- * 草稿尺寸对来源 sizes 的回退解析:来源列表里没有当前值(默认 "auto" 在多数
- * 网关上不存在)时回落到第一档。来源列表未知时保持原值,由服务端兜底校验。
+ * 草稿尺寸对模型 sizes 的回退解析:模型列表里没有当前值(默认 "auto" 在多数
+ * 网关上不存在)时回落到第一档。模型列表未知时保持原值,由服务端兜底校验。
  */
 export function resolveDraftSize(
   size: string,
-  providerSizes: string[] | undefined
+  modelSizes: string[] | undefined
 ): string {
-  if (!providerSizes || providerSizes.length === 0) return size;
-  return providerSizes.includes(size) ? size : (providerSizes[0] ?? size);
+  if (!modelSizes || modelSizes.length === 0) return size;
+  return modelSizes.includes(size) ? size : (modelSizes[0] ?? size);
 }

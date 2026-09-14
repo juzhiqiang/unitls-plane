@@ -52,6 +52,18 @@ export const imageGenerateProviderIdSchema = z
     'providerId must start with a letter or digit and contain only letters, digits, "-" or "_"'
   );
 
+/**
+ * 生图模型名。
+ *
+ * 这里只校验形状,不校验"这个模型是否真的配置过":可用模型来自 API 侧的
+ * AI_IMAGE_PROVIDERS 运行时配置,validators 包拿不到也不该拿到。存在性与能力
+ * (是否支持图生图)由 ImageGenerationService 在路由时判定。
+ *
+ * 不做字符集正则:模型名是上游标识符(可含空格、点、大小写,如 "KMage V2"),
+ * 只用于服务端内存 Map 匹配,不会拼进 URL,没有注入面。
+ */
+export const imageGenerateModelSchema = z.string().trim().min(1).max(64);
+
 /** 图生图(融合)最多同时携带的参考图张数。 */
 export const IMAGE_GENERATE_MAX_REFERENCE_IMAGES = 4;
 
@@ -89,7 +101,9 @@ export const imageGenerateTaskConfigSchema = z
     size: imageGenerateSizeSchema.default('1024x1024'),
     quality: imageGenerateQualityEnum.default('high'),
     style: imageGenerateStyleEnum.optional(),
-    /** 省略时用服务端配置里的第一个来源,保持历史任务与单来源部署可用。 */
+    /** 省略时用服务端配置里第一个来源的第一个模型(单模型部署可不选)。 */
+    model: imageGenerateModelSchema.optional(),
+    /** 历史任务兼容窗口:旧客户端按来源选择,新客户端不发送;服务层优先 model。 */
     providerId: imageGenerateProviderIdSchema.optional(),
     /** 省略时上游用默认背景;transparent 依赖 PNG 产物(本站恒为 PNG)。 */
     background: imageGenerateBackgroundEnum.optional(),
@@ -124,6 +138,7 @@ export type ImageGenerateStyle = z.infer<typeof imageGenerateStyleEnum>;
 export type ImageGenerateProviderId = z.infer<
   typeof imageGenerateProviderIdSchema
 >;
+export type ImageGenerateModel = z.infer<typeof imageGenerateModelSchema>;
 export type ImageGenerateTaskConfig = z.infer<
   typeof imageGenerateTaskConfigSchema
 >;

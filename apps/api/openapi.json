@@ -177,19 +177,19 @@
         ]
       }
     },
-    "/tasks/image-generate/providers": {
+    "/tasks/image-generate/models": {
       "get": {
-        "operationId": "TasksController_listImageGenerateProviders",
+        "operationId": "TasksController_listImageGenerateModels",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Configured image generation providers",
+            "description": "Configured image generation models",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ImageGenerateProviderDto"
+                    "$ref": "#/components/schemas/ImageGenerateModelDto"
                   }
                 }
               }
@@ -204,7 +204,7 @@
             "bearer": []
           }
         ],
-        "summary": "List the configured image generation providers",
+        "summary": "List the configured image generation models",
         "tags": [
           "tasks"
         ]
@@ -1443,30 +1443,27 @@
           "createdAt"
         ]
       },
-      "ImageGenerateProviderDto": {
+      "ImageGenerateModelDto": {
         "type": "object",
         "properties": {
-          "id": {
+          "model": {
             "type": "string",
-            "description": "来源 id，创建任务时放进 inputConfig.providerId"
-          },
-          "label": {
-            "type": "string",
-            "description": "展示给用户的来源名称"
+            "description": "模型名，创建任务时放进 inputConfig.model"
           },
           "capabilities": {
             "type": "array",
-            "description": "该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传",
+            "description": "该模型支持的能力（所有服务它的来源的并集）。generate = 文生图，edit = 图生图，inpaint = 局部重绘；缺少 edit 时前端禁用参考图上传",
             "items": {
               "type": "string",
               "enum": [
                 "generate",
-                "edit"
+                "edit",
+                "inpaint"
               ]
             }
           },
           "sizes": {
-            "description": "该来源支持的尺寸（\"auto\" 或 \"WxH\"）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size",
+            "description": "该模型支持的尺寸（\"auto\" 或 \"WxH\"，所有服务它的来源的并集）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size",
             "items": {
               "type": "array",
               "items": {
@@ -1477,8 +1474,7 @@
           }
         },
         "required": [
-          "id",
-          "label",
+          "model",
           "capabilities",
           "sizes"
         ]

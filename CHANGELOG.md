@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2026-09-14
+
+### AI 生图
+
+- 生图模型选择改为「模型为主」：参数面板的下拉直接显示真实模型名（如 gpt-image-2、KMage V2），来源/网关名不再展示给用户；对应端点由 `GET /tasks/image-generate/providers` 更名为 `GET /tasks/image-generate/models`，任务提交字段由 `inputConfig.providerId` 改为 `inputConfig.model`。
+- `AI_IMAGE_PROVIDERS` 配置结构升级（不兼容旧格式，启动即报错并附升级指引）：每个来源声明 `models` 数组，同一模型可配在多个来源（网关）下。
+- 同一模型多来源时自动容错路由：同一会话沿用上次实际使用的来源（出图效果稳定），新会话随机挑选（分摊网关压力）；可重试失败（超时、5xx、限流）自动切换下一个同模型来源，内容拒绝与确定性错误不换。
+- 产物 EXIF 隐式标识补充实际出图来源（`source=`），并新增 `tasks.output_meta` 列记录实际来源与模型（需先执行数据库迁移，组合镜像内迁移先于应用启动）。
+- 旧单来源变量 `AI_IMAGE_*` 回退与历史排队任务兼容：未升级配置的部署零改动；升级已配置 `AI_IMAGE_PROVIDERS` 的环境须把顶层 `model`/`capabilities`/`sizes` 挪进 `models[]` 后重建 api 容器。
+
 ## 2026-09-12
 
 ### 发布

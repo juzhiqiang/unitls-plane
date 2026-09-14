@@ -7,7 +7,7 @@ import { IMAGE_GENERATE_MAX_REFERENCE_IMAGES } from '@utils-plane/validators';
 import type { ImageGenerateChatDraft } from './types';
 import { SettingsPanel } from './settings-panel';
 import { ImageLightbox } from './image-lightbox';
-import type { ImageGenerateProviderDto } from '@/hooks/api/types';
+import type { ImageGenerateModelDto } from '@/hooks/api/types';
 import { useObjectUrls } from '@/hooks/use-object-urls';
 
 interface PromptComposerProps {
@@ -19,10 +19,10 @@ interface PromptComposerProps {
   onSubmit: () => void;
   busy: boolean;
   disabled?: boolean;
-  providers: ImageGenerateProviderDto[];
+  models: ImageGenerateModelDto[];
   /** undefined = 未登录或额度未知,此时不显示额度行、不限数量。 */
   quota?: { limit: number; used: number; remaining: number };
-  /** 当前来源是否支持图生图;不支持时禁掉参考图入口而不是隐藏。 */
+  /** 当前模型是否支持图生图;不支持时禁掉参考图入口而不是隐藏。 */
   editSupported: boolean;
   /** 参考图大小上限(字节);超限文件直接拒收并提示。 */
   maxReferenceSize?: number;
@@ -43,7 +43,7 @@ export function PromptComposer({
   onSubmit,
   busy,
   disabled = false,
-  providers,
+  models,
   quota,
   editSupported,
   maxReferenceSize,
@@ -167,7 +167,7 @@ export function PromptComposer({
             value={draft}
             onChange={onDraftChange}
             disabled={busy}
-            providers={providers}
+            models={models}
             quotaRemaining={quota?.remaining}
           />
         </div>
@@ -222,7 +222,7 @@ export function PromptComposer({
           <button
             type="button"
             aria-label={t('attachReference')}
-            title={editSupported ? t('attachReference') : t('providerNoEditHint')}
+            title={editSupported ? t('attachReference') : t('modelNoEditHint')}
             disabled={disabled || busy || !editSupported}
             onClick={() => fileInputRef.current?.click()}
             className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"

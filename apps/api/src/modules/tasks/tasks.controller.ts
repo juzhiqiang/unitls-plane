@@ -30,7 +30,7 @@ import {
   TaskStatusDto,
   BatchTaskStatusDto,
   ImageGenerateQuotaDto,
-  ImageGenerateProviderDto,
+  ImageGenerateModelDto,
   ImageGeneratePresetDto,
   ImageGenerateSessionDto,
   ImageGenerateSessionTasksDto,
@@ -75,24 +75,24 @@ export class TasksController {
   }
 
   /**
-   * 可用生图来源列表。
+   * 可用生图模型列表。
    *
-   * 只下发 id / label / capabilities;baseUrl 与 apiKey 属于服务端配置,绝不出网。
+   * 只下发模型名 / 能力 / 尺寸;来源(网关)信息属于服务端配置,绝不出网。
    * 与额度接口一致要求登录:生图本身就必须登录,匿名拿这个列表没有用途。
    */
-  @Get('image-generate/providers')
+  @Get('image-generate/models')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List the configured image generation providers' })
+  @ApiOperation({ summary: 'List the configured image generation models' })
   @ApiResponse({
     status: 200,
-    description: 'Configured image generation providers',
-    type: ImageGenerateProviderDto,
+    description: 'Configured image generation models',
+    type: ImageGenerateModelDto,
     isArray: true,
   })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
-  async listImageGenerateProviders(@CurrentUser() currentUser?: User) {
+  async listImageGenerateModels(@CurrentUser() currentUser?: User) {
     if (!currentUser) throw new UnauthorizedException();
-    return this.imageGenerationService.listProviders();
+    return this.imageGenerationService.listModels();
   }
 
   @Get('image-generate/quota')

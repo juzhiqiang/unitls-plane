@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import type { ImageGenerateProviderDto } from '@/hooks/api/types';
+import type { ImageGenerateModelDto } from '@/hooks/api/types';
 import type { ImageGenerateChatDraft } from './types';
 import { sizeToRatioLabel, resolveDraftSize } from './types';
 import {
@@ -15,7 +15,7 @@ interface SettingsPanelProps {
   value: ImageGenerateChatDraft;
   onChange: (next: ImageGenerateChatDraft) => void;
   disabled?: boolean;
-  providers: ImageGenerateProviderDto[];
+  models: ImageGenerateModelDto[];
   /** 当前剩余额度,数量上限取 min(10, remaining);拿不到时按 10。 */
   quotaRemaining?: number;
 }
@@ -72,21 +72,21 @@ export function SettingsPanel({
   value,
   onChange,
   disabled = false,
-  providers,
+  models,
   quotaRemaining,
 }: SettingsPanelProps) {
   const t = useTranslations('ImageGenerate');
   /** 模型名后的能力后缀:支持图生图(含融合) / 仅文生图。 */
   const capabilityText = (capabilities: Array<'generate' | 'edit' | 'inpaint'>) =>
     capabilities.includes('edit')
-      ? t('providerCapEdit')
-      : t('providerCapTextOnly');
+      ? t('modelCapEdit')
+      : t('modelCapTextOnly');
 
-  // 画面比例档位由当前来源的 sizes 派生(自动 + 每个 WxH 约分后的比例标签);
+  // 画面比例档位由当前模型的 sizes 派生(自动 + 每个 WxH 约分后的比例标签);
   // 选中值始终存原始 size 串,提交时不需要二次换算。
-  const selectedProvider =
-    providers.find(item => item.id === value.providerId) ?? providers[0];
-  const sizeOptions = (selectedProvider?.sizes ?? ['auto']).map(size => ({
+  const selectedModel =
+    models.find(item => item.model === value.model) ?? models[0];
+  const sizeOptions = (selectedModel?.sizes ?? ['auto']).map(size => ({
     value: size,
     label: size === 'auto' ? t('ratioAuto') : sizeToRatioLabel(size),
   }));
@@ -95,9 +95,9 @@ export function SettingsPanel({
 
   return (
     <div className="absolute bottom-full left-0 right-0 mb-2 space-y-4 rounded-lg border border-border bg-card p-4 shadow-lg">
-      {/* 模型 = 来源。单来源部署不渲染这一行(选一项的单选是噪音)。
+      {/* 单模型部署不渲染这一行(选一项的单选是噪音)。
           名称后缀标注能力:支持图生图 / 仅文生图,选型时不用猜。 */}
-      {providers.length > 1 && (
+      {models.length > 1 && (
         <div className="space-y-1.5">
           <p className="text-xs text-muted-foreground">{t('modelLabel')}</p>
           <DropdownMenu>
@@ -106,36 +106,36 @@ export function SettingsPanel({
               className="flex h-8 w-full items-center justify-between rounded-md border border-border px-3 text-sm data-[state=open]:border-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="truncate">
-                {selectedProvider?.label ?? value.providerId}
+                {selectedModel?.model ?? value.model}
                 <span className="ml-1 text-xs text-muted-foreground">
-                  {capabilityText(selectedProvider?.capabilities ?? [])}
+                  {capabilityText(selectedModel?.capabilities ?? [])}
                 </span>
               </span>
               <span aria-hidden className="text-muted-foreground">▾</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
-              {providers.map(provider => (
+              {models.map(model => (
                 <DropdownMenuItem
-                  key={provider.id}
-                  onClick={() => onChange({ ...value, providerId: provider.id })}
+                  key={model.model}
+                  onClick={() => onChange({ ...value, model: model.model })}
                 >
-                  <span className="truncate">{provider.label}</span>
+                  <span className="truncate">{model.model}</span>
                   <span className="ml-auto pl-2 text-xs text-muted-foreground">
-                    {capabilityText(provider.capabilities)}
+                    {capabilityText(model.capabilities)}
                   </span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <p className="text-[11px] text-muted-foreground">{t('providerHint')}</p>
+          <p className="text-[11px] text-muted-foreground">{t('modelHint')}</p>
         </div>
       )}
 
       <ChipRow
         legend={t('ratioLabel')}
         options={sizeOptions}
-        // 草稿里的尺寸(默认 auto)不在当前来源支持列表时,选中态回落到第一档。
-        selected={resolveDraftSize(value.size, selectedProvider?.sizes)}
+        // 草稿里的尺寸(默认 auto)不在当前模型支持列表时,选中态回落到第一档。
+        selected={resolveDraftSize(value.size, selectedModel?.sizes)}
         disabled={disabled}
         onSelect={size => onChange({ ...value, size })}
       />

@@ -130,9 +130,9 @@ services:
       # AI 生图（可选）。AI_IMAGE_PROVIDERS 与 AI_IMAGE_BASE_URL 都没配时，
       # 生图任务以 AI_IMAGE_NOT_CONFIGURED 失败，页面提示未配置。
       #
-      # AI_IMAGE_PROVIDERS 是多来源 JSON 数组（第一项为默认来源），配了它就忽略
-      # 下面的单来源变量；页面的「模型平台」选择器只在来源数 >= 2 时出现，
-      # 所以不透传这一项时线上只会看到单来源、选择器不显示。
+      # AI_IMAGE_PROVIDERS 是多来源 JSON 数组（第一项为默认来源，每来源 models[]
+      # 声明模型），配了它就忽略下面的单来源变量；页面的「模型」选择器只在
+      # 模型数 >= 2 时出现，所以不透传这一项时线上只会看到单模型、选择器不显示。
       # 值里有 apiKey，放 .env.prod 并用单引号包住整段 JSON。
       AI_IMAGE_PROVIDERS: ${AI_IMAGE_PROVIDERS:-}
       AI_IMAGE_BASE_URL: ${AI_IMAGE_BASE_URL:-}

@@ -170,7 +170,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
 - `NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION`
 - `SMTP_*`
 - `S3_*`
-- `AI_IMAGE_PROVIDERS`（多来源生图配置，改了才会出现或更新页面上的「模型平台」选择器）
+- `AI_IMAGE_PROVIDERS`（多来源生图配置，改了才会出现或更新页面上的「模型」选择器；格式为每来源 `models[]` 数组，见 `.env.example`）
 
 上传新的 `.env.prod` 后执行：
 
@@ -292,10 +292,10 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod \
   exec api node apps/api/dist/scripts/seed-image-generate-presets.js
 ```
 
-AI 生图页的「模型平台」选择器是另一回事，与数据库无关：它只在服务端返回的来源数 >= 2 时出现，需要在
+AI 生图页的「模型」选择器是另一回事，与数据库无关：它只在服务端返回的模型数 >= 2 时出现，需要在
 `.env.prod` 里配置多来源 JSON
-`AI_IMAGE_PROVIDERS`（单引号包住整段，第一项为默认来源），并重建 api 容器。只配 `AI_IMAGE_BASE_URL`
-时线上只有一个 `default` 来源，选择器不显示。
+`AI_IMAGE_PROVIDERS`（单引号包住整段，第一项为默认来源，每来源 `models[]` 声明模型），并重建 api 容器。只配 `AI_IMAGE_BASE_URL`
+时线上只有一个 `default` 来源单模型，选择器不显示。
 
 ## 保留历史数据的安全更新顺序
 

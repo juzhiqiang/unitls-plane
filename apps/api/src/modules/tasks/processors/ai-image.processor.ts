@@ -28,6 +28,7 @@ type AiImageTask = {
   userId?: string | null;
   inputFileIds?: string[] | null;
   inputConfig?: unknown;
+  sessionId?: string | null;
 };
 
 /**
@@ -170,16 +171,39 @@ export class AiImageProcessor extends WorkerHost {
     await this.reportProgress(task.id, job, 30);
 
     const references = await this.loadReferences(task, config.mode);
+
+    // 粘性路由:同会话同模型沿用上次实际使用的来源(一组图效果稳定),
+    // 新会话/新模型没有记录时服务层随机首发。历史任务(只带 providerId)不查,
+    // 直接钉死来源,与旧行为一致。
+    const preferredProviderId =
+      config.model && task.sessionId && task.userId
+        ? await this.tasksService
+            .findLastImageGenerateProviderId(
+              task.userId,
+              task.sessionId,
+              config.model
+            )
+            .catch(error => {
+              // 查询失败不该挡住生成:退化成随机首发即可。
+              this.logger.warn(
+                `Sticky source lookup failed for task ${task.id}: ${(error as Error).message}`
+              );
+              return null;
+            })
+        : null;
+
     const generated = await this.imageGenerationService.generate(
       config,
-      references
+      references,
+      preferredProviderId ? { preferredProviderId } : undefined
     );
     await this.reportProgress(task.id, job, 80);
 
-    // 模型取实际出图的来源,而不是全局 env:多来源下两者会不一致,
-    // EXIF 里记错模型等于产物标识作废。
+    // 模型与来源取实际出图的那一条:同模型多来源容错路由下,同会话也可能
+    // 换过网关,EXIF 里记错等于产物标识作废。
     const marked = await markGeneratedImage(generated.buffer, {
       model: generated.model ?? resolveAiImageModel(),
+      source: generated.providerId,
       generatedAt: new Date(),
     });
 
@@ -195,7 +219,12 @@ export class AiImageProcessor extends WorkerHost {
     );
     await this.reportProgress(task.id, job, 95);
 
-    await this.tasksService.markCompleted(task.id, outputFile.id);
+    // 实际出图的来源与模型写入 output_meta:同会话后续任务靠它粘住来源,
+    // 也是产物追溯的服务端事实(与用户提交的 inputConfig 分开存)。
+    await this.tasksService.markCompleted(task.id, outputFile.id, {
+      providerId: generated.providerId,
+      model: generated.model,
+    });
     await job.updateProgress(100);
     return { outputFileId: outputFile.id };
   }

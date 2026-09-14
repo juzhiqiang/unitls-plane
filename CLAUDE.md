@@ -107,7 +107,8 @@ ID_PHOTO_AI_IMAGE_QUALITY=high
 ID_PHOTO_AI_IMAGE_BACKGROUND=opaque
 ID_PHOTO_AI_RESPONSE_FORMAT=url
 
-# 多来源:JSON 数组,第一项为默认来源;配置它即忽略下面的单来源变量,详见 .env.example
+# 多来源:JSON 数组,第一项为默认来源;每来源 models[] 声明模型(可多模型),
+# 同一模型可配多个来源自动容错;配置它即忽略下面的单来源变量,详见 .env.example
 AI_IMAGE_PROVIDERS=
 AI_IMAGE_BASE_URL=
 AI_IMAGE_API_KEY=
@@ -191,9 +192,8 @@ API 模块：
 - 图片裁剪（/image/crop）与打码（/image/mosaic）纯浏览器 canvas 处理，图片不上传。
 - GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
-- AI 生图（/image/generate）是对话式布局（会话侧栏 + 消息流 + 底部输入条），走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图、图生图与多图融合（附/粘贴/拖入参考图，1 张图生图、多张融合，上限 4 张）以及局部重绘（结果图上画笔/矩形圈选，来源需声明 inpaint 能力）。生图来源由
-  `AI_IMAGE_PROVIDERS` JSON 配置，可配多个 OpenAI 兼容来源并在参数面板选择（含各来源 `sizes`
-  尺寸声明），配额仍为全局。会话由任务派生（`tasks.session_id`），端点为
+- AI 生图（/image/generate）是对话式布局（会话侧栏 + 消息流 + 底部输入条），走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图、图生图与多图融合（附/粘贴/拖入参考图，1 张图生图、多张融合，上限 4 张）以及局部重绘（结果图上画笔/矩形圈选，模型需声明 inpaint 能力）。生图以模型为主：`AI_IMAGE_PROVIDERS` JSON 里每来源声明 `models[]`（可多模型），前端参数面板显示真实模型名（来源/网关隐藏，端点
+  `GET /tasks/image-generate/models`），同一模型可配多个来源 —— 同会话粘性随机挑选、可重试失败自动换源，配额仍为全局。会话由任务派生（`tasks.session_id`），端点为
   `GET /tasks/image-generate/sessions` 与 `.../sessions/:sessionId/tasks`。
 - AI 生图的提示词模板已动态化：模板存 `image_generate_presets` 表（双语言列），示例图存 MinIO
   `presets` 匿名只读桶，由 `GET /tasks/image-generate/presets`（公开端点，按 `lang`

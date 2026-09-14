@@ -1096,35 +1096,52 @@ describe('ImageGenerationService (multi provider registry)', () => {
     expect(provider.generate).not.toHaveBeenCalled();
   });
 
-  it('lists providers in configuration order and leaks no credentials', () => {
+  it('lists models (not providers) with union capabilities and leaks no credentials', () => {
+    // 两个来源都服务 gpt-image-1,kmage 额外有 KMage V2 → 模型视角两条,
+    // gpt-image-1 的 capabilities/sizes 取并集(任一来源支持即可用)。
     const service = new ImageGenerationService({
-      providers: [stub('alpha'), stub('kmage', ['generate'])],
+      providers: [
+        stub('alpha', ['generate', 'edit'], 'gpt-image-1'),
+        stub('kmage', ['generate', 'edit', 'inpaint'], 'KMage V2'),
+      ],
+    });
+    const alphaOnly = new ImageGenerationService({
+      providers: [
+        stub('alpha'),
+        stub('beta', ['generate', 'edit', 'inpaint'], 'gpt-image-1', [
+          '1024x1024',
+          'auto',
+        ]),
+      ],
     });
 
-    const listed = service.listProviders();
-
+    const listed = service.listModels();
     expect(listed).toEqual([
       {
-        id: 'alpha',
-        label: 'alpha label',
+        model: 'gpt-image-1',
         capabilities: ['generate', 'edit'],
-        // stub 的 descriptor 不带 sizes,回落默认三档。
         sizes: ['1024x1024', '1024x1536', '1536x1024'],
       },
       {
-        id: 'kmage',
-        label: 'kmage label',
-        capabilities: ['generate'],
+        model: 'KMage V2',
+        capabilities: ['generate', 'edit', 'inpaint'],
         sizes: ['1024x1024', '1024x1536', '1536x1024'],
       },
     ]);
-    // baseUrl / apiKey 属于服务端配置,出现在这里就是外泄。
+
+    const merged = alphaOnly.listModels();
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.capabilities).toContain('inpaint');
+    expect(merged[0]?.sizes).toContain('auto');
+
+    // baseUrl / apiKey / 来源名属于服务端配置,出现在这里就是外泄。
     const serialized = JSON.stringify(listed);
     expect(serialized).not.toContain('baseUrl');
     expect(serialized).not.toContain('apiKey');
+    expect(serialized).not.toContain('label');
   });
 
-  it('lists provider-declared sizes when the descriptor carries them', () => {
+  it('lists model-declared sizes when the descriptor carries them', () => {
     const provider = stub('wide', ['generate', 'edit'], 'gpt-image-1', [
       'auto',
       '1024x1024',
@@ -1134,7 +1151,7 @@ describe('ImageGenerationService (multi provider registry)', () => {
     ]);
     const service = new ImageGenerationService({ providers: [provider] });
 
-    expect(service.listProviders()[0]?.sizes).toContain('1344x768');
+    expect(service.listModels()[0]?.sizes).toContain('1344x768');
   });
 
   it('rejects a size the provider does not declare', async () => {

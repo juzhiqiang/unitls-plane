@@ -85,11 +85,42 @@ export const DEFAULT_AI_IMAGE_SIZES = [
 ] as const;
 
 /**
- * 单个生图来源。
+ * 来源内的单个模型。
+ *
+ * 模型级声明 capabilities 与 sizes:同一来源(网关)下不同模型的能力与尺寸档位
+ * 可以不同(如只有 gpt-image-2 支持 inpaint),前端的能力标签与画面比例档位
+ * 都按所选模型显示。
+ */
+export const imageProviderModelSchema = z
+  .object({
+    /** 模型名即上游 API 的 model 参数原文,可含空格与大小写(如 "KMage V2")。 */
+    name: z.string().trim().min(1).max(64),
+    /** 能力声明同旧来源级语义:inpaint 不进默认值,支持的模型显式声明。 */
+    capabilities: z
+      .array(imageProviderCapabilityEnum)
+      .min(1)
+      .default(['generate', 'edit'])
+      .transform(list => [...new Set(list)]),
+    /** 该模型支持的尺寸;默认不含 "auto"(沿用旧默认的理由见 size schema 注释)。 */
+    sizes: z
+      .array(imageProviderSizeSchema)
+      .min(1)
+      .default([...DEFAULT_AI_IMAGE_SIZES])
+      .transform(list => [...new Set(list)]),
+  })
+  .strict();
+
+export type ImageProviderModelConfig = z.infer<typeof imageProviderModelSchema>;
+
+/**
+ * 单个生图来源(网关)。
  *
  * 只要是 OpenAI 兼容的生图接口,新增来源就是往 AI_IMAGE_PROVIDERS 数组里加一项,
  * 不需要改代码 —— 差异全部落在 editTransport / refImagesField / refImageEncoding /
  * responseFormat 这几个开关上。
+ *
+ * 模型声明在 models 数组(每项一个模型,含自己的能力与尺寸);同一模型可以出现在
+ * 多个来源下 —— 这正是多来源容错路由的基础。
  */
 export const imageProviderConfigSchema = z
   .object({
@@ -101,17 +132,13 @@ export const imageProviderConfigSchema = z
         /^[a-z0-9][a-z0-9_-]*$/i,
         'provider id must start with a letter or digit and contain only letters, digits, "-" or "_"'
       ),
-    /** 展示给用户的名字。会下发到前端,不要写成含密钥或内部主机名的字符串。 */
+    /** 展示名,仅供日志与内部诊断;模型视角的前端不再展示来源名。 */
     label: z.string().trim().min(1).max(64),
     baseUrl: z.string().trim().url(),
     /** 允许缺省:少数自托管网关不校验 Authorization。 */
     apiKey: z.string().trim().min(1).optional(),
-    model: z.string().trim().min(1).default(DEFAULT_AI_IMAGE_MODEL),
-    capabilities: z
-      .array(imageProviderCapabilityEnum)
-      .min(1)
-      .default(['generate', 'edit'])
-      .transform(list => [...new Set(list)]),
+    /** 该来源服务的模型列表;至少一个。 */
+    models: z.array(imageProviderModelSchema).min(1),
     editTransport: imageProviderEditTransportEnum.default('multipart'),
     refImagesField: z
       .string()
@@ -121,12 +148,6 @@ export const imageProviderConfigSchema = z
       .default('reference_images'),
     refImageEncoding: imageProviderRefEncodingEnum.default('data_url'),
     responseFormat: imageProviderResponseFormatEnum.default('b64_json'),
-    /** 该来源支持的尺寸;下发前端用于派生画面比例档位。 */
-    sizes: z
-      .array(imageProviderSizeSchema)
-      .min(1)
-      .default([...DEFAULT_AI_IMAGE_SIZES])
-      .transform(list => [...new Set(list)]),
     /** 见 imageProviderOmittableBodyFieldEnum:严格校验请求体的网关靠这个删字段。 */
     omitBodyFields: z
       .array(imageProviderOmittableBodyFieldEnum)
@@ -138,7 +159,7 @@ export const imageProviderConfigSchema = z
 /**
  * AI_IMAGE_PROVIDERS 的完整形状。
  *
- * 数组第一项是默认来源:任务没带 providerId(历史任务、单来源部署)时用它。
+ * 数组第一项是默认来源:任务没带 model(历史任务、单来源部署)时用它。
  */
 export const imageProviderConfigsSchema = z
   .array(imageProviderConfigSchema)
@@ -155,6 +176,21 @@ export const imageProviderConfigsSchema = z
         });
       }
       seen.add(key);
+
+      // 来源内模型名去重(大小写不敏感):"GPT-Image-1" vs "gpt-image-1" 在同一来源
+      // 下只会是配置笔误。跨来源同名模型合法,不在这里校验。
+      const modelKeys = new Set<string>();
+      provider.models.forEach((model, modelIndex) => {
+        const modelKey = model.name.toLowerCase();
+        if (modelKeys.has(modelKey)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index, 'models', modelIndex, 'name'],
+            message: `duplicate model name in provider ${provider.id}: ${model.name}`,
+          });
+        }
+        modelKeys.add(modelKey);
+      });
     });
   });
 
@@ -178,7 +214,7 @@ export type ImageProviderConfig = z.infer<typeof imageProviderConfigSchema>;
 /** 只读的环境变量视图。不用 NodeJS.ProcessEnv:eslint 的 no-undef 在这里看不到 node 全局。 */
 export type ImageProviderEnv = Record<string, string | undefined>;
 
-/** 旧单来源配置回退时用的 id,也是 GET /tasks/image-generate/providers 里的第一项。 */
+/** 旧单来源配置回退时用的 id,也是历史任务 providerId 的解析目标。 */
 export const LEGACY_PROVIDER_ID = 'default';
 
 /** 模型解析收在一处:用 || 而不是 ?? ,env "设了但为空" 也要回退默认值。 */
@@ -212,7 +248,7 @@ export function resolveAiImageRequestTimeoutMs(
  * 三种情况分得很开:
  * - 配了 AI_IMAGE_PROVIDERS:严格解析,非法就抛错让进程起不来(fail-fast)。配置写错
  *   静默降级成单来源,比启动失败难查得多。
- * - 只配了旧的 AI_IMAGE_*:包装成一个 default 来源,现网部署零改动。
+ * - 只配了旧的 AI_IMAGE_*:包装成一个 default 来源(单模型),现网部署零改动。
  * - 都没配:返回空数组,生图功能保持关闭。
  */
 export function loadImageProviderConfigs(
@@ -236,7 +272,12 @@ export function loadImageProviderConfigs(
       const issues = result.error.issues
         .map(issue => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
         .join('; ');
-      throw new Error(`AI_IMAGE_PROVIDERS is invalid: ${issues}`);
+      // 旧格式(顶层 model/capabilities/sizes)在新结构下报 "Unrecognized key",
+      // 追加一句人话指引,别让运维对着 zod 原文猜。
+      const legacy = looksLikeLegacyProviderConfig(parsed)
+        ? ' (format changed: declare models under a "models" array per provider, see .env.example)'
+        : '';
+      throw new Error(`AI_IMAGE_PROVIDERS is invalid: ${issues}${legacy}`);
     }
     return result.data;
   }
@@ -251,11 +292,32 @@ export function loadImageProviderConfigs(
       ...(env.AI_IMAGE_API_KEY?.trim()
         ? { apiKey: env.AI_IMAGE_API_KEY.trim() }
         : {}),
-      model: resolveAiImageModel(env),
-      capabilities: ['generate', 'edit'],
+      models: [
+        {
+          name: resolveAiImageModel(env),
+          capabilities: ['generate', 'edit'],
+          sizes: [...DEFAULT_AI_IMAGE_SIZES],
+        },
+      ],
       editTransport: 'multipart',
       responseFormat:
         env.AI_IMAGE_RESPONSE_FORMAT?.trim() === 'url' ? 'url' : 'b64_json',
     },
   ]);
+}
+
+/**
+ * 判断解析失败的输入是不是旧版结构(顶层 model/capabilities/sizes)。
+ *
+ * 只看键名不看值:错误信息不能回显 value(数组里有 apiKey),这里同样只碰键名。
+ */
+function looksLikeLegacyProviderConfig(parsed: unknown): boolean {
+  if (!Array.isArray(parsed) || parsed.length === 0) return false;
+  const legacyKeys = new Set(['model', 'capabilities', 'sizes']);
+  return parsed.some(
+    item =>
+      typeof item === 'object' &&
+      item !== null &&
+      Object.keys(item).some(key => legacyKeys.has(key))
+  );
 }

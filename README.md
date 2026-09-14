@@ -179,18 +179,18 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 - `image_result`：调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
   兼容格式上传参考图并返回最终证件照结果图。
 
-AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响，并支持配置多个来源：
+AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响，并支持配置多个来源（每来源可声明多个模型，同一模型可配多个来源实现自动容错）：
 
 ```env
-AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","model":"gpt-image-1"},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","model":"gpt-image-2","editTransport":"generations_ref"}]'
+AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","models":[{"name":"gpt-image-1","capabilities":["generate","edit","inpaint"],"sizes":["auto","1024x1024","1024x1536","1536x1024"]}]},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","models":[{"name":"KMage V2"},{"name":"gpt-image-2","capabilities":["generate","edit","inpaint"]}],"editTransport":"generations_ref"}]'
 ```
 
-- `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级。
-- 每项字段：`id`、`label`（必填，展示名，会下发前端）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
-  `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`，只支持文生图写
-  `["generate"]`）、`sizes`（默认
-  `["1024x1024","1024x1536","1536x1024"]`，页面画面比例档位由它派生，SDXL 系网关可声明更多 WxH 档位；gpt-image-1 类来源想要「自动」档需显式加
-  `"auto"`，严格网关收到 `"auto"` 会 400）、`editTransport`（`multipart` 默认 /
+- `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级（旧版顶层 `model`/`capabilities`/`sizes` 格式会启动报错并附升级指引）。
+- 每项字段：`id`、`label`（必填，内部诊断名）、`baseUrl`（必填）、`apiKey`（可选）、`models`（必填数组，每项
+  `name` 模型名、`capabilities`（默认 `["generate","edit"]`，只支持文生图写
+  `["generate"]`，支持局部重绘显式加 `"inpaint"`）、`sizes`（默认七档
+  `["1024x1024","1024x1536","1536x1024","864x1152","1152x864","864x1536","1536x864"]`，页面画面比例档位由它派生，SDXL 系网关可声明更多 WxH 档位；gpt-image-1 类模型想要「自动」档需显式加
+  `"auto"`，严格网关收到 `"auto"` 会 400））、`editTransport`（`multipart` 默认 /
   `generations_ref`）、`refImagesField`（默认 `reference_images`）、`refImageEncoding`（`data_url`
   默认 / `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
   `size`/`quality`/`response_format`/`n`/`background`）。
@@ -200,20 +200,20 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   `response_format`。把对应字段列进去即可，不必改代码；`model` 与 `prompt` 不可省略。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到单来源变量
   `AI_IMAGE_BASE_URL`、`AI_IMAGE_API_KEY`、`AI_IMAGE_MODEL`、`AI_IMAGE_RESPONSE_FORMAT`、`AI_IMAGE_LABEL`，等价于一个
-  `id: default` 的来源。两者都没配置时 `/image/generate` 入口仍然可见，生图任务会以
+  `id: default` 的单模型来源。两者都没配置时 `/image/generate` 入口仍然可见，生图任务会以
   `AI_IMAGE_NOT_CONFIGURED` 失败，页面提示未配置。
 - 尺寸与质量不走 env——由前端选择传入、schema 提供默认。
 
 当前支持文生图（所有来源统一
 `POST /v1/images/generations`）与图生图（页面上传一张参考图并可预览）；图生图按来源分支：`multipart`
 走 `POST /v1/images/edits`，`generations_ref` 也走 `POST /v1/images/generations` 并把参考图以 data
-URL 放进 `reference_images` 数组（`image.dddd.zone` 一类网关没有 edits 端点）。局部重绘需要来源声明
+URL 放进 `reference_images` 数组（`image.dddd.zone` 一类网关没有 edits 端点）。局部重绘需要模型声明
 `"inpaint"`
-能力（`capabilities: ["generate","edit","inpaint"]`），gpt-image-2 一类完整来源（kmage、鲁批）可声明。实现为双通道官方优先：先走 edits 端点的
+能力（`capabilities: ["generate","edit","inpaint"]`），gpt-image-2 一类完整模型（kmage、鲁批）可声明。实现为双通道官方优先：先走 edits 端点的
 `image`+`mask`（透明区=重绘区）；网关以确定性 4xx 拒绝 `mask`
-字段时自动回退「原图 + 红标记图」两张参考图加固定提示词前缀。页面上「局部修改」入口常显，来源不支持时点击会提示切换来源。页面在配置了多个来源时展示来源选择器，选中的来源随
-`inputConfig.providerId` 提交；来源不支持图生图时该模式被禁用。无论来源返回 `b64_json` 还是
-`url`，产物都会落到 MinIO，用户拿到的始终是本站文件地址。每日生成张数上限是全局的（不按来源区分），在
+字段时自动回退「原图 + 红标记图」两张参考图加固定提示词前缀。页面上「局部修改」入口常显，模型不支持时点击会提示切换模型。页面在配置了多个模型时展示模型选择器（显示真实模型名，来源/网关对用户隐藏），选中的模型随
+`inputConfig.model` 提交；模型不支持图生图时该模式被禁用。同一模型配在多个来源下时，同会话沿用上次实际使用的来源，可重试失败（超时/5xx/限流）自动换源。无论来源返回 `b64_json` 还是
+`url`，产物都会落到 MinIO，用户拿到的始终是本站文件地址；产物 EXIF 写入实际出图的模型与来源。每日生成张数上限是全局的（不按模型区分），在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
 
 ### 启动前端开发服务
@@ -527,7 +527,7 @@ PostgreSQL + Redis + MinIO
 - AI 生图走服务端任务队列（独立
   `ai-queue`），必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印。可通过
   `AI_IMAGE_PROVIDERS`
-  配置多个 OpenAI 兼容来源，由用户在页面上手动选择，不做自动切换。提示词模板走 DB + MinIO `presets`
+  配置多个 OpenAI 兼容来源与模型，页面以模型为主选择；同一模型配多个来源时服务端随机挑选并自动容错换源。提示词模板走 DB + MinIO `presets`
   匿名只读桶，通过公开端点 `GET /tasks/image-generate/presets` 按语言下发。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式

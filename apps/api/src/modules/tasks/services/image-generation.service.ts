@@ -15,6 +15,7 @@ import {
   resolveAiImageRequestTimeoutMs,
   type ImageProviderCapability,
   type ImageProviderConfig,
+  type ImageProviderModelConfig,
   type ImageProviderEditTransport,
   type ImageProviderOmittableBodyField,
   type ImageProviderRefEncoding,
@@ -103,12 +104,23 @@ export class ImageGenerationError extends Error {
   }
 }
 
-/** 下发给前端的来源信息。只有这四个字段可以出网:baseUrl 与 apiKey 永不外泄。 */
+/**
+ * 来源描述符:服务内部路由用,不再直接下发给前端(前端只见模型)。
+ * baseUrl 与 apiKey 不在其中,永不外泄。
+ */
 export interface ImageProviderDescriptor {
   id: string;
   label: string;
   capabilities: ImageProviderCapability[];
-  /** 该来源支持的尺寸,前端据此派生画面比例档位。 */
+  /** 该来源(模型)支持的尺寸,路由时做交叉校验。 */
+  sizes: string[];
+}
+
+/** 下发给前端的模型信息。只有这三个字段可以出网:来源的 baseUrl/apiKey/label 永不外泄。 */
+export interface ImageModelDescriptor {
+  model: string;
+  capabilities: ImageProviderCapability[];
+  /** 所有服务该模型的来源的尺寸并集,前端据此派生画面比例档位。 */
   sizes: string[];
 }
 
@@ -202,12 +214,23 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     this.fetchImpl = fetchImpl;
   }
 
+  /**
+   * 从来源配置 + 模型声明构造 (来源, 模型) 组合实例。
+   *
+   * 实例粒度是"每模型一个 provider":同一来源下不同模型各自持有自己的
+   * capabilities/sizes 声明,路由层按模型名归组。
+   */
   static fromConfig(
     config: ImageProviderConfig,
+    model: ImageProviderModelConfig,
     fetchImpl?: typeof fetch
   ): OpenAiCompatibleImageGenerationProvider {
+    const { models: _models, ...providerFields } = config;
     return new OpenAiCompatibleImageGenerationProvider({
-      ...config,
+      ...providerFields,
+      model: model.name,
+      capabilities: model.capabilities,
+      sizes: model.sizes,
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
     });
   }
@@ -585,18 +608,20 @@ export interface ImageGenerationServiceOptions {
   externalProvider?: ImageGenerationProvider | null;
   /** 多来源注入口,给测试与将来的自定义装配用;省略时从 AI_IMAGE_PROVIDERS 读取。 */
   providers?: ImageGenerationProvider[];
+  /** 随机数注入口,给测试控制粘性随机路由用;省略时用 Math.random。 */
+  random?: () => number;
 }
 
 export interface GeneratedImage {
   buffer: Buffer;
   mimeType: string;
   extension: string;
-  /** 实际出图的来源与模型,供 processor 写入产物标识。 */
+  /** 实际出图的来源与模型,供 processor 写入产物标识与粘性路由记录。 */
   providerId: string;
   model: string;
 }
 
-/** mode → 该模式要求来源具备的能力。 */
+/** mode → 该模式要求模型具备的能力。 */
 const REQUIRED_CAPABILITY: Record<
   ImageGenerateTaskConfig['mode'],
   ImageProviderCapability
@@ -606,13 +631,34 @@ const REQUIRED_CAPABILITY: Record<
   inpaint: 'inpaint',
 };
 
+/** 路由表里的一条 (来源, 模型) 组合。 */
+interface RoutingEntry {
+  /** 原始大小写的来源 id(写 EXIF 与 output_meta 用,匹配时小写化)。 */
+  providerId: string;
+  model: ImageProviderModelConfig;
+  provider: ImageGenerationProvider;
+}
+
+/** generate() 的路由偏好,粘性上下文由 processor 查好后传入,服务层零 DB 依赖。 */
+export interface ImageGenerationRouting {
+  /** 同会话同模型上次实际使用的来源 id,优先尝试它。 */
+  preferredProviderId?: string;
+}
+
 @Injectable()
 export class ImageGenerationService {
   private readonly logger = new Logger(ImageGenerationService.name);
-  /** 插入顺序即配置顺序,第一项是默认来源。 */
-  private readonly providers = new Map<string, ImageGenerationProvider>();
+  /** 插入顺序 = 配置顺序(来源序 × 模型序)。 */
+  private readonly entries: RoutingEntry[] = [];
+  /** key = 模型名;同模型多来源是容错路由的基础。 */
+  private readonly byModel = new Map<string, RoutingEntry[]>();
+  /** key = 小写来源 id;历史任务 providerId 的解析入口。 */
+  private readonly byProviderId = new Map<string, RoutingEntry[]>();
+  private readonly random: () => number;
 
   constructor(@Optional() options?: ImageGenerationServiceOptions) {
+    this.random = options?.random ?? Math.random;
+
     if (options?.providers) {
       for (const provider of options.providers) this.register(provider);
       return;
@@ -625,107 +671,197 @@ export class ImageGenerationService {
 
     // 配置非法时这里会抛错,进程起不来 —— 这是故意的,见 loadImageProviderConfigs。
     for (const config of loadImageProviderConfigs()) {
-      this.register(OpenAiCompatibleImageGenerationProvider.fromConfig(config));
+      for (const model of config.models) {
+        this.entries.push({
+          providerId: config.id,
+          model,
+          provider: OpenAiCompatibleImageGenerationProvider.fromConfig(
+            config,
+            model
+          ),
+        });
+      }
     }
+    this.reindex();
 
-    if (this.providers.size === 0) {
+    if (this.entries.length === 0) {
       this.logger.log(
         'Neither AI_IMAGE_PROVIDERS nor AI_IMAGE_BASE_URL is set; image generation stays disabled'
       );
     } else {
       this.logger.log(
-        `Image generation providers: ${[...this.providers.keys()].join(', ')}`
+        `Image generation providers: ${[...this.byProviderId.keys()].join(', ')}`
       );
     }
   }
 
+  /** 把 entries 归组成 byModel / byProviderId 两张索引;注册完统一调用。 */
+  private reindex(): void {
+    this.byModel.clear();
+    this.byProviderId.clear();
+    for (const entry of this.entries) {
+      const modelList = this.byModel.get(entry.model.name) ?? [];
+      modelList.push(entry);
+      this.byModel.set(entry.model.name, modelList);
+
+      const providerKey = entry.providerId.toLowerCase();
+      const providerList = this.byProviderId.get(providerKey) ?? [];
+      providerList.push(entry);
+      this.byProviderId.set(providerKey, providerList);
+    }
+  }
+
+  /** 测试注入口:stub provider 带 model 字段即成一条 entry。 */
   private register(provider: ImageGenerationProvider): void {
     const id = provider.descriptor?.id ?? LEGACY_PROVIDER_ID;
-    this.providers.set(id.toLowerCase(), provider);
+    this.entries.push({
+      providerId: id,
+      model: {
+        name: provider.model ?? DEFAULT_AI_IMAGE_MODEL,
+        capabilities: provider.descriptor?.capabilities ?? ['generate', 'edit'],
+        sizes: provider.descriptor?.sizes ?? [...DEFAULT_AI_IMAGE_SIZES],
+      },
+      provider,
+    });
+    this.reindex();
   }
 
   get configured(): boolean {
-    return this.providers.size > 0;
-  }
-
-  /** 供 GET /tasks/image-generate/providers 使用,顺序即配置顺序。 */
-  listProviders(): ImageProviderDescriptor[] {
-    return [...this.providers.entries()].map(([id, provider]) => ({
-      id: provider.descriptor?.id ?? id,
-      label: provider.descriptor?.label ?? id,
-      capabilities: provider.descriptor?.capabilities ?? ['generate', 'edit'],
-      sizes: provider.descriptor?.sizes ?? [...DEFAULT_AI_IMAGE_SIZES],
-    }));
+    return this.entries.length > 0;
   }
 
   /**
-   * 按 providerId 取来源。
+   * 模型视角的可用列表,供 GET /tasks/image-generate/models 使用。
    *
-   * 没带 providerId 走第一个(历史任务与单来源部署);带了但不存在或不支持该模式时
-   * 直接失败,不静默换一个来源 —— 用户选了哪个来源就该用哪个,悄悄换掉等于骗人。
+   * 模型按配置序首次出现去重;capabilities 与 sizes 取所有服务该模型的来源的
+   * 并集 —— 任一来源支持 edit,前端参考图入口就可用,路由会挑到支持它的来源。
    */
-  private resolveProvider(
-    config: ImageGenerateTaskConfig
-  ): ImageGenerationProvider {
-    const [fallback] = this.providers.values();
-    if (!fallback) {
+  listModels(): ImageModelDescriptor[] {
+    const models: ImageModelDescriptor[] = [];
+    for (const [name, entries] of this.byModel) {
+      const capabilities = new Set<ImageProviderCapability>();
+      const sizes = new Set<string>();
+      for (const entry of entries) {
+        for (const capability of entry.model.capabilities) {
+          capabilities.add(capability);
+        }
+        for (const size of entry.model.sizes) sizes.add(size);
+      }
+      models.push({
+        model: name,
+        capabilities: [...capabilities],
+        sizes: [...sizes],
+      });
+    }
+    return models;
+  }
+
+  /**
+   * 解析候选来源:模型 → 能力/尺寸过滤,产出按"粘性优先、其余配置序"排列的尝试队列。
+   *
+   * - config.model 指定模型(新客户端);历史任务只带 providerId 时钉死该来源
+   *   并取其第一个模型,行为与旧版一致;都没带用第一个来源的第一个模型。
+   * - 能力与尺寸按模型级声明交叉校验,不满足直接按不可用失败(retryable=false,
+   *   换来源也救不了,不该烧第二次钱)。
+   */
+  private orderCandidates(
+    config: ImageGenerateTaskConfig,
+    routing?: ImageGenerationRouting
+  ): RoutingEntry[] {
+    const first = this.entries[0];
+    if (!first) {
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_NOT_CONFIGURED,
         'AI image generation is not configured'
       );
     }
 
-    const requested = config.providerId?.trim().toLowerCase();
-    const provider = requested ? this.providers.get(requested) : fallback;
-    if (!provider) {
-      this.logger.warn(`Unknown image provider requested: ${requested}`);
-      throw new ImageGenerationError(
-        ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
-        'The selected image provider is unavailable'
-      );
+    let candidates: RoutingEntry[];
+    if (config.model) {
+      candidates = this.byModel.get(config.model) ?? [];
+    } else if (config.providerId) {
+      // 历史任务兼容窗口:旧客户端按来源选择,取该来源的第一个模型并钉死来源。
+      const pinned =
+        this.byProviderId.get(config.providerId.toLowerCase()) ?? [];
+      candidates = pinned.slice(0, 1);
+    } else {
+      candidates = [first];
     }
 
     const required = REQUIRED_CAPABILITY[config.mode];
-    const capabilities = provider.descriptor?.capabilities;
-    if (capabilities && !capabilities.includes(required)) {
+    const filtered = candidates.filter(
+      entry =>
+        entry.model.capabilities.includes(required) &&
+        entry.model.sizes.includes(config.size)
+    );
+    if (filtered.length === 0) {
       this.logger.warn(
-        `Image provider ${provider.descriptor?.id} does not support ${config.mode}`
+        `No image source serves model=${config.model ?? '(default)'} with ${config.mode}/${config.size}`
       );
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
-        'The selected image provider does not support this mode'
+        'The selected image model is unavailable'
       );
     }
 
-    // 尺寸交叉校验:前端的画面比例 chips 由 provider.sizes 派生,正常流程到不了这里;
-    // 只有旧缓存客户端或对已收窄 sizes 的来源重试旧任务时触发,按不可用处理。
-    // 注入的 externalProvider 没有 descriptor.sizes 时跳过(单来源部署默认四档)。
-    const sizes = provider.descriptor?.sizes;
-    if (sizes && !sizes.includes(config.size)) {
-      this.logger.warn(
-        `Image provider ${provider.descriptor?.id} does not support size ${config.size}`
+    // 粘性优先:偏好来源存在且通过了过滤就置首,其余保持配置序作为换源队列。
+    // 偏好来源被过滤掉(配置变更过)时自然落回随机首发。
+    const preferred = routing?.preferredProviderId?.toLowerCase();
+    const ordered: RoutingEntry[] = [];
+    if (preferred) {
+      const sticky = filtered.find(
+        entry => entry.providerId.toLowerCase() === preferred
       );
-      throw new ImageGenerationError(
-        ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE,
-        'The selected image provider does not support the requested size'
-      );
+      if (sticky) ordered.push(sticky);
+    }
+    for (const entry of filtered) {
+      if (!ordered.includes(entry)) ordered.push(entry);
     }
 
-    return provider;
+    // 无粘性偏好时随机挑首发(会话首次生成),其余仍按配置序排在后面当换源队列。
+    if (!preferred && ordered.length > 1) {
+      const head = Math.floor(this.random() * ordered.length) % ordered.length;
+      const [pick] = ordered.splice(head, 1);
+      if (pick) ordered.unshift(pick);
+    }
+    return ordered;
   }
 
+  /**
+   * 生成一张图:模型 → 来源路由 → 逐个尝试。
+   *
+   * 只有 retryable=true 的失败(网关 5xx、超时、限流、网络错误)才换下一个同模型
+   * 来源;内容拒绝与确定性 4xx 不换 —— 重试只会再烧一次钱。候选列表有界,
+   * 不会死循环。
+   */
   async generate(
     config: ImageGenerateTaskConfig,
-    references?: Buffer[]
+    references?: Buffer[],
+    routing?: ImageGenerationRouting
   ): Promise<GeneratedImage> {
-    const provider = this.resolveProvider(config);
-    const buffer = await provider.generate(config, references);
-    return {
-      buffer,
-      mimeType: 'image/png',
-      extension: 'png',
-      providerId: provider.descriptor?.id ?? LEGACY_PROVIDER_ID,
-      model: provider.model ?? DEFAULT_AI_IMAGE_MODEL,
-    };
+    const ordered = this.orderCandidates(config, routing);
+
+    let lastError: unknown;
+    for (const entry of ordered) {
+      try {
+        const buffer = await entry.provider.generate(config, references);
+        return {
+          buffer,
+          mimeType: 'image/png',
+          extension: 'png',
+          providerId: entry.providerId,
+          model: entry.model.name,
+        };
+      } catch (error) {
+        lastError = error;
+        const retryable =
+          error instanceof ImageGenerationError && error.retryable === true;
+        if (!retryable) throw error;
+        this.logger.warn(
+          `Source ${entry.providerId} failed for model ${entry.model.name}, trying the next source`
+        );
+      }
+    }
+    throw lastError;
   }
 }

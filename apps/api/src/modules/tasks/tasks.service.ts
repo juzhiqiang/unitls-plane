@@ -521,7 +521,12 @@ export class TasksService {
     for (const row of rows) this.summaryCache.invalidate(row.userId);
   }
 
-  async markCompleted(id: string, outputFileId: string): Promise<void> {
+  async markCompleted(
+    id: string,
+    outputFileId: string,
+    /** 服务端输出事实(目前只有生图写入:实际出图的来源与模型),供粘性路由与产物追溯。 */
+    outputMeta?: { providerId: string; model: string }
+  ): Promise<void> {
     const rows = await db
       .update(tasks)
       .set({
@@ -532,10 +537,42 @@ export class TasksService {
         // 重试成功要清掉上一次 attempt 留下的错误,否则任务记录会同时显示「完成」和失败原因。
         errorCode: null,
         errorMessage: null,
+        ...(outputMeta ? { outputMeta } : {}),
       })
       .where(eq(tasks.id, id))
       .returning({ userId: tasks.userId });
     for (const row of rows) this.summaryCache.invalidate(row.userId);
+  }
+
+  /**
+   * 同会话同模型最近一次成功出图的实际来源 id,给生图的粘性路由用。
+   *
+   * 没有记录(新会话、该模型首次使用、配置变更导致来源切换)返回 null,
+   * 调用方自然落回随机首发。会话内任务上限 200,复合索引覆盖,无需额外索引。
+   */
+  async findLastImageGenerateProviderId(
+    userId: string,
+    sessionId: string,
+    model: string
+  ): Promise<string | null> {
+    const [row] = await db
+      .select({
+        providerId: sql<string | null>`${tasks.outputMeta} ->> 'providerId'`,
+      })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.sessionId, sessionId),
+          eq(tasks.type, 'image_generate'),
+          eq(tasks.status, 'completed'),
+          sql`${tasks.outputMeta} ->> 'model' = ${model}`,
+          sql`${tasks.outputMeta} ->> 'providerId' is not null`
+        )
+      )
+      .orderBy(desc(tasks.completedAt))
+      .limit(1);
+    return row?.providerId ?? null;
   }
 
   async markFailed(

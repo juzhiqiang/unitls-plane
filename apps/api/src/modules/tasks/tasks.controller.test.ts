@@ -14,7 +14,7 @@ const tasksService = {
 };
 
 const imageGenerationService = {
-  listProviders: vi.fn(),
+  listModels: vi.fn(),
 };
 
 function createController() {
@@ -38,10 +38,9 @@ beforeEach(() => {
     used: 3,
     remaining: 7,
   });
-  imageGenerationService.listProviders.mockReturnValue([
+  imageGenerationService.listModels.mockReturnValue([
     {
-      id: 'default',
-      label: '内置生图',
+      model: 'gpt-image-1',
       capabilities: ['generate', 'edit'],
       sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
     },
@@ -143,27 +142,26 @@ it('propagates the service result unchanged to the response', async () => {
   expect(quota).toEqual({ limit: 100, used: 100, remaining: 0 });
 });
 
-it('returns the configured providers for an authenticated user', async () => {
+it('returns the configured models for an authenticated user', async () => {
   const user = { id: 'user-1', plan: 'signed_in', role: 'user' } as never;
 
-  const providers = await createController().listImageGenerateProviders(user);
+  const models = await createController().listImageGenerateModels(user);
 
-  expect(providers).toEqual([
+  expect(models).toEqual([
     {
-      id: 'default',
-      label: '内置生图',
+      model: 'gpt-image-1',
       capabilities: ['generate', 'edit'],
       sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
     },
   ]);
 });
 
-it('throws 401 when listing providers without a user', async () => {
+it('throws 401 when listing models without a user', async () => {
   await expect(
-    createController().listImageGenerateProviders(undefined)
+    createController().listImageGenerateModels(undefined)
   ).rejects.toThrow(UnauthorizedException);
 
-  expect(imageGenerationService.listProviders).not.toHaveBeenCalled();
+  expect(imageGenerationService.listModels).not.toHaveBeenCalled();
 });
 
 it('returns the session list for an authenticated user', async () => {

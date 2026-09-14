@@ -278,4 +278,50 @@ describe('imageGenerateTaskConfigSchema', () => {
       ).toBe(false);
     }
   });
+
+  it('accepts a model name, including one with spaces', () => {
+    for (const model of ['gpt-image-1', 'KMage V2', 'flux.dev-1.1-pro']) {
+      const parsed = imageGenerateTaskConfigSchema.parse({
+        ...base,
+        model,
+        inputFileCount: 0,
+      });
+
+      expect(parsed.model).toBe(model);
+    }
+  });
+
+  it('leaves model undefined when it is omitted', () => {
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      inputFileCount: 0,
+    });
+
+    expect(parsed.model).toBeUndefined();
+  });
+
+  it('rejects empty or oversized model names', () => {
+    for (const model of ['', '   ', 'x'.repeat(65)]) {
+      expect(
+        imageGenerateTaskConfigSchema.safeParse({
+          ...base,
+          model,
+          inputFileCount: 0,
+        }).success
+      ).toBe(false);
+    }
+  });
+
+  it('passes both model and providerId through when both are present', () => {
+    // 优先级判定在 API 侧(服务层优先 model),schema 只负责形状。
+    const parsed = imageGenerateTaskConfigSchema.parse({
+      ...base,
+      model: 'gpt-image-1',
+      providerId: 'kmage',
+      inputFileCount: 0,
+    });
+
+    expect(parsed.model).toBe('gpt-image-1');
+    expect(parsed.providerId).toBe('kmage');
+  });
 });

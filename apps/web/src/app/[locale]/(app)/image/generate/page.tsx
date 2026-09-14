@@ -8,7 +8,7 @@ import {
   useCreateTask,
   useDeleteImageGenerateSession,
   useImageGeneratePresets,
-  useImageGenerateProviders,
+  useImageGenerateModels,
   useImageGenerateQuota,
   useImageGenerateSessions,
   useImageGenerateSessionTasks,
@@ -49,7 +49,7 @@ const SUBMIT_ERROR_KEYS: Record<string, string> = {
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
   AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
   AI_IMAGE_NOT_CONFIGURED: 'notConfigured',
-  AI_IMAGE_PROVIDER_UNAVAILABLE: 'providerUnavailable',
+  AI_IMAGE_PROVIDER_UNAVAILABLE: 'modelUnavailable',
 };
 
 const INITIAL_DRAFT: ImageGenerateChatDraft = {
@@ -117,7 +117,7 @@ export default function ImageGeneratePage() {
   const { session, requireLogin } = useRequireLogin();
   const createTask = useCreateTask();
   const quota = useImageGenerateQuota();
-  const providersQuery = useImageGenerateProviders();
+  const modelsQuery = useImageGenerateModels();
   const presetsQuery = useImageGeneratePresets();
   const sessionsQuery = useImageGenerateSessions();
   const uploadFile = useUploadFile();
@@ -145,22 +145,22 @@ export default function ImageGeneratePage() {
   // 已发起产物下载的 taskId:切会话后 previews 被清空,这个集合也要跟着重置。
   const loadedRef = useRef<Set<string>>(new Set());
 
-  const providers = providersQuery.data ?? [];
-  const selectedProvider =
-    providers.find(item => item.id === draft.providerId) ?? providers[0];
+  const models = modelsQuery.data ?? [];
+  const selectedModel =
+    models.find(item => item.model === draft.model) ?? models[0];
   const editSupported =
-    !selectedProvider || selectedProvider.capabilities.includes('edit');
-  // 局部重绘依赖来源的 mask 传输能力(wan 系网关没有,kmage 的 gpt-image-2 有):
-  // 入口始终展示,不支持的来源点击时给「换来源」引导,而不是让功能凭空消失。
+    !selectedModel || selectedModel.capabilities.includes('edit');
+  // 局部重绘依赖模型的 mask 传输能力(wan 系网关没有,kmage 的 gpt-image-2 有):
+  // 入口始终展示,不支持的模型点击时给「换模型」引导,而不是让功能凭空消失。
   const inpaintSupported =
-    !selectedProvider || selectedProvider.capabilities.includes('inpaint');
+    !selectedModel || selectedModel.capabilities.includes('inpaint');
 
-  /** 编辑入口统一走这里:支持的来源打开编辑器,不支持的给切换引导。 */
+  /** 编辑入口统一走这里:支持的模型打开编辑器,不支持的给切换引导。 */
   const handleEditImage = (url: string) => {
     if (inpaintSupported) {
       setEditingImageUrl(url);
     } else {
-      setFailure({ key: 'providerNoInpaintHint' });
+      setFailure({ key: 'modelNoInpaintHint' });
     }
   };
 
@@ -257,9 +257,9 @@ export default function ImageGeneratePage() {
     const mode = referenceFiles.length > 0 ? 'image_to_image' : 'text_to_image';
     const clientGroupId = randomUUID();
     const prompt = draft.prompt.trim();
-    // 草稿尺寸(默认 auto)不在当前来源支持列表时回落到第一档,免得提交一个
+    // 草稿尺寸(默认 auto)不在当前模型支持列表时回落到第一档,免得提交一个
     // 会在 processor 被尺寸交叉校验拒掉的值。
-    const size = resolveDraftSize(draft.size, selectedProvider?.sizes);
+    const size = resolveDraftSize(draft.size, selectedModel?.sizes);
 
     setFailure(null);
     setSubmitting(true);
@@ -321,7 +321,7 @@ export default function ImageGeneratePage() {
             size,
             quality: draft.quality,
             ...(draft.background ? { background: draft.background } : {}),
-            ...(draft.providerId ? { providerId: draft.providerId } : {}),
+            ...(draft.model ? { model: draft.model } : {}),
             sessionId: activeSessionId,
             clientGroupId,
           },
@@ -425,7 +425,7 @@ export default function ImageGeneratePage() {
       );
 
       const requestedSize = `${width}x${height}`;
-      const size = resolveDraftSize(requestedSize, selectedProvider?.sizes);
+      const size = resolveDraftSize(requestedSize, selectedModel?.sizes);
 
       await createTask.mutateAsync({
         type: 'image_generate',
@@ -436,7 +436,7 @@ export default function ImageGeneratePage() {
           size,
           quality: draft.quality,
           ...(draft.background ? { background: draft.background } : {}),
-          ...(draft.providerId ? { providerId: draft.providerId } : {}),
+          ...(draft.model ? { model: draft.model } : {}),
           sessionId: activeSessionId,
           clientGroupId,
         },
@@ -587,7 +587,7 @@ export default function ImageGeneratePage() {
               onReferenceChange={setReferenceFiles}
               onSubmit={submit}
               busy={busy}
-              providers={providers}
+              models={models}
               quota={session ? quota.data : undefined}
               editSupported={editSupported}
               maxReferenceSize={getImageUploadMaxFileSize(session)}

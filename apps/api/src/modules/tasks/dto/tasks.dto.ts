@@ -201,29 +201,24 @@ export class ImageGenerateQuotaDto {
   remaining!: number;
 }
 
-export class ImageGenerateProviderDto {
+export class ImageGenerateModelDto {
   @ApiProperty({
-    description: '来源 id，创建任务时放进 inputConfig.providerId',
+    description: '模型名，创建任务时放进 inputConfig.model',
   })
-  id!: string;
-
-  @ApiProperty({
-    description: '展示给用户的来源名称',
-  })
-  label!: string;
+  model!: string;
 
   @ApiProperty({
     description:
-      '该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传',
+      '该模型支持的能力（所有服务它的来源的并集）。generate = 文生图，edit = 图生图，inpaint = 局部重绘；缺少 edit 时前端禁用参考图上传',
     type: [String],
-    enum: ['generate', 'edit'],
+    enum: ['generate', 'edit', 'inpaint'],
     isArray: true,
   })
   capabilities!: string[];
 
   @ApiProperty({
     description:
-      '该来源支持的尺寸（"auto" 或 "WxH"）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size',
+      '该模型支持的尺寸（"auto" 或 "WxH"，所有服务它的来源的并集）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size',
     type: [String],
     isArray: true,
   })

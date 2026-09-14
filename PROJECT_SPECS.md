@@ -229,27 +229,31 @@ ID_PHOTO_AI_RESPONSE_FORMAT=url
 mask 的视觉模型；`image_result` 时调用 `/v1/images/edits`，按 OpenAI `images.createEdit`
 兼容格式上传参考图并返回最终证件照。
 
-AI 生图使用一组独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响，并支持配置多个来源：
+AI 生图使用一组独立的 OpenAI 兼容配置，与证件照 AI 精修互不影响，并支持配置多个来源（每个来源可声明多个模型，同一模型可配在多个来源下）：
 
 ```env
-AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","model":"gpt-image-1"},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","model":"gpt-image-2","editTransport":"generations_ref"}]'
+AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","models":[{"name":"gpt-image-1","capabilities":["generate","edit","inpaint"],"sizes":["auto","1024x1024","1024x1536","1536x1024"]}]},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","models":[{"name":"KMage V2"},{"name":"gpt-image-2","capabilities":["generate","edit","inpaint"]}],"editTransport":"generations_ref"}]'
 ```
 
 - `AI_IMAGE_PROVIDERS`
-  是 JSON 数组，**数组第一项是默认来源**。新增一个兼容 OpenAI 格式的来源只需加一项，不需要改代码。JSON 非法或字段不合法时 API 直接启动失败，不静默降级。
+  是 JSON 数组，**数组第一项是默认来源**。新增一个兼容 OpenAI 格式的来源只需加一项，不需要改代码。JSON 非法或字段不合法时 API 直接启动失败，不静默降级；旧版顶层 `model`/`capabilities`/`sizes` 格式会被拒绝，错误信息附带升级指引。
 - 每项字段：`id`（必填，字母数字与
-  `-`/`_`）、`label`（必填，展示名）、`baseUrl`（必填）、`apiKey`（可选）、`model`（默认
-  `gpt-image-1`）、`capabilities`（默认 `["generate","edit"]`）、`sizes`（该来源支持的尺寸列表，默认
-  `["1024x1024","1024x1536","1536x1024"]`，随 providers 端点下发，前端画面比例档位由它派生，processor 请求前交叉校验；默认不含
+  `-`/`_`，服务端路由用，不下发前端）、`label`（必填，内部诊断名）、`baseUrl`（必填）、`apiKey`（可选）、`models`（必填数组，至少一项；每项 `name` 模型名（上游 model 参数原文，可含空格与大小写）、`capabilities`（默认
+  `["generate","edit"]`）、`sizes`（该模型支持的尺寸列表，默认
+  `["1024x1024","1024x1536","1536x1024","864x1152","1152x864","864x1536","1536x864"]`，随 models 端点下发，前端画面比例档位由它派生，processor 请求前交叉校验；默认不含
   `"auto"`
-  —— 那只是 gpt-image-1 一族的语义，严格网关会 400，需要「自动」档的来源显式声明）、`editTransport`（`multipart`
+  —— 那只是 gpt-image-1 一族的语义，严格网关会 400，需要「自动」档的模型显式声明））、`editTransport`（`multipart`
   默认 / `generations_ref`）、`refImagesField`（默认
   `reference_images`）、`refImageEncoding`（`data_url` 默认 /
   `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
-  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。
+  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。来源内模型名不区分大小写去重；跨来源同名模型合法，正是多来源容错路由的基础。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到旧的单来源变量 `AI_IMAGE_BASE_URL` / `AI_IMAGE_API_KEY` /
   `AI_IMAGE_MODEL` / `AI_IMAGE_RESPONSE_FORMAT` / `AI_IMAGE_LABEL`，等价于一个 `id: default`
-  的 multipart 来源，现网部署零改动。
+  的单模型 multipart 来源，现网部署零改动。
+- **路由以模型为主**：`inputConfig.model` 指定模型，服务端在所有服务该模型的来源中挑选 —— 同会话同模型沿用上次实际使用的来源（「粘性随机」，记录在
+  `tasks.output_meta` 的 `providerId`/`model`），新会话首次生成随机挑一个；可重试失败（超时/5xx/408/425/429/网络错误）自动换下一个同模型来源，内容拒绝与确定性
+  4xx 不换（不替用户烧第二次钱）。历史任务只带 `inputConfig.providerId`（兼容窗口）：钉死该来源并取其第一个模型。没带
+  model 的任务用第一个来源的第一个模型。
 - 文生图所有来源统一调用 `POST /v1/images/generations`（JSON）。图生图按来源分支：`multipart` 走
   `POST /v1/images/edits`（multipart 上传参考图）；`generations_ref` 也走
   `POST /v1/images/generations`，参考图以 data URL 放进 `refImagesField` 数组（`image.dddd.zone`
@@ -261,14 +265,14 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   `mask`，透明区=重绘区，无需前缀）；网关以确定性 4xx 且非内容策略的方式拒绝 mask 字段时（如 wan 系「未知文件字段：mask」）自动回退红标记通道（双参考图 + 固定提示词前缀
   `IMAGE_GENERATE_INPAINT_PROMPT_PREFIX`，由 validators 包共享，存量 2 输入旧格式任务与
   `generations_ref`
-  来源一律直接走红标记通道）。内容策略拒绝与瞬时故障（5xx/408/425/429）不回退，交给任务级重试。来源能力位
+  来源一律直接走红标记通道）。内容策略拒绝与瞬时故障（5xx/408/425/429）不回退，交给任务级重试。模型能力位
   `inpaint` 需显式声明（默认不含）。
-- `GET /tasks/image-generate/providers` 返回可用来源，需登录，只下发 `id` / `label` / `capabilities`
-  / `sizes`；`baseUrl` 与 `apiKey` 属于服务端配置，不出网。前端只有一个来源时不展示模型行。
-- 前端把选中的来源作为 `inputConfig.providerId`
-  提交。省略时用第一个来源；来源不存在、不支持该模式或不支持所请求尺寸时任务以
-  `AI_IMAGE_PROVIDER_UNAVAILABLE` 失败，不会静默换成另一个来源。
-- 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。
+- `GET /tasks/image-generate/models` 返回可用模型（按配置序首次出现去重，`capabilities`/`sizes` 取所有服务该模型的来源的并集），需登录，只下发
+  `model` / `capabilities` / `sizes`；来源（网关）信息与 `baseUrl`、`apiKey` 属于服务端配置，不出网。前端只有一个模型时不展示模型行。
+- 前端把选中的模型作为 `inputConfig.model`
+  提交。省略时用第一个来源的第一个模型；模型不存在、没有来源支持该模式或所请求尺寸时任务以
+  `AI_IMAGE_PROVIDER_UNAVAILABLE` 失败（错误码沿用，不静默换模型骗用户）。
+- 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。产物 EXIF 隐式标识写入实际出图的模型与来源（`model=`/`source=`）及生成时间。
 - 生图失败时，服务端把上游真实报错经 `apps/api/src/modules/tasks/services/image-error-sanitizer.ts`
   脱敏（剥离 prompt 回显、`sk-`/Bearer 密钥形态与签名 URL，HTML 报错页只取
   `<title>`，折叠单行并截断 160 字符）后写入
@@ -292,11 +296,11 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   的后台新增行。脚本同时建桶、设匿名只读策略并上传示例图，全程失败不阻塞启动。组合镜像由
   `docker/start-all.sh`、prod compose 由 `api.command` 在 `main.js` 之前调用。
 - 后台模板 CRUD 尚未开发。
-- 每日张数配额是全局的，不按来源区分。
+- 每日张数配额是全局的，不按模型或来源区分。
 - 都没配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
   失败，页面提示未配置。
 - 画面比例与质量由前端参数面板传入：`size` 为 `"auto"` 或 `WxH`（形状由
-  `imageGenerateTaskConfigSchema` 校验，取值由来源 `sizes` 交叉校验），`quality` 为
+  `imageGenerateTaskConfigSchema` 校验，取值由模型 `sizes` 交叉校验），`quality` 为
   `auto`/`standard`/`high`；`background` 可选
   `transparent`（透明背景，依赖本站恒 PNG 的产物）。设计稿中的「分辨率」行明确不做：「自动」语义已由画面比例=自动（`size:"auto"`）覆盖。风格（`style`）行已从 UI 下线，schema 字段保留以兼容旧任务 retry。
 - **生图页为对话式布局**（2026-09-07 改版）：左侧会话历史侧栏（新对话/搜索/列表）+ 主画布消息流（每次生成 = 提示词气泡 + 结果网格）+ 底部输入条（参考图附件/粘贴/拖入即图生图，无显式模式开关）。会话从任务派生：`tasks.session_id`

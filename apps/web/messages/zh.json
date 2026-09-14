@@ -895,11 +895,11 @@
     "presetDescription": "点击下面任一模板即可填入提示词输入框，之后可继续修改。",
     "presetClose": "关闭",
     "presetExampleAlt": "{title} 示例图",
-    "providerHint": "不同来源使用不同的模型，出图风格与支持的能力也不一样；产物都会保存到你的账号文件。",
-    "providerNoEditHint": "当前来源不支持图生图，请换一个来源。",
-    "providerCapEdit": "支持图生图",
-    "providerCapTextOnly": "仅文生图",
-    "providerNoInpaintHint": "当前来源不支持局部修改，请在「生成设置 → 模型」切换到支持的来源（如 KMage）后再试。",
+    "modelHint": "不同模型出图风格与支持的能力不一样；同一模型可能有多个服务来源，系统会自动选择并在失败时切换，产物都会保存到你的账号文件。",
+    "modelNoEditHint": "当前模型不支持图生图，请换一个模型。",
+    "modelCapEdit": "支持图生图",
+    "modelCapTextOnly": "仅文生图",
+    "modelNoInpaintHint": "当前模型不支持局部修改，请在「生成设置 → 模型」切换到支持的模型后再试。",
     "sourcePreviewAlt": "参考图预览",
     "uploadFailed": "参考图上传失败，请重试。",
     "referenceTooLarge": "参考图超过大小上限，请换一张更小的图片。",
@@ -928,7 +928,7 @@
     "quotaExceeded": "今日额度已用完，明天再来。",
     "contentRejected": "提示词被内容策略拒绝，换个说法再试。",
     "notConfigured": "AI 生图尚未配置，请联系管理员。",
-    "providerUnavailable": "所选来源不可用，请换一个来源重试。",
+    "modelUnavailable": "所选模型不可用，请换一个模型重试。",
     "failed": "生成失败，请重试。",
     "upstreamHttpBare": "上游服务异常，请重试。",
     "upstreamTimeout": "上游响应超时，请稍后重试。",
@@ -1606,6 +1606,21 @@
       "title": "更新日志",
       "intro": "这里记录每个公开版本带来的新能力、体验改进和重要修复。",
       "entries": [
+        {
+          "version": "v0.8.1",
+          "date": "2026-09-14",
+          "title": "AI 生图改为按模型选择",
+          "summary": "生图参数面板直接显示真实模型名，网关来源不再出现在界面上；同一模型可由多个服务方提供，系统自动挑选并在超时或临时故障时切换，出图更稳定。",
+          "groups": [
+            {
+              "title": "体验改进",
+              "items": [
+                "模型下拉直接显示真实模型名（如 gpt-image-2），不再显示网关/平台名称，选择更直观。",
+                "同一模型配置多个服务来源时自动容错：同一会话沿用同一来源保持风格稳定，遇到超时或临时故障自动切换备用来源重试，无需手动干预。"
+              ]
+            }
+          ]
+        },
         {
           "version": "v0.8.0",
           "date": "2026-09-12",

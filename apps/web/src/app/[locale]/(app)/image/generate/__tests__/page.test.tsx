@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   invalidate: vi.fn(),
   imageGenerateQuota: vi.fn(),
-  imageGenerateProviders: vi.fn(),
+  imageGenerateModels: vi.fn(),
   imageGeneratePresets: vi.fn(),
   imageGenerateSessions: vi.fn(),
   sessionTasks: vi.fn(),
@@ -47,9 +47,8 @@ const PRESETS = [
   },
 ];
 
-const DEFAULT_PROVIDER = {
-  id: 'default',
-  label: 'Default',
+const DEFAULT_MODEL = {
+  model: 'gpt-image-1',
   capabilities: ['generate', 'edit'] as const,
   sizes: [
     'auto',
@@ -89,7 +88,7 @@ vi.mock('@/hooks/use-require-login', () => ({
 vi.mock('@/hooks/api/use-tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mocks.createTask }),
   useImageGenerateQuota: () => mocks.imageGenerateQuota(),
-  useImageGenerateProviders: () => mocks.imageGenerateProviders(),
+  useImageGenerateModels: () => mocks.imageGenerateModels(),
   useImageGeneratePresets: () => mocks.imageGeneratePresets(),
   useImageGenerateSessions: () => mocks.imageGenerateSessions(),
   useImageGenerateSessionTasks: (sessionId: string) =>
@@ -264,7 +263,7 @@ beforeEach(() => {
   mocks.imageGenerateQuota.mockReturnValue({
     data: { limit: 10, used: 3, remaining: 7 },
   });
-  mocks.imageGenerateProviders.mockReturnValue({ data: [DEFAULT_PROVIDER] });
+  mocks.imageGenerateModels.mockReturnValue({ data: [DEFAULT_MODEL] });
   mocks.imageGeneratePresets.mockReturnValue({ data: PRESETS });
   mocks.imageGenerateSessions.mockReturnValue({ data: [] });
   mocks.sessionTasks.mockReturnValue({
@@ -475,12 +474,11 @@ describe('ImageGeneratePage', () => {
     expect(mocks.createTask).not.toHaveBeenCalled();
   });
 
-  it('disables the reference entry when the provider cannot edit', () => {
-    mocks.imageGenerateProviders.mockReturnValue({
+  it('disables the reference entry when the model cannot edit', () => {
+    mocks.imageGenerateModels.mockReturnValue({
       data: [
         {
-          id: 't2i-only',
-          label: 'Text only',
+          model: 'text-only-model',
           capabilities: ['generate'] as const,
           sizes: ['auto', '1024x1024'],
         },
@@ -690,12 +688,12 @@ describe('ImageGeneratePage', () => {
     ).toBeInTheDocument();
   });
 
-  it('derives ratio chips from provider sizes and hides the model row for a single provider', () => {
+  it('derives ratio chips from model sizes and hides the model row for a single model', () => {
     renderPage();
     openSettings();
 
     expect(screen.getByText('Aspect ratio')).toBeInTheDocument();
-    // DEFAULT_PROVIDER.sizes → 比例行 Auto/1:1/2:3/3:2;质量行也有一枚 Auto。
+    // DEFAULT_MODEL.sizes → 比例行 Auto/1:1/2:3/3:2;质量行也有一枚 Auto。
     expect(screen.getAllByText('Auto').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('1:1')).toBeInTheDocument();
     expect(screen.getByText('2:3')).toBeInTheDocument();
@@ -705,20 +703,19 @@ describe('ImageGeneratePage', () => {
     expect(screen.getByText('4:3')).toBeInTheDocument();
     expect(screen.getByText('9:16')).toBeInTheDocument();
     expect(screen.getByText('16:9')).toBeInTheDocument();
-    // 单来源部署不渲染模型行。
+    // 单模型部署不渲染模型行。
     expect(screen.queryByText('Model')).not.toBeInTheDocument();
     // 背景与质量行存在。
     expect(screen.getByText('Background')).toBeInTheDocument();
     expect(screen.getByText('Transparent')).toBeInTheDocument();
   });
 
-  it('shows the model row with the provider dropdown for multi-source setups', () => {
-    mocks.imageGenerateProviders.mockReturnValue({
+  it('shows the model row with real model names for multi-model setups', () => {
+    mocks.imageGenerateModels.mockReturnValue({
       data: [
-        DEFAULT_PROVIDER,
+        DEFAULT_MODEL,
         {
-          id: 'kmage',
-          label: 'Kmage',
+          model: 'KMage V2',
           capabilities: ['generate', 'edit'] as const,
           sizes: ['auto', '1024x1024'],
         },
@@ -728,26 +725,51 @@ describe('ImageGeneratePage', () => {
     openSettings();
 
     expect(screen.getByText('Model')).toBeInTheDocument();
-    // 'Default' 同时是背景默认 chip 与当前来源名;下拉内容(Radix)关闭时不渲染,
-    // 这里断言触发器显示当前来源即可。
-    expect(screen.getAllByText('Default').length).toBeGreaterThanOrEqual(1);
-    // 触发器上的能力后缀:DEFAULT_PROVIDER 支持 edit → image-to-image。
+    // 触发器显示真实模型名(不是来源/网关名);下拉项同理。
+    expect(screen.getByText('gpt-image-1')).toBeInTheDocument();
+    // 触发器上的能力后缀:DEFAULT_MODEL 支持 edit → image-to-image。
     expect(screen.getAllByText('image-to-image').length).toBeGreaterThanOrEqual(
       1
     );
   });
 
-  it('marks text-only providers in the model dropdown', () => {
-    // 纯文生图来源排在首位(默认选中):触发器上的能力后缀应显示 text-only。
-    mocks.imageGenerateProviders.mockReturnValue({
+  it('submits the selected model instead of a provider id', async () => {
+    mocks.imageGenerateModels.mockReturnValue({
+      data: [
+        DEFAULT_MODEL,
+        {
+          model: 'KMage V2',
+          capabilities: ['generate', 'edit'] as const,
+          sizes: ['auto', '1024x1024'],
+        },
+      ],
+    });
+    renderPage();
+    openSettings();
+
+    // Radix DropdownMenu 的打开依赖 pointerdown 事件(jsdom 下 click 不够),
+    // 触发器打开后下拉项才渲染,再点第二个模型。
+    fireEvent.pointerDown(screen.getByText('gpt-image-1'));
+    fireEvent.click(screen.getByText('KMage V2'));
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    const { inputConfig } = mocks.createTask.mock.calls[0][0];
+    expect(inputConfig).toMatchObject({ model: 'KMage V2' });
+    expect(inputConfig).not.toHaveProperty('providerId');
+  });
+
+  it('marks text-only models in the model dropdown', () => {
+    // 纯文生图模型排在首位(默认选中):触发器上的能力后缀应显示 text-only。
+    mocks.imageGenerateModels.mockReturnValue({
       data: [
         {
-          id: 't2i-only',
-          label: 'Text Only Model',
+          model: 'text-only-model',
           capabilities: ['generate'] as const,
           sizes: ['auto', '1024x1024'],
         },
-        DEFAULT_PROVIDER,
+        DEFAULT_MODEL,
       ],
     });
     renderPage();
@@ -771,12 +793,11 @@ describe('ImageGeneratePage', () => {
   });
 
   it('falls back to the first supported size when the draft size is not declared', async () => {
-    // 来源没声明 "auto"(严格网关的常态):提交值回落到第一档,不发送 auto。
-    mocks.imageGenerateProviders.mockReturnValue({
+    // 模型没声明 "auto"(严格网关的常态):提交值回落到第一档,不发送 auto。
+    mocks.imageGenerateModels.mockReturnValue({
       data: [
         {
-          id: 'wan',
-          label: 'wan',
+          model: 'wan-strict',
           capabilities: ['generate', 'edit'] as const,
           sizes: ['1024x1024', '1024x1536'],
         },
@@ -878,12 +899,11 @@ describe('ImageGeneratePage', () => {
   });
 
   it('edits a completed image via the mask editor and submits an inpaint task', async () => {
-    // 来源声明 inpaint 能力,编辑入口才会出现。
-    mocks.imageGenerateProviders.mockReturnValue({
+    // 模型声明 inpaint 能力,编辑入口才会出现。
+    mocks.imageGenerateModels.mockReturnValue({
       data: [
         {
-          id: 'kmage',
-          label: 'Kmage',
+          model: 'gpt-image-2',
           capabilities: ['generate', 'edit', 'inpaint'] as const,
           sizes: ['auto', '1024x1024'],
         },
@@ -935,7 +955,7 @@ describe('ImageGeneratePage', () => {
       // 提示词 = 固定前缀(向模型说明两张参考图与红色标记含义) + 用户输入。
       // 提示词存用户原文:官方 mask 通道无需前缀,回退时由后端拼固定前缀。
       prompt: 'make it a night sky',
-      // 原始 1024x1024 在来源 sizes 里,原样下发。
+      // 原始 1024x1024 在模型 sizes 里,原样下发。
       size: '1024x1024',
     });
   });
@@ -955,7 +975,7 @@ describe('ImageGeneratePage', () => {
     });
     rerender();
 
-    // 入口常显:不支持时点击给「换来源」引导,而不是让功能凭空消失。
+    // 入口常显:不支持时点击给「换模型」引导,而不是让功能凭空消失。
     fireEvent.click(screen.getByRole('button', { name: 'Edit region' }));
     expect(
       screen.getByText(/does not support region editing/)

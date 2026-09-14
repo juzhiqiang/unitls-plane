@@ -57,6 +57,9 @@ export const tasks = pgTable(
     // 生图会话 id(客户端 crypto.randomUUID)。text 而非 uuid 列型:格式约束放写入侧,
     // 避免第三方脏数据在迁移/写入时炸列;会话查询都先按 userId 过滤,复合索引覆盖。
     sessionId: text('session_id'),
+    // 服务端输出事实(目前只有生图写入):实际出图的来源与模型,供同会话粘性路由
+    // 与产物追溯。不写进 inputConfig:那是用户提交语义,retry 会原样复制它。
+    outputMeta: jsonb('output_meta'),
   },
   t => ({
     userCreatedIdx: index('tasks_user_created_idx').on(

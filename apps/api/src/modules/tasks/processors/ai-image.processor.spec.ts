@@ -46,6 +46,8 @@ function createTasksService(overrides: Record<string, unknown> = {}) {
     markCompleted: vi.fn(),
     markFailed: vi.fn(),
     markRetrying: vi.fn(),
+    // 粘性路由查询:默认"没有上次记录",触发随机首发。
+    findLastImageGenerateProviderId: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -74,6 +76,7 @@ it('generates an image and stores it against the task owner', async () => {
       // mock 不补它就会落到 processor 的 resolveAiImageModel() env 兜底,
       // 断言会被本机 AI_IMAGE_MODEL 污染 —— 这里补上,断言只验透传、不依赖 env。
       model: 'gpt-image-1',
+      providerId: 'alpha',
     }),
   };
 
@@ -94,20 +97,114 @@ it('generates an image and stores it against the task owner', async () => {
       quality: 'high',
       inputFileCount: 0,
     }),
+    undefined,
+    // 无粘性记录时 routing 传 undefined,服务层走随机首发。
     undefined
   );
   expect(getTaskOutputOwner).toHaveBeenCalledWith('user-1');
   // 标记是本 processor 的安全承诺:产物必须先过 marker 再上传。
   expect(markGeneratedImage).toHaveBeenCalledWith(
     Buffer.from('png-bytes'),
-    expect.objectContaining({ model: 'gpt-image-1' })
+    expect.objectContaining({ model: 'gpt-image-1', source: 'alpha' })
   );
   expect(filesService.upload).toHaveBeenCalledWith(
     Buffer.from('png-bytes'),
     expect.objectContaining({ mimeType: 'image/png' }),
     { id: 'user-1', plan: 'signed_in', role: 'user' }
   );
-  expect(tasksService.markCompleted).toHaveBeenCalledWith('task-1', 'output-1');
+  // 实际出图的来源与模型作为服务端事实落库,供同会话粘性与产物追溯。
+  expect(tasksService.markCompleted).toHaveBeenCalledWith(
+    'task-1',
+    'output-1',
+    {
+      providerId: 'alpha',
+      model: 'gpt-image-1',
+    }
+  );
+});
+
+it('passes the sticky source of the session as the routing preference', async () => {
+  const filesService = {
+    upload: vi.fn().mockResolvedValue({ id: 'output-1' }),
+  };
+  const tasksService = createTasksService({
+    sessionId: 'session-1',
+    inputConfig: {
+      mode: 'text_to_image',
+      prompt: '同一会话的第二张',
+      model: 'gpt-image-1',
+    },
+  });
+  tasksService.findLastImageGenerateProviderId = vi
+    .fn()
+    .mockResolvedValue('kmage');
+  const imageGenerationService = {
+    generate: vi.fn().mockResolvedValue({
+      buffer: Buffer.from('png-bytes'),
+      mimeType: 'image/png',
+      extension: 'png',
+      model: 'gpt-image-1',
+      providerId: 'kmage',
+    }),
+  };
+
+  const processor = new AiImageProcessor(
+    filesService as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  await processor.process(createJob());
+
+  expect(tasksService.findLastImageGenerateProviderId).toHaveBeenCalledWith(
+    'user-1',
+    'session-1',
+    'gpt-image-1'
+  );
+  expect(imageGenerationService.generate).toHaveBeenCalledWith(
+    expect.objectContaining({ model: 'gpt-image-1' }),
+    undefined,
+    { preferredProviderId: 'kmage' }
+  );
+});
+
+it('skips the sticky lookup for legacy tasks without a model', async () => {
+  const filesService = {
+    upload: vi.fn().mockResolvedValue({ id: 'output-1' }),
+  };
+  const tasksService = createTasksService({
+    sessionId: 'session-1',
+    // 历史任务只带 providerId,不查粘性,直接钉死来源。
+    inputConfig: {
+      mode: 'text_to_image',
+      prompt: '旧客户端任务',
+      providerId: 'kmage',
+    },
+  });
+  const imageGenerationService = {
+    generate: vi.fn().mockResolvedValue({
+      buffer: Buffer.from('png-bytes'),
+      mimeType: 'image/png',
+      extension: 'png',
+      model: 'gpt-image-2',
+      providerId: 'kmage',
+    }),
+  };
+
+  const processor = new AiImageProcessor(
+    filesService as never,
+    tasksService as never,
+    imageGenerationService as never
+  );
+
+  await processor.process(createJob());
+
+  expect(tasksService.findLastImageGenerateProviderId).not.toHaveBeenCalled();
+  expect(imageGenerationService.generate).toHaveBeenCalledWith(
+    expect.objectContaining({ providerId: 'kmage' }),
+    undefined,
+    undefined
+  );
 });
 
 it('marks the task failed with the provider error code and a fixed message', async () => {
@@ -181,6 +278,8 @@ it('sends the uploaded reference image for image_to_image', async () => {
       buffer: Buffer.from('edited-bytes'),
       mimeType: 'image/png',
       extension: 'png',
+      model: 'gpt-image-1',
+      providerId: 'alpha',
     }),
   };
 
@@ -204,9 +303,17 @@ it('sends the uploaded reference image for image_to_image', async () => {
       inputFileCount: 1,
     }),
     // 参考图现在以数组传递(多张 = 融合)。
-    [Buffer.from('source-bytes')]
+    [Buffer.from('source-bytes')],
+    undefined
   );
-  expect(tasksService.markCompleted).toHaveBeenCalledWith('task-1', 'output-2');
+  expect(tasksService.markCompleted).toHaveBeenCalledWith(
+    'task-1',
+    'output-2',
+    {
+      providerId: 'alpha',
+      model: 'gpt-image-1',
+    }
+  );
 });
 
 it('sends every reference image for multi-image fusion', async () => {
@@ -233,6 +340,7 @@ it('sends every reference image for multi-image fusion', async () => {
       mimeType: 'image/png',
       extension: 'png',
       model: 'gpt-image-1',
+      providerId: 'alpha',
     }),
   };
   const processor = new AiImageProcessor(
@@ -249,7 +357,8 @@ it('sends every reference image for multi-image fusion', async () => {
       Buffer.from('bytes-of-file-1'),
       Buffer.from('bytes-of-file-2'),
       Buffer.from('bytes-of-file-3'),
-    ]
+    ],
+    undefined
   );
 });
 

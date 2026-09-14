@@ -4,8 +4,8 @@ import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/api-client';
 import type {
   CreateTaskDto,
+  ImageGenerateModelDto,
   ImageGeneratePresetDto,
-  ImageGenerateProviderDto,
   ImageGenerateSessionDto,
   TaskResponseDto,
   TaskStatusDto,
@@ -160,20 +160,20 @@ export function useImageGenerateQuota() {
 }
 
 /**
- * 可用生图来源。来自服务端的 AI_IMAGE_PROVIDERS 配置,进程生命周期内不会变,
+ * 可用生图模型。来自服务端的 AI_IMAGE_PROVIDERS 配置,进程生命周期内不会变,
  * 所以设成永不过期:每次进生图页重新拉一遍没有意义。
  */
-export function useImageGenerateProviders() {
+export function useImageGenerateModels() {
   const { data: session, isPending: sessionPending } = useSession();
   const userId = session?.user.id;
 
   return useQuery({
-    queryKey: taskQueryKeys.imageGenerateProviders(),
+    queryKey: taskQueryKeys.imageGenerateModels(),
     queryFn: async () => {
-      const { data, error } = await api.GET('/tasks/image-generate/providers');
+      const { data, error } = await api.GET('/tasks/image-generate/models');
       if (error) throw error;
       // openapi 生成的 sizes 类型是 string[][],与手写 DTO 不重叠,经 unknown 转换。
-      return data as unknown as ImageGenerateProviderDto[];
+      return data as unknown as ImageGenerateModelDto[];
     },
     enabled: !sessionPending && !!userId,
     staleTime: Infinity,

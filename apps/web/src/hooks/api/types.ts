@@ -47,11 +47,10 @@ export interface TaskStatusDto {
   errorMessage?: string;
 }
 
-export interface ImageGenerateProviderDto {
-  id: string;
-  label: string;
+export interface ImageGenerateModelDto {
+  model: string;
   capabilities: Array<'generate' | 'edit' | 'inpaint'>;
-  /** 该来源支持的尺寸("auto" 或 "WxH"),画面比例档位由它派生。 */
+  /** 该模型支持的尺寸("auto" 或 "WxH"),画面比例档位由它派生。 */
   sizes: string[];
 }
 

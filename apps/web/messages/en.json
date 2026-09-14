@@ -895,11 +895,11 @@
     "presetDescription": "Click any template below to fill the prompt field, then keep editing.",
     "presetClose": "Close",
     "presetExampleAlt": "{title} example",
-    "providerHint": "Sources use different models, so output style and capabilities differ; results are always saved to your account files.",
-    "providerNoEditHint": "The selected source does not support image to image. Pick another source.",
-    "providerCapEdit": "image-to-image",
-    "providerCapTextOnly": "text-only",
-    "providerNoInpaintHint": "The selected source does not support region editing. Switch the model in generation settings (e.g. KMage) and try again.",
+    "modelHint": "Different models produce different styles and support different capabilities; the same model may be served by multiple sources, picked automatically with failover, and results are always saved to your account files.",
+    "modelNoEditHint": "The selected model does not support image to image. Pick another model.",
+    "modelCapEdit": "image-to-image",
+    "modelCapTextOnly": "text-only",
+    "modelNoInpaintHint": "The selected model does not support region editing. Switch to a supported model in generation settings and try again.",
     "sourcePreviewAlt": "Reference image preview",
     "uploadFailed": "Uploading the reference image failed. Please try again.",
     "referenceTooLarge": "The reference image exceeds the size limit. Pick a smaller one.",
@@ -928,7 +928,7 @@
     "quotaExceeded": "You have used today's quota. Try again tomorrow.",
     "contentRejected": "The prompt was rejected by the content policy. Try rephrasing it.",
     "notConfigured": "AI image generation is not configured. Contact the administrator.",
-    "providerUnavailable": "The selected source is unavailable. Pick another source and try again.",
+    "modelUnavailable": "The selected model is unavailable. Pick another model and try again.",
     "failed": "Generation failed. Please try again.",
     "upstreamHttpBare": "The upstream service failed. Please try again.",
     "upstreamTimeout": "The upstream request timed out. Please try again shortly.",
@@ -1608,6 +1608,21 @@
       "title": "Changelog",
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
+        {
+          "version": "v0.8.1",
+          "date": "2026-09-14",
+          "title": "AI image generation picks by model",
+          "summary": "The generation panel now lists real model names instead of gateway names; the same model can be served by multiple sources, picked automatically with failover on timeouts and transient faults, so results stay stable.",
+          "groups": [
+            {
+              "title": "Improvements",
+              "items": [
+                "The model dropdown shows real model names (e.g. gpt-image-2) instead of gateway or platform names, making selection straightforward.",
+                "When a model is served by multiple sources, routing is automatic: the same session keeps one source for consistent style, and timeouts or transient failures switch to a backup source and retry without manual intervention."
+              ]
+            }
+          ]
+        },
         {
           "version": "v0.8.0",
           "date": "2026-09-12",

@@ -22,15 +22,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tasks/image-generate/providers": {
+    "/tasks/image-generate/models": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List the configured image generation providers */
-        get: operations["TasksController_listImageGenerateProviders"];
+        /** List the configured image generation models */
+        get: operations["TasksController_listImageGenerateModels"];
         put?: never;
         post?: never;
         delete?: never;
@@ -560,14 +560,12 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
-        ImageGenerateProviderDto: {
-            /** @description 来源 id，创建任务时放进 inputConfig.providerId */
-            id: string;
-            /** @description 展示给用户的来源名称 */
-            label: string;
-            /** @description 该来源支持的能力。generate = 文生图，edit = 图生图；缺少 edit 时前端禁用参考图上传 */
-            capabilities: ("generate" | "edit")[];
-            /** @description 该来源支持的尺寸（"auto" 或 "WxH"）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size */
+        ImageGenerateModelDto: {
+            /** @description 模型名，创建任务时放进 inputConfig.model */
+            model: string;
+            /** @description 该模型支持的能力（所有服务它的来源的并集）。generate = 文生图，edit = 图生图，inpaint = 局部重绘；缺少 edit 时前端禁用参考图上传 */
+            capabilities: ("generate" | "edit" | "inpaint")[];
+            /** @description 该模型支持的尺寸（"auto" 或 "WxH"，所有服务它的来源的并集）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size */
             sizes: string[][];
         };
         ImageGenerateQuotaDto: {
@@ -755,7 +753,7 @@ export interface operations {
             };
         };
     };
-    TasksController_listImageGenerateProviders: {
+    TasksController_listImageGenerateModels: {
         parameters: {
             query?: never;
             header?: never;
@@ -764,13 +762,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Configured image generation providers */
+            /** @description Configured image generation models */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageGenerateProviderDto"][];
+                    "application/json": components["schemas"]["ImageGenerateModelDto"][];
                 };
             };
             /** @description Not authenticated */

@@ -1612,12 +1612,13 @@
           "version": "v0.8.2",
           "date": "2026-09-15",
           "title": "Same model merged across sources",
-          "summary": "When different providers use different names for the same underlying model, the model dropdown now merges them into one entry instead of showing duplicates; the actual source still fails over automatically behind the scenes.",
+          "summary": "When different providers use different names for the same underlying model, the model dropdown now merges them into one entry instead of showing duplicates; the actual source still fails over automatically behind the scenes. Also fixes a bug where a gateway returning base64 in the url field was misjudged as an unrecognizable response and failed the task.",
           "groups": [
             {
               "title": "Improvements",
               "items": [
-                "When different providers use different names for the same model, the model dropdown merges them into a single entry instead of showing duplicates."
+                "When different providers use different names for the same model, the model dropdown merges them into a single entry instead of showing duplicates.",
+                "Gateways that declare a URL response but actually return base64 are now decoded correctly, instead of failing with an \"unrecognizable\" error."
               ]
             }
           ]

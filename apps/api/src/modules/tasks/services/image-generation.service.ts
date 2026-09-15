@@ -325,14 +325,14 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       this.logger.warn(
         `AI image generation response could not be decoded: ${String(error)}`
       );
-      // 图没取回来(网关抖动)可以重试,透出取回失败的真实原因;
-      // 响应结构不认识是确定性问题,重试只会再烧一次钱。
+      // 取回失败(网关抖动)与响应结构不认识都允许换源重试:同一模型在 kmage 解码
+      // 失败,换到 lupi 可能就正常。图已经在上游生成,换来源完全有机会拿到可识别的响应。
       throw new ImageGenerationError(
         ErrorCodes.AI_IMAGE_GENERATION_FAILED,
         error instanceof GeneratedImageDownloadError
           ? sanitizeImageError(error.message)
           : 'Unexpected response format from the provider',
-        error instanceof GeneratedImageDownloadError
+        true
       );
     }
   }

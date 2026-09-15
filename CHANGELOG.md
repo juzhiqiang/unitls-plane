@@ -5,6 +5,7 @@
 ### AI 生图
 
 - 模型项新增可选 `displayAs` 字段：不同来源（网关）对同一底层模型用不同上游名时（如某网关把 gpt-image-2 改名成 wan2.7-image），填 `displayAs` 后前端下拉按它去重显示、路由层按它归组做粘性随机与失败换源。省略时回退到 `name`（老配置零改动）。产物 EXIF 与 `output_meta.model` 仍记真实上游名，`output_meta.displayModel` 记归并键供同会话粘性路由匹配。
+- 修复部分网关（如 kmage）声明 `responseFormat=url` 却把 base64 塞进 `data[0].url` 返回，导致响应被当作不可识别、任务直接失败而不换源重试的问题：`bufferFromGeneratedImagePayload` 现在能识别 `url` 字段里的 data URL 与裸 base64 并就地解码；响应结构不认识改为可重试，换下一个同模型来源继续尝试。
 - 修复任务处理器 `workerConcurrency` 的 `import` 错放在文件末尾、经 tsc 编译为 CJS 后 `require` 落在装饰器求值之后导致 `ReferenceError: Cannot access 'worker_concurrency_1' before initialization`、API 容器启动即崩溃的问题（本地 dev 走 ESM 不暴露，仅离线镜像复现）。
 
 ## 2026-09-14

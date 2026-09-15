@@ -46,21 +46,40 @@ export async function bufferFromGeneratedImagePayload(
   }
 
   const url = data?.url;
-  if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
-    let response: Response;
-    try {
-      response = await fetchImpl(url);
-    } catch (error) {
-      throw new GeneratedImageDownloadError(
-        `Failed to download generated image: ${String(error instanceof Error ? error.message : error)}`
-      );
+  if (typeof url === 'string' && url.trim()) {
+    // 少数网关(如 kmage)声明了 responseFormat=url,却把 base64 字符串塞进
+    // data[0].url 字段返回(裸 base64 或带 data: 前缀),而不是一个可下载的 URL。
+    // 这种情况直接就地解码,不要再去 fetch 一个根本不是 URL 的值。
+    if (/^data:[^,]+,/.test(url)) {
+      return Buffer.from(url.replace(/^data:[^,]+,/, ''), 'base64');
     }
-    if (!response.ok) {
-      throw new GeneratedImageDownloadError(
-        `Failed to download generated image: ${response.status}`
-      );
+    // 裸 base64:不是 URL(无 https?:// 前缀),但能解出非空字节就按 base64 处理。
+    // 用 try/catch 兜底:解不出就继续往下走 URL 下载/missing 分支,不在这里硬崩。
+    if (!/^https?:\/\//i.test(url)) {
+      try {
+        const decoded = Buffer.from(url, 'base64');
+        if (decoded.length > 0) return decoded;
+      } catch {
+        // 不是合法 base64,落到下面的 URL 下载尝试(会因非 URL 失败)或 missing。
+      }
     }
-    return Buffer.from(await response.arrayBuffer());
+
+    if (/^https?:\/\//i.test(url)) {
+      let response: Response;
+      try {
+        response = await fetchImpl(url);
+      } catch (error) {
+        throw new GeneratedImageDownloadError(
+          `Failed to download generated image: ${String(error instanceof Error ? error.message : error)}`
+        );
+      }
+      if (!response.ok) {
+        throw new GeneratedImageDownloadError(
+          `Failed to download generated image: ${response.status}`
+        );
+      }
+      return Buffer.from(await response.arrayBuffer());
+    }
   }
 
   throw new Error('OpenAI-compatible image response missing generated image');

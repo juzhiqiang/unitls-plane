@@ -497,7 +497,7 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error.retryable).toBe(true);
   });
 
-  it('maps an undecodable success payload to a readable error', async () => {
+  it('maps an undecodable success payload to a retryable error', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ data: [{}] }));
     const provider = new OpenAiCompatibleImageGenerationProvider({
       baseUrl: 'https://api.test',
@@ -511,7 +511,8 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
     expect(error).toBeInstanceOf(ImageGenerationError);
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_GENERATION_FAILED);
     expect(error.message).toBe('Unexpected response format from the provider');
-    expect(error.retryable).toBe(false);
+    // 响应结构不认识也允许换源:同一模型在 kmage 解码失败,换 lupi 可能正常。
+    expect(error.retryable).toBe(true);
   });
 
   const editConfig = {

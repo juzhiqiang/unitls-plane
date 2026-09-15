@@ -88,4 +88,26 @@ describe('bufferFromGeneratedImagePayload', () => {
       )
     ).rejects.toThrow('missing generated image');
   });
+
+  it('decodes a data-url stuffed into the url field by a non-compliant gateway', async () => {
+    const payload = {
+      data: [{ url: 'data:image/png;base64,aGVsbG8=' }],
+    };
+    const buffer = await bufferFromGeneratedImagePayload(
+      payload,
+      fetchImpl as unknown as typeof fetch
+    );
+    expect(buffer.toString('utf8')).toBe('hello');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('decodes a bare base64 stuffed into the url field by a non-compliant gateway', async () => {
+    const payload = { data: [{ url: 'aGVsbG8=' }] };
+    const buffer = await bufferFromGeneratedImagePayload(
+      payload,
+      fetchImpl as unknown as typeof fetch
+    );
+    expect(buffer.toString('utf8')).toBe('hello');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

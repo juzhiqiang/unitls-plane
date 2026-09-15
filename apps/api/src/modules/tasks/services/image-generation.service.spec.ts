@@ -1014,7 +1014,8 @@ describe('ImageGenerationService (multi provider registry)', () => {
     id: string,
     capabilities: Array<'generate' | 'edit'> = ['generate', 'edit'],
     model = 'gpt-image-1',
-    sizes: string[] = ['1024x1024', '1024x1536', '1536x1024']
+    sizes: string[] = ['1024x1024', '1024x1536', '1536x1024'],
+    displayAs?: string
   ) {
     return {
       generate: vi.fn(async () => Buffer.from(id)),
@@ -1023,8 +1024,10 @@ describe('ImageGenerationService (multi provider registry)', () => {
         label: `${id} label`,
         capabilities,
         sizes,
+        ...(displayAs ? { displayAs } : {}),
       },
       model,
+      ...(displayAs ? { displayAs } : {}),
     };
   }
 
@@ -1192,5 +1195,89 @@ describe('ImageGenerationService (multi provider registry)', () => {
       .generate(config)
       .catch(caught => caught)) as ImageGenerationError;
     expect(error.code).toBe(ErrorCodes.AI_IMAGE_NOT_CONFIGURED);
+  });
+
+  it('merges models that share a displayAs across providers into one entry', () => {
+    // 两个来源用了不同的上游名(wan2.7-image / gpt-image-2),但都声明
+    // displayAs=gpt-image-2 → 前端下拉只剩一个 gpt-image-2,capabilities/sizes 取并集。
+    const service = new ImageGenerationService({
+      providers: [
+        stub(
+          'wan',
+          ['generate', 'edit'],
+          'wan2.7-image',
+          ['1024x1024', '1024x1536'],
+          'gpt-image-2'
+        ),
+        stub(
+          'kmage',
+          ['generate', 'edit', 'inpaint'],
+          'gpt-image-2',
+          ['1024x1024', '1536x1024'],
+          'gpt-image-2'
+        ),
+      ],
+    });
+
+    const listed = service.listModels();
+    expect(listed).toEqual([
+      {
+        model: 'gpt-image-2',
+        capabilities: ['generate', 'edit', 'inpaint'],
+        sizes: ['1024x1024', '1024x1536', '1536x1024'],
+      },
+    ]);
+  });
+
+  it('routes by displayAs and falls across providers under the same key', async () => {
+    // 提交 model=gpt-image-2(归并键),两个来源都声明了它;第一个失败(retryable)
+    // 时自动换到第二个,产物 EXIF 记真实上游名。
+    const wan = stub(
+      'wan',
+      ['generate', 'edit'],
+      'wan2.7-image',
+      ['1024x1024'],
+      'gpt-image-2'
+    );
+    wan.generate.mockRejectedValueOnce(
+      new ImageGenerationError(ErrorCodes.AI_IMAGE_GENERATION_FAILED, 'boom', true)
+    );
+    const kmage = stub(
+      'kmage',
+      ['generate', 'edit'],
+      'gpt-image-2',
+      ['1024x1024'],
+      'gpt-image-2'
+    );
+    const service = new ImageGenerationService({
+      providers: [wan, kmage],
+      random: () => 0,
+    });
+
+    const result = await service.generate({ ...config, model: 'gpt-image-2' });
+
+    expect(kmage.generate).toHaveBeenCalled();
+    // EXIF / output_meta.model 是真实上游名,不是归并键。
+    expect(result.model).toBe('gpt-image-2');
+    expect(result.displayModel).toBe('gpt-image-2');
+  });
+
+  it('keeps the real upstream name in EXIF model even when displayAs differs', async () => {
+    const wan = stub(
+      'wan',
+      ['generate', 'edit'],
+      'wan2.7-image',
+      ['1024x1024'],
+      'gpt-image-2'
+    );
+    const service = new ImageGenerationService({
+      providers: [wan],
+      random: () => 0,
+    });
+
+    const result = await service.generate({ ...config, model: 'gpt-image-2' });
+
+    expect(result.model).toBe('wan2.7-image');
+    expect(result.displayModel).toBe('gpt-image-2');
   });
 });

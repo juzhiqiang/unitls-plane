@@ -246,7 +246,7 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   默认 / `generations_ref`）、`refImagesField`（默认
   `reference_images`）、`refImageEncoding`（`data_url` 默认 /
   `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
-  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。来源内模型名不区分大小写去重；跨来源同名模型合法，正是多来源容错路由的基础。
+  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。来源内模型名不区分大小写去重；跨来源同名模型合法，正是多来源容错路由的基础。模型项可选 `displayAs`（用户可见名 + 跨来源归并键）：不同来源对同一底层模型用不同上游名时填它，前端下拉按它去重、路由层按它归组做粘性随机与失败换源，省略时回退到 `name`，EXIF 与 `output_meta.model` 仍记真实 `name`，`output_meta.displayModel` 记归并键供粘性路由匹配。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到旧的单来源变量 `AI_IMAGE_BASE_URL` / `AI_IMAGE_API_KEY` /
   `AI_IMAGE_MODEL` / `AI_IMAGE_RESPONSE_FORMAT` / `AI_IMAGE_LABEL`，等价于一个 `id: default`
   的单模型 multipart 来源，现网部署零改动。

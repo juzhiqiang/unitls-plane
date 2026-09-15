@@ -19,6 +19,7 @@ import {
   desc,
   asc,
   and,
+  or,
   inArray,
   isNotNull,
   sql,
@@ -524,8 +525,15 @@ export class TasksService {
   async markCompleted(
     id: string,
     outputFileId: string,
-    /** 服务端输出事实(目前只有生图写入:实际出图的来源与模型),供粘性路由与产物追溯。 */
-    outputMeta?: { providerId: string; model: string }
+    /**
+     * 服务端输出事实(目前只有生图写入),供粘性路由与产物追溯。
+     * model = 真实上游名,displayModel = 归并键(displayAs ?? name)。
+     */
+    outputMeta?: {
+      providerId: string;
+      model: string;
+      displayModel?: string;
+    }
   ): Promise<void> {
     const rows = await db
       .update(tasks)
@@ -549,6 +557,9 @@ export class TasksService {
    *
    * 没有记录(新会话、该模型首次使用、配置变更导致来源切换)返回 null,
    * 调用方自然落回随机首发。会话内任务上限 200,复合索引覆盖,无需额外索引。
+   *
+   * model 参数是归并键(displayAs ?? name):output_meta.model 存的是真实上游名,
+   * 但路由键需要跨来源归并,所以这里同时匹配归并键与真实名,任一命中即视作同款模型。
    */
   async findLastImageGenerateProviderId(
     userId: string,
@@ -566,7 +577,10 @@ export class TasksService {
           eq(tasks.sessionId, sessionId),
           eq(tasks.type, 'image_generate'),
           eq(tasks.status, 'completed'),
-          sql`${tasks.outputMeta} ->> 'model' = ${model}`,
+          or(
+            sql`${tasks.outputMeta} ->> 'model' = ${model}`,
+            sql`${tasks.outputMeta} ->> 'displayModel' = ${model}`
+          ),
           sql`${tasks.outputMeta} ->> 'providerId' is not null`
         )
       )

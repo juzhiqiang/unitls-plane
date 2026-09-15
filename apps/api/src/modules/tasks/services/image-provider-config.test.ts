@@ -523,3 +523,40 @@ it('never echoes the api key into the validation error', () => {
   expect(error).not.toBeNull();
   expect(error?.message).not.toContain(secret);
 });
+
+it('accepts an optional displayAs on a model and echoes it through', () => {
+  const [provider] = loadImageProviderConfigs(
+    env({
+      AI_IMAGE_PROVIDERS: JSON.stringify([
+        {
+          id: 'wan-gw',
+          label: 'wan 网关',
+          baseUrl: 'https://api.wan',
+          models: [{ name: 'wan2.7-image', displayAs: 'gpt-image-2' }],
+        },
+      ]),
+    })
+  );
+
+  expect(provider?.models[0]).toMatchObject({
+    name: 'wan2.7-image',
+    displayAs: 'gpt-image-2',
+  });
+});
+
+it('omits displayAs when not declared (legacy config unaffected)', () => {
+  const [provider] = loadImageProviderConfigs(
+    env({
+      AI_IMAGE_PROVIDERS: JSON.stringify([
+        {
+          id: 'openai',
+          label: 'OpenAI',
+          baseUrl: 'https://api.openai.com',
+          models: [{ name: 'gpt-image-1' }],
+        },
+      ]),
+    })
+  );
+
+  expect(provider?.models[0].displayAs).toBeUndefined();
+});

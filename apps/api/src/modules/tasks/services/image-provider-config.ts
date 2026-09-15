@@ -95,6 +95,18 @@ export const imageProviderModelSchema = z
   .object({
     /** 模型名即上游 API 的 model 参数原文,可含空格与大小写(如 "KMage V2")。 */
     name: z.string().trim().min(1).max(64),
+    /**
+     * 用户可见名 + 跨来源归并键。
+     *
+     * 不同来源(网关)对同一底层模型可能用不同的上游名(例如某网关把 gpt-image-2
+     * 改名成 wan2.7-image)。填了 displayAs 后,前端下拉按它去重显示,路由层也按它
+     * 归组做粘性随机与失败换源 —— 等价于把这些上游名视作同一个模型。
+     * 省略时回退到 name(老配置零改动);EXIF 与 output_meta 仍记真实 name,
+     * 产物追溯不会被归并名误导。
+     *
+     * 不校验「displayAs 是否与别处的 name 重名」:那是合法用法(正是本字段的目的)。
+     */
+    displayAs: z.string().trim().min(1).max(64).optional(),
     /** 能力声明同旧来源级语义:inpaint 不进默认值,支持的模型显式声明。 */
     capabilities: z
       .array(imageProviderCapabilityEnum)

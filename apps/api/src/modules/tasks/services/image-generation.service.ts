@@ -114,6 +114,8 @@ export interface ImageProviderDescriptor {
   capabilities: ImageProviderCapability[];
   /** 该来源(模型)支持的尺寸,路由时做交叉校验。 */
   sizes: string[];
+  /** 可选归并键,测试注入口用来模拟 displayAs;真实路径从 config.models 解析。 */
+  displayAs?: string;
 }
 
 /** 下发给前端的模型信息。只有这三个字段可以出网:来源的 baseUrl/apiKey/label 永不外泄。 */
@@ -122,6 +124,17 @@ export interface ImageModelDescriptor {
   capabilities: ImageProviderCapability[];
   /** 所有服务该模型的来源的尺寸并集,前端据此派生画面比例档位。 */
   sizes: string[];
+}
+
+/**
+ * 解析一个 (来源, 模型) 条目的归并键。
+ *
+ * 有 displayAs 时用它(跨来源归并同款模型);否则回退到 name(老配置与同名多来源)。
+ * 这把「用户可见名 / 粘性路由键」与「发给上游的 model 参数」解耦:EXIF 与 output_meta
+ * 仍记真实 name,产物追溯不受归并影响。
+ */
+function resolveDisplayKey(model: ImageProviderModelConfig): string {
+  return model.displayAs ?? model.name;
 }
 
 export interface ImageGenerationProvider {
@@ -134,8 +147,8 @@ export interface ImageGenerationProvider {
     references?: Buffer[]
   ): Promise<Buffer>;
   readonly descriptor?: ImageProviderDescriptor;
-  /** 实际请求用的模型,写进产物 EXIF。 */
   readonly model?: string;
+  readonly displayAs?: string;
 }
 
 export interface OpenAiCompatibleImageGenerationProviderOptions {
@@ -147,6 +160,8 @@ export interface OpenAiCompatibleImageGenerationProviderOptions {
   responseFormat?: string;
   capabilities?: ImageProviderCapability[];
   sizes?: string[];
+  /** 归并键,从 config.models[].displayAs 透传;路由层按它归组,EXIF 仍记 model。 */
+  displayAs?: string;
   editTransport?: ImageProviderEditTransport;
   refImagesField?: string;
   refImageEncoding?: ImageProviderRefEncoding;
@@ -172,6 +187,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
   private readonly editUrl: string;
   private readonly apiKey?: string;
   readonly model: string;
+  readonly displayAs?: string;
   readonly descriptor: ImageProviderDescriptor;
   private readonly responseFormat: string;
   private readonly editTransport: ImageProviderEditTransport;
@@ -190,6 +206,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     responseFormat = process.env.AI_IMAGE_RESPONSE_FORMAT || 'b64_json',
     capabilities = ['generate', 'edit'],
     sizes = [...DEFAULT_AI_IMAGE_SIZES],
+    displayAs,
     editTransport = 'multipart',
     refImagesField = 'reference_images',
     refImageEncoding = 'data_url',
@@ -204,7 +221,14 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     this.editUrl = normalizeOpenAiCompatibleImageEditUrl(baseUrl);
     this.apiKey = apiKey;
     this.model = model;
-    this.descriptor = { id, label: label ?? id, capabilities, sizes };
+    this.displayAs = displayAs;
+    this.descriptor = {
+      id,
+      label: label ?? id,
+      capabilities,
+      sizes,
+      ...(displayAs ? { displayAs } : {}),
+    };
     this.responseFormat = responseFormat;
     this.editTransport = editTransport;
     this.refImagesField = refImagesField;
@@ -231,6 +255,7 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
       model: model.name,
       capabilities: model.capabilities,
       sizes: model.sizes,
+      ...(model.displayAs ? { displayAs: model.displayAs } : {}),
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
     });
   }
@@ -616,9 +641,12 @@ export interface GeneratedImage {
   buffer: Buffer;
   mimeType: string;
   extension: string;
-  /** 实际出图的来源与模型,供 processor 写入产物标识与粘性路由记录。 */
+  /** 实际出图的来源 id,供 processor 写入产物标识与粘性路由记录。 */
   providerId: string;
+  /** 真实上游模型名(写 EXIF 与 output_meta.model),不经过 displayAs 归并。 */
   model: string;
+  /** 归并键(displayAs ?? name),写 output_meta.displayModel 供粘性路由匹配。 */
+  displayModel: string;
 }
 
 /** mode → 该模式要求模型具备的能力。 */
@@ -650,7 +678,7 @@ export class ImageGenerationService {
   private readonly logger = new Logger(ImageGenerationService.name);
   /** 插入顺序 = 配置顺序(来源序 × 模型序)。 */
   private readonly entries: RoutingEntry[] = [];
-  /** key = 模型名;同模型多来源是容错路由的基础。 */
+  /** key = 归并键(displayAs ?? name);同款模型跨来源归一组做容错路由。 */
   private readonly byModel = new Map<string, RoutingEntry[]>();
   /** key = 小写来源 id;历史任务 providerId 的解析入口。 */
   private readonly byProviderId = new Map<string, RoutingEntry[]>();
@@ -700,9 +728,9 @@ export class ImageGenerationService {
     this.byModel.clear();
     this.byProviderId.clear();
     for (const entry of this.entries) {
-      const modelList = this.byModel.get(entry.model.name) ?? [];
+      const modelList = this.byModel.get(resolveDisplayKey(entry.model)) ?? [];
       modelList.push(entry);
-      this.byModel.set(entry.model.name, modelList);
+      this.byModel.set(resolveDisplayKey(entry.model), modelList);
 
       const providerKey = entry.providerId.toLowerCase();
       const providerList = this.byProviderId.get(providerKey) ?? [];
@@ -714,10 +742,14 @@ export class ImageGenerationService {
   /** 测试注入口:stub provider 带 model 字段即成一条 entry。 */
   private register(provider: ImageGenerationProvider): void {
     const id = provider.descriptor?.id ?? LEGACY_PROVIDER_ID;
+    const name = provider.model ?? DEFAULT_AI_IMAGE_MODEL;
     this.entries.push({
       providerId: id,
       model: {
-        name: provider.model ?? DEFAULT_AI_IMAGE_MODEL,
+        name,
+        ...(provider.descriptor?.displayAs
+          ? { displayAs: provider.descriptor.displayAs }
+          : {}),
         capabilities: provider.descriptor?.capabilities ?? ['generate', 'edit'],
         sizes: provider.descriptor?.sizes ?? [...DEFAULT_AI_IMAGE_SIZES],
       },
@@ -733,12 +765,13 @@ export class ImageGenerationService {
   /**
    * 模型视角的可用列表,供 GET /tasks/image-generate/models 使用。
    *
-   * 模型按配置序首次出现去重;capabilities 与 sizes 取所有服务该模型的来源的
-   * 并集 —— 任一来源支持 edit,前端参考图入口就可用,路由会挑到支持它的来源。
+   * 模型按归并键(displayAs ?? name)首次出现去重;capabilities 与 sizes 取所有
+   * 服务该模型(归并键相同)的来源的并集 —— 任一来源支持 edit,前端参考图入口就
+   * 可用,路由会挑到支持它的来源。下发的 model 字段是归并键,客户端提交时原样回传。
    */
   listModels(): ImageModelDescriptor[] {
     const models: ImageModelDescriptor[] = [];
-    for (const [name, entries] of this.byModel) {
+    for (const [displayKey, entries] of this.byModel) {
       const capabilities = new Set<ImageProviderCapability>();
       const sizes = new Set<string>();
       for (const entry of entries) {
@@ -748,7 +781,7 @@ export class ImageGenerationService {
         for (const size of entry.model.sizes) sizes.add(size);
       }
       models.push({
-        model: name,
+        model: displayKey,
         capabilities: [...capabilities],
         sizes: [...sizes],
       });
@@ -787,7 +820,6 @@ export class ImageGenerationService {
     } else {
       candidates = [first];
     }
-
     const required = REQUIRED_CAPABILITY[config.mode];
     const filtered = candidates.filter(
       entry =>
@@ -851,6 +883,7 @@ export class ImageGenerationService {
           extension: 'png',
           providerId: entry.providerId,
           model: entry.model.name,
+          displayModel: resolveDisplayKey(entry.model),
         };
       } catch (error) {
         lastError = error;

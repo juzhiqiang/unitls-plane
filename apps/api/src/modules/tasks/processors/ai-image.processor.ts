@@ -222,9 +222,11 @@ export class AiImageProcessor extends WorkerHost {
 
     // 实际出图的来源与模型写入 output_meta:同会话后续任务靠它粘住来源,
     // 也是产物追溯的服务端事实(与用户提交的 inputConfig 分开存)。
+    // model = 真实上游名(产物追溯),displayModel = 归并键(粘性路由匹配)。
     await this.tasksService.markCompleted(task.id, outputFile.id, {
       providerId: generated.providerId,
       model: generated.model,
+      displayModel: generated.displayModel,
     });
     await job.updateProgress(100);
     return { outputFileId: outputFile.id };

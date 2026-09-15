@@ -1609,6 +1609,20 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.8.2",
+          "date": "2026-09-15",
+          "title": "Same model merged across sources",
+          "summary": "When different providers use different names for the same underlying model, the model dropdown now merges them into one entry instead of showing duplicates; the actual source still fails over automatically behind the scenes.",
+          "groups": [
+            {
+              "title": "Improvements",
+              "items": [
+                "When different providers use different names for the same model, the model dropdown merges them into a single entry instead of showing duplicates."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.8.1",
           "date": "2026-09-14",
           "title": "AI image generation picks by model",

@@ -469,3 +469,16 @@ docker compose down -v         # 停止并清除数据
 - Drizzle ORM 一等公民支持
 - 内建 OAuth、邮箱验证、2FA、组织、impersonation
 - NestJS/Next.js 双端友好
+
+### Phase 9: PDF 转 CAD
+
+> 详细任务文件见 `task/phase9/`
+
+- [ ] 00 - CAD 公共契约（必须首先完成）
+- [ ] 01 - PDF CAD 核心解析
+- [ ] 02 - DXF Writer 与 OCR
+- [ ] 03 - API、任务队列与数据库接入
+- [ ] 04 - Web PDF 转 CAD 工具
+- [ ] 05 - 文档、部署与最终验证
+
+**首版范围：** 工程级 DXF；DWG 保留 writer 适配边界并返回明确的暂不支持错误。

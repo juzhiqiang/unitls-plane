@@ -3,7 +3,7 @@
   "version": "0.8.2",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "bun ../../scripts/clean-pwa-artifacts.ts && next build",
     "dev": "next dev",
     "lint": "next lint",
     "lint:fix": "next lint --fix",

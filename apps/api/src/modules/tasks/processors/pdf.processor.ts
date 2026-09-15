@@ -19,6 +19,7 @@ import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 import { hasExhaustedAttempts, shouldRecordFailure } from './attempt-outcome';
 import { getTaskOutputOwner } from './task-output-owner';
+import { workerConcurrency } from '../../../config/worker-concurrency';
 
 type MupdfModule = typeof import('mupdf');
 const nativeImport = new Function('specifier', 'return import(specifier)') as (
@@ -896,4 +897,3 @@ export class PdfProcessor extends WorkerHost {
     this.logger.warn(`Job ${jobId} stalled — will be retried by BullMQ`);
   }
 }
-import { workerConcurrency } from '../../../config/worker-concurrency';

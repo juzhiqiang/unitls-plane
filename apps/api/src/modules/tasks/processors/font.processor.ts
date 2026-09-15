@@ -6,6 +6,7 @@ import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 import { hasExhaustedAttempts, shouldRecordFailure } from './attempt-outcome';
 import { getTaskOutputOwner } from './task-output-owner';
+import { workerConcurrency } from '../../../config/worker-concurrency';
 
 @Processor('font-queue', {
   concurrency: workerConcurrency('FONT_WORKER_CONCURRENCY', 2),
@@ -126,4 +127,3 @@ export class FontProcessor extends WorkerHost {
     this.logger.warn(`Job ${jobId} stalled — will be retried by BullMQ`);
   }
 }
-import { workerConcurrency } from '../../../config/worker-concurrency';

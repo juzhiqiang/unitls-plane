@@ -12,6 +12,7 @@ import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
 import { hasExhaustedAttempts, shouldRecordFailure } from './attempt-outcome';
 import { getTaskOutputOwner } from './task-output-owner';
+import { workerConcurrency } from '../../../config/worker-concurrency';
 
 function getMimeType(format?: string): string {
   switch (format) {
@@ -309,4 +310,3 @@ export class ImageProcessor extends WorkerHost {
     this.logger.warn(`Job ${jobId} stalled — will be retried by BullMQ`);
   }
 }
-import { workerConcurrency } from '../../../config/worker-concurrency';

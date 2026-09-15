@@ -11,7 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./test/setup.ts'],
     // e2e 下是 Playwright 用例(@playwright/test),不应被 vitest 收集;
     // 在默认排除项之外追加 e2e/**。
     exclude: [...configDefaults.exclude, 'e2e/**'],

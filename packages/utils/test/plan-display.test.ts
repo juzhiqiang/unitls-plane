@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'bun:test';
+import { PLAN_DISPLAY_ORDER, getPlanDisplayLimits } from '../src/plan-display';
+
+describe('plan display limits', () => {
+  it('returns every entitlement plan in a stable display order', () => {
+    const plans = getPlanDisplayLimits();
+
+    expect(plans.map(p => p.plan)).toEqual(PLAN_DISPLAY_ORDER);
+    expect(PLAN_DISPLAY_ORDER).toEqual([
+      'free',
+      'signed_in',
+      'beta_preview',
+      'pro_preview',
+      'pro',
+      'team',
+      'private',
+    ]);
+  });
+
+  it('exposes the upload file size limit for each plan', () => {
+    const plans = getPlanDisplayLimits();
+    const byPlan = Object.fromEntries(plans.map(p => [p.plan, p]));
+
+    expect(byPlan.free.uploadMaxFileSize).toBe(10 * 1024 * 1024);
+    expect(byPlan.signed_in.uploadMaxFileSize).toBe(50 * 1024 * 1024);
+    // 公测先锋:单文件 80MB,介于登录用户与专业版之间。
+    expect(byPlan.beta_preview.uploadMaxFileSize).toBe(80 * 1024 * 1024);
+    expect(byPlan.pro_preview.uploadMaxFileSize).toBe(250 * 1024 * 1024);
+    expect(byPlan.pro.uploadMaxFileSize).toBe(100 * 1024 * 1024);
+    expect(byPlan.team.uploadMaxFileSize).toBe(150 * 1024 * 1024);
+    expect(byPlan.private.uploadMaxFileSize).toBe(250 * 1024 * 1024);
+  });
+
+  it('exposes the AI image generation daily quota for each plan', () => {
+    const plans = getPlanDisplayLimits();
+    const byPlan = Object.fromEntries(plans.map(p => [p.plan, p]));
+
+    expect(byPlan.free.imageGenerateDailyCount).toBe(0);
+    expect(byPlan.signed_in.imageGenerateDailyCount).toBe(10);
+    // 公测先锋:每日生图 30 次。
+    expect(byPlan.beta_preview.imageGenerateDailyCount).toBe(30);
+    expect(byPlan.pro_preview.imageGenerateDailyCount).toBe(100);
+    expect(byPlan.pro.imageGenerateDailyCount).toBe(50);
+    expect(byPlan.team.imageGenerateDailyCount).toBe(80);
+    expect(byPlan.private.imageGenerateDailyCount).toBe(100);
+  });
+
+  it('marks the public beta top-tier plan for highlight', () => {
+    const plans = getPlanDisplayLimits();
+    const preview = plans.find(p => p.plan === 'pro_preview');
+
+    expect(preview?.isPublicBetaTopTier).toBe(true);
+    expect(plans.filter(p => p.isPublicBetaTopTier).length).toBe(1);
+  });
+});

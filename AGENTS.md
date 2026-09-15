@@ -44,6 +44,9 @@ Utils-Plane 是一个全栈文件处理工具平台，支持图片压缩/转换/
   `CHANGELOG.md`）只记录用户可感知的新功能、体验改进和问题修复；仅影响开发环境的行为（本地 dev
   server、构建脚本、端口、测试与工具链调整等）不写进更新日志。
 - 本地优先工具优先在浏览器完成处理；服务端任务才进入文件上传、任务队列和登录/存储流程。
+- 测试文件统一放在各子项与 `src` 同级的 `test/` 目录下，内部镜像 `src` 的子目录结构（如
+  `apps/api/src/modules/files/files.service.ts` 对应 `apps/api/test/modules/files/files.service.test.ts`）；
+  不放在 `src` 内部，也不再使用 `__tests__/` 子目录。Web 端到端用例保留在 `apps/web/e2e/`。
 
 ### 文件命名规范
 

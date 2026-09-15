@@ -13,7 +13,7 @@
     "lint": "turbo lint",
     "lint:fix": "turbo lint:fix",
     "test": "bun run test:packages && bun run test:api && bun run test:web",
-    "test:packages": "bun test packages/auth/src packages/db/src packages/utils/src packages/validators/src packages/api-client/src",
+    "test:packages": "bun test packages/auth/test packages/db/test packages/utils/test packages/validators/test",
     "test:api": "bun --cwd apps/api test",
     "test:web": "bun --cwd apps/web test -- --exclude \"e2e/**\"",
     "test:e2e": "playwright test",

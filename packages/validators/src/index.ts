@@ -1,3 +1,4 @@
+export * from './cad';
 export * from './files';
 export * from './id-photo';
 export * from './image-generate';

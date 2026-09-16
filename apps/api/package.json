@@ -23,6 +23,7 @@
     "@types/node": "^25.9.0",
     "@types/turndown": "^5.0.6",
     "bun-types": "^1.3.14",
+    "dxf-parser": "1.1.2",
     "nodemon": "^3.1.14",
     "typescript": "^6.0.3"
   },

@@ -128,7 +128,8 @@
                 "pdf_metadata",
                 "pdf_rearrange",
                 "pdf_from_document",
-                "image_generate"
+                "image_generate",
+                "pdf_to_cad"
               ]
             }
           }
@@ -1339,7 +1340,8 @@
               "pdf_metadata",
               "pdf_rearrange",
               "pdf_from_document",
-              "image_generate"
+              "image_generate",
+              "pdf_to_cad"
             ]
           },
           "inputFileIds": {
@@ -1389,7 +1391,8 @@
               "pdf_metadata",
               "pdf_rearrange",
               "pdf_from_document",
-              "image_generate"
+              "image_generate",
+              "pdf_to_cad"
             ]
           },
           "status": {
@@ -1424,6 +1427,10 @@
           },
           "errorMessage": {
             "type": "string"
+          },
+          "outputMeta": {
+            "type": "object",
+            "description": "服务端输出事实。生图任务记录实际来源与模型;PDF 转 CAD 任务记录页数、实体数、OCR 数、单位、降级原因与转换器版本(PdfToCadConversionMeta)"
           },
           "createdAt": {
             "format": "date-time",

@@ -58,6 +58,10 @@ describe('TaskQueryDto', () => {
     expect(TASK_TYPES).toContain('pdf_from_document');
   });
 
+  it('includes the PDF-to-CAD task type in the API boundary', () => {
+    expect(TASK_TYPES).toContain('pdf_to_cad');
+  });
+
   it('includes the AI image generation task type in the API boundary', () => {
     expect(TASK_TYPES).toContain('image_generate');
   });

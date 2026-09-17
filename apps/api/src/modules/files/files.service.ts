@@ -51,6 +51,8 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
   'application/pdf',
   'application/zip',
+  // PDF 转 CAD 产物(DXF 文本);带底图资源时是 application/zip。
+  'application/dxf',
   'font/ttf',
   'font/otf',
   'font/woff',

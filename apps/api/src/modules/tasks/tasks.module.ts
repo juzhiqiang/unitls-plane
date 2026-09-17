@@ -13,6 +13,8 @@ import { CleanupScheduler } from './processors/cleanup.scheduler';
 import { ImageService } from './services/image.service';
 import { IdPhotoService } from './services/id-photo.service';
 import { PdfService } from './services/pdf.service';
+import { PdfCadExtractorService } from './services/cad/pdf-cad-extractor.service';
+import { PdfToCadService } from './services/cad/pdf-to-cad.service';
 import { FontService } from './services/font.service';
 import { PortraitSegmentationService } from './services/portrait-segmentation.service';
 import { ImageGenerationService } from './services/image-generation.service';
@@ -44,6 +46,8 @@ import { TaskJobStateRepository } from './task-job-state.repository';
     ImageGenerationService,
     ImageGeneratePresetsService,
     PdfService,
+    PdfCadExtractorService,
+    PdfToCadService,
     FontService,
     ImageProcessor,
     PdfProcessor,

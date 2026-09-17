@@ -1,7 +1,12 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import * as archiver from 'archiver';
+import {
+  PDF_TO_CAD_MAX_FILE_SIZE,
+  PDF_TO_CAD_MAX_PAGES,
+  pdfToCadTaskConfigSchema,
+} from '@utils-plane/validators';
 import {
   PdfService,
   type SplitOptions,
@@ -15,9 +20,18 @@ import {
   type RearrangeOptions,
   type DocumentToPdfOptions,
 } from '../services/pdf.service';
+import {
+  PdfToCadService,
+  type ConversionStage,
+} from '../services/cad/pdf-to-cad.service';
+import { CadError, isCadError } from '../services/cad/types';
 import { FilesService } from '../../files/files.service';
 import { TasksService } from '../tasks.service';
-import { hasExhaustedAttempts, shouldRecordFailure } from './attempt-outcome';
+import {
+  hasExhaustedAttempts,
+  isRetryableError,
+  shouldRecordFailure,
+} from './attempt-outcome';
 import { getTaskOutputOwner } from './task-output-owner';
 import { workerConcurrency } from '../../../config/worker-concurrency';
 
@@ -42,8 +56,33 @@ function streamToBuffer(archive: archiver.Archiver): Promise<Buffer> {
   });
 }
 
+// archiver 运行时是 v8(ESM,只导出 ZipArchive 类),@types/archiver 仍是 v7 的 create() 形状:
+// archiver.create 在运行时是 undefined,拆分多份 / 多页转图片的 ZIP 分支之前一直会抛
+// TypeError。与 account-export.service、cad-writer 相同的取法。
+const ZipArchive = (
+  archiver as unknown as {
+    ZipArchive: new (options: { zlib: { level: number } }) => archiver.Archiver;
+  }
+).ZipArchive;
+
+function createZipArchive(): archiver.Archiver {
+  return new ZipArchive({ zlib: { level: 6 } });
+}
+
 const MAX_TOTAL_PAGES = 500;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+/** CAD 契约错误保留自己的错误码,其余一律归为 PDF_PROCESSING_FAILED。 */
+function failureCodeOf(err: unknown): string {
+  return isCadError(err) ? err.code : 'PDF_PROCESSING_FAILED';
+}
+
+/** 各阶段在任务进度条上的区间:解析 5→50,OCR 50→80,写出 80→90,上传收尾到 100。 */
+const CAD_STAGE_PROGRESS: Record<ConversionStage, [number, number]> = {
+  parse: [5, 50],
+  ocr: [50, 80],
+  write: [80, 90],
+};
 
 function inferDocumentFormat(
   filename: string,
@@ -90,7 +129,8 @@ export class PdfProcessor extends WorkerHost {
   constructor(
     private readonly pdfService: PdfService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService
+    private readonly tasksService: TasksService,
+    private readonly pdfToCadService: PdfToCadService
   ) {
     super();
   }
@@ -130,6 +170,8 @@ export class PdfProcessor extends WorkerHost {
           return await this.handleRearrange(task, job);
         case 'pdf_from_document':
           return await this.handleDocumentToPdf(task, job);
+        case 'pdf_to_cad':
+          return await this.handleToCad(task, job);
         default:
           throw new Error(`Unknown pdf task type: ${task.type}`);
       }
@@ -143,7 +185,7 @@ export class PdfProcessor extends WorkerHost {
       try {
         await this.tasksService.markFailed(
           taskId,
-          'PDF_PROCESSING_FAILED',
+          failureCodeOf(err),
           (err as Error).message
         );
       } catch (dbErr) {
@@ -151,7 +193,10 @@ export class PdfProcessor extends WorkerHost {
           `Failed to mark task ${taskId} as failed: ${(dbErr as Error).message}`
         );
       }
-      throw err;
+      // 确定性失败(CAD 契约错误:配置非法、DWG 未支持、OCR 缺失、损坏 PDF)重跑结果一样,
+      // 用 UnrecoverableError 掐断后续 attempt,避免同一错误反复落库。
+      if (isRetryableError(err)) throw err;
+      throw new UnrecoverableError((err as Error).message);
     }
   }
 
@@ -272,7 +317,7 @@ export class PdfProcessor extends WorkerHost {
       outputName = `split-${inputFile.filename}`;
       outputMime = 'application/pdf';
     } else {
-      const archive = archiver.create('zip', {});
+      const archive = createZipArchive();
       outputs.forEach((buf, i) => {
         archive.append(buf, { name: `part-${i + 1}.pdf` });
       });
@@ -386,7 +431,7 @@ export class PdfProcessor extends WorkerHost {
       outputName = `${baseName}.${format === 'jpeg' ? 'jpg' : 'png'}`;
       outputMime = `image/${format}`;
     } else {
-      const archive = archiver.create('zip', {});
+      const archive = createZipArchive();
       for (const img of images) {
         archive.append(img.data, { name: img.name });
       }
@@ -834,6 +879,97 @@ export class PdfProcessor extends WorkerHost {
     return { outputFileId: outputFile.id };
   }
 
+  /**
+   * PDF → CAD(首版 DXF)。
+   *
+   * 校验顺序:输入文件存在 → inputConfig 契约 → PDF 类型 → 50MB → 500 页,任何一步失败都是
+   * CadError(不可重试),不会产出文件。DWG 与 OCR 前置检查由 PdfToCadService 在解析前完成。
+   * 完成后把转换元数据写进 output_meta,前端据此展示实体/OCR 统计与降级说明。
+   */
+  private async handleToCad(task: any, job: Job): Promise<unknown> {
+    const fileId = task.inputFileIds?.[0];
+    if (!fileId) {
+      throw new CadError('CAD_INVALID_CONFIG', 'No input file specified');
+    }
+
+    const parsed = pdfToCadTaskConfigSchema.safeParse(task.inputConfig ?? {});
+    if (!parsed.success) {
+      throw new CadError(
+        'CAD_INVALID_CONFIG',
+        `Invalid PDF to CAD config: ${parsed.error.issues
+          .map(issue => `${issue.path.join('.') || 'config'}: ${issue.message}`)
+          .join('; ')}`,
+        { issues: parsed.error.issues.map(issue => issue.path.join('.')) }
+      );
+    }
+    const config = parsed.data;
+
+    const inputFile = await this.filesService.getById(
+      fileId,
+      task.userId ?? null
+    );
+    if (inputFile.mimeType !== 'application/pdf') {
+      throw new CadError(
+        'CAD_INVALID_CONFIG',
+        `INVALID_FILE_TYPE: File ${inputFile.filename} is not a PDF`
+      );
+    }
+    if (inputFile.originalSize > PDF_TO_CAD_MAX_FILE_SIZE) {
+      throw new CadError(
+        'CAD_INVALID_CONFIG',
+        `File ${inputFile.filename} exceeds ${PDF_TO_CAD_MAX_FILE_SIZE / 1024 / 1024}MB limit`
+      );
+    }
+
+    const inputBuffer = await this.filesService.download(inputFile.storageKey);
+    let pageCount: number;
+    try {
+      pageCount = await this.pdfService.getPageCount(inputBuffer);
+    } catch (err) {
+      throw new CadError(
+        'CAD_CONVERSION_FAILED',
+        `Unable to read PDF: ${(err as Error).message}`
+      );
+    }
+    if (pageCount > PDF_TO_CAD_MAX_PAGES) {
+      throw new CadError(
+        'CAD_INVALID_CONFIG',
+        `PDF has ${pageCount} pages, exceeding the limit of ${PDF_TO_CAD_MAX_PAGES}`,
+        { pageCount, limit: PDF_TO_CAD_MAX_PAGES }
+      );
+    }
+    await this.reportProgress(task.id, job, 5);
+
+    const result = await this.pdfToCadService.convert(inputBuffer, config, {
+      baseName: inputFile.filename.replace(/\.pdf$/i, ''),
+      onProgress: async (stage, fraction) => {
+        const [from, to] = CAD_STAGE_PROGRESS[stage];
+        await this.reportProgress(
+          task.id,
+          job,
+          Math.round(from + (to - from) * Math.min(1, Math.max(0, fraction)))
+        );
+      },
+    });
+    await this.reportProgress(task.id, job, 90);
+
+    const outputOwner = await getTaskOutputOwner(task.userId);
+    const outputFile = await this.filesService.upload(
+      result.output.data,
+      {
+        filename: result.output.filename,
+        mimeType: result.output.mimeType,
+        size: result.output.data.length,
+      },
+      outputOwner
+    );
+    await this.reportProgress(task.id, job, 95);
+
+    await this.tasksService.markCompleted(task.id, outputFile.id, result.meta);
+    await this.reportProgress(task.id, job, 100);
+    return { outputFileId: outputFile.id, meta: result.meta };
+  }
+
   private async handleRearrange(task: any, job: Job): Promise<unknown> {
     const fileId = task.inputFileIds?.[0];
     if (!fileId) throw new Error('No input file specified');
@@ -886,7 +1022,7 @@ export class PdfProcessor extends WorkerHost {
       const { taskId } = job.data as { taskId: string };
       await this.tasksService.markFailed(
         taskId,
-        'PDF_PROCESSING_FAILED',
+        failureCodeOf(err),
         err.message
       );
     }

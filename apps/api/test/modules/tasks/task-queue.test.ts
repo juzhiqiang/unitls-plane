@@ -10,6 +10,7 @@ describe('getTaskQueueName', () => {
     expect(getTaskQueueName('image_id_photo')).toBe('image-queue');
     expect(getTaskQueueName('pdf_merge')).toBe('pdf-queue');
     expect(getTaskQueueName('pdf_from_document')).toBe('pdf-queue');
+    expect(getTaskQueueName('pdf_to_cad')).toBe('pdf-queue');
     expect(getTaskQueueName('font_convert')).toBe('font-queue');
   });
 

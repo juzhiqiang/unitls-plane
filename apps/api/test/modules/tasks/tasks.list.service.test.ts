@@ -174,6 +174,7 @@ describe('TasksService listByUser category filtering', () => {
       'pdf_metadata',
       'pdf_rearrange',
       'pdf_from_document',
+      'pdf_to_cad',
     ]);
 
     const listWhere = selectCalls[0]?.where;

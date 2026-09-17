@@ -25,6 +25,7 @@ export function getTaskQueueName(type: TaskType): TaskQueueName {
     case 'pdf_metadata':
     case 'pdf_rearrange':
     case 'pdf_from_document':
+    case 'pdf_to_cad':
       return 'pdf-queue';
     case 'font_convert':
       return 'font-queue';

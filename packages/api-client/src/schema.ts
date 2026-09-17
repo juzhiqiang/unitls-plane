@@ -535,7 +535,7 @@ export interface components {
     schemas: {
         CreateTaskDto: {
             /** @enum {string} */
-            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate";
+            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "pdf_to_cad";
             inputFileIds: string[];
             inputConfig?: Record<string, never>;
         };
@@ -545,7 +545,7 @@ export interface components {
             /** Format: uuid */
             userId?: string;
             /** @enum {string} */
-            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate";
+            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "pdf_to_cad";
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
             inputFileIds: string[];
@@ -555,6 +555,8 @@ export interface components {
             progress: number;
             errorCode?: string;
             errorMessage?: string;
+            /** @description 服务端输出事实。生图任务记录实际来源与模型;PDF 转 CAD 任务记录页数、实体数、OCR 数、单位、降级原因与转换器版本(PdfToCadConversionMeta) */
+            outputMeta?: Record<string, never>;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -706,7 +708,7 @@ export interface operations {
                 limit?: number;
                 status?: "pending" | "processing" | "completed" | "failed";
                 category?: "image" | "pdf" | "font";
-                type?: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate";
+                type?: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "pdf_to_cad";
             };
             header?: never;
             path?: never;

@@ -25,6 +25,7 @@ export const TASK_TYPES = [
   'pdf_rearrange',
   'pdf_from_document',
   'image_generate',
+  'pdf_to_cad',
 ] as const satisfies readonly string[];
 
 export const taskTypeEnum = z.enum(TASK_TYPES);

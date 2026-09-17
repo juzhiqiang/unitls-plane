@@ -33,6 +33,7 @@ import {
 import type { Task, NewTask } from '@utils-plane/db';
 import type {
   CreateTaskInput,
+  PdfToCadConversionMeta,
   TaskCategory,
   TaskType,
   TaskStatus,
@@ -74,6 +75,7 @@ const TASK_TYPES_BY_CATEGORY: Record<TaskCategory, readonly TaskType[]> = {
     'pdf_metadata',
     'pdf_rearrange',
     'pdf_from_document',
+    'pdf_to_cad',
   ],
   font: ['font_convert'],
 };
@@ -526,14 +528,17 @@ export class TasksService {
     id: string,
     outputFileId: string,
     /**
-     * 服务端输出事实(目前只有生图写入),供粘性路由与产物追溯。
-     * model = 真实上游名,displayModel = 归并键(displayAs ?? name)。
+     * 服务端输出事实,供前端展示与产物追溯。
+     * - 生图:providerId / model(真实上游名)/ displayModel(归并键),供粘性路由匹配。
+     * - PDF 转 CAD:PdfToCadConversionMeta(页数、实体数、OCR 数、单位、降级原因、版本)。
      */
-    outputMeta?: {
-      providerId: string;
-      model: string;
-      displayModel?: string;
-    }
+    outputMeta?:
+      | {
+          providerId: string;
+          model: string;
+          displayModel?: string;
+        }
+      | PdfToCadConversionMeta
   ): Promise<void> {
     const rows = await db
       .update(tasks)
@@ -725,6 +730,7 @@ export class TasksService {
       case 'pdf_metadata':
       case 'pdf_rearrange':
       case 'pdf_from_document':
+      case 'pdf_to_cad':
       case 'font_convert':
         return true;
     }

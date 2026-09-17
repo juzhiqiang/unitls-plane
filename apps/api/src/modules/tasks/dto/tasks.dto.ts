@@ -149,6 +149,13 @@ export class TaskResponseDto {
   @ApiPropertyOptional({ type: String })
   errorMessage?: string;
 
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      '服务端输出事实。生图任务记录实际来源与模型;PDF 转 CAD 任务记录页数、实体数、OCR 数、单位、降级原因与转换器版本(PdfToCadConversionMeta)',
+  })
+  outputMeta?: Record<string, unknown>;
+
   @ApiProperty()
   createdAt!: Date;
 

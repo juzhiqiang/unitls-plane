@@ -36,4 +36,11 @@ describe('TasksService queue routing', () => {
 
     expect((service as any).getQueue('image_generate').name).toBe('ai-queue');
   });
+
+  it('routes pdf_to_cad tasks to the pdf queue and treats them as server tasks', () => {
+    const service = createService();
+
+    expect((service as any).getQueue('pdf_to_cad').name).toBe('pdf-queue');
+    expect((service as any).isServerTask('pdf_to_cad')).toBe(true);
+  });
 });

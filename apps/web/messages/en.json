@@ -1690,7 +1690,8 @@
               "items": [
                 "New /pdf/to-cad page with page selection, millimetre/inch units, scale and by-source/semantic layer strategies.",
                 "Optional OCR and raster underlay for scans: OCR recognises image pages without native text, and the underlay output is a ZIP (DXF next to PNGs).",
-                "The result panel shows page count, entity counts, source breakdown, OCR text and degradation notes."
+                "The result panel shows page count, entity counts, source breakdown, OCR text and degradation notes.",
+                "Fixes a 500 error when uploading larger files (near the 50MB limit): the server-side streaming upload deadlocked under the Bun runtime; it now buffers and uploads in one request."
               ]
             }
           ]

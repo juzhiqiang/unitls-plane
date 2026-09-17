@@ -29,6 +29,7 @@ describe('tool metadata', () => {
       '/pdf/from-document',
       '/pdf/to-image',
       '/pdf/to-text',
+      '/pdf/to-cad',
       '/pdf/metadata',
       '/pdf/encrypt',
       '/pdf/watermark',
@@ -53,6 +54,17 @@ describe('tool metadata', () => {
     expect(tool?.processing).toBe('server');
     expect(tool?.requiresLogin).toBe(true);
     expect(tool?.retention).toBe('account-files');
+  });
+
+  it('registers PDF to CAD as a login-gated server tool in the PDF convert group', () => {
+    const tool = getToolByHref('/pdf/to-cad');
+
+    expect(tool?.key).toBe('pdfToCad');
+    expect(tool?.processing).toBe('server');
+    expect(tool?.requiresLogin).toBe(true);
+    expect(tool?.retention).toBe('account-files');
+    expect(tool?.categoryKey).toBe('ToolCatalog.categories.pdfConvert');
+    expect(tool?.tags).toContain('dxf');
   });
 
   it('registers the id photo generator as a local-first image tool with account-file retention', () => {

@@ -10,6 +10,10 @@ describe('task category labels', () => {
     expect(getTaskTypeCategory('pdf_from_document')).toBe('pdf');
   });
 
+  it('classifies PDF-to-CAD as a PDF task', () => {
+    expect(getTaskTypeCategory('pdf_to_cad')).toBe('pdf');
+  });
+
   it('classifies AI image generation as an image task', () => {
     expect(getTaskTypeCategory('image_generate')).toBe('image');
   });

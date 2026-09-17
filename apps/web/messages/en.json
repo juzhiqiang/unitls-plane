@@ -237,6 +237,10 @@
         "title": "PDF to text",
         "description": "Extract text as Markdown or plain text."
       },
+      "pdfToCad": {
+        "title": "PDF to CAD",
+        "description": "Turn vector PDFs into editable DXF drawings; optional OCR and raster underlay for scans."
+      },
       "pdfMetadata": {
         "title": "Edit metadata",
         "description": "Review and update title, author, and keyword fields."
@@ -480,6 +484,7 @@
       "pdf_metadata": "PDF metadata",
       "pdf_rearrange": "PDF rearrange",
       "pdf_from_document": "Document to PDF",
+      "pdf_to_cad": "PDF to CAD",
       "font_convert": "Font conversion",
       "image_generate": "AI image generation"
     }
@@ -1006,6 +1011,10 @@
         "title": "PDF to text",
         "description": "Extract PDF content as Markdown or plain text"
       },
+      "toCad": {
+        "title": "PDF to CAD",
+        "description": "Convert PDF drawings to DXF with lines, arcs, circles, text and layers"
+      },
       "fromImage": {
         "title": "Images to PDF",
         "description": "Combine multiple images into a single PDF"
@@ -1115,6 +1124,67 @@
       "fitStretch": "Stretch",
       "start": "Convert",
       "processing": "Converting..."
+    },
+    "toCad": {
+      "title": "PDF to CAD",
+      "description": "Convert PDF drawings into engineering-grade DXF: lines, polylines, arcs, circles, fills and text are layered by source; scans can use OCR and a raster underlay.",
+      "pages": "pages",
+      "changeFile": "Change file",
+      "format": "Output format",
+      "formatDxf": "DXF",
+      "formatDwg": "DWG",
+      "dwgUnavailable": "DWG is not available yet; this release only writes DXF.",
+      "unit": "Drawing unit",
+      "unitMm": "Millimetres",
+      "unitInch": "Inches",
+      "scale": "Scale",
+      "scaleHint": "PDF sizes are converted to the unit first, then multiplied by this factor (0.001-1000).",
+      "layerMode": "Layer strategy",
+      "layerSource": "By source",
+      "layerSemantic": "Semantic",
+      "layerModeHint": "By source: layers per object type, colour and font. Semantic: outline / thin / hidden / hatch / text.",
+      "ocr": "OCR for scanned pages",
+      "ocrHint": "Runs Tesseract only on image pages without native text; results go to the OCR_TEXT layer.",
+      "underlay": "Include raster underlay",
+      "underlayHint": "Exports page images as PNG referenced from the DXF; the output becomes a ZIP.",
+      "allPages": "All pages",
+      "selectedPages": "Select pages",
+      "selectPages": "Click pages to select for conversion",
+      "start": "Convert",
+      "processing": "Converting...",
+      "stageParse": "Parsing PDF",
+      "stageOcr": "Recognising scanned pages",
+      "stageWrite": "Writing DXF",
+      "stageUpload": "Saving output",
+      "resultReady": "DXF is ready to download.",
+      "resultZipHint": "The output is a ZIP: extract it and keep the DXF next to the PNG underlays before opening in CAD.",
+      "statPages": "Pages",
+      "statEntities": "Entities",
+      "statSources": "Native / OCR / inferred",
+      "statOcrText": "OCR text",
+      "statUnit": "Unit x scale",
+      "degradationsTitle": "Degradation notes",
+      "degradationPage": "Page {page}",
+      "degradationCount": "x{count}",
+      "degradations": {
+        "empty_page": "Blank page; only the page frame was kept",
+        "raster_page": "Scanned page: no vector content, relies on OCR, line inference and the underlay",
+        "shading_dropped": "Gradient fills were dropped",
+        "clip_ignored": "Clipping paths were ignored; geometry outside clips may appear",
+        "mask_ignored": "Soft masks were ignored",
+        "curve_flattened": "Non-circular curves were flattened into polylines",
+        "thin_fill_as_line": "Thin filled rectangles were restored as lines",
+        "ocr_skipped_native_text": "Page already has native text; OCR skipped",
+        "ocr_no_text": "OCR found no text",
+        "raster_lines_inferred": "Lines inferred from raster content; please verify"
+      },
+      "errors": {
+        "CAD_INVALID_CONFIG": "Invalid conversion settings; check the pages, scale and format.",
+        "CAD_OCR_UNAVAILABLE": "The OCR engine or its language data is missing on the server; disable OCR and retry.",
+        "CAD_DWG_UNSUPPORTED": "DWG is not available yet; choose DXF.",
+        "CAD_CONVERSION_FAILED": "The PDF could not be converted: it may be damaged, encrypted, empty or exceed the entity limit."
+      },
+      "errorFallback": "Conversion failed. Retry or choose another file."
     },
     "fromDocument": {
       "title": "Markdown / Word to PDF",
@@ -1353,6 +1423,7 @@
     "typePdfMetadata": "PDF Metadata",
     "typePdfRearrange": "PDF Rearrange",
     "typePdfFromDocument": "Document to PDF",
+    "typePdfToCad": "PDF to CAD",
     "typeFontConvert": "Font Convert"
   },
   "ToolsShared": {

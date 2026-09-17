@@ -14,6 +14,7 @@ const detailPages = [
   ['/pdf/split', 'src/app/[locale]/(app)/pdf/split/page.tsx'],
   ['/pdf/to-image', 'src/app/[locale]/(app)/pdf/to-image/page.tsx'],
   ['/pdf/to-text', 'src/app/[locale]/(app)/pdf/to-text/page.tsx'],
+  ['/pdf/to-cad', 'src/app/[locale]/(app)/pdf/to-cad/page.tsx'],
   ['/pdf/from-image', 'src/app/[locale]/(app)/pdf/from-image/page.tsx'],
   ['/pdf/from-document', 'src/app/[locale]/(app)/pdf/from-document/page.tsx'],
   ['/pdf/rotate', 'src/app/[locale]/(app)/pdf/rotate/page.tsx'],

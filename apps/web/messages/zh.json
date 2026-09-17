@@ -237,6 +237,10 @@
         "title": "PDF 转文本",
         "description": "提取 Markdown 或纯文本内容。"
       },
+      "pdfToCad": {
+        "title": "PDF 转 CAD",
+        "description": "把矢量 PDF 转为可编辑的 DXF 图纸，扫描件可选 OCR 与底图。"
+      },
       "pdfMetadata": {
         "title": "编辑元数据",
         "description": "查看并修改标题、作者和关键词。"
@@ -480,6 +484,7 @@
       "pdf_metadata": "PDF 元数据",
       "pdf_rearrange": "PDF 重排",
       "pdf_from_document": "文档转 PDF",
+      "pdf_to_cad": "PDF 转 CAD",
       "font_convert": "字体转换",
       "image_generate": "AI 生图"
     }
@@ -1006,6 +1011,10 @@
         "title": "PDF 转文本",
         "description": "提取 PDF 文字内容为 Markdown 或纯文本"
       },
+      "toCad": {
+        "title": "PDF 转 CAD",
+        "description": "将 PDF 图纸转换为 DXF，保留线、圆、折线、文字与图层"
+      },
       "fromImage": {
         "title": "图片转 PDF",
         "description": "将多张图片合并为一个 PDF 文件"
@@ -1115,6 +1124,67 @@
       "fitStretch": "拉伸",
       "start": "开始转换",
       "processing": "转换中..."
+    },
+    "toCad": {
+      "title": "PDF 转 CAD",
+      "description": "将 PDF 图纸转换为工程级 DXF：线、折线、圆弧、圆、填充与文字按来源分层；扫描件可选 OCR 与栅格底图。",
+      "pages": "页",
+      "changeFile": "更换文件",
+      "format": "输出格式",
+      "formatDxf": "DXF",
+      "formatDwg": "DWG",
+      "dwgUnavailable": "DWG 暂不支持，首版只输出 DXF。",
+      "unit": "图纸单位",
+      "unitMm": "毫米",
+      "unitInch": "英寸",
+      "scale": "比例",
+      "scaleHint": "PDF 尺寸先换算为目标单位，再乘以该比例（0.001–1000）。",
+      "layerMode": "图层策略",
+      "layerSource": "按来源",
+      "layerSemantic": "按语义",
+      "layerModeHint": "按来源：按对象类型、颜色与字体分层；按语义：轮廓 / 细线 / 隐藏线 / 填充 / 文字。",
+      "ocr": "扫描页文字识别（OCR）",
+      "ocrHint": "只对没有原生文字的含图页面运行 Tesseract，识别结果放在 OCR_TEXT 图层。",
+      "underlay": "包含栅格底图",
+      "underlayHint": "把页内图片导出为 PNG 并在 DXF 中引用，产物改为 ZIP。",
+      "allPages": "全部页面",
+      "selectedPages": "选择页面",
+      "selectPages": "点击选择要转换的页面",
+      "start": "开始转换",
+      "processing": "转换中...",
+      "stageParse": "解析 PDF",
+      "stageOcr": "识别扫描页",
+      "stageWrite": "写出 DXF",
+      "stageUpload": "保存产物",
+      "resultReady": "DXF 已生成，可下载。",
+      "resultZipHint": "产物是 ZIP：解压后把 DXF 与底图 PNG 放在同一目录，再用 CAD 打开。",
+      "statPages": "页数",
+      "statEntities": "实体",
+      "statSources": "原生 / OCR / 推断",
+      "statOcrText": "OCR 文字",
+      "statUnit": "单位 × 比例",
+      "degradationsTitle": "降级说明",
+      "degradationPage": "第 {page} 页",
+      "degradationCount": "×{count}",
+      "degradations": {
+        "empty_page": "空白页，只保留页面边界",
+        "raster_page": "扫描页：没有矢量内容，只能依赖 OCR、线段推断与底图",
+        "shading_dropped": "渐变填充已丢弃",
+        "clip_ignored": "裁剪路径已忽略，裁剪区外的几何可能显示",
+        "mask_ignored": "软蒙版已忽略",
+        "curve_flattened": "非圆弧曲线已打散为折线",
+        "thin_fill_as_line": "细长填充矩形已还原为线段",
+        "ocr_skipped_native_text": "页面已有原生文字，跳过 OCR",
+        "ocr_no_text": "OCR 未识别到文字",
+        "raster_lines_inferred": "由栅格推断出的线段，请核对"
+      },
+      "errors": {
+        "CAD_INVALID_CONFIG": "转换参数无效，请检查页码、比例与格式。",
+        "CAD_OCR_UNAVAILABLE": "服务端未安装 OCR 引擎或缺少语言包，请关闭 OCR 后重试。",
+        "CAD_DWG_UNSUPPORTED": "DWG 暂不支持，请选择 DXF。",
+        "CAD_CONVERSION_FAILED": "PDF 无法转换：文件可能损坏、加密、没有可转换内容或实体数超出上限。"
+      },
+      "errorFallback": "转换失败，请重试或更换文件。"
     },
     "fromDocument": {
       "title": "Markdown / Word 转 PDF",
@@ -1353,6 +1423,7 @@
     "typePdfMetadata": "PDF 元数据",
     "typePdfRearrange": "PDF 重排",
     "typePdfFromDocument": "文档转 PDF",
+    "typePdfToCad": "PDF 转 CAD",
     "typeFontConvert": "字体转换"
   },
   "ToolsShared": {

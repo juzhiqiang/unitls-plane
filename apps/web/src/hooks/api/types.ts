@@ -16,7 +16,8 @@ export type TaskTypeValue =
   | 'pdf_metadata'
   | 'pdf_rearrange'
   | 'pdf_from_document'
-  | 'image_generate';
+  | 'image_generate'
+  | 'pdf_to_cad';
 
 export interface CreateTaskDto {
   type: TaskTypeValue;
@@ -35,6 +36,11 @@ export interface TaskResponseDto {
   progress: number;
   errorCode?: string;
   errorMessage?: string;
+  /**
+   * 服务端输出事实。生图任务记录实际来源与模型;PDF 转 CAD 任务是
+   * PdfToCadConversionMeta(页数、实体数、OCR 数、单位、降级原因),用 validators 的 schema 解析。
+   */
+  outputMeta?: Record<string, unknown>;
   createdAt: string;
   completedAt?: string;
 }

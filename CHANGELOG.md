@@ -1,22 +1,46 @@
 # 更新日志
 
+## 2026-09-17
+
+### PDF 转 CAD
+
+- 新增 PDF 转 CAD 工具（`/pdf/to-cad`）：矢量 PDF 转为工程级 DXF 图纸，线、折线、圆弧、圆、填充、文字按来源分层，可在 LibreCAD/QCAD/AutoCAD 中编辑。支持页面选择、毫米/英寸单位、比例、按来源/按语义图层策略。
+- 扫描件可选 OCR 与栅格底图：开启 OCR 后自动识别没有原生文字的含图页面，识别结果放在独立图层；开启底图后产物为 ZIP（DXF 与底图 PNG 同级）。
+- 结果面板展示页数、实体数、原生/OCR/推断来源分布、OCR 文字数与降级说明；DWG 暂不支持，界面显示 DXF 可用。
+
 ## 2026-09-15
 
 ### AI 生图
 
-- 模型项新增可选 `displayAs` 字段：不同来源（网关）对同一底层模型用不同上游名时（如某网关把 gpt-image-2 改名成 wan2.7-image），填 `displayAs` 后前端下拉按它去重显示、路由层按它归组做粘性随机与失败换源。省略时回退到 `name`（老配置零改动）。产物 EXIF 与 `output_meta.model` 仍记真实上游名，`output_meta.displayModel` 记归并键供同会话粘性路由匹配。
-- 修复部分网关（如 kmage）声明 `responseFormat=url` 却把 base64 塞进 `data[0].url` 返回，导致响应被当作不可识别、任务直接失败而不换源重试的问题：`bufferFromGeneratedImagePayload` 现在能识别 `url` 字段里的 data URL 与裸 base64 并就地解码；响应结构不认识改为可重试，换下一个同模型来源继续尝试。
-- 修复任务处理器 `workerConcurrency` 的 `import` 错放在文件末尾、经 tsc 编译为 CJS 后 `require` 落在装饰器求值之后导致 `ReferenceError: Cannot access 'worker_concurrency_1' before initialization`、API 容器启动即崩溃的问题（本地 dev 走 ESM 不暴露，仅离线镜像复现）。
+- 模型项新增可选 `displayAs`
+  字段：不同来源（网关）对同一底层模型用不同上游名时（如某网关把 gpt-image-2 改名成 wan2.7-image），填
+  `displayAs` 后前端下拉按它去重显示、路由层按它归组做粘性随机与失败换源。省略时回退到
+  `name`（老配置零改动）。产物 EXIF 与 `output_meta.model`
+  仍记真实上游名，`output_meta.displayModel` 记归并键供同会话粘性路由匹配。
+- 修复部分网关（如 kmage）声明 `responseFormat=url` 却把 base64 塞进 `data[0].url`
+  返回，导致响应被当作不可识别、任务直接失败而不换源重试的问题：`bufferFromGeneratedImagePayload`
+  现在能识别 `url` 字段里的 data
+  URL 与裸 base64 并就地解码；响应结构不认识改为可重试，换下一个同模型来源继续尝试。
+- 修复任务处理器 `workerConcurrency` 的 `import` 错放在文件末尾、经 tsc 编译为 CJS 后 `require`
+  落在装饰器求值之后导致
+  `ReferenceError: Cannot access 'worker_concurrency_1' before initialization`、API 容器启动即崩溃的问题（本地 dev 走 ESM 不暴露，仅离线镜像复现）。
 
 ## 2026-09-14
 
 ### AI 生图
 
-- 生图模型选择改为「模型为主」：参数面板的下拉直接显示真实模型名（如 gpt-image-2、KMage V2），来源/网关名不再展示给用户；对应端点由 `GET /tasks/image-generate/providers` 更名为 `GET /tasks/image-generate/models`，任务提交字段由 `inputConfig.providerId` 改为 `inputConfig.model`。
-- `AI_IMAGE_PROVIDERS` 配置结构升级（不兼容旧格式，启动即报错并附升级指引）：每个来源声明 `models` 数组，同一模型可配在多个来源（网关）下。
+- 生图模型选择改为「模型为主」：参数面板的下拉直接显示真实模型名（如 gpt-image-2、KMage
+  V2），来源/网关名不再展示给用户；对应端点由 `GET /tasks/image-generate/providers` 更名为
+  `GET /tasks/image-generate/models`，任务提交字段由 `inputConfig.providerId` 改为
+  `inputConfig.model`。
+- `AI_IMAGE_PROVIDERS` 配置结构升级（不兼容旧格式，启动即报错并附升级指引）：每个来源声明 `models`
+  数组，同一模型可配在多个来源（网关）下。
 - 同一模型多来源时自动容错路由：同一会话沿用上次实际使用的来源（出图效果稳定），新会话随机挑选（分摊网关压力）；可重试失败（超时、5xx、限流）自动切换下一个同模型来源，内容拒绝与确定性错误不换。
-- 产物 EXIF 隐式标识补充实际出图来源（`source=`），并新增 `tasks.output_meta` 列记录实际来源与模型（需先执行数据库迁移，组合镜像内迁移先于应用启动）。
-- 旧单来源变量 `AI_IMAGE_*` 回退与历史排队任务兼容：未升级配置的部署零改动；升级已配置 `AI_IMAGE_PROVIDERS` 的环境须把顶层 `model`/`capabilities`/`sizes` 挪进 `models[]` 后重建 api 容器。
+- 产物 EXIF 隐式标识补充实际出图来源（`source=`），并新增 `tasks.output_meta`
+  列记录实际来源与模型（需先执行数据库迁移，组合镜像内迁移先于应用启动）。
+- 旧单来源变量 `AI_IMAGE_*` 回退与历史排队任务兼容：未升级配置的部署零改动；升级已配置
+  `AI_IMAGE_PROVIDERS` 的环境须把顶层 `model`/`capabilities`/`sizes` 挪进 `models[]`
+  后重建 api 容器。
 
 ## 2026-09-12
 

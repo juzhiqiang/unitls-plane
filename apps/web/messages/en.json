@@ -1680,6 +1680,22 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.9.0",
+          "date": "2026-09-17",
+          "title": "PDF to CAD",
+          "summary": "A new PDF to CAD tool converts vector PDFs into engineering-grade DXF drawings with lines, arcs, polylines, fills and text layered by source, editable in common CAD software; scans can use OCR and a raster underlay, DWG is not available yet.",
+          "groups": [
+            {
+              "title": "New features",
+              "items": [
+                "New /pdf/to-cad page with page selection, millimetre/inch units, scale and by-source/semantic layer strategies.",
+                "Optional OCR and raster underlay for scans: OCR recognises image pages without native text, and the underlay output is a ZIP (DXF next to PNGs).",
+                "The result panel shows page count, entity counts, source breakdown, OCR text and degradation notes."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.8.2",
           "date": "2026-09-15",
           "title": "Same model merged across sources",

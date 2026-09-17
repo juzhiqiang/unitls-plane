@@ -74,6 +74,7 @@ Codex 会直接读取 `AGENTS.md`；Claude Code 通过 `CLAUDE.md` 中的 `@AGEN
 - 图片转 PDF、PDF 转图片
 - Markdown / Word 转 PDF，支持 Markdown 在线编辑、预览和本地导出
 - PDF 转文本/Markdown
+- PDF 转 CAD（/pdf/to-cad）：矢量 PDF 转工程级 DXF，线、圆、折线、文字与图层可编辑；扫描件可选 OCR 与栅格底图（产物为 ZIP）；DWG 暂不支持
 - 元数据编辑
 - 加密、水印、压缩
 
@@ -113,7 +114,7 @@ utils-plane/
 │   ├── utils/                  # shared utilities
 │   └── validators/             # Zod schemas
 ├── docs/                       # 设计审计和实现规格
-├── task/                       # phase1-phase8 任务文档
+├── task/                       # phase1-phase9 任务文档
 ├── docker-compose.yml
 ├── package.json
 └── turbo.json
@@ -185,7 +186,8 @@ AI 生图使用独立的 OpenAI 兼容配置，与证件照 AI 精修互不影�
 AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.openai.com","apiKey":"sk-xxx","models":[{"name":"gpt-image-1","capabilities":["generate","edit","inpaint"],"sizes":["auto","1024x1024","1024x1536","1536x1024"]}]},{"id":"kmage","label":"KMage","baseUrl":"https://image.dddd.zone","apiKey":"kmage_xxx","models":[{"name":"KMage V2"},{"name":"gpt-image-2","capabilities":["generate","edit","inpaint"]}],"editTransport":"generations_ref"}]'
 ```
 
-- `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级（旧版顶层 `model`/`capabilities`/`sizes` 格式会启动报错并附升级指引）。
+- `AI_IMAGE_PROVIDERS`：JSON 数组，数组第一项是默认来源。新增兼容 OpenAI 格式的来源只需加一项，不改代码；JSON 或字段不合法时 API 启动失败，不静默降级（旧版顶层
+  `model`/`capabilities`/`sizes` 格式会启动报错并附升级指引）。
 - 每项字段：`id`、`label`（必填，内部诊断名）、`baseUrl`（必填）、`apiKey`（可选）、`models`（必填数组，每项
   `name` 模型名、`capabilities`（默认 `["generate","edit"]`，只支持文生图写
   `["generate"]`，支持局部重绘显式加 `"inpaint"`）、`sizes`（默认七档
@@ -212,7 +214,9 @@ URL 放进 `reference_images` 数组（`image.dddd.zone` 一类网关没有 edit
 能力（`capabilities: ["generate","edit","inpaint"]`），gpt-image-2 一类完整模型（kmage、鲁批）可声明。实现为双通道官方优先：先走 edits 端点的
 `image`+`mask`（透明区=重绘区）；网关以确定性 4xx 拒绝 `mask`
 字段时自动回退「原图 + 红标记图」两张参考图加固定提示词前缀。页面上「局部修改」入口常显，模型不支持时点击会提示切换模型。页面在配置了多个模型时展示模型选择器（显示真实模型名，来源/网关对用户隐藏），选中的模型随
-`inputConfig.model` 提交；模型不支持图生图时该模式被禁用。同一模型配在多个来源下时，同会话沿用上次实际使用的来源，可重试失败（超时/5xx/限流）自动换源。无论来源返回 `b64_json` 还是
+`inputConfig.model`
+提交；模型不支持图生图时该模式被禁用。同一模型配在多个来源下时，同会话沿用上次实际使用的来源，可重试失败（超时/5xx/限流）自动换源。无论来源返回
+`b64_json` 还是
 `url`，产物都会落到 MinIO，用户拿到的始终是本站文件地址；产物 EXIF 写入实际出图的模型与来源。每日生成张数上限是全局的（不按模型区分），在
 `packages/utils/src/entitlements.ts` 的 `LIMITS['image.generate.dailyCount']` 中按 plan 配置。
 
@@ -228,6 +232,10 @@ Markdown / Word 转 PDF 的服务端导出会优先调用 LibreOffice。Docker �
 `libreoffice-writer`
 和 CJK 字体；宿主机本地运行 API 时，如果需要更高保真服务端转换，可安装 LibreOffice 或设置
 `LIBREOFFICE_BIN`。Markdown 本地导出不依赖服务端。
+
+PDF 转 CAD 的扫描页 OCR 通过命令行调用 Tesseract。Docker 组合镜像已安装 `tesseract-ocr` 及
+`chi_sim`/`eng` 语言包；宿主机本地运行 API 时，如需验证扫描件 OCR，可安装 Tesseract 或设置
+`TESSERACT_BIN`（语言包与分割模式可用 `CAD_OCR_LANGUAGES`、`CAD_OCR_PSM` 覆盖）。
 
 ## 本地服务地址
 
@@ -527,8 +535,8 @@ PostgreSQL + Redis + MinIO
 - AI 生图走服务端任务队列（独立
   `ai-queue`），必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印。可通过
   `AI_IMAGE_PROVIDERS`
-  配置多个 OpenAI 兼容来源与模型，页面以模型为主选择；同一模型配多个来源时服务端随机挑选并自动容错换源。提示词模板走 DB + MinIO `presets`
-  匿名只读桶，通过公开端点 `GET /tasks/image-generate/presets` 按语言下发。
+  配置多个 OpenAI 兼容来源与模型，页面以模型为主选择；同一模型配多个来源时服务端随机挑选并自动容错换源。提示词模板走 DB +
+  MinIO `presets` 匿名只读桶，通过公开端点 `GET /tasks/image-generate/presets` 按语言下发。
 - 匿名用户每分钟 10 次请求，登录用户每分钟 60 次请求。
 - 单文件额度为：匿名用户 10MB、普通登录用户 50MB、Pro 100MB、Team 150MB、Private 250MB；显式
   `pro_preview` 账号使用与 Private 相同的顶额权益，普通 `plan: free` 登录账号仍为 50MB。
@@ -569,7 +577,7 @@ bunx drizzle-kit migrate
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
 - [docs/build-verification.md](./docs/build-verification.md) - 构建验证说明（Windows 开发机 vs
   Linux）
-- [task/](./task/) - phase1-phase8 任务文档
+- [task/](./task/) - phase1-phase9 任务文档
 
 ## 当前版本与更新日志
 

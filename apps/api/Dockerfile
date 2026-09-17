@@ -35,6 +35,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/packages/auth/package.json ./packages/auth/package.json

@@ -178,7 +178,7 @@ API 模块：
 - `/` - 营销首页和推荐工具入口
 - `/dashboard` - 最近文件、任务、失败恢复和快捷工具
 - `/image`、`/image/compress`、`/image/convert`、`/image/animation`、`/image/stitch`、`/image/watermark`、`/image/id-photo`、`/image/cutout`、`/image/crop`、`/image/mosaic`、`/image/generate`
-- `/pdf`、`/pdf/merge`、`/pdf/split`、`/pdf/rearrange`、`/pdf/rotate`、`/pdf/from-image`、`/pdf/from-document`、`/pdf/to-image`、`/pdf/to-text`、`/pdf/metadata`、`/pdf/encrypt`、`/pdf/watermark`、`/pdf/compress`
+- `/pdf`、`/pdf/merge`、`/pdf/split`、`/pdf/rearrange`、`/pdf/rotate`、`/pdf/from-image`、`/pdf/from-document`、`/pdf/to-image`、`/pdf/to-text`、`/pdf/to-cad`、`/pdf/metadata`、`/pdf/encrypt`、`/pdf/watermark`、`/pdf/compress`
 - `/font`
 - `/files`、`/files/trash`
 - `/tasks`
@@ -192,7 +192,8 @@ API 模块：
 - 图片裁剪（/image/crop）与打码（/image/mosaic）纯浏览器 canvas 处理，图片不上传。
 - GIF 制作免费可用；APNG、高级压缩和更高限制属于登录增强能力，当前不涉及付费。
 - 证件照生成走服务端任务，需要登录；AI 精修依赖 OpenAI 兼容配置。
-- AI 生图（/image/generate）是对话式布局（会话侧栏 + 消息流 + 底部输入条），走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图、图生图与多图融合（附/粘贴/拖入参考图，1 张图生图、多张融合，上限 4 张）以及局部重绘（结果图上画笔/矩形圈选，模型需声明 inpaint 能力）。生图以模型为主：`AI_IMAGE_PROVIDERS` JSON 里每来源声明 `models[]`（可多模型），前端参数面板显示真实模型名（来源/网关隐藏，端点
+- AI 生图（/image/generate）是对话式布局（会话侧栏 + 消息流 + 底部输入条），走服务端任务，必须登录，受每日张数配额限制；产物写入隐式来源标识，不加可见水印；支持文生图、图生图与多图融合（附/粘贴/拖入参考图，1 张图生图、多张融合，上限 4 张）以及局部重绘（结果图上画笔/矩形圈选，模型需声明 inpaint 能力）。生图以模型为主：`AI_IMAGE_PROVIDERS`
+  JSON 里每来源声明 `models[]`（可多模型），前端参数面板显示真实模型名（来源/网关隐藏，端点
   `GET /tasks/image-generate/models`），同一模型可配多个来源 —— 同会话粘性随机挑选、可重试失败自动换源，配额仍为全局。会话由任务派生（`tasks.session_id`），端点为
   `GET /tasks/image-generate/sessions` 与 `.../sessions/:sessionId/tasks`。
 - AI 生图的提示词模板已动态化：模板存 `image_generate_presets` 表（双语言列），示例图存 MinIO
@@ -204,11 +205,11 @@ API 模块：
 - 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；Docker 组合镜像已安装 `libreoffice-writer`
   和 CJK 字体，本地宿主机运行 API 时可安装 LibreOffice 或设置 `LIBREOFFICE_BIN`。
 - 当前任务类型包含
-  `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`。
+  `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`font_convert`、`pdf_to_text`、`image_to_pdf`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`、`pdf_to_cad`。
 
 ## 参考文档
 
 - [AGENTS.md](./AGENTS.md) - Codex 与 Claude 共用的公共协作规则
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
 - [README.md](./README.md) - 项目介绍、启动方式和完整文档导航
-- [task/](./task/) - phase1-phase8 任务文档
+- [task/](./task/) - phase1-phase9 任务文档

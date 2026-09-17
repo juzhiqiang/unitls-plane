@@ -58,6 +58,9 @@ ENV HOSTNAME=0.0.0.0
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libreoffice-writer \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
         fonts-dejavu \
         fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*

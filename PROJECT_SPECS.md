@@ -9,7 +9,7 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 
 ## 版本与更新日志
 
-- 当前统一发布版本为 `v0.8.0`，根包、Web、API 及所有 `packages/*` 共享 `0.8.0` 版本号。
+- 当前统一发布版本为 `v0.9.0`，根包、Web、API 及所有 `packages/*` 共享 `0.9.0` 版本号。
 - 面向用户的精选更新日志公开地址为 `/{locale}/changelog`，并从营销页页脚和认证页版本号进入。
 - 套餐额度公开页为 `/{locale}/plans`，展示各套餐的单文件上传额度与定位说明，数据来源于
   `packages/utils` 的 `entitlements`。
@@ -112,7 +112,7 @@ utils-plane/
 │   ├── utils/                  # shared utilities
 │   └── validators/             # Zod schemas
 ├── docs/                       # audits and generated specs
-├── task/                       # phase1-phase8 task docs
+├── task/                       # phase1-phase9 task docs
 ├── docker-compose.yml
 ├── package.json
 ├── turbo.json
@@ -236,9 +236,11 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 ```
 
 - `AI_IMAGE_PROVIDERS`
-  是 JSON 数组，**数组第一项是默认来源**。新增一个兼容 OpenAI 格式的来源只需加一项，不需要改代码。JSON 非法或字段不合法时 API 直接启动失败，不静默降级；旧版顶层 `model`/`capabilities`/`sizes` 格式会被拒绝，错误信息附带升级指引。
+  是 JSON 数组，**数组第一项是默认来源**。新增一个兼容 OpenAI 格式的来源只需加一项，不需要改代码。JSON 非法或字段不合法时 API 直接启动失败，不静默降级；旧版顶层
+  `model`/`capabilities`/`sizes` 格式会被拒绝，错误信息附带升级指引。
 - 每项字段：`id`（必填，字母数字与
-  `-`/`_`，服务端路由用，不下发前端）、`label`（必填，内部诊断名）、`baseUrl`（必填）、`apiKey`（可选）、`models`（必填数组，至少一项；每项 `name` 模型名（上游 model 参数原文，可含空格与大小写）、`capabilities`（默认
+  `-`/`_`，服务端路由用，不下发前端）、`label`（必填，内部诊断名）、`baseUrl`（必填）、`apiKey`（可选）、`models`（必填数组，至少一项；每项
+  `name` 模型名（上游 model 参数原文，可含空格与大小写）、`capabilities`（默认
   `["generate","edit"]`）、`sizes`（该模型支持的尺寸列表，默认
   `["1024x1024","1024x1536","1536x1024","864x1152","1152x864","864x1536","1536x864"]`，随 models 端点下发，前端画面比例档位由它派生，processor 请求前交叉校验；默认不含
   `"auto"`
@@ -246,14 +248,18 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   默认 / `generations_ref`）、`refImagesField`（默认
   `reference_images`）、`refImageEncoding`（`data_url` 默认 /
   `base64`）、`responseFormat`（`b64_json` 默认 / `url`）、`omitBodyFields`（默认 `[]`，可填
-  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。来源内模型名不区分大小写去重；跨来源同名模型合法，正是多来源容错路由的基础。模型项可选 `displayAs`（用户可见名 + 跨来源归并键）：不同来源对同一底层模型用不同上游名时填它，前端下拉按它去重、路由层按它归组做粘性随机与失败换源，省略时回退到 `name`，EXIF 与 `output_meta.model` 仍记真实 `name`，`output_meta.displayModel` 记归并键供粘性路由匹配。
+  `size`/`quality`/`response_format`/`n`/`background`，用于请求体校验严格、多一个未知字段就 400 的网关）。来源内模型名不区分大小写去重；跨来源同名模型合法，正是多来源容错路由的基础。模型项可选
+  `displayAs`（用户可见名 + 跨来源归并键）：不同来源对同一底层模型用不同上游名时填它，前端下拉按它去重、路由层按它归组做粘性随机与失败换源，省略时回退到
+  `name`，EXIF 与 `output_meta.model` 仍记真实 `name`，`output_meta.displayModel`
+  记归并键供粘性路由匹配。
 - 未配置 `AI_IMAGE_PROVIDERS` 时回退到旧的单来源变量 `AI_IMAGE_BASE_URL` / `AI_IMAGE_API_KEY` /
   `AI_IMAGE_MODEL` / `AI_IMAGE_RESPONSE_FORMAT` / `AI_IMAGE_LABEL`，等价于一个 `id: default`
   的单模型 multipart 来源，现网部署零改动。
-- **路由以模型为主**：`inputConfig.model` 指定模型，服务端在所有服务该模型的来源中挑选 —— 同会话同模型沿用上次实际使用的来源（「粘性随机」，记录在
-  `tasks.output_meta` 的 `providerId`/`model`），新会话首次生成随机挑一个；可重试失败（超时/5xx/408/425/429/网络错误）自动换下一个同模型来源，内容拒绝与确定性
-  4xx 不换（不替用户烧第二次钱）。历史任务只带 `inputConfig.providerId`（兼容窗口）：钉死该来源并取其第一个模型。没带
-  model 的任务用第一个来源的第一个模型。
+- **路由以模型为主**：`inputConfig.model`
+  指定模型，服务端在所有服务该模型的来源中挑选 —— 同会话同模型沿用上次实际使用的来源（「粘性随机」，记录在
+  `tasks.output_meta` 的
+  `providerId`/`model`），新会话首次生成随机挑一个；可重试失败（超时/5xx/408/425/429/网络错误）自动换下一个同模型来源，内容拒绝与确定性4xx 不换（不替用户烧第二次钱）。历史任务只带
+  `inputConfig.providerId`（兼容窗口）：钉死该来源并取其第一个模型。没带 model 的任务用第一个来源的第一个模型。
 - 文生图所有来源统一调用 `POST /v1/images/generations`（JSON）。图生图按来源分支：`multipart` 走
   `POST /v1/images/edits`（multipart 上传参考图）；`generations_ref` 也走
   `POST /v1/images/generations`，参考图以 data URL 放进 `refImagesField` 数组（`image.dddd.zone`
@@ -267,12 +273,15 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   `generations_ref`
   来源一律直接走红标记通道）。内容策略拒绝与瞬时故障（5xx/408/425/429）不回退，交给任务级重试。模型能力位
   `inpaint` 需显式声明（默认不含）。
-- `GET /tasks/image-generate/models` 返回可用模型（按配置序首次出现去重，`capabilities`/`sizes` 取所有服务该模型的来源的并集），需登录，只下发
-  `model` / `capabilities` / `sizes`；来源（网关）信息与 `baseUrl`、`apiKey` 属于服务端配置，不出网。前端只有一个模型时不展示模型行。
+- `GET /tasks/image-generate/models` 返回可用模型（按配置序首次出现去重，`capabilities`/`sizes`
+  取所有服务该模型的来源的并集），需登录，只下发 `model` / `capabilities` /
+  `sizes`；来源（网关）信息与 `baseUrl`、`apiKey`
+  属于服务端配置，不出网。前端只有一个模型时不展示模型行。
 - 前端把选中的模型作为 `inputConfig.model`
   提交。省略时用第一个来源的第一个模型；模型不存在、没有来源支持该模式或所请求尺寸时任务以
   `AI_IMAGE_PROVIDER_UNAVAILABLE` 失败（错误码沿用，不静默换模型骗用户）。
-- 无论来源返回 `b64_json` 还是 `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。产物 EXIF 隐式标识写入实际出图的模型与来源（`model=`/`source=`）及生成时间。
+- 无论来源返回 `b64_json` 还是
+  `url`，产物都会由 API 落到 MinIO，用户拿到的始终是本站文件地址。产物 EXIF 隐式标识写入实际出图的模型与来源（`model=`/`source=`）及生成时间。
 - 生图失败时，服务端把上游真实报错经 `apps/api/src/modules/tasks/services/image-error-sanitizer.ts`
   脱敏（剥离 prompt 回显、`sk-`/Bearer 密钥形态与签名 URL，HTML 报错页只取
   `<title>`，折叠单行并截断 160 字符）后写入
@@ -415,7 +424,7 @@ cd packages/api-client && bun run generate
 
 ### Task 类型
 
-`compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`。
+`compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`、`pdf_to_cad`。
 
 ## API 服务
 
@@ -423,7 +432,7 @@ cd packages/api-client && bun run generate
 
 - `auth` - Better-Auth handler 和认证集成。
 - `files` - 上传、下载、缩略图、签名 URL、文件列表、回收站、恢复、永久删除、批量操作。
-- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler。
+- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler、PDF 转 CAD。
 - `health` - 健康检查。
 
 全局能力：
@@ -463,7 +472,7 @@ cd packages/api-client && bun run generate
 
 - 图片：压缩、格式转换、水印、长图拼接、GIF/APNG 制作与压缩、证件照生成、AI 生图、批量处理、压缩前后对比。
 - PDF：合并、拆分、重排、旋转、图片转 PDF、Markdown /
-  Word 转 PDF、PDF 转图片、PDF 转文本/Markdown、元数据、加密、水印、压缩。
+  Word 转 PDF、PDF 转图片、PDF 转文本/Markdown、PDF 转 CAD（/pdf/to-cad，DXF 首版）、元数据、加密、水印、压缩。
 - 字体：TTF/OTF/WOFF/WOFF2 转换。
 
 ## 文件与任务策略
@@ -476,6 +485,17 @@ cd packages/api-client && bun run generate
 - Markdown 转 PDF 支持在线编辑、预览和本地导出；登录后可选择服务端导出。Word/DOCX 转 PDF 走服务端任务。
 - 服务端 Markdown / Word 转 PDF 优先使用 LibreOffice；生产组合镜像内置 `libreoffice-writer`
   和 CJK 字体，服务端仍保留 PDF fallback。
+- PDF 转 CAD（`pdf_to_cad`）走服务端任务，需要登录；首版只输出 DXF（R2000/AC1015），DWG 请求以
+  `CAD_DWG_UNSUPPORTED` 失败。`inputConfig` 支持 `format`、`pages`（0 基页码）、
+  `unit`（mm/inch）、`scale`（先按 point 换算到目标单位再乘比例）、`ocr`、`includeRasterUnderlay` 和
+  `layerMode`（source/semantic）。错误码固定为 `CAD_INVALID_CONFIG`、`CAD_OCR_UNAVAILABLE`、
+  `CAD_DWG_UNSUPPORTED`、`CAD_CONVERSION_FAILED`，确定性失败不消耗重试。转换元数据写入
+  `tasks.output_meta`（页数、实体数、OCR 数、单位、降级原因、转换器版本）。带底图资源时产物为 ZIP（DXF 与 PNG 同级），否则直接输出 DXF 不引用外部资源。扫描页 OCR 用 Tesseract（镜像内
+  `tesseract-ocr` + `chi_sim`/`eng` 语言包，宿主机可用 `TESSERACT_BIN`、
+  `CAD_OCR_LANGUAGES`、`CAD_OCR_PSM`
+  覆盖），只对没有原生文字的含图页面运行；栅格线段推断与细长填充转线段标记为
+  `inferred`。公共契约（配置 schema、中间模型、错误码）在 `packages/validators/src/cad.ts` 与
+  `apps/api/src/modules/tasks/services/cad/types.ts`。
 - PDF 和字体的重型处理主要走服务端任务。
 - 任务状态：`pending`、`processing`、`completed`、`failed`。
 - 文件支持软删除、恢复、永久删除和清空回收站。

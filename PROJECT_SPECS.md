@@ -496,6 +496,11 @@ cd packages/api-client && bun run generate
   覆盖），只对没有原生文字的含图页面运行；栅格线段推断与细长填充转线段标记为
   `inferred`。公共契约（配置 schema、中间模型、错误码）在 `packages/validators/src/cad.ts` 与
   `apps/api/src/modules/tasks/services/cad/types.ts`。
+- 依赖版本与许可：PDF 解析用 MuPDF
+  `1.27.0`（AGPL-3.0-or-later，动态加载，与既有 pdf.service 一致）；OCR 用 Tesseract
+  `5.x`（Apache-2.0，镜像内经 apt 安装，语言包 `tesseract-ocr-chi-sim`/`tesseract-ocr-eng`）；DXF
+  writer 为自研实现（R2000/AC1015 文本格式，无三方运行时依赖），开发侧用 `dxf-parser` 与 Python
+  `ezdxf` 做回读审计（仅 dev/test）。
 - PDF 和字体的重型处理主要走服务端任务。
 - 任务状态：`pending`、`processing`、`completed`、`failed`。
 - 文件支持软删除、恢复、永久删除和清空回收站。

@@ -93,10 +93,31 @@ describe('MinioService streamed upload', () => {
 
     const command = send.mock.calls[0]?.[0] as PutObjectCommand;
     expect(command).toBeInstanceOf(PutObjectCommand);
-    expect(command.input.Body).toBe(source);
+    // Bun 运行时下 SDK 对 Node Readable Body 的流式 PUT 会死锁(30 秒后 SDK 内部锁超时),
+    // uploadStream 把流读成 Buffer 再 PUT;Body 应与源内容一致。
+    expect(Buffer.isBuffer(command.input.Body)).toBe(true);
+    expect((command.input.Body as Buffer).equals(Buffer.from('contents'))).toBe(
+      true
+    );
     expect(command.input.ContentLength).toBe(8);
     expect(command.input.ContentType).toBe('application/pdf');
     expect(send.mock.calls[0]?.[1]?.abortSignal).toBeDefined();
+  });
+
+  it('rejects a streamed upload whose byte count differs from the declared size', async () => {
+    const send = vi.fn(async () => ({}));
+    const service = withClient(send);
+    const source = Readable.from(Buffer.from('mismatched'));
+
+    await expect(
+      service.uploadStream(
+        'user-1/file-1/report.pdf',
+        source,
+        8,
+        'application/pdf'
+      )
+    ).rejects.toThrow('expected 8');
+    expect(send).not.toHaveBeenCalled();
   });
 });
 

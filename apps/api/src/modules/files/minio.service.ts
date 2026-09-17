@@ -78,11 +78,27 @@ export class MinioService implements OnModuleInit {
     mimeType: string,
     signal?: globalThis.AbortSignal
   ): Promise<void> {
+    // Bun 运行时下 SDK 对 Node Readable Body 的流式 PUT 会死锁(约 30 秒后 SDK 内部
+    // 锁等待超时抛 "RequestTimeout: A timeout occurred while trying to lock a resource",
+    // 与数据库无关;Node 下正常)。把流读成 Buffer 再 PUT,一次性内存成本与
+    // 既有 Buffer 分支一致,且有 MINIO_UPLOAD_TIMEOUT_MS 兜底。
+    const chunks: Buffer[] = [];
+    for await (const chunk of source) {
+      chunks.push(
+        Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
+      );
+    }
+    const body = Buffer.concat(chunks);
+    if (body.length !== size) {
+      throw new Error(
+        `Upload stream produced ${body.length} bytes, expected ${size}`
+      );
+    }
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
-        Body: source,
+        Body: body,
         ContentLength: size,
         ContentType: mimeType,
       }),

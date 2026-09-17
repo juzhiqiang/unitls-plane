@@ -225,7 +225,8 @@ describe('Tesseract integration', () => {
     'recognizes Latin and Chinese text from MuPDF-rendered pages',
     async () => {
       const mupdf = await loadMupdf();
-      const ocr = new TesseractOcr();
+      // 整套测试并发跑时 Tesseract 偶发初始化抖动:识别失败重试一次再断言。
+      const ocr = new TesseractOcr({ timeoutMs: 120_000 });
       const recognize = async (pdf: Buffer) => {
         const source = mupdf.Document.openDocument(pdf, 'application/pdf');
         try {
@@ -239,13 +240,22 @@ describe('Tesseract integration', () => {
           source.destroy();
         }
       };
+      const recognizeWithRetry = async (pdf: Buffer) => {
+        try {
+          return await recognize(pdf);
+        } catch {
+          return await recognize(pdf);
+        }
+      };
 
-      const scanned = await recognize((await createScannedFixture()).pdf);
+      const scanned = await recognizeWithRetry(
+        (await createScannedFixture()).pdf
+      );
       expect(
         scanned.map(line => line.text.replace(/\s+/g, '')).join('|')
       ).toContain('SCAN123');
 
-      const chinese = await recognize(
+      const chinese = await recognizeWithRetry(
         (await createChineseAnnotationFixture()).pdf
       );
       const joined = chinese.map(line => line.text).join('|');

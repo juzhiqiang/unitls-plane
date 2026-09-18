@@ -72,13 +72,18 @@ export function useTaskOutput<T>(): UseTaskOutputResult<T> {
   const [result, setResultState] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   // 卸载后不再 setState:下载可能比页面活得久。
+  //
+  // 挂载时**必须**重新置 true。App Router 默认开着 StrictMode(未显式配置
+  // reactStrictMode 时为 true),挂载 effect 会走一遍 mount → cleanup → mount;
+  // 只在 cleanup 里置 false 的话,ref 就永久停在 false,之后 download 的每个
+  // setState 都被吞掉 —— 任务跑到 100%、结果区却一直空着,连下载按钮都不出现。
   const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    []
-  );
+    };
+  }, []);
 
   const download = useCallback(
     async (

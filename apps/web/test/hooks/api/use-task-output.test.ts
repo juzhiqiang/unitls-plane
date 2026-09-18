@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
@@ -63,6 +64,31 @@ describe('useTaskOutput', () => {
     expect(result.current.state).toBe('ready');
     expect(result.current.pending).toBe(false);
     expect(result.current.result?.name).toBe('out.png');
+  });
+
+  it('still lands the result under StrictMode double-mount', async () => {
+    // App Router 默认开着 StrictMode(reactStrictMode 未显式配置时为 true),
+    // 挂载 effect 会被跑两遍:mount → cleanup → mount。若 effect 只在 cleanup
+    // 里把 mountedRef 置 false、不在挂载时置回 true,ref 就永久停在 false,
+    // 之后 download 的 setState 全部被吞掉 —— 页面表现为任务跑到 100%、
+    // 结果区却永远空着,连下载按钮都看不到。
+    globalThis.fetch = vi.fn(async () =>
+      okResponse()
+    ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useTaskOutput<File>(), {
+      wrapper: StrictMode,
+    });
+
+    await act(async () => {
+      await result.current.download(
+        'file-1',
+        blob => new File([blob], 'out.dxf', { type: blob.type })
+      );
+    });
+
+    await waitFor(() => expect(result.current.result).not.toBeNull());
+    expect(result.current.state).toBe('ready');
   });
 
   it('turns a non-ok response into an error state without rejecting', async () => {

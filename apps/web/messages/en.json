@@ -1680,6 +1680,20 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.9.2",
+          "date": "2026-09-20",
+          "title": "Regenerate replaces in place",
+          "summary": "Clicking Regenerate in AI image generation no longer adds an extra empty tile; the regenerated image replaces the one you clicked, and only one tile remains after a refresh or revisiting the session.",
+          "groups": [
+            {
+              "title": "Bug fixes",
+              "items": [
+                "AI image Regenerate now replaces the clicked tile in place (failed → generating → result) instead of adding a new tile beside it; only one tile remains after a refresh or revisiting the session."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.9.1",
           "date": "2026-09-19",
           "title": "Task results & download fix",

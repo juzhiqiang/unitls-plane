@@ -98,6 +98,31 @@ fix(api): 修复文件上传大小限制
 update(db): 添加任务状态枚举
 ```
 
+## 打包与发布规范
+
+每次打部署包（`bun run docker:package:all` / `:api` /
+`:offline`）之前，只要包里含有**上次发布之后新增的、用户可感知的改动**（新功能、体验改进、问题修复），就必须先完成两件事，再打包：
+
+1. **升级版本号**：根包、Web、API 与所有 `packages/*` 共用同一版本号，必须**一起**改。涉及：
+   - 8 个 `package.json` 的 `version`；
+   - `packages/utils/src/release.ts` 的 `APP_VERSION`；
+   - `packages/utils/test/release.test.ts` 的断言（版本号 + `it` 描述）。
+   - 版本步进：纯问题修复走 patch（`0.9.0` → `0.9.1`），有新功能走 minor（`0.9.0` → `0.10.0`）。
+2. **写更新日志**：同步维护根目录 `CHANGELOG.md` 与 `apps/web/messages/{zh,en}.json` 的
+   `PublicSite.changelog`。日志内容遵循「更新日志只记录用户可感知改动」那条规范。
+   - `PublicSite.changelog.entries[0].version` 必须等于新的 `APP_VERSION_LABEL`（`v` + 版本号），
+     `entries[0].date` 用发布当天日期；`changelog` 页面测试的日期断言同步更新。
+
+版本号跟的是「发布了哪些用户可感知改动」，不是「打了几次包」，**不会因重复打包累加**：
+
+- 同一批改动**重复打包**（构建失败重打、换服务器重打、联网版与 offline 版各打一份、升版本后又补了个纯构建修复再重打)一律**沿用同一版本号**，不再 +1。
+- 只有当「上次升版本之后」又**新积累了用户可感知改动**，下次打包才升一级。
+- **仅影响开发环境的改动**（构建脚本、工具链、端口、测试、本地 dev
+  server 等)不算用户可感知改动，据此重打的包**不要求**升版本号或写日志——这类改动本就不该进更新日志。
+
+发布前仍按既有流程先跑验证门：停掉占用 `3000` 端口的 Web dev server，设置
+`NEXT_PUBLIC_SUPPORT_EMAIL`，执行 `bun run release:verify`（10 步），通过后再打包。
+
 ## 数据库变更规范
 
 ```bash

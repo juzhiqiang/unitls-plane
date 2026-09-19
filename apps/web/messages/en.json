@@ -1680,6 +1680,20 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.9.1",
+          "date": "2026-09-19",
+          "title": "Task results & download fix",
+          "summary": "Fixes an issue where the result panel and download button did not appear after a server-side task (such as PDF to CAD) finished; results and downloads now show up as soon as a task completes.",
+          "groups": [
+            {
+              "title": "Bug fixes",
+              "items": [
+                "Fixed the result panel and download button not appearing after task completion: under a specific mount sequence the page's internal mounted flag stayed cleared, so post-completion UI updates were dropped. All server-side tool pages now show results and the download button correctly."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.9.0",
           "date": "2026-09-17",
           "title": "PDF to CAD",

@@ -11,6 +11,8 @@ const tasksService = {
   listImageGenerateSessions: vi.fn(),
   listImageGenerateSessionTasks: vi.fn(),
   deleteImageGenerateSession: vi.fn(),
+  getById: vi.fn(),
+  create: vi.fn(),
 };
 
 const imageGenerationService = {
@@ -248,4 +250,39 @@ it('throws 401 when deleting a session without a user', async () => {
   ).rejects.toThrow(UnauthorizedException);
 
   expect(tasksService.deleteImageGenerateSession).not.toHaveBeenCalled();
+});
+
+it('stamps retriedFrom on the new task and passes the rest of the config through', async () => {
+  const user = { id: 'user-1', plan: 'signed_in', role: 'user' } as never;
+  const originalId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a010';
+  tasksService.getById.mockResolvedValue({
+    id: originalId,
+    type: 'image_generate',
+    inputFileIds: ['file-1'],
+    inputConfig: {
+      mode: 'image_to_image',
+      prompt: '一只戴礼帽的柴犬',
+      clientGroupId: '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001',
+      sessionId: '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a002',
+    },
+  });
+  tasksService.create.mockResolvedValue({ id: 'new-task' });
+
+  await createController().retry(originalId, { user } as never);
+
+  expect(tasksService.getById).toHaveBeenCalledWith(originalId, user.id);
+  expect(tasksService.create).toHaveBeenCalledWith(
+    {
+      type: 'image_generate',
+      inputFileIds: ['file-1'],
+      inputConfig: {
+        mode: 'image_to_image',
+        prompt: '一只戴礼帽的柴犬',
+        clientGroupId: '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001',
+        sessionId: '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a002',
+        retriedFrom: originalId,
+      },
+    },
+    user
+  );
 });

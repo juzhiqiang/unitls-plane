@@ -111,6 +111,11 @@ export const imageGenerateTaskConfigSchema = z
     sessionId: imageGenerateGroupIdSchema.optional(),
     /** 一次提交的 N 张图共享的分组 id,前端按它聚成一条消息。 */
     clientGroupId: imageGenerateGroupIdSchema.optional(),
+    /**
+     * 「重新生成」时由 API 写入,指向被重试的直接父任务 id。前端按它把新任务
+     * 沿血缘链折叠回原格子(原地替换);processor 不依赖它。
+     */
+    retriedFrom: imageGenerateGroupIdSchema.optional(),
     /** 由 processor 传入 task.inputFileIds.length,不由客户端提供。 */
     inputFileCount: z.number().int().min(0),
   })

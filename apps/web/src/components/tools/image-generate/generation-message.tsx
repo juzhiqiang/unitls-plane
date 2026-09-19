@@ -379,7 +379,11 @@ export function GenerationMessage({
                     <button
                       type="button"
                       onClick={() => retryTask.mutate(task.taskId)}
-                      className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      disabled={
+                        retryTask.isPending &&
+                        retryTask.variables === task.taskId
+                      }
+                      className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-60"
                     >
                       {t('retryGenerate')}
                     </button>

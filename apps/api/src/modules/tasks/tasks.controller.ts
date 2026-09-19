@@ -315,7 +315,13 @@ export class TasksController {
       {
         type: original.type,
         inputFileIds: original.inputFileIds as string[],
-        inputConfig: (original.inputConfig as Record<string, unknown>) ?? {},
+        // retriedFrom 记录直接父任务:生图页据此把「重新生成」出的新任务折叠回
+        // 被点击的那张格子里(原地替换,而非旁边多一个框)。对其他任务类型无害
+        // (多一个被 processor Zod 忽略的键)。
+        inputConfig: {
+          ...((original.inputConfig as Record<string, unknown>) ?? {}),
+          retriedFrom: id,
+        },
       },
       user ?? null
     );

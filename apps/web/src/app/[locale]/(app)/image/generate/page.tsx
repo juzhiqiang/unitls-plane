@@ -64,15 +64,57 @@ function errorCodeOf(error: unknown): string {
   return typeof code === 'string' ? code : 'AI_IMAGE_GENERATION_FAILED';
 }
 
-/** 服务端任务列表 → 消息组:一次提交(clientGroupId)聚成一条消息。 */
+function taskConfigOf(task: TaskResponseDto): {
+  prompt?: unknown;
+  mode?: unknown;
+  clientGroupId?: unknown;
+  retriedFrom?: unknown;
+} {
+  return (task.inputConfig ?? {}) as {
+    prompt?: unknown;
+    mode?: unknown;
+    clientGroupId?: unknown;
+    retriedFrom?: unknown;
+  };
+}
+
+/**
+ * 服务端任务列表 → 消息组:一次提交(clientGroupId)聚成一条消息。
+ *
+ * 「重新生成」在服务端会新建一个带 `retriedFrom=父任务id` 的任务(见 retry 控制器)。
+ * 这里把这类子任务沿血缘链折叠回**被点击的那张格子**:每个槽位只保留链首(根)任务,
+ * 展示时解析到链尾(最新一次尝试)的状态与产物 —— 失败 → 生成中 → 出图都在原地发生,
+ * 旁边不再多出一个新格子。
+ */
 function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
+  // 父任务 id → 重试出来的子任务(取最后一个,链尾即最新一次尝试)。
+  const replacedBy = new Map<string, TaskResponseDto>();
+  for (const task of tasks) {
+    const retriedFrom = taskConfigOf(task).retriedFrom;
+    if (typeof retriedFrom === 'string') {
+      replacedBy.set(retriedFrom, task);
+    }
+  }
+
+  // 沿血缘链走到链尾:最新一次重试的任务(用它的状态/产物展示)。
+  const resolveTip = (task: TaskResponseDto): TaskResponseDto => {
+    let tip = task;
+    const seen = new Set<string>([task.id]);
+    let next = replacedBy.get(tip.id);
+    while (next && !seen.has(next.id)) {
+      seen.add(next.id);
+      tip = next;
+      next = replacedBy.get(tip.id);
+    }
+    return tip;
+  };
+
   const groups = new Map<string, GenerationMessageGroup>();
   for (const task of tasks) {
-    const config = (task.inputConfig ?? {}) as {
-      prompt?: unknown;
-      mode?: unknown;
-      clientGroupId?: unknown;
-    };
+    const config = taskConfigOf(task);
+    // 本身是「被重试出来的子任务」:它会通过父任务的槽位显示,不单独占格子。
+    if (typeof config.retriedFrom === 'string') continue;
+
     // 旧客户端的任务没有 clientGroupId,单任务自成一组。
     const clientGroupId =
       typeof config.clientGroupId === 'string' ? config.clientGroupId : task.id;
@@ -83,18 +125,20 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
         : 'text_to_image';
     // inpaint 的 prompt 带固定前缀(发给上游用的),气泡里只显示用户输入的部分。
     const prompt = stripInpaintPromptPrefix(rawPrompt, mode);
+    // 解析到链尾:格子展示的是最新一次尝试的状态与产物。
+    const tip = resolveTip(task);
     const entry: GenerationMessageTask = {
-      taskId: task.id,
-      status: task.status,
-      progress: task.progress,
-      outputFileId: task.outputFileId,
-      errorCode: task.errorCode,
-      errorMessage: task.errorMessage,
+      taskId: tip.id,
+      status: tip.status,
+      progress: tip.progress,
+      outputFileId: tip.outputFileId,
+      errorCode: tip.errorCode,
+      errorMessage: tip.errorMessage,
     };
 
     const existing = groups.get(clientGroupId);
     if (existing) {
-      existing.taskIds.push(task.id);
+      existing.taskIds.push(tip.id);
       existing.tasks?.push(entry);
     } else {
       groups.set(clientGroupId, {
@@ -103,7 +147,7 @@ function toMessageGroups(tasks: TaskResponseDto[]): GenerationMessageGroup[] {
         mode,
         referenceFileIds:
           mode === 'text_to_image' ? [] : (task.inputFileIds as string[]),
-        taskIds: [task.id],
+        taskIds: [tip.id],
         tasks: [entry],
       });
     }

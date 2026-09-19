@@ -596,6 +596,48 @@ describe('ImageGeneratePage', () => {
     );
   });
 
+  it('folds a retried task into the clicked tile instead of adding a new box', async () => {
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    // 第一张失败。
+    const [task] = syncServerTasks(rerender);
+    task.status = 'failed';
+    task.errorCode = 'AI_IMAGE_CONTENT_REJECTED';
+    refreshSessionTasks(rerender);
+    expect(
+      screen.getByText(
+        'The prompt was rejected by the content policy. Try rephrasing it.'
+      )
+    ).toBeInTheDocument();
+
+    // 重新生成:服务端新建一个带 retriedFrom=原任务 的任务,落回同一会话。
+    // 关键断言:失败文案消失(格子被链尾替换),而不是旁边多一个框。
+    serverTasks.push({
+      id: 'task-retry',
+      status: 'completed',
+      outputFileId: 'out-1',
+      inputConfig: {
+        ...task.inputConfig,
+        retriedFrom: task.id,
+      },
+      inputFileIds: task.inputFileIds,
+    });
+    refreshSessionTasks(rerender);
+
+    expect(
+      screen.queryByText(
+        'The prompt was rejected by the content policy. Try rephrasing it.'
+      )
+    ).not.toBeInTheDocument();
+    // 链尾 completed 任务的产物按其 id 取回(证明格子解析到了 task-retry)。
+    await waitFor(() =>
+      expect(mocks.outputLoad).toHaveBeenCalledWith('task-retry', 'out-1')
+    );
+  });
+
   it('shows the upstream refusal text instead of the generic content-policy copy', async () => {
     const { rerender } = renderPage();
     setPrompt('a shiba inu');

@@ -128,6 +128,13 @@
     background-color: var(--accent);
     color: var(--background);
   }
+
+  /* Tailwind v4 Preflight 把可点击元素默认光标改成 default;这里统一补回手势光标。
+     放 @layer base,优先级低于 utility class,个别刻意用 cursor-default 的组件不受影响。 */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
 }
 
 @layer utilities {

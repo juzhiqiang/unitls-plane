@@ -148,29 +148,48 @@ vi.mock('@/components/tools/image-generate/mask-editor', () => ({
   }: {
     open: boolean;
     onSubmit: (payload: {
-      maskBlob: Blob;
-      markedBlob: Blob;
+      maskBlob?: Blob;
+      markedBlob?: Blob;
       prompt: string;
       width: number;
       height: number;
     }) => void;
   }) =>
     open
-      ? React.createElement(
-          'button',
-          {
-            'data-testid': 'stub-inpaint-submit',
-            onClick: () =>
-              onSubmit({
-                maskBlob: new Blob(['mask-bytes']),
-                markedBlob: new Blob(['marked-bytes']),
-                prompt: 'make it a night sky',
-                width: 1024,
-                height: 1024,
-              }),
-          },
-          'stub-inpaint-submit'
-        )
+      ? React.createElement('div', null, [
+          // 圈选提交:带蒙版 + 红标记图 → inpaint。
+          React.createElement(
+            'button',
+            {
+              key: 'inpaint',
+              'data-testid': 'stub-inpaint-submit',
+              onClick: () =>
+                onSubmit({
+                  maskBlob: new Blob(['mask-bytes']),
+                  markedBlob: new Blob(['marked-bytes']),
+                  prompt: 'make it a night sky',
+                  width: 1024,
+                  height: 1024,
+                }),
+            },
+            'stub-inpaint-submit'
+          ),
+          // 不圈选、只写描述提交 → image_to_image 整图改图。
+          React.createElement(
+            'button',
+            {
+              key: 'describe',
+              'data-testid': 'stub-describe-submit',
+              onClick: () =>
+                onSubmit({
+                  prompt: 'make it a night sky',
+                  width: 1024,
+                  height: 1024,
+                }),
+            },
+            'stub-describe-submit'
+          ),
+        ])
       : null,
 }));
 
@@ -965,8 +984,8 @@ describe('ImageGeneratePage', () => {
     });
     rerender();
 
-    // 编辑入口 → 打桩的编辑器 → 提交。
-    fireEvent.click(screen.getByRole('button', { name: 'Edit region' }));
+    // 编辑入口 → 打桩的编辑器 → 圈选提交(带蒙版)。
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     const stubSubmit = await screen.findByTestId('stub-inpaint-submit');
 
     // 原图从 blob url 取回:给一个可用的全局 fetch。
@@ -1002,7 +1021,8 @@ describe('ImageGeneratePage', () => {
     });
   });
 
-  it('keeps the edit entry visible without inpaint support and shows a hint', async () => {
+  it('edits a completed image by description only and submits an image_to_image task', async () => {
+    // DEFAULT_MODEL 支持 edit(不支持 inpaint):编辑器开为「描述整图改图」,无需圈选。
     const { rerender } = renderPage();
     setPrompt('a shiba inu');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
@@ -1017,10 +1037,67 @@ describe('ImageGeneratePage', () => {
     });
     rerender();
 
-    // 入口常显:不支持时点击给「换模型」引导,而不是让功能凭空消失。
-    fireEvent.click(screen.getByRole('button', { name: 'Edit region' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const stubSubmit = await screen.findByTestId('stub-describe-submit');
+
+    let uploads = 200;
+    mocks.uploadFile.mockImplementation(async () => {
+      uploads += 1;
+      return { id: `file-${uploads}` };
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        blob: async () => new Blob(['image-bytes'], { type: 'image/png' }),
+      }))
+    );
+
+    fireEvent.click(stubSubmit);
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
+    const [payload] = mocks.createTask.mock.calls[1];
+    expect(payload).toMatchObject({
+      type: 'image_generate',
+      // 只上传原图当唯一参考图(无蒙版/红标记图)。
+      inputFileIds: ['file-201'],
+    });
+    expect(payload.inputFileIds).toHaveLength(1);
+    expect(payload.inputConfig).toMatchObject({
+      mode: 'image_to_image',
+      prompt: 'make it a night sky',
+    });
+  });
+
+  it('shows a switch-model hint when the model supports neither edit nor inpaint', async () => {
+    // 纯 generate 模型:既不能整图改图也不能圈选 → 点编辑给「换模型」引导。
+    mocks.imageGenerateModels.mockReturnValue({
+      data: [
+        {
+          model: 'text-only',
+          capabilities: ['generate'] as const,
+          sizes: ['auto', '1024x1024'],
+        },
+      ],
+    });
+    const { rerender } = renderPage();
+    setPrompt('a shiba inu');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-1';
+    refreshSessionTasks(rerender);
+    mocks.previews.mockReturnValue({
+      'task-1': { state: 'ready', url: 'blob:image-1' },
+    });
+    rerender();
+
+    // 入口常显:两种能力都没有时点击给「换模型」引导,而不是让功能凭空消失。
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     expect(
-      screen.getByText(/does not support region editing/)
+      screen.getByText(/does not support image to image/)
     ).toBeInTheDocument();
   });
 

@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Brush, Square, Undo2, Eraser } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 /** 一笔(可撤销的最小单位):画笔轨迹或矩形圈选。 */
 type Stroke =
@@ -15,10 +11,16 @@ type Stroke =
   | { type: 'rect'; x: number; y: number; width: number; height: number };
 
 export interface MaskEditorSubmitPayload {
-  /** 透明蒙版 PNG:透明区 = 要重绘的区域(官方 mask 通道用)。 */
-  maskBlob: Blob;
-  /** 带红色标记的原图(与用户在画布上看到的选区一致),回退通道的第二张参考图。 */
-  markedBlob: Blob;
+  /**
+   * 透明蒙版 PNG:透明区 = 要重绘的区域(官方 mask 通道用)。
+   * 只在用户圈选了区域时导出;无圈选(直接描述整图改图)时为 undefined。
+   */
+  maskBlob?: Blob;
+  /**
+   * 带红色标记的原图(与用户在画布上看到的选区一致),回退通道的第二张参考图。
+   * 与 maskBlob 同在同缺。
+   */
+  markedBlob?: Blob;
   prompt: string;
   width: number;
   height: number;
@@ -28,6 +30,11 @@ interface MaskEditorProps {
   open: boolean;
   /** 要编辑的原图(blob url)。 */
   imageUrl: string;
+  /**
+   * 模型是否支持圈选局部重绘(inpaint 能力)。false 时隐藏画笔/矩形工具,
+   * 编辑器退化成「看图 + 写描述」的整图图生图改图。
+   */
+  inpaintSupported?: boolean;
   onClose: () => void;
   onSubmit: (payload: MaskEditorSubmitPayload) => void;
   busy?: boolean;
@@ -44,6 +51,7 @@ interface MaskEditorProps {
 export function MaskEditor({
   open,
   imageUrl,
+  inpaintSupported = true,
   onClose,
   onSubmit,
   busy = false,
@@ -95,9 +103,7 @@ export function MaskEditor({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const all = drawingRef.current
-      ? [...strokes, drawingRef.current]
-      : strokes;
+    const all = drawingRef.current ? [...strokes, drawingRef.current] : strokes;
     for (const stroke of all) drawStroke(ctx, stroke, 'red');
   }, [strokes, drawStroke]);
 
@@ -114,9 +120,7 @@ export function MaskEditor({
     };
   };
 
-  const handlePointerDown = (
-    event: React.PointerEvent<HTMLCanvasElement>
-  ) => {
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (busy) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = toCanvasPoint(event);
@@ -127,9 +131,7 @@ export function MaskEditor({
     redraw();
   };
 
-  const handlePointerMove = (
-    event: React.PointerEvent<HTMLCanvasElement>
-  ) => {
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const current = drawingRef.current;
     if (!current) return;
     const point = toCanvasPoint(event);
@@ -185,18 +187,23 @@ export function MaskEditor({
   }, [open]);
 
   const submit = async () => {
-    if (strokes.length === 0 || prompt.trim().length === 0) return;
+    // 圈选可选:只要有提示词即可提交。无圈选 = 整图图生图改图。
+    if (prompt.trim().length === 0) return;
     const image = imageRef.current;
     const { width, height } = imageSize;
     if (!image || !width || !height) return;
 
-    // 同时导出两份,后端按网关能力选择通道:
+    // 无圈选:不导出蒙版,回传 prompt/尺寸,页面据此走整图 image_to_image。
+    if (strokes.length === 0) {
+      onSubmit({ prompt: prompt.trim(), width, height });
+      return;
+    }
+
+    // 有圈选:同时导出两份,后端按网关能力选择通道:
     // 1. 透明蒙版(官方 mask 通道):白底不透明,选区用 destination-out 挖成透明;
     // 2. 带红色标记的原图(回退通道):原图打底 + 红色选区,所见即所得。
     const toBlob = (canvas: HTMLCanvasElement) =>
-      new Promise<Blob | null>(resolve =>
-        canvas.toBlob(resolve, 'image/png')
-      );
+      new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
 
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = width;
@@ -246,67 +253,70 @@ export function MaskEditor({
           {t('editorTitle')}
         </DialogTitle>
 
-        {/* 工具栏:画笔/矩形 + 笔刷大小 + 撤销/清空。 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            aria-pressed={tool === 'brush'}
-            onClick={() => setTool('brush')}
-            className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs ${
-              tool === 'brush'
-                ? 'border-foreground bg-foreground text-background'
-                : 'border-border hover:border-foreground'
-            }`}
-          >
-            <Brush className="h-3.5 w-3.5" />
-            {t('editorBrush')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={tool === 'rect'}
-            onClick={() => setTool('rect')}
-            className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs ${
-              tool === 'rect'
-                ? 'border-foreground bg-foreground text-background'
-                : 'border-border hover:border-foreground'
-            }`}
-          >
-            <Square className="h-3.5 w-3.5" />
-            {t('editorRect')}
-          </button>
-          {tool === 'brush' && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              {t('editorBrushSize')}
-              <input
-                type="range"
-                min={4}
-                max={96}
-                value={brushSize}
-                onChange={event => setBrushSize(Number(event.target.value))}
-                className="w-28"
-              />
-            </label>
-          )}
-          <span className="flex-1" />
-          <button
-            type="button"
-            onClick={undo}
-            disabled={strokes.length === 0 || busy}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-            {t('editorUndo')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setStrokes([])}
-            disabled={strokes.length === 0 || busy}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Eraser className="h-3.5 w-3.5" />
-            {t('editorClear')}
-          </button>
-        </div>
+        {/* 工具栏:画笔/矩形 + 笔刷大小 + 撤销/清空。仅在模型支持圈选局部重绘时出现;
+            不支持时编辑器退化成「看图 + 写描述」的整图图生图。 */}
+        {inpaintSupported && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={tool === 'brush'}
+              onClick={() => setTool('brush')}
+              className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs ${
+                tool === 'brush'
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border hover:border-foreground'
+              }`}
+            >
+              <Brush className="h-3.5 w-3.5" />
+              {t('editorBrush')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={tool === 'rect'}
+              onClick={() => setTool('rect')}
+              className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs ${
+                tool === 'rect'
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border hover:border-foreground'
+              }`}
+            >
+              <Square className="h-3.5 w-3.5" />
+              {t('editorRect')}
+            </button>
+            {tool === 'brush' && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                {t('editorBrushSize')}
+                <input
+                  type="range"
+                  min={4}
+                  max={96}
+                  value={brushSize}
+                  onChange={event => setBrushSize(Number(event.target.value))}
+                  className="w-28"
+                />
+              </label>
+            )}
+            <span className="flex-1" />
+            <button
+              type="button"
+              onClick={undo}
+              disabled={strokes.length === 0 || busy}
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              {t('editorUndo')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStrokes([])}
+              disabled={strokes.length === 0 || busy}
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              {t('editorClear')}
+            </button>
+          </div>
+        )}
 
         {/* 画布:原图在下,蒙版层在上,尺寸对齐原图。 */}
         <div className="relative mx-auto max-h-[52vh] w-fit overflow-auto rounded-md border border-border">
@@ -325,14 +335,17 @@ export function MaskEditor({
             className="block max-w-full select-none"
             draggable={false}
           />
+          {/* 不支持圈选时画布只作预览(pointer-events 关掉,不接管指针)。 */}
           <canvas
             ref={canvasRef}
             width={imageSize.width || 1}
             height={imageSize.height || 1}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
+            onPointerDown={inpaintSupported ? handlePointerDown : undefined}
+            onPointerMove={inpaintSupported ? handlePointerMove : undefined}
+            onPointerUp={inpaintSupported ? handlePointerUp : undefined}
+            className={`absolute inset-0 h-full w-full touch-none ${
+              inpaintSupported ? 'cursor-crosshair' : 'pointer-events-none'
+            }`}
           />
         </div>
 
@@ -348,15 +361,19 @@ export function MaskEditor({
           <button
             type="button"
             onClick={() => void submit()}
-            disabled={
-              busy || strokes.length === 0 || prompt.trim().length === 0
-            }
+            disabled={busy || prompt.trim().length === 0}
             className="h-9 shrink-0 rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? t('generating') : t('editorSubmit')}
+            {busy
+              ? t('generating')
+              : strokes.length > 0
+                ? t('editorSubmit')
+                : t('editorSubmitDescribe')}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground">{t('editorHint')}</p>
+        <p className="text-xs text-muted-foreground">
+          {inpaintSupported ? t('editorHintOptional') : t('editorHintDescribe')}
+        </p>
       </DialogContent>
     </Dialog>
   );

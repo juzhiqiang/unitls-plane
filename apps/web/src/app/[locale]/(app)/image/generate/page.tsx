@@ -199,12 +199,15 @@ export default function ImageGeneratePage() {
   const inpaintSupported =
     !selectedModel || selectedModel.capabilities.includes('inpaint');
 
-  /** 编辑入口统一走这里:支持的模型打开编辑器,不支持的给切换引导。 */
+  /**
+   * 编辑入口统一走这里:模型支持整图改图(edit)或圈选重绘(inpaint)任一即可开编辑器,
+   * 编辑器内部按 inpaintSupported 决定是否给圈选工具;两者都不支持才给切换引导。
+   */
   const handleEditImage = (url: string) => {
-    if (inpaintSupported) {
+    if (editSupported || inpaintSupported) {
       setEditingImageUrl(url);
     } else {
-      setFailure({ key: 'modelNoInpaintHint' });
+      setFailure({ key: 'modelNoEditHint' });
     }
   };
 
@@ -401,35 +404,41 @@ export default function ImageGeneratePage() {
   };
 
   /**
-   * 局部重绘提交:编辑器产出的蒙版 + 原图一起上传,作为同会话里的新消息。
+   * 编辑器提交:圈选可选,按有无蒙版分两条链路,都作为同会话里的新消息。
    *
-   * 尺寸取原图的原始宽高(蒙版与原图逐像素对齐,输出尺寸也跟随原图);
-   * 不在来源支持列表时回落到第一档,与普通提交同一条解析路径。
+   * - 有蒙版(圈了区域)→ inpaint:上传 [原图, 透明蒙版, 红标记图],后端先走官方
+   *   mask 通道,被拒时用红标记图回退。
+   * - 无蒙版(只写描述)→ image_to_image:只上传原图当唯一参考图,整图按描述改图。
+   *
+   * 尺寸取原图的原始宽高(蒙版与原图逐像素对齐,输出尺寸也跟随原图);不在来源支持
+   * 列表时回落到第一档,与普通提交同一条解析路径。
    */
-  const submitInpaint = async ({
+  const submitEdit = async ({
     maskBlob,
     markedBlob,
     prompt,
     width,
     height,
   }: {
-    maskBlob: Blob;
-    markedBlob: Blob;
+    maskBlob?: Blob;
+    markedBlob?: Blob;
     prompt: string;
     width: number;
     height: number;
   }) => {
     if (requireLogin(TOOL_HREF) || !editingImageUrl) return;
 
+    const isInpaint = Boolean(maskBlob && markedBlob);
+    const mode = isInpaint ? 'inpaint' : 'image_to_image';
     const clientGroupId = randomUUID();
-    // inputConfig.prompt 存用户原文:后端默认走官方 mask 通道(无需前缀),
-    // 网关拒绝 mask 时才回退红标记通道并自行拼固定前缀。
+    // inputConfig.prompt 存用户原文:inpaint 时后端默认走官方 mask 通道(无需前缀),
+    // 网关拒绝 mask 时才回退红标记通道并自行拼固定前缀;image_to_image 直接用原文。
     setFailure(null);
     setInpaintBusy(true);
     setOptimistic({
       clientGroupId,
       prompt,
-      mode: 'inpaint',
+      mode,
       referenceFileIds: [],
       taskIds: [],
       tasks: [{ taskId: `${clientGroupId}-optimistic-0`, status: 'pending' }],
@@ -440,27 +449,32 @@ export default function ImageGeneratePage() {
       const imageResponse = await fetch(editingImageUrl);
       if (!imageResponse.ok) throw new Error('fetch failed');
       const imageBlob = await imageResponse.blob();
-      const baseFile = new File([imageBlob], 'inpaint-base.png', {
+      const baseFile = new File([imageBlob], 'edit-base.png', {
         type: imageBlob.type || 'image/png',
       });
-      const maskFile = new File([maskBlob], 'inpaint-mask.png', {
-        type: 'image/png',
-      });
-      const markedFile = new File([markedBlob], 'inpaint-marked.png', {
-        type: 'image/png',
-      });
 
-      // 上传顺序即语义顺序:inputFileIds = [原图, 透明蒙版, 红标记图],
-      // 后端先走官方 mask 通道,被拒时用红标记图回退。
+      // 原图两条链路都要:image_to_image 的唯一参考图,或 inpaint 的第一张。
       const baseUploaded = (await uploadFile.mutateAsync(
         baseFile
       )) as unknown as { id: string };
-      const maskUploaded = (await uploadFile.mutateAsync(
-        maskFile
-      )) as unknown as { id: string };
-      const markedUploaded = (await uploadFile.mutateAsync(
-        markedFile
-      )) as unknown as { id: string };
+
+      let inputFileIds = [baseUploaded.id];
+      if (isInpaint) {
+        const maskFile = new File([maskBlob!], 'inpaint-mask.png', {
+          type: 'image/png',
+        });
+        const markedFile = new File([markedBlob!], 'inpaint-marked.png', {
+          type: 'image/png',
+        });
+        // 上传顺序即语义顺序:inputFileIds = [原图, 透明蒙版, 红标记图]。
+        const maskUploaded = (await uploadFile.mutateAsync(
+          maskFile
+        )) as unknown as { id: string };
+        const markedUploaded = (await uploadFile.mutateAsync(
+          markedFile
+        )) as unknown as { id: string };
+        inputFileIds = [baseUploaded.id, maskUploaded.id, markedUploaded.id];
+      }
 
       setOptimistic(current =>
         current && current.clientGroupId === clientGroupId
@@ -473,9 +487,9 @@ export default function ImageGeneratePage() {
 
       await createTask.mutateAsync({
         type: 'image_generate',
-        inputFileIds: [baseUploaded.id, maskUploaded.id, markedUploaded.id],
+        inputFileIds,
         inputConfig: {
-          mode: 'inpaint',
+          mode,
           prompt,
           size,
           quality: draft.quality,
@@ -640,12 +654,13 @@ export default function ImageGeneratePage() {
         </div>
       </div>
 
-      {/* 局部重绘蒙版编辑器。 */}
+      {/* 图片编辑器:圈选可选。支持 inpaint 才给圈选工具,否则纯描述整图改图。 */}
       <MaskEditor
         open={Boolean(editingImageUrl)}
         imageUrl={editingImageUrl ?? ''}
+        inpaintSupported={inpaintSupported}
         onClose={() => setEditingImageUrl(null)}
-        onSubmit={payload => void submitInpaint(payload)}
+        onSubmit={payload => void submitEdit(payload)}
         busy={inpaintBusy}
       />
 

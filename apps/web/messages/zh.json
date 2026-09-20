@@ -139,10 +139,6 @@
       "imageComposeDescription": "将多张图片拼成适合发布的长图。",
       "imageProtect": "保护",
       "imageProtectDescription": "添加可见归属标记，用于品牌保护和防盗图发布。",
-      "imageBatch": "批量",
-      "imageBatchDescription": "一次处理多张图片，并打包下载结果。",
-      "imagePreview": "预览",
-      "imagePreviewDescription": "保存前对比原图和处理结果。",
       "imageGenerate": "AI 生图",
       "imageGenerateDescription": "用文字描述生成图片，产物直接进账号文件。",
       "pdfOrganize": "整理",
@@ -180,14 +176,6 @@
       "imageAnimation": {
         "title": "GIF/APNG 制作与压缩",
         "description": "用图片序列制作 GIF，登录后可使用 APNG 和高级压缩选项。"
-      },
-      "imageBatch": {
-        "title": "批量图片输出",
-        "description": "处理多张图片并下载一个 ZIP。"
-      },
-      "imageCompare": {
-        "title": "前后对比预览",
-        "description": "保留结果前检查视觉质量。"
       },
       "pdfMerge": {
         "title": "合并 PDF",

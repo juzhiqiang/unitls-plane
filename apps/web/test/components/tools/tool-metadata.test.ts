@@ -44,7 +44,7 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(12);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(10);
   });
 
   it('registers the AI image generator as a login-gated server tool', () => {

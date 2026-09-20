@@ -139,10 +139,6 @@
       "imageComposeDescription": "Stitch images into publishing-ready long visuals.",
       "imageProtect": "Protect",
       "imageProtectDescription": "Add visible ownership marks for brand protection and anti-theft publishing.",
-      "imageBatch": "Batch",
-      "imageBatchDescription": "Process multiple images and package the result as one download.",
-      "imagePreview": "Preview",
-      "imagePreviewDescription": "Compare original and result before saving.",
       "imageGenerate": "AI image generation",
       "imageGenerateDescription": "Generate images from a text prompt, saved straight to your account files.",
       "pdfOrganize": "Organize",
@@ -180,14 +176,6 @@
       "imageAnimation": {
         "title": "GIF / APNG maker",
         "description": "Create GIFs from image sequences, with APNG and advanced compression available after sign-in."
-      },
-      "imageBatch": {
-        "title": "Batch image output",
-        "description": "Process many images and download a single ZIP."
-      },
-      "imageCompare": {
-        "title": "Before / after preview",
-        "description": "Check visual quality before keeping the result."
       },
       "pdfMerge": {
         "title": "Merge PDF",

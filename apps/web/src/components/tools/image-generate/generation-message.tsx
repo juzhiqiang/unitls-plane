@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Pencil, Sparkles } from 'lucide-react';
 import type { GenerationMessageGroup } from './types';
-import type { TaskOutputPreview } from '@/hooks/api/use-task-output';
-import { useFilePreviewUrl } from '@/hooks/api/use-file-preview';
+import {
+  buildFileDownloadUrl,
+  buildFileThumbnailUrl,
+  downloadStoredFile,
+} from '@/lib/files/file-download';
 import { useRetryTask } from '@/hooks/api/use-tasks';
 import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
 import { ImageLightbox } from './image-lightbox';
@@ -247,44 +250,90 @@ export interface MessageUser {
 
 interface GenerationMessageProps {
   group: GenerationMessageGroup;
-  /** taskId → 产物预览状态(url 存在即可显示)。 */
-  previews: Record<string, TaskOutputPreview>;
-  /** 单张取回失败时给「重试取回」而不是重新生成。 */
-  onRetryFetch: (taskId: string, outputFileId: string) => void;
   /**
    * 局部重绘入口:常显(来源不支持时由页面给切换引导),undefined = 完全不出
-   * (只有一种情况:连来源列表都还没回来)。
+   * (只有一种情况:连来源列表都还没回来)。回调收产物文件 id,页面按需取原图。
    */
-  onEditImage?: (url: string) => void;
+  onEditImage?: (fileId: string) => void;
   /** 当前登录用户,用于右侧头像。 */
   user?: MessageUser;
 }
 
-/** 消息里一张参考图的缩略(点击放大)。 */
+/** 消息里一张参考图的缩略(点击放大)。走 320px 缩略图端点,不再预取原图 blob。 */
 function ReferenceThumb({
   fileId,
   onOpen,
 }: {
   fileId: string;
-  onOpen: (url: string) => void;
+  onOpen: (fileId: string) => void;
 }) {
-  const url = useFilePreviewUrl(fileId);
   const t = useTranslations('ImageGenerate');
-  if (!url) return null;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [fileId]);
+  if (failed) return null;
   return (
     <button
       type="button"
       aria-label={t('enlargeReference')}
-      onClick={() => onOpen(url)}
+      onClick={() => onOpen(fileId)}
       className="block overflow-hidden rounded-md border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={url}
+        src={buildFileThumbnailUrl(fileId)}
         alt={t('sourcePreviewAlt')}
+        loading="lazy"
+        onError={() => setFailed(true)}
         className="h-14 w-14 object-cover"
       />
     </button>
+  );
+}
+
+/**
+ * 一张已完成结果图的缩略格子。走 320px 缩略图端点 + 原生懒加载:
+ * 切进历史会话时,不在视口内的图不会立刻下载,也不再为 128px 的格子拉 3 MB 原图。
+ * 取回失败时给「重试取回」,点击 bump 一个 key 给 URL 追加参数破缓存重取。
+ */
+function ResultThumb({ fileId, alt }: { fileId: string; alt: string }) {
+  const t = useTranslations('ImageGenerate');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    setReloadKey(0);
+  }, [fileId]);
+
+  if (failed) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setFailed(false);
+          setReloadKey(key => key + 1);
+        }}
+        className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-center text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+      >
+        <span>{t('resultFetchFailed')}</span>
+        <span>{t('retryFetch')}</span>
+      </button>
+    );
+  }
+
+  const src =
+    reloadKey > 0
+      ? `${buildFileThumbnailUrl(fileId)}?r=${reloadKey}`
+      : buildFileThumbnailUrl(fileId);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-full w-full object-cover"
+    />
   );
 }
 
@@ -297,8 +346,6 @@ function ReferenceThumb({
  */
 export function GenerationMessage({
   group,
-  previews,
-  onRetryFetch,
   onEditImage,
   user,
 }: GenerationMessageProps) {
@@ -306,20 +353,27 @@ export function GenerationMessage({
   const failureText = useFailureText();
   const retryTask = useRetryTask();
   const [compareOpen, setCompareOpen] = useState(false);
-  const [lightbox, setLightbox] = useState<{ url: string; alt: string } | null>(
-    null
-  );
+  const [lightbox, setLightbox] = useState<{
+    fileId: string;
+    alt: string;
+  } | null>(null);
 
   const completedTasks = (group.tasks ?? []).filter(
     task => task.status === 'completed'
   );
-  const firstUrl = previews[completedTasks[0]?.taskId ?? '']?.url;
-  const baseImageForCompare = useFilePreviewUrl(
-    group.mode === 'inpaint' ? group.referenceFileIds[0] : undefined
-  );
-  const referenceUrlForCompare = useFilePreviewUrl(
-    group.mode === 'image_to_image' ? group.referenceFileIds[0] : undefined
-  );
+  // 对比弹窗要原图清晰度(纯 <img> 展示,不碰 canvas):直接用 /download inline URL。
+  const firstOutputFileId = completedTasks[0]?.outputFileId;
+  const firstUrl = firstOutputFileId
+    ? buildFileDownloadUrl(firstOutputFileId)
+    : undefined;
+  const baseImageForCompare =
+    group.mode === 'inpaint' && group.referenceFileIds[0]
+      ? buildFileDownloadUrl(group.referenceFileIds[0])
+      : undefined;
+  const referenceUrlForCompare =
+    group.mode === 'image_to_image' && group.referenceFileIds[0]
+      ? buildFileDownloadUrl(group.referenceFileIds[0])
+      : undefined;
   const showCompareToggle = Boolean(
     group.mode === 'image_to_image' && referenceUrlForCompare && firstUrl
   );
@@ -335,8 +389,8 @@ export function GenerationMessage({
                 <ReferenceThumb
                   key={fileId}
                   fileId={fileId}
-                  onOpen={url =>
-                    setLightbox({ url, alt: t('sourcePreviewAlt') })
+                  onOpen={id =>
+                    setLightbox({ fileId: id, alt: t('sourcePreviewAlt') })
                   }
                 />
               ))}
@@ -365,8 +419,6 @@ export function GenerationMessage({
           {/* 结果缩略图:固定 8rem 方格流式排列,点击放大。 */}
           <div className="flex flex-wrap gap-2">
             {(group.tasks ?? []).map((task, index) => {
-              const preview = previews[task.taskId];
-
               if (task.status === 'failed') {
                 return (
                   <div
@@ -391,7 +443,8 @@ export function GenerationMessage({
                 );
               }
 
-              if (!preview?.url) {
+              // 未完成或还没写回产物 id:脉动占位,图交给完成后的懒加载。
+              if (task.status !== 'completed' || !task.outputFileId) {
                 return (
                   <div
                     key={task.taskId}
@@ -400,13 +453,14 @@ export function GenerationMessage({
                     className="flex h-32 w-32 items-center justify-center rounded-md bg-muted/40"
                   >
                     <span className="animate-pulse font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {task.status === 'completed'
-                        ? t('resultFetching')
-                        : t('generating')}
+                      {t('generating')}
                     </span>
                   </div>
                 );
               }
+
+              const outputFileId = task.outputFileId;
+              const resultAlt = t('resultMeta', { index: String(index + 1) });
 
               return (
                 <figure
@@ -421,25 +475,17 @@ export function GenerationMessage({
                         : t('enlargeResult')
                     }
                     onClick={() => {
-                      // inpaint 无条件开对比弹窗:底图预览是异步取回的,若在这里等它,
+                      // inpaint 无条件开对比弹窗:底图是按需取回的,若在这里等它,
                       // 首次点击会误入放大预览分支,用户要再点一次才能看到对比。
                       if (group.mode === 'inpaint') {
                         setCompareOpen(true);
                       } else {
-                        setLightbox({
-                          url: preview.url!,
-                          alt: t('resultMeta', { index: String(index + 1) }),
-                        });
+                        setLightbox({ fileId: outputFileId, alt: resultAlt });
                       }
                     }}
                     className="block h-full w-full cursor-zoom-in"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={preview.url}
-                      alt={t('resultMeta', { index: String(index + 1) })}
-                      className="h-full w-full object-cover"
-                    />
+                    <ResultThumb fileId={outputFileId} alt={resultAlt} />
                   </button>
 
                   {/* 编辑与下载:小图上用图标位,常显以便触摸设备可达。 */}
@@ -448,46 +494,25 @@ export function GenerationMessage({
                       type="button"
                       aria-label={t('editImage')}
                       title={t('editImage')}
-                      onClick={() => onEditImage(preview.url!)}
+                      onClick={() => onEditImage(outputFileId)}
                       className="absolute left-1 top-1 rounded-md bg-background/90 p-1 text-foreground shadow-sm hover:bg-background"
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
                   )}
-                  <a
-                    href={preview.url}
-                    download={`ai-image-${index + 1}.png`}
+                  <button
+                    type="button"
                     aria-label={t('downloadImage')}
                     title={t('downloadImage')}
+                    onClick={() => downloadStoredFile(outputFileId)}
                     className="absolute bottom-1 right-1 rounded-md bg-background/90 px-1.5 py-0.5 text-[10px] text-foreground shadow-sm hover:bg-background"
                   >
                     {t('downloadImage')}
-                  </a>
+                  </button>
                 </figure>
               );
             })}
           </div>
-
-          {/* 产物取回失败的行内重试(区别于生成失败:图已生成,只补一次下载)。 */}
-          {(group.tasks ?? []).map(task => {
-            if (
-              task.status === 'completed' &&
-              task.outputFileId &&
-              previews[task.taskId]?.state === 'error'
-            ) {
-              return (
-                <button
-                  key={task.taskId}
-                  type="button"
-                  onClick={() => onRetryFetch(task.taskId, task.outputFileId!)}
-                  className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                >
-                  {t('resultFetchFailed')} · {t('retryFetch')}
-                </button>
-              );
-            }
-            return null;
-          })}
         </div>
       </div>
 
@@ -520,7 +545,7 @@ export function GenerationMessage({
       </Dialog>
 
       <ImageLightbox
-        url={lightbox?.url ?? null}
+        fileId={lightbox?.fileId ?? null}
         alt={lightbox?.alt ?? ''}
         onClose={() => setLightbox(null)}
       />

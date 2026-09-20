@@ -14,7 +14,7 @@ import {
   useImageGenerateSessionTasks,
 } from '@/hooks/api/use-tasks';
 import { useUploadFile } from '@/hooks/api/use-files';
-import { useTaskOutputPreviews } from '@/hooks/api/use-task-output';
+import { buildFileDownloadUrl } from '@/lib/files/file-download';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { taskQueryKeys } from '@/hooks/api/query-keys';
 import type { TaskResponseDto } from '@/hooks/api/types';
@@ -182,12 +182,12 @@ export default function ImageGeneratePage() {
   );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   // 局部重绘:正在编辑的结果图 blob url(null = 编辑器关闭)。
+  // MaskEditor 要把图 drawImage 进 canvas 再 toBlob 导出蒙版,跨域图会污染 canvas,
+  // 所以这里存的是「按需 fetch 原图转出的同源 objectURL」,而不是跨域 /download URL。
   const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
   const [inpaintBusy, setInpaintBusy] = useState(false);
-
-  const output = useTaskOutputPreviews();
-  // 已发起产物下载的 taskId:切会话后 previews 被清空,这个集合也要跟着重置。
-  const loadedRef = useRef<Set<string>>(new Set());
+  // 当前编辑用的 objectURL,切换/关闭时回收,避免泄漏。
+  const editingObjectUrlRef = useRef<string | null>(null);
 
   const models = modelsQuery.data ?? [];
   const selectedModel =
@@ -199,15 +199,44 @@ export default function ImageGeneratePage() {
   const inpaintSupported =
     !selectedModel || selectedModel.capabilities.includes('inpaint');
 
+  // 回收上一张编辑用的 objectURL(切换编辑对象、关闭编辑器时调用)。
+  const revokeEditingObjectUrl = () => {
+    if (editingObjectUrlRef.current) {
+      URL.revokeObjectURL(editingObjectUrlRef.current);
+      editingObjectUrlRef.current = null;
+    }
+  };
+
+  const closeEditor = () => {
+    revokeEditingObjectUrl();
+    setEditingImageUrl(null);
+  };
+
+  useEffect(() => () => revokeEditingObjectUrl(), []);
+
   /**
    * 编辑入口统一走这里:模型支持整图改图(edit)或圈选重绘(inpaint)任一即可开编辑器,
    * 编辑器内部按 inpaintSupported 决定是否给圈选工具;两者都不支持才给切换引导。
+   *
+   * 网格只加载缩略图,编辑要的是原图:这里按 fileId 拉一次原图转成同源 objectURL 再交给
+   * 编辑器 —— 既保证 canvas 不被跨域图污染(toBlob 可用),也让蒙版按原图尺寸对齐。
    */
-  const handleEditImage = (url: string) => {
-    if (editSupported || inpaintSupported) {
-      setEditingImageUrl(url);
-    } else {
+  const handleEditImage = async (fileId: string) => {
+    if (!editSupported && !inpaintSupported) {
       setFailure({ key: 'modelNoEditHint' });
+      return;
+    }
+    try {
+      const response = await fetch(buildFileDownloadUrl(fileId), {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('fetch failed');
+      const objectUrl = URL.createObjectURL(await response.blob());
+      revokeEditingObjectUrl();
+      editingObjectUrlRef.current = objectUrl;
+      setEditingImageUrl(objectUrl);
+    } catch {
+      setFailure({ key: 'failed' });
     }
   };
 
@@ -232,29 +261,9 @@ export default function ImageGeneratePage() {
     return serverGroups;
   }, [sessionTasks, optimistic]);
 
-  // 切会话:清空预览与已加载集合,恢复历史会话时 completed 任务会经 effect 重新取回。
-  useEffect(() => {
-    output.reset();
-    loadedRef.current = new Set();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId]);
-
-  // completed 任务统一在这里取回产物(新完成的与历史恢复的走同一条路)。
-  useEffect(() => {
-    for (const group of messageGroups) {
-      for (const task of group.tasks ?? []) {
-        if (
-          task.status === 'completed' &&
-          task.outputFileId &&
-          !loadedRef.current.has(task.taskId)
-        ) {
-          loadedRef.current.add(task.taskId);
-          void output.load(task.taskId, task.outputFileId);
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messageGroups]);
+  // 结果图不再预取 blob:网格用缩略图端点 + 原生 <img loading="lazy">,由浏览器按
+  // 视口懒加载、按 HTTP 缓存复用。切会话不再瞬间并发几十个原图下载(旧的两个 effect
+  // ——切会话 reset 预览、遍历 completed 并发 load —— 已删除)。
 
   // 生图失败返还额度:后端计数排除 failed(countTasksCreatedToday 的
   // ne(status,'failed')),任务转失败后当日已用自动回退;但额度快照只在建任务
@@ -499,6 +508,7 @@ export default function ImageGeneratePage() {
           clientGroupId,
         },
       });
+      revokeEditingObjectUrl();
       setEditingImageUrl(null);
     } catch (error) {
       setFailure({
@@ -519,16 +529,9 @@ export default function ImageGeneratePage() {
       task => task.status === 'pending' || task.status === 'processing'
     )
   );
-  // 任务 settled 只说明服务端出图了,页面还要再下载一次 blob 才有东西可看:
-  // busy 要按住到图片真的能显示,否则按钮先恢复、格子空着、图片随后突然出现。
-  const fetchingResults = messageGroups.some(group =>
-    (group.tasks ?? []).some(
-      task =>
-        task.status === 'completed' &&
-        (output.previews[task.taskId]?.state ?? 'loading') === 'loading'
-    )
-  );
-  const busy = submitting || inFlight || fetchingResults || inpaintBusy;
+  // 任务 completed 即解除忙碌态:结果图交给缩略图 <img> 懒加载,不再按住到 blob 下完
+  // (旧写法会先下完 blob 才恢复按钮;现在出图即可继续操作,图片就地懒加载显示)。
+  const busy = submitting || inFlight || inpaintBusy;
 
   const activeSessionTitle =
     activeSessionId === newSessionId
@@ -546,12 +549,10 @@ export default function ImageGeneratePage() {
   const handleDeleteSession = (sessionId: string) => {
     void deleteSession.mutate(sessionId, {
       onSuccess: () => {
-        // 删的是当前会话:画布切回新对话,预览与加载记录一并清空。
+        // 删的是当前会话:画布切回新对话。删其它会话时当前画布不受影响,
+        // 结果图由缩略图 <img> 各自加载,无预取状态需要清理。
         if (sessionId === activeSessionId) {
           startNewChat();
-        } else {
-          output.reset();
-          loadedRef.current = new Set();
         }
       },
       onError: error => {
@@ -592,11 +593,7 @@ export default function ImageGeneratePage() {
           <GenerationMessage
             key={group.clientGroupId}
             group={group}
-            previews={output.previews}
-            onRetryFetch={(taskId, outputFileId) =>
-              void output.load(taskId, outputFileId)
-            }
-            onEditImage={handleEditImage}
+            onEditImage={fileId => void handleEditImage(fileId)}
             user={session?.user}
           />
         ))}
@@ -659,7 +656,7 @@ export default function ImageGeneratePage() {
         open={Boolean(editingImageUrl)}
         imageUrl={editingImageUrl ?? ''}
         inpaintSupported={inpaintSupported}
-        onClose={() => setEditingImageUrl(null)}
+        onClose={closeEditor}
         onSubmit={payload => void submitEdit(payload)}
         busy={inpaintBusy}
       />

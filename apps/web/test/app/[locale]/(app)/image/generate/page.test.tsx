@@ -24,8 +24,6 @@ const mocks = vi.hoisted(() => ({
   imageGeneratePresets: vi.fn(),
   imageGenerateSessions: vi.fn(),
   sessionTasks: vi.fn(),
-  previews: vi.fn(),
-  outputLoad: vi.fn(),
   retryTask: vi.fn(),
   maxReferenceSize: vi.fn(),
   deleteSession: vi.fn(),
@@ -103,18 +101,6 @@ vi.mock('@/hooks/api/use-tasks', () => ({
 
 vi.mock('@/hooks/api/use-files', () => ({
   useUploadFile: () => ({ mutateAsync: mocks.uploadFile }),
-}));
-
-vi.mock('@/hooks/api/use-task-output', () => ({
-  useTaskOutputPreviews: () => ({
-    previews: mocks.previews(),
-    load: mocks.outputLoad,
-    reset: vi.fn(),
-  }),
-}));
-
-vi.mock('@/hooks/api/use-file-preview', () => ({
-  useFilePreviewUrl: () => 'blob:file-preview',
 }));
 
 vi.mock('@/hooks/use-object-url', () => ({
@@ -288,10 +274,11 @@ beforeEach(() => {
   mocks.sessionTasks.mockReturnValue({
     data: { tasks: serverTasks, total: 0 },
   });
-  mocks.previews.mockReturnValue({});
-  mocks.outputLoad.mockResolvedValue(undefined);
   mocks.maxReferenceSize.mockReturnValue(1024 * 1024);
   vi.stubEnv('NEXT_PUBLIC_S3_PUBLIC_URL', 'http://minio.test:9000');
+  // 结果图/参考图缩略走 buildFileThumbnailUrl,下载走 buildFileDownloadUrl:两者都读
+  // NEXT_PUBLIC_API_URL,固定它以便断言拼出的 URL。
+  vi.stubEnv('NEXT_PUBLIC_API_URL', 'http://api.test:3001');
   Object.defineProperty(URL, 'createObjectURL', {
     value: vi.fn(() => 'blob:preview-url'),
     configurable: true,
@@ -510,34 +497,33 @@ describe('ImageGeneratePage', () => {
     ).toBeDisabled();
   });
 
-  it('shows images and per-image downloads once previews are fetched', async () => {
+  it('renders the result grid via the thumbnail endpoint with a download action', async () => {
     const { rerender } = renderPage();
     setPrompt('a shiba inu');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
     await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
 
-    // 任务落库(query 刷新)→ completed + outputFileId → 页面发起取回。
+    // 任务落库(query 刷新)→ completed + outputFileId → 网格直接用缩略图端点显示,
+    // 不再预取原图 blob。
     const [task] = syncServerTasks(rerender);
     task.status = 'completed';
     task.outputFileId = 'file-out-1';
     refreshSessionTasks(rerender);
-
-    await waitFor(() =>
-      expect(mocks.outputLoad).toHaveBeenCalledWith('task-1', 'file-out-1')
-    );
-
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'ready', url: 'blob:image-1' },
-    });
-    rerender();
 
     const image = await screen.findByAltText('Image 1');
-    expect(image).toHaveAttribute('src', 'blob:image-1');
-    const download = screen.getByRole('link', { name: 'Download' });
-    expect(download).toHaveAttribute('href', 'blob:image-1');
+    // 320px 缩略图端点 + 懒加载,而不是 3 MB 原图 blob。
+    expect(image).toHaveAttribute(
+      'src',
+      'http://api.test:3001/files/file-out-1/thumbnail'
+    );
+    expect(image).toHaveAttribute('loading', 'lazy');
+    // 下载是按钮(触发 ?download=1 附件下载),不再是指向 blob 的链接。
+    expect(
+      screen.getByRole('button', { name: 'Download' })
+    ).toBeInTheDocument();
   });
 
-  it('stays busy until the fetched image is actually visible', async () => {
+  it('clears the busy state as soon as the task completes', async () => {
     const { rerender } = renderPage();
     setPrompt('a shiba inu');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
@@ -548,42 +534,10 @@ describe('ImageGeneratePage', () => {
     task.outputFileId = 'file-out-1';
     refreshSessionTasks(rerender);
 
-    // 取回仍在 loading:按钮保持禁用(busy 时文案变为 Generating)。
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'loading' },
-    });
-    rerender();
-    expect(screen.getByRole('button', { name: 'Generating' })).toBeDisabled();
-
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'ready', url: 'blob:image-1' },
-    });
-    rerender();
-    // 提交成功后输入框已清空(空 prompt 也禁用按钮):重新填词后,
-    // busy 解除与否就只取决于取回状态。
+    // 任务 completed 即解除忙碌态:结果图交给缩略图懒加载,不再按住到 blob 下完。
+    // 提交成功后输入框已清空(空 prompt 也禁用按钮),重新填词后按钮应可用。
     setPrompt('anything else');
     expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled();
-  });
-
-  it('offers a fetch retry (not a regeneration) when the download fails', async () => {
-    const { rerender } = renderPage();
-    setPrompt('a shiba inu');
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
-
-    const [task] = syncServerTasks(rerender);
-    task.status = 'completed';
-    task.outputFileId = 'file-out-1';
-    refreshSessionTasks(rerender);
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'error' },
-    });
-    rerender();
-
-    fireEvent.click(screen.getByRole('button', { name: /Retry fetch/ }));
-    expect(mocks.outputLoad).toHaveBeenCalledTimes(2);
-    // 重试取回不再触发生成:总调用数不变。
-    expect(mocks.createTask).toHaveBeenCalledTimes(1);
   });
 
   it('shows an inline error and a regenerate action for a failed task', async () => {
@@ -651,9 +605,11 @@ describe('ImageGeneratePage', () => {
         'The prompt was rejected by the content policy. Try rephrasing it.'
       )
     ).not.toBeInTheDocument();
-    // 链尾 completed 任务的产物按其 id 取回(证明格子解析到了 task-retry)。
-    await waitFor(() =>
-      expect(mocks.outputLoad).toHaveBeenCalledWith('task-retry', 'out-1')
+    // 链尾 completed 任务的产物按其 outputFileId 走缩略图端点显示(证明格子解析到了 task-retry)。
+    const image = await screen.findByAltText('Image 1');
+    expect(image).toHaveAttribute(
+      'src',
+      'http://api.test:3001/files/out-1/thumbnail'
     );
   });
 
@@ -979,16 +935,9 @@ describe('ImageGeneratePage', () => {
     task.status = 'completed';
     task.outputFileId = 'file-out-1';
     refreshSessionTasks(rerender);
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'ready', url: 'blob:image-1' },
-    });
-    rerender();
 
-    // 编辑入口 → 打桩的编辑器 → 圈选提交(带蒙版)。
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    const stubSubmit = await screen.findByTestId('stub-inpaint-submit');
-
-    // 原图从 blob url 取回:给一个可用的全局 fetch。
+    // 点编辑前先给可用的全局 fetch:编辑入口会按 fileId 拉一次原图转同源 objectURL
+    // (canvas 需要同源图),submitEdit 再从该 objectURL 取回上传。
     let uploads = 100;
     mocks.uploadFile.mockImplementation(async () => {
       uploads += 1;
@@ -1001,6 +950,10 @@ describe('ImageGeneratePage', () => {
         blob: async () => new Blob(['image-bytes'], { type: 'image/png' }),
       }))
     );
+
+    // 编辑入口 → 打桩的编辑器 → 圈选提交(带蒙版)。
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const stubSubmit = await screen.findByTestId('stub-inpaint-submit');
 
     fireEvent.click(stubSubmit);
 
@@ -1032,13 +985,6 @@ describe('ImageGeneratePage', () => {
     task.status = 'completed';
     task.outputFileId = 'file-out-1';
     refreshSessionTasks(rerender);
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'ready', url: 'blob:image-1' },
-    });
-    rerender();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    const stubSubmit = await screen.findByTestId('stub-describe-submit');
 
     let uploads = 200;
     mocks.uploadFile.mockImplementation(async () => {
@@ -1052,6 +998,9 @@ describe('ImageGeneratePage', () => {
         blob: async () => new Blob(['image-bytes'], { type: 'image/png' }),
       }))
     );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const stubSubmit = await screen.findByTestId('stub-describe-submit');
 
     fireEvent.click(stubSubmit);
 
@@ -1089,12 +1038,9 @@ describe('ImageGeneratePage', () => {
     task.status = 'completed';
     task.outputFileId = 'file-out-1';
     refreshSessionTasks(rerender);
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'ready', url: 'blob:image-1' },
-    });
-    rerender();
 
     // 入口常显:两种能力都没有时点击给「换模型」引导,而不是让功能凭空消失。
+    // 纯 generate 模型:handleEditImage 早退给引导,不会 fetch 原图。
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     expect(
       screen.getByText(/does not support image to image/)
@@ -1113,10 +1059,6 @@ describe('ImageGeneratePage', () => {
     (task.inputConfig as Record<string, unknown>).mode = 'inpaint';
     task.inputFileIds = ['file-base-1', 'file-mask-1'];
     refreshSessionTasks(rerender);
-    mocks.previews.mockReturnValue({
-      'task-1': { state: 'ready', url: 'blob:image-1' },
-    });
-    rerender();
 
     // inpaint 结果的点击语义是「修改前后对比」,不再走放大预览。
     fireEvent.click(

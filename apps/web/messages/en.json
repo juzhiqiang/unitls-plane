@@ -1667,6 +1667,22 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.10.1",
+          "date": "2026-09-20",
+          "title": "Instant history images and UI touch-ups",
+          "summary": "Switching AI image-generation history sessions is faster—history images now load as lazy thumbnails and fetch the full image only when opened; clickable buttons show a pointer cursor on hover; the homepage copy now states what the product does up front.",
+          "groups": [
+            {
+              "title": "Improvements",
+              "items": [
+                "Switching AI image-generation history sessions is nearly instant: history images load small thumbnails and lazy-load on demand, fetching the full-size image only when opened or downloaded, instead of downloading every original in the session at once.",
+                "Clickable buttons now consistently show a pointer cursor on hover, making interactions clearer.",
+                "Homepage copy revamp: the first screen now states plainly what the product does (one place to process images, PDFs, documents, and fonts online)."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.10.0",
           "date": "2026-09-20",
           "title": "Edit by description",

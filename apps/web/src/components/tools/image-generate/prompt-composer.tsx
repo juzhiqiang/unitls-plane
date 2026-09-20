@@ -313,8 +313,9 @@ export function PromptComposer({
       </div>
 
       <ImageLightbox
-        url={lightboxUrl}
+        src={lightboxUrl}
         alt={t('sourcePreviewAlt')}
+        downloadHref={lightboxUrl ?? undefined}
         onClose={() => setLightboxUrl(null)}
       />
     </div>

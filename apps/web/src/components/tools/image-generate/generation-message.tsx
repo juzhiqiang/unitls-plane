@@ -545,8 +545,13 @@ export function GenerationMessage({
       </Dialog>
 
       <ImageLightbox
-        fileId={lightbox?.fileId ?? null}
+        src={lightbox ? buildFileDownloadUrl(lightbox.fileId) : null}
         alt={lightbox?.alt ?? ''}
+        downloadHref={
+          lightbox
+            ? buildFileDownloadUrl(lightbox.fileId, { attachment: true })
+            : undefined
+        }
         onClose={() => setLightbox(null)}
       />
     </article>

@@ -31,6 +31,7 @@ describe('public changelog page', () => {
 
     expect(entry.version).toBe(APP_VERSION_LABEL);
     expect(entry.date).toBe('2026-09-20');
+    // 注:0.10.0 与 0.9.2 同日发布,顶条日期仍是 2026-09-20。
     expect(entry.groups.length).toBeGreaterThanOrEqual(1);
     expect(entry.groups.every(group => group.items.length > 0)).toBe(true);
   });

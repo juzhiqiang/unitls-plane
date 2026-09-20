@@ -1683,6 +1683,21 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.10.0",
+          "date": "2026-09-20",
+          "title": "Edit by description",
+          "summary": "AI image Edit now lets you change the whole image with a single description; region masking becomes optional, and the editor preview fits the whole image so tall images no longer need scrolling.",
+          "groups": [
+            {
+              "title": "New features",
+              "items": [
+                "Click Edit on a result and just describe the change to edit the whole image; painting or dragging a rectangle to regenerate a region is now optional (when the model supports it).",
+                "The editor preview now fits the whole image, so tall images no longer need a scrollbar."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.9.2",
           "date": "2026-09-20",
           "title": "Regenerate replaces in place",

@@ -318,8 +318,9 @@ export function MaskEditor({
           </div>
         )}
 
-        {/* 画布:原图在下,蒙版层在上,尺寸对齐原图。 */}
-        <div className="relative mx-auto max-h-[52vh] w-fit overflow-auto rounded-md border border-border">
+        {/* 画布:原图在下,蒙版层在上,尺寸对齐原图。整张等比缩进可视区,不出滚动条:
+            图片同时限宽高(max-h 与容器一致)+ object-contain,容器 w-fit 贴合缩放后的图。 */}
+        <div className="relative mx-auto flex max-h-[52vh] w-fit items-center justify-center overflow-hidden rounded-md border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imageRef}
@@ -332,7 +333,7 @@ export function MaskEditor({
                 height: img.naturalHeight,
               });
             }}
-            className="block max-w-full select-none"
+            className="block max-h-[52vh] max-w-full select-none object-contain"
             draggable={false}
           />
           {/* 不支持圈选时画布只作预览(pointer-events 关掉,不接管指针)。 */}

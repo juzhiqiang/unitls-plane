@@ -16,9 +16,9 @@
       "gb": "GB"
     },
     "meta": {
-      "title": "Utils Plane - 文件进化处理核心",
-      "description": "让图片、PDF、文档和字体在同一个处理核心里完成压缩、转换、预览和恢复。本地优先，重任务交给服务端。",
-      "ogDescription": "让图片、PDF、文档和字体在同一个处理核心里完成进化"
+      "title": "Utils Plane - 图片 PDF 文档字体一站处理",
+      "description": "免费在线处理图片、PDF、文档和字体：压缩转换、长图拼接、AI 生图与证件照、PDF 合并拆分加密、Word 转 PDF、字体转换。本地优先，无需安装。",
+      "ogDescription": "图片、PDF、文档、字体一站式在线处理，本地优先、无需安装"
     }
   },
   "AnimationFrameList": {
@@ -53,51 +53,35 @@
       "plans": "套餐与额度"
     },
     "hero": {
-      "titleLine1": "文件开始进化",
-      "titleLine2": "同一处理核心",
-      "subtitle": "图片、PDF、文档和字体在一个核心里完成压缩、转换、预览和恢复。本地优先，重任务交给服务端。",
+      "titleLine1": "图片 PDF 文档字体",
+      "titleLine2": "一站处理",
+      "subtitle": "图片压缩转换、长图拼接、GIF 动图、AI 生图与证件照，PDF 合并拆分、加密水印、Word 与 Markdown 转 PDF，字体转换——常用文件处理在一个网站里搞定。能在浏览器本地完成的绝不上传，无需安装任何软件。",
       "ctaPrimary": "开始处理图片",
-      "ctaSecondary": "转换 PDF"
+      "ctaSecondary": "处理 PDF"
     },
     "tools": {
-      "heading": "像产品一样组织处理能力",
-      "description": "常用路径被整理成清晰的产品矩阵：压缩、拼接、文档生成和动图制作，从第一屏继续到可操作界面。",
+      "heading": "常用工具，即点即用",
+      "description": "压缩、拼接、文档转 PDF、动图制作——高频能力放在第一屏，点开就是可操作界面，不用先注册、不用先上传。",
       "recovery": "失败可重试，文件可替换，登录后可在任务记录里继续追踪。"
     },
-    "features": {
-      "label": "功能",
-      "heading": "一切皆可处理",
-      "image": {
-        "title": "图片工具",
-        "description": "支持 PNG、JPG、WebP、GIF 格式，无损压缩、智能转换"
-      },
-      "pdf": {
-        "title": "PDF 工具",
-        "description": "合并、拆分、提取页面，在线处理无需安装软件"
-      },
-      "font": {
-        "title": "字体转换",
-        "description": "TTF、OTF、WOFF 之间转换，批量处理更高效"
-      }
-    },
     "highlights": {
-      "label": "工作流能力",
+      "label": "为什么选它",
       "heading": "少一点杂乱，多一点确定性",
       "performance": {
-        "title": "本地先完成",
-        "description": "适合浏览器完成的处理留在本地，减少等待，也减少不必要的上传。"
+        "title": "本地优先，快且省心",
+        "description": "图片压缩转换、裁剪打码、抠图这类处理直接在浏览器完成，不上传、不排队，出结果更快。"
       },
       "privacy": {
-        "title": "边界可见",
-        "description": "处理位置、保留规则和登录要求都放在界面里，文件怎么流转一眼可见。"
+        "title": "边界写在明处",
+        "description": "每个工具是本地处理还是上传服务端、文件保留多久、要不要登录，都清清楚楚标在界面上。"
       },
       "free": {
-        "title": "登录增强能力",
-        "description": "登录后可使用任务记录、账户文件、更高处理限制和服务端能力；公测期间按当前界面说明开放。"
+        "title": "登录解锁更多",
+        "description": "免费即可用大部分工具；登录后追加任务记录、账户文件、更高处理限制和服务端能力，公测期间按界面说明开放。"
       }
     },
     "cta": {
-      "heading": "准备好让文件进入下一段工作流",
+      "heading": "现在就开始处理你的文件",
       "description": "打开工作台，把处理、预览、任务记录和失败恢复放进同一个连续空间。",
       "button": "打开仪表盘"
     }

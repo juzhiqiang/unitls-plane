@@ -16,9 +16,9 @@
       "gb": "GB"
     },
     "meta": {
-      "title": "Utils Plane - File Evolution Core",
-      "description": "Let images, PDFs, documents, and fonts evolve inside one processing core. Local first, server-ready for heavy jobs, previewable results, and recoverable failures.",
-      "ogDescription": "A file evolution core for image, PDF, document, and font workflows"
+      "title": "Utils Plane - Images, PDFs, Docs & Fonts in One Place",
+      "description": "Free online processing for images, PDFs, documents, and fonts: compression and conversion, long-image stitching, AI image generation and ID photos, PDF merge/split/encrypt, Word to PDF, font conversion. Local first, no install.",
+      "ogDescription": "One place to process images, PDFs, documents, and fonts online—local first, no install"
     }
   },
   "AnimationFrameList": {
@@ -53,51 +53,35 @@
       "plans": "Plans & limits"
     },
     "hero": {
-      "titleLine1": "Files Evolve",
-      "titleLine2": "In One Core",
-      "subtitle": "Images, PDFs, documents, and fonts move through one core for compression, conversion, preview, and recovery. Local first, server-ready for heavy jobs.",
+      "titleLine1": "Images, PDFs, Docs, Fonts",
+      "titleLine2": "One Place",
+      "subtitle": "Image compression and conversion, long-image stitching, GIFs, AI image generation and ID photos, PDF merge/split, encryption and watermarks, Word and Markdown to PDF, font conversion—everyday file work in a single site. Anything the browser can handle stays local, with no software to install.",
       "ctaPrimary": "Process images",
-      "ctaSecondary": "Convert PDF"
+      "ctaSecondary": "Work with PDFs"
     },
     "tools": {
-      "heading": "Processing, arranged like products",
-      "description": "Common paths become a focused product matrix: compression, stitching, document generation, and animation creation, all opening into usable workflows.",
+      "heading": "Popular tools, ready to use",
+      "description": "Compression, stitching, document-to-PDF, animation—the tools people reach for most, right on the first screen. Click one and you're in a working interface, no sign-up or upload first.",
       "recovery": "Retry failures, replace files, and keep tracking work in task history after sign-in."
     },
-    "features": {
-      "label": "Features",
-      "heading": "Everything you need",
-      "image": {
-        "title": "Image tools",
-        "description": "PNG, JPG, WebP, and GIF support with lossless compression and smart conversion"
-      },
-      "pdf": {
-        "title": "PDF tools",
-        "description": "Merge, split, and extract pages online with no install required"
-      },
-      "font": {
-        "title": "Font conversion",
-        "description": "Convert between TTF, OTF, and WOFF with efficient batch processing"
-      }
-    },
     "highlights": {
-      "label": "Workflow capability",
+      "label": "Why choose it",
       "heading": "Less clutter. More certainty.",
       "performance": {
-        "title": "Local when it fits",
-        "description": "Work that fits in the browser stays in the browser, reducing wait time and unnecessary uploads."
+        "title": "Local first, fast and easy",
+        "description": "Compression, conversion, cropping, mosaic, and cutout run right in the browser—no upload, no queue, results come back faster."
       },
       "privacy": {
-        "title": "Visible boundaries",
-        "description": "Processing location, retention rules, and sign-in requirements stay visible in the interface."
+        "title": "Boundaries in plain sight",
+        "description": "For every tool, whether it runs locally or on the server, how long files are kept, and whether sign-in is needed are all spelled out in the interface."
       },
       "free": {
-        "title": "Signed-in enhanced capabilities",
-        "description": "Signed-in users can use task history, account files, higher limits, and server-side capabilities as currently offered during the beta."
+        "title": "Sign in to unlock more",
+        "description": "Most tools are free to use; signing in adds task history, account files, higher limits, and server-side capabilities, as offered during the beta."
       }
     },
     "cta": {
-      "heading": "Ready for the next file workflow",
+      "heading": "Start working with your files now",
       "description": "Open the workbench and keep processing, preview, task history, and recovery in one continuous space.",
       "button": "Open dashboard"
     }

@@ -1,6 +1,6 @@
 ---
 name: frontend-performance-analysis
-description: Use when a web UI feels slow or janky — 页面卡死掉帧、交互无响应、主线程被长任务阻塞、首屏/加载慢、bundle 过大、内存涨或标签页崩溃、本地图片/视频/文件处理卡 UI、performance/slow/jank/freeze/memory leak;涉及主线程 vs Web Worker、Canvas/OffscreenCanvas、wasm/WebGPU、大 chunk 或重渲染。
+description: Use when a web UI feels slow or janky — 页面卡死掉帧、交互无响应、主线程被长任务阻塞、首屏/加载慢、bundle 过大、内存涨或标签页崩溃、客户端重计算卡 UI、performance/slow/jank/freeze/memory leak;涉及主线程 vs Web Worker、Canvas/OffscreenCanvas、wasm/WebGPU、大 chunk 或重渲染。
 ---
 
 # 前端性能问题分析

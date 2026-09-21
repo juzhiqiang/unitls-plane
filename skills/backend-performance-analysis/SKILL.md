@@ -1,6 +1,6 @@
 ---
 name: backend-performance-analysis
-description: Use when a server/API/backend feels slow or unstable — 接口响应慢、任务排队久、队列积压、内存飙升或 OOM、CPU 打满、列表查询慢、上传/下载慢、外部进程超时、performance/slow/latency/timeout/memory leak;涉及任务队列(BullMQ 等)、图片/PDF/文档处理管道、数据库查询、缓存或对象存储。
+description: Use when a server/API/backend feels slow or unstable — 接口响应慢、吞吐上不去、内存飙升或 OOM、CPU 打满、后台任务排队久或积压、批处理慢、查询慢、上传/下载慢、外部依赖或子进程超时、performance/slow/latency/throughput/timeout/memory leak。
 ---
 
 # 后端性能问题分析

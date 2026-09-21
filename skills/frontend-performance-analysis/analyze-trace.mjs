@@ -73,7 +73,8 @@ function main() {
     if (e.ph === 'M' && e.name === 'thread_name' && e.args?.name) {
       threadName.set(e.tid, e.args.name);
     }
-    if (typeof e.ts === 'number') {
+    // 计算时间跨度:忽略 metadata(ph M)和 ts<=0 的事件,否则 traceMin 会被 ts=0 污染
+    if (typeof e.ts === 'number' && e.ts > 0 && e.ph !== 'M') {
       if (e.ts < traceMin) traceMin = e.ts;
       const end = e.ts + (e.dur || 0);
       if (end > traceMax) traceMax = end;
@@ -83,12 +84,48 @@ function main() {
     }
   }
 
-  const mainTid =
-    forcedTid != null
-      ? Number(forcedTid)
-      : [...threadBusy.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  // 选主线程:优先按名字锁定渲染主线程(CrRendererMain),否则退化到最忙的 X 事件线程。
+  // 采样式 trace 的 X 事件少,纯按忙碌度会误选 GPU/合成线程。
+  let mainTid;
+  if (forcedTid != null) {
+    mainTid = Number(forcedTid);
+  } else {
+    for (const [tid, name] of threadName) {
+      if (name === 'CrRendererMain') { mainTid = tid; break; }
+    }
+    if (mainTid == null) mainTid = [...threadBusy.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  }
 
   const spanUs = traceMax - traceMin;
+
+  // 现代 trace 的 JS self-time 在 ProfileChunk 里(采样式 profiler),不在 X 事件。
+  // 跨 chunk 累积 nodes(每个 node 有 id/callFrame/parent),samples 引用 node id,timeDeltas 对齐 samples。
+  const cpuNodeById = new Map(); // id -> callFrame
+  const cpuSelfById = new Map(); // id -> self us
+  let cpuSampledUs = 0;
+  let cpuIdleUs = 0;
+  for (const e of events) {
+    if (e.name !== 'ProfileChunk' && e.name !== 'Profile') continue;
+    const data = e.args?.data;
+    const cp = data?.cpuProfile || data;
+    if (cp?.nodes) {
+      for (const n of cp.nodes) if (!cpuNodeById.has(n.id)) cpuNodeById.set(n.id, n.callFrame || {});
+    }
+    const samples = cp?.samples;
+    const deltas = data?.timeDeltas || cp?.timeDeltas;
+    if (samples && deltas) {
+      for (let i = 0; i < samples.length; i++) {
+        const id = samples[i];
+        const dt = Math.max(0, deltas[i] || 0);
+        cpuSampledUs += dt;
+        const cf = cpuNodeById.get(id);
+        const fn = cf?.functionName;
+        if (fn === '(idle)' || fn === '(program)' || fn === '(root)') { cpuIdleUs += dt; continue; }
+        cpuSelfById.set(id, (cpuSelfById.get(id) || 0) + dt);
+      }
+    }
+  }
+  const hasCpuProfile = cpuSelfById.size > 0;
 
   // 只在主线程上做细粒度统计
   const catTotals = { Scripting: 0, Rendering: 0, Painting: 0, GC: 0, System: 0 };
@@ -113,8 +150,8 @@ function main() {
     const self = Math.max(0, node.dur - node.childDur);
     const cat = categoryOf(node.name);
     catTotals[cat] = (catTotals[cat] || 0) + self;
-    // self-time 热点:脚本类事件,或带函数名的事件
-    if (cat === 'Scripting' || node.ev.args?.data?.functionName) {
+    // 没有 CPU profile 时,退化用 X 事件的函数名估 self-time 热点
+    if (!hasCpuProfile && (cat === 'Scripting' || node.ev.args?.data?.functionName)) {
       const fn = node.ev.args?.data?.functionName || node.ev.args?.data?.url || node.name;
       const url = node.ev.args?.data?.url || '';
       const key = (fn || '(anonymous)') + (url ? '  @' + shortUrl(url) : '');
@@ -173,12 +210,31 @@ function main() {
   }
   if (!longTasks.length) line('  (无 >50ms 顶层任务)');
 
-  line(`\n[self-time 热点函数]  显示前 ${top}`);
-  const hot = [...selfTime.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  for (const [k, v] of hot.slice(0, top)) {
-    line(`  ${fmtMs(v).padStart(9)}  ${pct(v, spanUs).padStart(6)}  ${k}`);
+  if (hasCpuProfile) {
+    // 用 CPU profile 采样聚合 self-time(现代 trace 的准确来源)
+    const cpuActive = cpuSampledUs - cpuIdleUs;
+    const byFn = new Map();
+    for (const [id, us] of cpuSelfById) {
+      const cf = cpuNodeById.get(id) || {};
+      const name = cf.functionName || '(anonymous)';
+      const url = cf.url || '';
+      const key = name + (url ? '  @' + shortUrl(url) + (cf.lineNumber >= 0 ? ':' + (cf.lineNumber + 1) : '') : '');
+      byFn.set(key, (byFn.get(key) || 0) + us);
+    }
+    line(`\n[JS self-time 热点函数 (CPU profile)]  采样活跃 ${fmtMs(cpuActive)} / idle ${pct(cpuIdleUs, cpuSampledUs)}  显示前 ${top}`);
+    const hot = [...byFn.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [k, v] of hot.slice(0, top)) {
+      const flag = v / cpuActive > 0.15 ? ' ⚠ 热点' : '';
+      line(`  ${fmtMs(v).padStart(9)}  ${pct(v, cpuActive).padStart(6)}  ${k}${flag}`);
+    }
+  } else {
+    line(`\n[self-time 热点函数 (X 事件估算)]  显示前 ${top}`);
+    const hot = [...selfTime.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    for (const [k, v] of hot.slice(0, top)) {
+      line(`  ${fmtMs(v).padStart(9)}  ${pct(v, spanUs).padStart(6)}  ${k}`);
+    }
+    if (!hot.length) line('  (trace 未含函数级数据;录制时用 JS Profiler / 勾选 advanced paint instrumentation)');
   }
-  if (!hot.length) line('  (trace 未含函数级数据;录制时勾选 "Enable advanced paint instrumentation" 或用 JS Profiler)');
 
   line('\n[渲染 / 布局]');
   line(`  Layout 次数: ${layoutCount}  总耗时: ${fmtMs(layoutDur)}`);

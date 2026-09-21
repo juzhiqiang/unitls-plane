@@ -1,6 +1,6 @@
 ---
 name: backend-performance-analysis
-description: Use when a server/API/backend feels slow or unstable — 接口响应慢、任务排队久、队列积压、内存飙升或 OOM、CPU 打满、列表查询慢、上传/下载慢、外部进程超时、performance/slow/latency/timeout/memory leak;涉及任务队列(BullMQ 等)、图片/PDF/文档处理管道、数据库查询、缓存或对象存储。技术层通用,末尾附本项目落点。
+description: Use when a server/API/backend feels slow or unstable — 接口响应慢、任务排队久、队列积压、内存飙升或 OOM、CPU 打满、列表查询慢、上传/下载慢、外部进程超时、performance/slow/latency/timeout/memory leak;涉及任务队列(BullMQ 等)、图片/PDF/文档处理管道、数据库查询、缓存或对象存储。
 ---
 
 # 后端性能问题分析
@@ -61,21 +61,3 @@ description: Use when a server/API/backend feels slow or unstable — 接口响�
 - [ ] 相关测试通过,没引入功能回归
 - [ ] 内存 / 队列在负载下稳定,不是只跑一次好看
 - [ ] 改的是最慢的那一层,不是顺手动了别处
-
----
-
-## 本项目落点(Utils-Plane;搬到其它项目可删除本节)
-
-技术栈:NestJS 11 + Bun runtime、BullMQ + Redis、PostgreSQL 16 + Drizzle、MinIO。无遥测/APM,测量只靠日志、`/admin/queues`、`docker stats`、`EXPLAIN ANALYZE`、`PERFORMANCE_MEMORY_LOG=true`(上传完打内存)。已知良好基线的事实源是 `PROJECT_SPECS.md` 的「性能优化接口约定」小节。
-
-| 通用症状 | 本项目具体位置 |
-|---|---|
-| 排队久 / 慢任务堵快任务 | 19 任务类型压 4 队列 `apps/api/src/modules/tasks/task-queue.ts`;并发 `apps/api/src/config/worker-concurrency.ts`(默认 image/pdf/font=2、ai=8,`*_WORKER_CONCURRENCY` 可调);单 Redis 连接 `apps/api/src/config/bull.config.ts` 是吞吐上限。慢的 `pdf_to_cad`/`pdf_compress` 会堵同队列的 `pdf_rotate` |
-| 全内存管道 / OOM | `apps/api/src/modules/files/minio.service.ts` 的 `uploadStream()`/`download()` 故意缓冲整对象(Bun 死锁 workaround);各 processor 均 download→Buffer→处理→upload |
-| 重复 encode / 热循环 | 图片 `apps/api/src/modules/tasks/services/image.service.ts` 的 `compressToTargetSize()` 二分质量 + 7 级降采样反复 encode;PDF `.../services/pdf.service.ts` 的 `handleToImage`/`compressPdf` mupdf 逐页 rasterize |
-| 外部进程超时 | `pdf.service.ts` 的 `documentToPdf` 每次 spawn LibreOffice(120s 超时,串行在 2 槽队列) |
-| CPU 推理慢 | `apps/api/src/modules/tasks/services/portrait-segmentation.service.ts` MODNet 逐像素张量 + 单会话串行 |
-| 列表慢 | 已用游标 + `includeTotal=false`(`apps/api/src/modules/files/files.service.ts`、`tasks.service.ts`),别退回 `COUNT(*)`/深 offset;文件名 `%term%` 搜索靠 `files_filename_trgm_idx`(`packages/db/src/schema/files.ts`) |
-| 批量删除慢 | `files.service.ts` 的 `batchPermanentDelete`/`emptyTrash`/`cleanupRecords` 逐条 `FOR UPDATE` + 单独 MinIO 往返,未批量 |
-| 缓存抖动 | 账号摘要进程内 2s 缓存 + Redis 层 `apps/api/src/common/cache/account-summary-redis.ts`,超时极短、故障静默回退 DB |
-| 健康检查慢 | `apps/api/src/modules/health/health.service.ts` 每探针 3s 超时并行;`libreoffice-health.ts` 每次都 spawn `soffice --version` |

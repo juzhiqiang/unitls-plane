@@ -1,6 +1,6 @@
 ---
 name: frontend-performance-analysis
-description: Use when a web UI feels slow or janky — 页面卡死掉帧、交互无响应、主线程被长任务阻塞、首屏/加载慢、bundle 过大、内存涨或标签页崩溃、本地图片/视频/文件处理卡 UI、performance/slow/jank/freeze/memory leak;涉及主线程 vs Web Worker、Canvas/OffscreenCanvas、wasm/WebGPU、大 chunk 或重渲染。技术层通用,末尾附本项目落点。
+description: Use when a web UI feels slow or janky — 页面卡死掉帧、交互无响应、主线程被长任务阻塞、首屏/加载慢、bundle 过大、内存涨或标签页崩溃、本地图片/视频/文件处理卡 UI、performance/slow/jank/freeze/memory leak;涉及主线程 vs Web Worker、Canvas/OffscreenCanvas、wasm/WebGPU、大 chunk 或重渲染。
 ---
 
 # 前端性能问题分析
@@ -60,17 +60,3 @@ description: Use when a web UI feels slow or janky — 页面卡死掉帧、交�
 - [ ] 相关测试通过,没引入功能回归
 - [ ] 在偏弱设备或节流 CPU 下也确认过,不是只在高端机好看
 - [ ] 改的是最慢的那一层,不是顺手动了别处
-
----
-
-## 本项目落点(Utils-Plane;搬到其它项目可删除本节)
-
-技术栈:Next.js 14 App Router + React 18、Web Worker + OffscreenCanvas、gifenc/upng-js、`@huggingface/transformers`(WebGPU/wasm)。本地优先工具尽量在浏览器完成,重活走 Worker。无遥测,测量只靠 DevTools Performance/Memory、Lighthouse。
-
-| 通用症状 | 本项目具体位置 |
-|---|---|
-| 重活回退主线程 | `apps/web/src/lib/processing/image-worker-client.ts` 的 `runInImageWorker` 无 `OffscreenCanvas` 时回退主线程;Worker 入口 `image.worker.ts`,主/Worker 共用 `canvas-surface.ts` |
-| 最重的本地工作负载 | GIF/APNG `apps/web/src/lib/processing/image-animation-client.ts`(gifenc 量化 + upng 编码,逐帧 `getImageData`/`putImageData`);长图拼接 `image-stitch-client.ts`(64 MiB 有界解码缓存) |
-| wasm 回退极重 | 抠图 `apps/web/src/lib/id-photo-local/segmentation.ts` RMBG-1.4,无 WebGPU 回退 wasm(~84MB 模型,CPU 极重);ONNX wasm 资源自托管 `apps/web/public/onnx/` |
-| bundle / 懒加载 | 超过 2 MiB 的普通静态 JS chunk 不进 PWA precache;PDF worker `apps/web/public/pdf.worker.min.mjs` |
-| 私有查询缓存 | React Query key 按 `userId` 分区(文件/回收站/任务/生图额度/会话),跨账号用公共前缀失效,避免复用旧账号缓存 |

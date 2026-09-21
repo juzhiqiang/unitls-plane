@@ -26,6 +26,26 @@ description: Use when a server/API/backend feels slow or unstable — 接口响�
    - 容器/主机:`docker stats` / `top` 看 CPU、内存、IO 是否打满。
 3. **只往最慢的单一层里查**,不要同时改多处。
 
+## 分析别人给的 profile / log
+
+拿到导出的性能文件(V8 `.cpuprofile`、`EXPLAIN (ANALYZE, BUFFERS)` 输出、慢查询日志、heap snapshot、火焰图数据)时:
+
+- **铁律:大文件先脚本化抽取,绝不整份读进上下文**。
+- V8 CPU profile 优先用随附脚本:`node analyze-cpuprofile.mjs <file.cpuprofile> --top 20`,它聚合出 self-time 热点函数、按模块归并的耗时、疑似热循环、idle 占比。**注意 CPU profile 看不到 I/O 等待**——高 idle 说明瓶颈在等待(DB/网络/锁),不在 CPU。
+- 读 `EXPLAIN ANALYZE`:比 `actual rows` 与 `estimated rows`(差大说明统计过时或估算错)、找 `Seq Scan`(大表全扫)、`Sort`/`Hash` 是否 `disk`(溢出磁盘)、`loops` 次数(N+1 会放大)、最深的 `actual time`。
+- **默认全程扫**,再对指出的现象细看。拿到结论对回下方症状表和阈值表。
+
+## 关键指标阈值(「慢」的客观基准)
+
+| 指标 | 好 | 差 | 含义 |
+|---|---|---|---|
+| 接口 p95 | 视业务,常 <300ms | 尾部远超均值 | 优化打 p95 尾部,不是均值 |
+| event-loop lag | <50ms | >100ms | 主线程被同步活/大 JSON 阻塞 |
+| 单 query | <50ms | >数百 ms | 慢查询,查索引/扫描 |
+| 队列 job p95 | 视任务 | 积压持续增长 | worker 跟不上产出 |
+| 内存 vs 输入 | 近似恒定 | 随输入线性涨 | 全内存管道,考虑流式 |
+| GC 占比 | 低 | >10% | 对象 churn / 内存压力 |
+
 ## 分层症状对照表(通用)
 
 | 症状 | 可能瓶颈层 | 检查方式 | 常见根因 / 修复方向 |
@@ -38,6 +58,16 @@ description: Use when a server/API/backend feels slow or unstable — 接口响�
 | 批量操作随条数线性变慢 | 逐条事务 / N+1 | 观察耗时随规模增长 | 逐条 `SELECT ... FOR UPDATE` + 逐条外部往返;批量化查询与删除 |
 | 全局抖动 / 偶发慢 | 缓存未命中或降级 | 查缓存命中率、依赖是否可用 | 缓存故障静默回退 DB;确认降级路径,别把降级当稳态 |
 | 健康检查慢 | 探针超时 / spawn | 看哪个 check 慢 | 探针无超时、每次探测都 spawn 子进程;给每个探针加超时并并行 |
+
+## 优化
+
+- **排优先级**:打 **p95 尾部**而非均值(尾部才是用户痛点);打**关键路径上 self-time 最高**的函数。先确认是 CPU-bound 还是 I/O-bound(profile idle 高 = 在等待)。
+- **技术菜单**:全内存 buffer 改流式;按任务代价分队列 + 调 worker 并发;逐条事务 / N+1 批量化(`inArray`、批量 upsert);加索引、游标分页替代深 offset;子进程复用或加超时、隔离到独立队列;缓存但先确认降级路径可靠。
+- **防回归**:一次只改一个变量,用改后的 profile / `EXPLAIN` 复测**同一**指标;负载下确认稳定,不是只跑一次好看。
+
+## 分析结论怎么呈现
+
+输出**按严重度排序的清单**,每条 = 一句现象 + 证据(哪个函数/查询 / 多少 ms / 占比 / rows / loops)+ 落在哪层 + 优化方向。**只写有 profile / EXPLAIN 数据支撑的结论;没数据支撑的标注「需进一步测量」,不写成定论。**
 
 ## 假设与单变量验证
 
@@ -57,7 +87,7 @@ description: Use when a server/API/backend feels slow or unstable — 接口响�
 
 声明「性能已改善」前必须确认:
 
-- [ ] 有改前 / 改后的**同指标**数字,复现场景一致
+- [ ] 有改前 / 改后的**同指标**数字,复现场景一致;有 profile/EXPLAIN 就复测同指标
 - [ ] 相关测试通过,没引入功能回归
 - [ ] 内存 / 队列在负载下稳定,不是只跑一次好看
 - [ ] 改的是最慢的那一层,不是顺手动了别处

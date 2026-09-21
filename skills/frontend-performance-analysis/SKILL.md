@@ -26,6 +26,27 @@ description: Use when a web UI feels slow or janky — 页面卡死掉帧、交�
    - 渲染:Performance 里的 layout/paint,是否有强制同步布局或大面积重绘。
 3. **只往最慢的单一层里查**,不要同时改多处。
 
+## 分析别人给的 trace / profile
+
+拿到导出的性能文件(Chrome Performance `.json`/`.json.gz`、Lighthouse JSON、React Profiler、heap snapshot)时:
+
+- **铁律:大文件先脚本化抽取,绝不整份读进上下文**。trace 常几十 MB,直接读会爆。
+- Chrome Performance trace 优先用随附脚本:`node analyze-trace.mjs <trace.json|.json.gz> --top 20`,它全程聚合出 Long Tasks 排行、主线程时间总账、self-time 热点、layout thrashing、GC、长帧、主线程 vs Worker 占比。
+- **默认全程扫**(挖潜藏问题),再对用户指出的现象时间窗细看。
+- 拿到脚本输出后,把每类指标对回下方分层症状表和阈值表,别停在「看起来很忙」。
+- 其它格式(Lighthouse/React Profiler)无脚本时也要先抽关键字段,不要贴原文。
+
+## 关键指标阈值(「慢」的客观基准)
+
+| 指标 | 好 | 差 | 含义 |
+|---|---|---|---|
+| Long Task | 无 >50ms | 频繁 >50ms | 单个任务阻塞主线程,输入无响应 |
+| INP | <200ms | >500ms | 交互到下次绘制,卡顿主观感受 |
+| LCP | <2.5s | >4s | 最大内容绘制,首屏快慢 |
+| CLS | <0.1 | >0.25 | 布局偏移 |
+| 单帧 | <16.7ms | >50ms | 掉帧、动画/滚动卡 |
+| 主线程 Scripting 占比 | — | 过半 | CPU-bound,重点查 self-time 热点 |
+
 ## 分层症状对照表(通用)
 
 | 症状 | 可能瓶颈层 | 检查方式 | 常见根因 / 修复方向 |
@@ -37,6 +58,16 @@ description: Use when a web UI feels slow or janky — 页面卡死掉帧、交�
 | 长列表滚动掉帧 | 一次渲染过多节点 | Performance 看 scroll 期 layout/paint | 全量渲染 + 每项重排;虚拟化/窗口化,离屏释放 |
 | 反复操作后越来越卡、标签崩溃 | 内存泄漏 | heap snapshot 对比,只增不降 | 未释放的 canvas/ImageData/事件监听/大对象;用完释放,离窗回收 |
 | 输入时明显卡顿 | 重渲染 / 强制同步布局 | Performance 看 render 次数与 reflow | 无节流的高频更新、读写布局交错;节流 + 批量读写 |
+
+## 优化
+
+- **排优先级**:先打**关键路径上 self-time 最高**的那一项,不是名字最吓人的。区分一次性成本(首屏加载)和每帧/每项重复成本(滚动、动画、大列表)——后者收益放大。
+- **技术菜单**:CPU 密集挪进 Web Worker;长任务用 `scheduler.yield()` / `isInputPending()` 分片让出主线程;长列表虚拟化/窗口化;重依赖路由级 code split + 交互时懒加载;批量读写 DOM 避免 layout thrashing;缓存解码结果、按需解码、降采样;用完释放 canvas/ImageData 防泄漏。
+- **防回归**:一次只改一个变量,用改后的 trace 复测**同一**指标对比。
+
+## 分析结论怎么呈现
+
+输出**按严重度排序的清单**,每条 = 一句现象 + 证据(哪个函数 / 多少 ms / 占比 / 触发几次)+ 落在哪层 + 优化方向。**只写有 trace 数据支撑的结论;没数据支撑的标注「需进一步测量」,不写成定论。**
 
 ## 假设与单变量验证
 
@@ -56,7 +87,7 @@ description: Use when a web UI feels slow or janky — 页面卡死掉帧、交�
 
 声明「性能已改善」前必须确认:
 
-- [ ] 有改前 / 改后的**同指标**数字(耗时 / TBT / 内存峰值),复现场景一致
+- [ ] 有改前 / 改后的**同指标**数字(耗时 / TBT / 内存峰值),复现场景一致;有 trace 就用改后 trace 复测同指标
 - [ ] 相关测试通过,没引入功能回归
 - [ ] 在偏弱设备或节流 CPU 下也确认过,不是只在高端机好看
 - [ ] 改的是最慢的那一层,不是顺手动了别处

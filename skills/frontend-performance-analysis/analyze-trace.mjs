@@ -22,6 +22,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--top') args.top = Math.max(1, parseInt(argv[++i], 10) || 15);
     else if (a === '--tid') args.tid = argv[++i];
+    else if (a === '--window') args.window = argv[++i]; // "START-END" 毫秒,相对 trace 起点
     else if (!a.startsWith('--')) args.file = a;
   }
   return args;
@@ -55,9 +56,9 @@ function categoryOf(name) {
 }
 
 function main() {
-  const { file, top, tid: forcedTid } = parseArgs(process.argv);
+  const { file, top, tid: forcedTid, window: windowArg } = parseArgs(process.argv);
   if (!file) {
-    console.error('用法: node analyze-trace.mjs <trace.json|.json.gz> [--top N] [--tid id]');
+    console.error('用法: node analyze-trace.mjs <trace.json|.json.gz> [--top N] [--tid id] [--window START-END]');
     process.exit(1);
   }
 
@@ -259,8 +260,50 @@ function main() {
     line('  ⚠ 主线程 Scripting 远超 worker → 重活可能压在主线程,考虑 offload 到 Web Worker');
   }
 
+  // 可选:钻某个时间窗(--window START-END,毫秒,相对 trace 起点),看那段主线程在干什么
+  if (windowArg) {
+    const [s, e2] = windowArg.split('-').map(Number);
+    const winStart = traceMin + s * 1000;
+    const winEnd = traceMin + e2 * 1000;
+    line(`\n[时间窗 +${s}ms ~ +${e2}ms 主线程明细]`);
+    const inWin = events
+      .filter((ev) => ev.ph === 'X' && ev.tid === mainTid && typeof ev.dur === 'number' &&
+        ev.ts < winEnd && ev.ts + ev.dur > winStart)
+      .sort((a, b) => a.ts - b.ts || b.dur - a.dur);
+    // 按耗时排序显示 Top,附类别和相对起点
+    const byDur = [...inWin].sort((a, b) => b.dur - a.dur).slice(0, top);
+    for (const ev of byDur) {
+      const data = ev.args?.data || {};
+      const label = data.functionName ? `${data.functionName}${data.url ? ' @' + shortUrl(data.url) : ''}` : ev.name;
+      line(`  ${fmtMs(ev.dur).padStart(9)}  [${categoryOf(ev.name)}]  ${label}  @+${fmtMs(ev.ts - traceMin)}`);
+    }
+    if (!byDur.length) line('  (该时间窗主线程无 X 事件;可能是 CPU profile 采样,试试放宽窗口)');
+  }
+
+  // 自动优化建议:按 trace 里实际命中的阈值,直接给具体方向(不是泛泛菜单)
+  line('\n[优化建议(基于本 trace 实际信号)]');
+  const recs = [];
+  if (forcedLayout > 20) {
+    recs.push(`强制同步布局 ${forcedLayout} 次 + Style 重算 ${styleCount} 次 → 滚动/resize/rAF 回调里在读布局属性(scrollX/offsetTop/尺寸)后又改 DOM,造成读写交错。改法:把布局「读」批量提前、「写」放到下一帧;滚动位置改用 IntersectionObserver/ResizeObserver 或缓存,别每帧同步读;高频回调加节流。`);
+  }
+  const scriptRatio = (catTotals.Scripting || 0) / spanUs;
+  if (scriptRatio > 0.5) {
+    recs.push(`主线程 Scripting 占比 ${pct(catTotals.Scripting, spanUs)} → CPU-bound。把 self-time 最高的函数挪进 Web Worker,或用 scheduler.yield()/分片让出主线程。`);
+  }
+  if (longTasks.length && longTasks[0].dur > 100000) {
+    recs.push(`最长任务 ${fmtMs(longTasks[0].dur)} @+${fmtMs(longTasks[0].ts - traceMin)} 超过 100ms → 用 --window ${Math.floor((longTasks[0].ts - traceMin) / 1000)}-${Math.ceil((longTasks[0].ts - traceMin + longTasks[0].dur) / 1000)} 钻这段看具体触发,拆分或延后该任务。`);
+  }
+  if (gcDur / spanUs > 0.1) {
+    recs.push(`GC 占比 ${pct(gcDur, spanUs)} 偏高 → 有对象 churn,查热路径里的临时对象/闭包分配,复用缓冲。`);
+  }
+  if (longFrames > frames.length * 0.1 && frames.length) {
+    recs.push(`掉帧 ${longFrames}/${frames.length} → 多半由上面的布局抖动或长任务造成,先修那几项,掉帧通常跟着降。`);
+  }
+  if (!recs.length) recs.push('未命中明显阈值;若仍感觉慢,补一段带 JS Profiler 的录制,或用 --window 钻具体现象时间窗。');
+  recs.forEach((r, i) => line(`  ${i + 1}. ${r}`));
+
   line('\n' + '='.repeat(64));
-  line('提示:以上是全程聚合。对着 SKILL.md 的分层症状表定位,先打 self-time 最高且在关键路径上的项。');
+  line('提示:以上是全程聚合。先打 self-time 最高且在关键路径上的项;改后用同一 trace 复测同指标。');
 }
 
 function shortUrl(u) {

@@ -31,9 +31,10 @@ description: Use when a web UI feels slow or janky — 页面卡死掉帧、交�
 拿到导出的性能文件(Chrome Performance `.json`/`.json.gz`、Lighthouse JSON、React Profiler、heap snapshot)时:
 
 - **铁律:大文件先脚本化抽取,绝不整份读进上下文**。trace 常几十 MB,直接读会爆。
-- Chrome Performance trace 优先用随附脚本:`node analyze-trace.mjs <trace.json|.json.gz> --top 20`,它全程聚合出 Long Tasks 排行、主线程时间总账、self-time 热点、layout thrashing、GC、长帧、主线程 vs Worker 占比。
-- **默认全程扫**(挖潜藏问题),再对用户指出的现象时间窗细看。
-- 拿到脚本输出后,把每类指标对回下方分层症状表和阈值表,别停在「看起来很忙」。
+- Chrome Performance trace 优先用随附脚本:`node analyze-trace.mjs <trace.json|.json.gz> --top 20`。它自动兼容采样式 `ProfileChunk` 格式,全程聚合出 Long Tasks 排行、主线程时间总账、**JS self-time 热点**、layout thrashing、GC、长帧、主线程 vs Worker 占比,并在末尾按实际命中的阈值**直接给出具体优化建议**。
+- **钻长任务**:对可疑长任务用 `--window START-END`(毫秒,相对 trace 起点)看那段主线程明细,定位真实触发。
+- **警惕测量假象**:长任务里若是 `CpuProfiler::StartProfiling`、`V8.HandleInterrupts` 之类,是录制工具自身开销,不是页面代码,别当性能问题优化。
+- **默认全程扫**(挖潜藏问题),再对现象时间窗 `--window` 细看。拿到输出把每类指标对回下方症状表和阈值表,别停在「看起来很忙」。
 - 其它格式(Lighthouse/React Profiler)无脚本时也要先抽关键字段,不要贴原文。
 
 ## 关键指标阈值(「慢」的客观基准)

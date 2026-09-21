@@ -1,0 +1,81 @@
+---
+name: backend-performance-analysis
+description: Use when a server/API/backend feels slow or unstable — 接口响应慢、任务排队久、队列积压、内存飙升或 OOM、CPU 打满、列表查询慢、上传/下载慢、外部进程超时、performance/slow/latency/timeout/memory leak;涉及任务队列(BullMQ 等)、图片/PDF/文档处理管道、数据库查询、缓存或对象存储。技术层通用,末尾附本项目落点。
+---
+
+# 后端性能问题分析
+
+## 概览
+
+**核心原则:没有测量数据不许优化;先定位是哪一层慢,再单变量验证。**
+
+后端性能几乎都是「层」的问题。改任何东西前,先确定慢/内存落在下面哪一层,只对最慢的那一层动手:
+
+请求入口 → 限流/中间件 → 任务队列(排队 vs 执行)→ 处理管道(内存 vs 流式)→ 数据库 → 缓存 → 对象存储 → 外部进程(转码/推理/子进程)。
+
+猜「这里肯定慢」然后直接改,是失败。先量,再定位,再验证。
+
+## 测量优先
+
+1. **复现并量化**:慢多少?每次都慢还是偶发?输入多大(文件大小、页数、批量条数)?冷启动还是稳态?
+2. **分层加证据**,一层一个手段:
+   - 请求:接口耗时分布(p50/p95/p99),区分「等资源」和「算得慢」。
+   - 队列:看积压深度、job 执行耗时、失败重试;区分「排队等 worker」和「job 本身跑得慢」。
+   - 内存:进程 RSS / 堆曲线,处理大输入时是否线性膨胀;必要时开内存日志或 heap snapshot。
+   - DB:对可疑查询跑 `EXPLAIN ANALYZE`,确认走索引不是全表扫、不是深 offset、不是每页 `COUNT(*)`。
+   - 容器/主机:`docker stats` / `top` 看 CPU、内存、IO 是否打满。
+3. **只往最慢的单一层里查**,不要同时改多处。
+
+## 分层症状对照表(通用)
+
+| 症状 | 可能瓶颈层 | 检查方式 | 常见根因 / 修复方向 |
+|---|---|---|---|
+| 任务迟迟不开始、排队久 | 队列并发不足 / 慢任务堵快任务 | 队列面板看积压 vs 执行耗时 | 慢任务和快任务共用同一队列同一并发时会互相堵;按任务代价分队列,或调 worker 并发(先测再调) |
+| 单请求/单任务内存飙升、OOM | 处理管道全内存化 | 内存曲线随输入线性涨 | `download→Buffer→内存处理→upload` 无流式;能流式就流式,不能就限制单次输入大小和并发 |
+| CPU 密集任务慢(转码/压缩/渲染) | 热循环 / 重复编解码 | 采样火焰图或按输入规模看耗时曲线 | 逐页/逐帧/逐像素循环、为找目标体积反复 encode;缓存中间结果、减少重复解码、降并发防争抢 |
+| 偶发很慢或超时 | 外部进程 / 子进程 spawn | 看是否卡在 spawn 或外部调用 | 每次 spawn 子进程(转档、OCR)、外部 HTTP 无超时;加超时、复用进程、隔离到独立队列 |
+| 列表接口慢 | DB 分页 / 索引 | `EXPLAIN ANALYZE` | 深 offset、每页 `COUNT(*)`、leading-wildcard `LIKE` 无 trgm 索引;改游标分页、可选关闭总数、建对应索引 |
+| 批量操作随条数线性变慢 | 逐条事务 / N+1 | 观察耗时随规模增长 | 逐条 `SELECT ... FOR UPDATE` + 逐条外部往返;批量化查询与删除 |
+| 全局抖动 / 偶发慢 | 缓存未命中或降级 | 查缓存命中率、依赖是否可用 | 缓存故障静默回退 DB;确认降级路径,别把降级当稳态 |
+| 健康检查慢 | 探针超时 / spawn | 看哪个 check 慢 | 探针无超时、每次探测都 spawn 子进程;给每个探针加超时并并行 |
+
+## 假设与单变量验证
+
+- 一次只改一个变量。改前记下 baseline 数字,改后对比**同一**指标。
+- 没提升就回滚,别在上面叠加第二个改动。
+- 拿不准就说「我不确定哪层慢」,回去补测量,不要硬猜。
+
+## 红旗——停下来重新测量
+
+- 「这里肯定慢」但没有数字
+- 一次改多处 / 同时加缓存又加并发
+- 拿冷启动、首次编译当性能数据
+- 为一个还没测出来的瓶颈提前加缓存/并发
+- 把已有的成熟优化(游标分页、索引、有界缓存)当新点子重复实现
+
+## 验证清单
+
+声明「性能已改善」前必须确认:
+
+- [ ] 有改前 / 改后的**同指标**数字,复现场景一致
+- [ ] 相关测试通过,没引入功能回归
+- [ ] 内存 / 队列在负载下稳定,不是只跑一次好看
+- [ ] 改的是最慢的那一层,不是顺手动了别处
+
+---
+
+## 本项目落点(Utils-Plane;搬到其它项目可删除本节)
+
+技术栈:NestJS 11 + Bun runtime、BullMQ + Redis、PostgreSQL 16 + Drizzle、MinIO。无遥测/APM,测量只靠日志、`/admin/queues`、`docker stats`、`EXPLAIN ANALYZE`、`PERFORMANCE_MEMORY_LOG=true`(上传完打内存)。已知良好基线的事实源是 `PROJECT_SPECS.md` 的「性能优化接口约定」小节。
+
+| 通用症状 | 本项目具体位置 |
+|---|---|
+| 排队久 / 慢任务堵快任务 | 19 任务类型压 4 队列 `apps/api/src/modules/tasks/task-queue.ts`;并发 `apps/api/src/config/worker-concurrency.ts`(默认 image/pdf/font=2、ai=8,`*_WORKER_CONCURRENCY` 可调);单 Redis 连接 `apps/api/src/config/bull.config.ts` 是吞吐上限。慢的 `pdf_to_cad`/`pdf_compress` 会堵同队列的 `pdf_rotate` |
+| 全内存管道 / OOM | `apps/api/src/modules/files/minio.service.ts` 的 `uploadStream()`/`download()` 故意缓冲整对象(Bun 死锁 workaround);各 processor 均 download→Buffer→处理→upload |
+| 重复 encode / 热循环 | 图片 `apps/api/src/modules/tasks/services/image.service.ts` 的 `compressToTargetSize()` 二分质量 + 7 级降采样反复 encode;PDF `.../services/pdf.service.ts` 的 `handleToImage`/`compressPdf` mupdf 逐页 rasterize |
+| 外部进程超时 | `pdf.service.ts` 的 `documentToPdf` 每次 spawn LibreOffice(120s 超时,串行在 2 槽队列) |
+| CPU 推理慢 | `apps/api/src/modules/tasks/services/portrait-segmentation.service.ts` MODNet 逐像素张量 + 单会话串行 |
+| 列表慢 | 已用游标 + `includeTotal=false`(`apps/api/src/modules/files/files.service.ts`、`tasks.service.ts`),别退回 `COUNT(*)`/深 offset;文件名 `%term%` 搜索靠 `files_filename_trgm_idx`(`packages/db/src/schema/files.ts`) |
+| 批量删除慢 | `files.service.ts` 的 `batchPermanentDelete`/`emptyTrash`/`cleanupRecords` 逐条 `FOR UPDATE` + 单独 MinIO 往返,未批量 |
+| 缓存抖动 | 账号摘要进程内 2s 缓存 + Redis 层 `apps/api/src/common/cache/account-summary-redis.ts`,超时极短、故障静默回退 DB |
+| 健康检查慢 | `apps/api/src/modules/health/health.service.ts` 每探针 3s 超时并行;`libreoffice-health.ts` 每次都 spawn `soffice --version` |

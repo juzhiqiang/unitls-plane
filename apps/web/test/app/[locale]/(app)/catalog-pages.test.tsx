@@ -65,8 +65,8 @@ describe('tool catalog pages', () => {
     expect(getByText('No sign-in required')).toBeInTheDocument();
     expect(getByRole('heading', { name: 'Optimize' })).toBeInTheDocument();
     expect(getByRole('heading', { name: 'Convert' })).toBeInTheDocument();
-    expect(getByRole('heading', { name: 'Batch' })).toBeInTheDocument();
     expect(getByRole('heading', { name: 'Animation' })).toBeInTheDocument();
+    expect(getByRole('heading', { name: 'Compose' })).toBeInTheDocument();
     expect(getByRole('link', { name: /Image compression/ })).toHaveAttribute(
       'href',
       expect.stringContaining('/image/compress')

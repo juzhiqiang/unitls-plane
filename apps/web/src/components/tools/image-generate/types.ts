@@ -78,13 +78,50 @@ export function sizeToRatioLabel(size: string): string {
 }
 
 /**
- * 草稿尺寸对模型 sizes 的回退解析:模型列表里没有当前值(默认 "auto" 在多数
- * 网关上不存在)时回落到第一档。模型列表未知时保持原值,由服务端兜底校验。
+ * 草稿尺寸对模型 sizes 的回退解析:
+ * 1. 列表里有完全匹配的值(含 "auto")时原样返回;
+ * 2. 如果输入是 WxH 格式(例如编辑时根据原图物理分辨率传入,或上游返回的非标分辨率),
+ *    按宽高比(aspect ratio)匹配列表中最接近的档位,避免非正方形图片(如 16:9 的 1792x1024)
+ *    因字面量不匹配而被错误强转为 1:1 的 1024x1024;
+ * 3. 都不匹配时回落到第一档。模型列表未知时保持原值,由服务端兜底校验。
  */
 export function resolveDraftSize(
   size: string,
   modelSizes: string[] | undefined
 ): string {
   if (!modelSizes || modelSizes.length === 0) return size;
-  return modelSizes.includes(size) ? size : (modelSizes[0] ?? size);
+  if (modelSizes.includes(size)) return size;
+
+  // 尝试宽高比最近邻匹配
+  const match = /^(\d+)x(\d+)$/.exec(size);
+  if (match) {
+    const targetWidth = Number(match[1]);
+    const targetHeight = Number(match[2]);
+    if (targetWidth > 0 && targetHeight > 0) {
+      const targetRatio = targetWidth / targetHeight;
+      let closestSize: string | null = null;
+      let minDiff = Infinity;
+
+      for (const candidate of modelSizes) {
+        const candidateMatch = /^(\d+)x(\d+)$/.exec(candidate);
+        if (!candidateMatch) continue;
+        const cWidth = Number(candidateMatch[1]);
+        const cHeight = Number(candidateMatch[2]);
+        if (cWidth > 0 && cHeight > 0) {
+          const candidateRatio = cWidth / cHeight;
+          const diff = Math.abs(candidateRatio - targetRatio);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestSize = candidate;
+          }
+        }
+      }
+
+      if (closestSize) {
+        return closestSize;
+      }
+    }
+  }
+
+  return modelSizes[0] ?? size;
 }

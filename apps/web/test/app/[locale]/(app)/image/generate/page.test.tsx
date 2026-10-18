@@ -160,6 +160,24 @@ vi.mock('@/components/tools/image-generate/mask-editor', () => ({
             },
             'stub-inpaint-submit'
           ),
+          // 圈选提交(16:9 底图):带蒙版 + DALL-E 3 风格的非标物理分辨率,
+          // 用于断言编辑产物保持 16:9 比例而不是被强转 1:1。
+          React.createElement(
+            'button',
+            {
+              key: 'inpaint-16-9',
+              'data-testid': 'stub-inpaint-16-9-submit',
+              onClick: () =>
+                onSubmit({
+                  maskBlob: new Blob(['mask-bytes']),
+                  markedBlob: new Blob(['marked-bytes']),
+                  prompt: 'make it a night sky',
+                  width: 1792,
+                  height: 1024,
+                }),
+            },
+            'stub-inpaint-16-9-submit'
+          ),
           // 不圈选、只写描述提交 → image_to_image 整图改图。
           React.createElement(
             'button',
@@ -971,6 +989,64 @@ describe('ImageGeneratePage', () => {
       prompt: 'make it a night sky',
       // 原始 1024x1024 在模型 sizes 里,原样下发。
       size: '1024x1024',
+    });
+  });
+
+  it('keeps the 16:9 ratio when editing a 16:9 image instead of falling back to 1:1', async () => {
+    // 模型声明全档位尺寸,编辑入口才出现。
+    mocks.imageGenerateModels.mockReturnValue({
+      data: [
+        {
+          model: 'gpt-image-2',
+          capabilities: ['generate', 'edit', 'inpaint'] as const,
+          sizes: [
+            '1024x1024',
+            '1024x1536',
+            '1536x1024',
+            '864x1152',
+            '1152x864',
+            '864x1536',
+            '1536x864',
+          ],
+        },
+      ],
+    });
+    const { rerender } = renderPage();
+    setPrompt('a landscape photo');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+
+    const [task] = syncServerTasks(rerender);
+    task.status = 'completed';
+    task.outputFileId = 'file-out-16-9';
+    refreshSessionTasks(rerender);
+
+    let uploads = 300;
+    mocks.uploadFile.mockImplementation(async () => {
+      uploads += 1;
+      return { id: `file-${uploads}` };
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        blob: async () => new Blob(['image-bytes'], { type: 'image/png' }),
+      }))
+    );
+
+    // 编辑入口 → 打桩编辑器的 16:9 提交(1792x1024,DALL-E 3 风格的物理分辨率)。
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const stubSubmit = await screen.findByTestId('stub-inpaint-16-9-submit');
+
+    fireEvent.click(stubSubmit);
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
+    const [payload] = mocks.createTask.mock.calls[1];
+    expect(payload.inputConfig).toMatchObject({
+      mode: 'inpaint',
+      // 1792x1024(16:9)按比例最近邻匹配到 1536x864,不再被字面量匹配失败
+      // 强转为首档 1024x1024(1:1)。
+      size: '1536x864',
     });
   });
 

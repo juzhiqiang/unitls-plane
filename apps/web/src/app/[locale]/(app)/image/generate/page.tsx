@@ -214,6 +214,13 @@ export default function ImageGeneratePage() {
 
   useEffect(() => () => revokeEditingObjectUrl(), []);
 
+  // 新会话在服务端没有任务,query 返回空列表,与「未启用」效果一致,无需额外门控。
+  const sessionTasksQuery = useImageGenerateSessionTasks(activeSessionId);
+  const sessionTasks = useMemo(
+    () => sessionTasksQuery.data?.tasks ?? [],
+    [sessionTasksQuery.data?.tasks]
+  );
+
   /**
    * 编辑入口统一走这里:模型支持整图改图(edit)或圈选重绘(inpaint)任一即可开编辑器,
    * 编辑器内部按 inpaintSupported 决定是否给圈选工具;两者都不支持才给切换引导。
@@ -239,13 +246,6 @@ export default function ImageGeneratePage() {
       setFailure({ key: 'failed' });
     }
   };
-
-  // 新会话在服务端没有任务,query 返回空列表,与「未启用」效果一致,无需额外门控。
-  const sessionTasksQuery = useImageGenerateSessionTasks(activeSessionId);
-  const sessionTasks = useMemo(
-    () => sessionTasksQuery.data?.tasks ?? [],
-    [sessionTasksQuery.data?.tasks]
-  );
 
   const messageGroups = useMemo(() => {
     const serverGroups = toMessageGroups(sessionTasks);
@@ -491,8 +491,11 @@ export default function ImageGeneratePage() {
           : current
       );
 
-      const requestedSize = `${width}x${height}`;
-      const size = resolveDraftSize(requestedSize, selectedModel?.sizes);
+      // 尺寸解析:以底图物理尺寸为准(编辑器按原图 naturalWidth/Height 回传),
+      // resolveDraftSize 内部按宽高比最近邻匹配模型档位 —— 上游返回非标分辨率
+      // (如 16:9 的 1792x1024)时匹配到 1536x864,不会被字面量不匹配强转成 1:1。
+      // 不继承原任务的名义 size:它可能是当时 "auto" 回落后的首档,与真实比例不符。
+      const size = resolveDraftSize(`${width}x${height}`, selectedModel?.sizes);
 
       await createTask.mutateAsync({
         type: 'image_generate',

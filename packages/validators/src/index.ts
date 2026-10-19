@@ -1,6 +1,7 @@
 export * from './cad';
 export * from './files';
 export * from './id-photo';
+export * from './id-photo-background';
 export * from './image-generate';
 export * from './tasks';
 export * from './users';

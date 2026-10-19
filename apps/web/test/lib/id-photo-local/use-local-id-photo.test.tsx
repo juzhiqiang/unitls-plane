@@ -3,7 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 推理层已在 segmentation.test.ts 单独覆盖;这里只验证 hook 的编排
 // (重入守卫、进度接线、过期丢弃、合成与资源释放)。
-const { segmentMock } = vi.hoisted(() => ({ segmentMock: vi.fn() }));
+const { segmentMock, faceDetectMock, compositeMock, actualComposite } =
+  vi.hoisted(() => ({
+    segmentMock: vi.fn(),
+    faceDetectMock: vi.fn(),
+    compositeMock: vi.fn(),
+    // composite 的真实实现由模块工厂在导入时填进来;既有用例继续走真实合成,
+    // 自动构图用例再把它替换成 spy 以便断言传入的 crop。
+    actualComposite: {} as { impl?: (...args: unknown[]) => unknown },
+  }));
 
 vi.mock('@/lib/id-photo-local/segmentation', async importOriginal => {
   const actual =
@@ -11,6 +19,29 @@ vi.mock('@/lib/id-photo-local/segmentation', async importOriginal => {
   return {
     ...actual,
     segmentToCutout: (...args: unknown[]) => segmentMock(...args),
+  };
+});
+
+vi.mock('@/lib/id-photo-local/face-detection', async importOriginal => {
+  const actual =
+    await importOriginal<
+      typeof import('@/lib/id-photo-local/face-detection')
+    >();
+  return {
+    ...actual,
+    detectFaces: (...args: unknown[]) => faceDetectMock(...args),
+  };
+});
+
+vi.mock('@/lib/id-photo-local/composite', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('@/lib/id-photo-local/composite')>();
+  actualComposite.impl = actual.compositeIdPhoto as unknown as (
+    ...args: unknown[]
+  ) => unknown;
+  return {
+    ...actual,
+    compositeIdPhoto: (...args: unknown[]) => compositeMock(...args),
   };
 });
 
@@ -34,6 +65,12 @@ beforeEach(() => {
     bitmap: lastCutout,
     sourceBackground: { r: 240, g: 240, b: 240 },
   }));
+  faceDetectMock.mockReset();
+  faceDetectMock.mockResolvedValue([]);
+  compositeMock.mockReset();
+  compositeMock.mockImplementation((...args: unknown[]) =>
+    actualComposite.impl!(...args)
+  );
 
   // compositeIdPhoto 在 jsdom 下需要 2D 上下文与 convertToBlob;最小可用桩。
   class FakeCtx {
@@ -267,5 +304,110 @@ describe('useLocalIdPhoto', () => {
     });
     await waitFor(() => expect(result.current.status).toBe('done'));
     expect(lastCutout.close).toHaveBeenCalled();
+  });
+});
+
+describe('useLocalIdPhoto auto framing', () => {
+  const face = {
+    box: { x: 100, y: 120, width: 240, height: 240 },
+    landmarks: [
+      [150, 200],
+      [290, 200],
+      [220, 240],
+      [190, 280],
+      [250, 280],
+    ] as Array<[number, number]>,
+    score: 0.95,
+  };
+
+  beforeEach(() => {
+    compositeMock.mockReset();
+    compositeMock.mockResolvedValue(new Blob(['ok'], { type: 'image/jpeg' }));
+  });
+
+  it('computes an auto layout on the first run', async () => {
+    faceDetectMock.mockResolvedValue([face]);
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    expect(result.current.autoLayout).not.toBeNull();
+    expect(result.current.userOverride).toBe(false);
+    const passedCrop = compositeMock.mock.calls[0]![5] as {
+      x: number;
+      y: number;
+      scale: number;
+    };
+    expect(passedCrop).toBeDefined();
+    expect(passedCrop.scale).toBeGreaterThanOrEqual(1);
+  });
+
+  it('stops auto framing once the user overrides the crop', async () => {
+    faceDetectMock.mockResolvedValue([face]);
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    act(() => result.current.markUserOverride());
+
+    const manual = { x: 0.4, y: 0.3, scale: 1.5 };
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        crop: manual,
+        autoFrame: false,
+      });
+    });
+
+    expect(faceDetectMock).not.toHaveBeenCalled();
+    expect(result.current.autoLayout).toBeNull();
+    expect(compositeMock.mock.calls[0]![5]).toEqual(manual);
+  });
+
+  it('falls back to the manual crop when no face is detected', async () => {
+    faceDetectMock.mockResolvedValue([]);
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    const manual = { x: 0.5, y: 0.5, scale: 1 };
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        crop: manual,
+        autoFrame: true,
+      });
+    });
+
+    expect(result.current.autoLayout).toBeNull();
+    expect(result.current.status).toBe('done');
+    expect(compositeMock.mock.calls[0]![5]).toEqual(manual);
+  });
+
+  it('produces a quality report after compositing', async () => {
+    faceDetectMock.mockResolvedValue([face]);
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    expect(result.current.quality).not.toBeNull();
+    expect(result.current.quality!.items.length).toBe(8);
+  });
+
+  it('reset clears autoLayout, userOverride and quality', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    act(() => result.current.markUserOverride());
+    act(() => result.current.reset());
+
+    expect(result.current.userOverride).toBe(false);
+    expect(result.current.autoLayout).toBeNull();
+    expect(result.current.quality).toBeNull();
   });
 });

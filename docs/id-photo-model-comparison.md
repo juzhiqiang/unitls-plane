@@ -1,8 +1,10 @@
 # 证件照分割模型实测对比（MODNet photographic vs RMBG-1.4）
 
 本文件记录 Task 1 的实测结果，用于决定后续 Task 6 / Task 8 / Task 9 的默认档位与预处理方式。
-所有数值均由 `scripts/evaluate-photographic-matte.cjs` 在本机 CPU（onnxruntime-node）上真实跑出，
-未使用任何估算值。
+主表的 alpha 分布、半透明占比、前景占比、洞检测与垂直分带由
+`scripts/evaluate-photographic-matte.cjs` 在本机 CPU（onnxruntime-node）上真实跑出；
+ROI、补边颜色、`refinePortraitAlphaBytes` 对比与权重逐像素 diff 来自当时的一次性临时脚本
+（未保留），逐项说明见「数据来源与可复现性」。全部数值均为实测，未使用估算值。
 
 ## 样张
 
@@ -47,6 +49,25 @@ node scripts/evaluate-photographic-matte.cjs artifacts/sample-portrait.jpg --all
 node scripts/evaluate-photographic-matte.cjs <C.jpg> --all --refpipe
 ```
 
+### 数据来源与可复现性
+
+- **脚本可复现**（`scripts/evaluate-photographic-matte.cjs`）：alpha p05/p50/p95、半透明像素占比、
+  前景占比、洞像素总数/占前景比例/最大单洞及 bbox、垂直三分带的 alpha 中位数与前景占比、推理耗时。
+  上文命令可直接复跑。
+- **一次性临时脚本（未保留，外部不能直接复现）**：
+  - **衣服/帽子 ROI 定量**：按源图坐标把 ROI 换算到各模型输入分辨率，在矩形内统计 alpha 分位数与
+    占比；ROI 坐标见「衣服/帽子 ROI 定量」一节。
+  - **补边颜色试验**：分别用灰/白填充 `contain` 的补边后重跑 photographic，再用与主脚本相同的
+    flood fill 统计洞；黑边即主脚本的默认口径。
+  - **`refinePortraitAlphaBytes` 对比**：对脚本 `--dump` 导出的 alpha 掩码套用现有后处理
+    （黑点 72 / 白点 144 / gamma 0.55），再用同一 flood fill 统计洞。
+  - **两权重逐像素 diff**：对同一输入分别运行 `apps/api/models/modnet.onnx` 与
+    `docker/models/modnet/modnet_photographic.onnx`，逐元素取 `max(abs(a - b))`。
+  上述临时脚本在 Task 1 当时单独编写、未纳入版本库；本文件保留的是当次运行的原始结果，未做估算或
+  事后调整。
+- **人工核对**：「帽子是否实心」「合成后是否肉眼可见蓝底」等结论基于脚本 `--dump` 导出的 alpha PNG
+  与合成图目视检查，不是脚本直接输出的指标。
+
 ## 主表：样张 A（黑帽子 + 暗背景）
 
 | 指标 | photographic (512 contain) | photographic (refpipe，无补边) | RMBG-1.4 fp16 (1024) | 通用 MODNet (256 fill) |
@@ -63,13 +84,17 @@ node scripts/evaluate-photographic-matte.cjs <C.jpg> --all --refpipe
 | 帽子是否实心 | 是（帽子区域无洞；同图的大洞在人脸/眼睛处） | 是 | 是 | 是（帽檐左缘略有锯齿） |
 | 推理耗时（CPU，单次） | 226 ms | 192 ms | 1100 ms（fp32 808 ms） | 129 ms |
 
+> 耗时列的数值采集于脚本加入「计时前预加载/热身 session」之前的版本，因此**包含模型加载**，
+> 仅供量级参考；当前脚本复跑时只计图像前处理 + 单次推理，绝对值通常会低于表中数值。
+
 > 全图 p50 会被补边/背景稀释：photographic 512 contain 的图有 32% 面积是黑边，p50=0 主要来自黑边，
 > 不代表人物区域是透明的。人物区域的判断请看下面的 ROI 统计与洞检测。
 
 ### 衣服/帽子 ROI 定量（样张 A）
 
 ROI 按源图坐标固定：帽子织物区 `x 480–760, y 245–345`，衣服区 `x 320–953, y 1216–1649`，
-换算到各模型输入分辨率后统计。
+换算到各模型输入分辨率后统计。本节数值由一次性临时脚本统计（脚本未保留），复现方法见
+「数据来源与可复现性」。
 
 | 指标 | photographic 512 contain | photographic refpipe | RMBG fp16 | 通用 MODNet 256 fill |
 | --- | --- | --- | --- | --- |
@@ -97,15 +122,17 @@ ROI 按源图坐标固定：帽子织物区 `x 480–760, y 245–345`，衣服�
 1. 同一张 A 图、同一份 photographic 权重：
    - 512 contain（等比缩放 + 黑边补成正方形）→ 衣服 2 个洞、人脸/眼睛处 1 个大洞（1176 px）；
    - refpipe（长边 512、保持长宽比、不补边，384×512）→ **0 个洞**。
-   - 追加试验：把补边颜色换成灰/白，洞减少到 1136 / 1065 px，但仍存在；直接把图拉伸成 512×512
-     （fill）则增至 3123 px。说明触发因素是「补成正方形的黑边」改变了模型对画面内容的判断，
-     而不是 photographic 权重本身会在衣服上开洞。
+   - 追加试验（一次性临时脚本，未保留）：把补边颜色换成灰/白，洞减少到 1136 / 1065 px，
+     但仍存在；直接把图拉伸成 512×512（fill）则增至 3123 px。说明触发因素是「补成正方形的
+     黑边」改变了模型对画面内容的判断，而不是 photographic 权重本身会在衣服上开洞。
 2. `apps/api/models/modnet.onnx`（现网「通用 MODNet」）与 `modnet_photographic.onnx` 在本机
-   逐像素输出**完全相同**（256×256 与 384×512 两种输入下 max abs diff = 0），两个文件只是封装
-   不同（sha256 不同、体积相差 80 KB）。因此「通用 MODNet 会把衣服开洞」这一历史结论，本质上是
-   **256 fill / 旧后处理管线**的表现，不能归因于模型权重差异。
+   逐像素输出**完全相同**（256×256 与 384×512 两种输入下 max abs diff = 0；该 diff 由一次性
+   临时脚本测得，未保留），两个文件只是封装不同（sha256 不同、体积相差 80 KB）。因此
+   「通用 MODNet 会把衣服开洞」这一历史结论，本质上是 **256 fill / 旧后处理管线**的表现，
+   不能归因于模型权重差异。
 3. 现有服务端后处理 `refinePortraitAlphaBytes`（黑点 72 / 白点 144 / gamma 0.55）会把半透明
-   像素二值化。对 contain 口径：洞从 1524 降到 1334 px（仍然破洞，肉眼可见蓝底）；对 refpipe
+   像素二值化（该对比由一次性临时脚本完成，未保留）。对 contain 口径：洞从 1524 降到 1334 px
+   （仍然破洞，肉眼可见蓝底）；对 refpipe
    口径：本来 0 洞，细化后出现 16 px 的 1 像素级噪点洞（0.01% 前景），可忽略。**后处理不能修复
    补边导致的破洞。**
 
@@ -135,8 +162,9 @@ alpha<0.5 占比 0.00%，与 RMBG-1.4 持平。
 
 ## 局限
 
-- 推理耗时是 Windows 本机 CPU（onnxruntime-node）单次结果，未包含模型加载，也不代表浏览器
-  WebGPU 的表现。
+- 推理耗时是 Windows 本机 CPU（onnxruntime-node）单次结果。当前脚本会在计时前统一创建并热身
+  session，因此耗时不含模型加载，但仍包含图像解码/缩放前处理；主表耗时采集于加入预加载之前的
+  脚本版本，包含模型加载，仅供量级参考。耗时也不代表浏览器 WebGPU 的表现。
 - 破洞判定基于 alpha>0.5 的连通域；低对比衣服上「alpha 0.1–0.5 的薄雾」不计为洞，但会表现为合成后
   的轻微透底。衣服区 alpha p05 / alpha<0.5 占比已一并给出，供交叉判断。
 - 样张 A/B/C 中 A、C 为本地样本，未提交到 Git（涉及真人照片）；按上文命令替换成任意同类型样张即可复现。

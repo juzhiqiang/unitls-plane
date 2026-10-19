@@ -1,11 +1,13 @@
 // scripts/evaluate-photographic-matte.cjs
 // 对同一张样张分别跑 MODNet photographic 与 RMBG-1.4，输出量化对比。
-// 用法: node scripts/evaluate-photographic-matte.cjs <样张.jpg>
 //
-// 依赖(与 apps/api 同一套，bun 的 node_modules 是扁平的，需从 apps/api 解析):
-//   node scripts/evaluate-photographic-matte.cjs <sample.jpg> [--all] [--dump <dir>]
-//   --all   同时跑 RMBG-1.4 fp32 / fp16 与通用 MODNet(256 fill)做对照
-//   --dump  把各模型的 alpha 掩码导出为 PNG(便于肉眼看「衣服是否破洞」)
+// 用法(依赖与 apps/api 同一套，bun 的 node_modules 是扁平的，需从 apps/api 解析):
+//   node scripts/evaluate-photographic-matte.cjs <sample.jpg> [--all] [--refpipe] [--dump <dir>]
+//   --all      同时跑 RMBG-1.4 fp32 / fp16 与通用 MODNet(256 fill)做对照
+//   --refpipe  photographic 改用参考实现口径(长边 512、不补边)，默认是 512 contain
+//   --dump     把各模型的 alpha 掩码导出为 PNG(便于肉眼看「衣服是否破洞」)
+//
+// 计时口径:所有 session 在计时前统一创建并各跑一次热身推理，ms 只覆盖前处理与单次推理。
 //
 // 说明:
 // - MODNet(photographic/通用)输入归一化 (x/255-0.5)/0.5，即 mean=std=0.5。
@@ -100,7 +102,7 @@ async function runModel(modelPath, sample, size, fit, opts = {}) {
  * 参考实现 id_photo_bg_changer 的 photographic 预处理:长边 512、保持长宽比、
  * 宽高向下取 32 的倍数、不补边。与 brief 的 512 contain 只差「黑边」。
  */
-async function runModnetRefPipe(modelPath, sample) {
+async function getModnetRefDims(sample) {
   const meta = await sharp(sample).metadata();
   if (!meta.width || !meta.height) throw new Error('cannot read sample dimensions');
   const scale = MODNET_INPUT / Math.max(meta.width, meta.height);
@@ -108,6 +110,11 @@ async function runModnetRefPipe(modelPath, sample) {
   let height = Math.round(meta.height * scale);
   width = Math.max(32, width - (width % 32));
   height = Math.max(32, height - (height % 32));
+  return { width, height };
+}
+
+async function runModnetRefPipe(modelPath, sample) {
+  const { width, height } = await getModnetRefDims(sample);
 
   const session = await getSession(modelPath);
   const raw = await sharp(sample)
@@ -127,6 +134,18 @@ async function runModnetRefPipe(modelPath, sample) {
     [session.inputNames[0]]: new ort.Tensor('float32', tensor, [1, 3, height, width]),
   });
   return { alpha: out[session.outputNames[0]].data, width, height };
+}
+
+// 在计时前完成 session 创建与一次热身推理，避免把模型加载/内核初始化算进 ms。
+async function warmUp(modelPath, width, height) {
+  const session = await getSession(modelPath);
+  const input = new ort.Tensor('float32', new Float32Array(3 * width * height), [
+    1,
+    3,
+    height,
+    width,
+  ]);
+  await session.run({ [session.inputNames[0]]: input });
 }
 
 // MODNet 输出是 1x1xHxW 的 alpha，形状与输入同尺寸
@@ -319,23 +338,45 @@ async function dumpAlpha(alpha, width, height, outPath) {
 
   console.log(`sample: ${sample}`);
   const runs = {
-    photographic: () =>
-      refPipe
-        ? runModnetRefPipe(MODEL_PATHS.photographic, sample)
-        : runModnet(MODEL_PATHS.photographic, sample, MODNET_INPUT, 'contain'),
+    photographic: {
+      prepare: async () => {
+        if (refPipe) {
+          const { width, height } = await getModnetRefDims(sample);
+          await warmUp(MODEL_PATHS.photographic, width, height);
+        } else {
+          await warmUp(MODEL_PATHS.photographic, MODNET_INPUT, MODNET_INPUT);
+        }
+      },
+      run: () =>
+        refPipe
+          ? runModnetRefPipe(MODEL_PATHS.photographic, sample)
+          : runModnet(MODEL_PATHS.photographic, sample, MODNET_INPUT, 'contain'),
+    },
   };
   if (runAll) {
-    runs['rmbg-fp32'] = () => runRmbg(MODEL_PATHS['rmbg-fp32'], sample);
-    runs['rmbg-fp16'] = () => runRmbg(MODEL_PATHS['rmbg-fp16'], sample);
-    runs['modnet-generic'] = () =>
-      runModnet(MODEL_PATHS['modnet-generic'], sample, MODNET_GENERIC_INPUT, 'fill');
+    runs['rmbg-fp32'] = {
+      prepare: () => warmUp(MODEL_PATHS['rmbg-fp32'], RMBG_INPUT, RMBG_INPUT),
+      run: () => runRmbg(MODEL_PATHS['rmbg-fp32'], sample),
+    };
+    runs['rmbg-fp16'] = {
+      prepare: () => warmUp(MODEL_PATHS['rmbg-fp16'], RMBG_INPUT, RMBG_INPUT),
+      run: () => runRmbg(MODEL_PATHS['rmbg-fp16'], sample),
+    };
+    runs['modnet-generic'] = {
+      prepare: () =>
+        warmUp(MODEL_PATHS['modnet-generic'], MODNET_GENERIC_INPUT, MODNET_GENERIC_INPUT),
+      run: () =>
+        runModnet(MODEL_PATHS['modnet-generic'], sample, MODNET_GENERIC_INPUT, 'fill'),
+    };
   }
 
   const report = {};
-  for (const [name, fn] of Object.entries(runs)) {
-    const t0 = Date.now();
+  for (const [name, { prepare, run }] of Object.entries(runs)) {
     try {
-      const { alpha, width, height } = await fn();
+      // 先加载并热身，t0 之后只计前处理 + 单次推理。
+      await prepare();
+      const t0 = Date.now();
+      const { alpha, width, height } = await run();
       const ms = Date.now() - t0;
       const s = summarize(alpha);
       const holes = findHoles(alpha, width, height);

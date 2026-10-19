@@ -36,7 +36,7 @@ export interface UseLocalCutout {
 /**
  * 通用本地抠图。
  *
- * 与 useLocalIdPhoto 共用 segmentation 模块(同一份模型、同一份模块级 pipeline 缓存),
+ * 与 useLocalIdPhoto 共用 segmentation 模块(同一份模型、同一份模块级 session 缓存),
  * 差别只在合成:这里保持原尺寸,输出透明或纯色底。
  */
 export function useLocalCutout(): UseLocalCutout {

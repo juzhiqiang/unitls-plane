@@ -49,11 +49,11 @@ export interface UseLocalIdPhoto {
 }
 
 /**
- * 本地证件照抠图(BRIA RMBG-1.4,经 @huggingface/transformers 的 background-removal pipeline)。
+ * 本地证件照抠图(MODNet photographic,经 onnxruntime-web 直接推理)。
  *
  * 资产自托管在 MinIO(见 model-registry),含模型本体与 ort wasm 运行时;
- * transformers.js 自身缓存已下载的模型权重(浏览器 Cache Storage),故重复处理不会重复下载。
- * 推理在主线程执行(WebGPU 下约 0.6s;CPU wasm 档用 fp16,可接受)。
+ * session 缓存放在 segmentation 模块作用域,重复处理不会重复下载/建 session。
+ * 推理在主线程执行(WebGPU 下更快;CPU wasm 档用 ~25MB photographic,可接受)。
  */
 export function useLocalIdPhoto(): UseLocalIdPhoto {
   const [status, setStatus] = useState<LocalStage>('idle');

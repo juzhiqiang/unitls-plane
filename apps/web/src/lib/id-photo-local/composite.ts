@@ -26,7 +26,7 @@ export function hexToRgb(hex: string): Rgb {
  * 裁剪几何一律走 validators 的 resolveIdPhotoCropBox —— 服务端 sharp 路径用的是
  * 同一个函数,这样同一组 crop 参数在本地与服务端产出完全一致的构图。
  *
- * RMBG-1.4 的 alpha 足够干净,无需再做 alpha 收敛,此处只做「叠底 + 裁剪 + 缩放」。
+ * photographic MODNet 的 alpha 已足够干净,无需再做 alpha 收敛,此处只做「叠底 + 裁剪 + 缩放」。
  *
  * @param cutout 抠图产出的透明 ImageBitmap(自带 alpha)
  * @param backgroundColor #rrggbb

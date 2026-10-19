@@ -30,7 +30,10 @@ beforeEach(() => {
 
   lastCutout = { width: 10, height: 10, close: vi.fn() };
   segmentMock.mockReset();
-  segmentMock.mockImplementation(async () => lastCutout);
+  segmentMock.mockImplementation(async () => ({
+    bitmap: lastCutout,
+    sourceBackground: { r: 240, g: 240, b: 240 },
+  }));
 
   // compositeIdPhoto 在 jsdom 下需要 2D 上下文与 convertToBlob;最小可用桩。
   class FakeCtx {
@@ -169,7 +172,10 @@ describe('useLocalIdPhoto', () => {
         options: { onDownloadProgress?: (ratio: number) => void }
       ) => {
         options.onDownloadProgress?.(0.5);
-        return lastCutout;
+        return {
+          bitmap: lastCutout,
+          sourceBackground: { r: 240, g: 240, b: 240 },
+        };
       }
     );
 
@@ -189,7 +195,11 @@ describe('useLocalIdPhoto', () => {
     segmentMock.mockImplementation(
       () =>
         new Promise(resolve => {
-          gate = () => resolve(lastCutout);
+          gate = () =>
+            resolve({
+              bitmap: lastCutout,
+              sourceBackground: { r: 240, g: 240, b: 240 },
+            });
         })
     );
 
@@ -216,7 +226,11 @@ describe('useLocalIdPhoto', () => {
     segmentMock.mockImplementation(
       () =>
         new Promise(resolve => {
-          resolveProcess = () => resolve(lastCutout);
+          resolveProcess = () =>
+            resolve({
+              bitmap: lastCutout,
+              sourceBackground: { r: 240, g: 240, b: 240 },
+            });
         })
     );
     await act(async () => {

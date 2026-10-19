@@ -36,6 +36,7 @@ vi.mock('onnxruntime-web', () => ({
   },
 }));
 
+import { estimateSourceBackgroundColors } from '@utils-plane/validators';
 import { ORT_VERSION, tierFor } from '@/lib/id-photo-local/model-registry';
 import {
   StaleSegmentationError,
@@ -204,7 +205,7 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
   });
 
   it('把蒙版缩放回原图并用 destination-in 合成,返回原尺寸 cutout', async () => {
-    const cutout = await segmentToCutout(makeFile(), 'balanced', 'wasm');
+    const result = await segmentToCutout(makeFile(), 'balanced', 'wasm');
 
     // 蒙版画布(第 2 个 OffscreenCanvas)拿到 0..1 蒙版 → alpha 0..255
     const matteCanvas = canvases[1];
@@ -223,8 +224,34 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     expect(outCanvas?.ctx.drawImage).toHaveBeenCalledTimes(2);
     expect(outCanvas?.ctx.globalCompositeOperation).toBe('source-over');
 
-    expect(cutout).toBe(cutoutBitmap);
+    expect(result.bitmap).toBe(cutoutBitmap);
     expect(sourceBitmap.close).toHaveBeenCalled();
+  });
+
+  it('在应用 matte 之前从原图估计底色,并随 cutout 一起返回', async () => {
+    const result = await segmentToCutout(makeFile(), 'balanced', 'wasm');
+
+    // 输入画布(第 1 个 OffscreenCanvas)此时仍是原图;按同一份共享算法
+    // 从它的 RGBA 复算期望值。
+    const inputPixels = canvases[0]!.ctx.getImageData(
+      0,
+      0,
+      INPUT_WIDTH,
+      INPUT_HEIGHT
+    ).data;
+    const rgb = new Uint8ClampedArray(INPUT_WIDTH * INPUT_HEIGHT * 3);
+    for (let i = 0; i < INPUT_WIDTH * INPUT_HEIGHT; i += 1) {
+      rgb[i * 3] = inputPixels[i * 4] ?? 0;
+      rgb[i * 3 + 1] = inputPixels[i * 4 + 1] ?? 0;
+      rgb[i * 3 + 2] = inputPixels[i * 4 + 2] ?? 0;
+    }
+    const expected = estimateSourceBackgroundColors(
+      rgb,
+      INPUT_WIDTH,
+      INPUT_HEIGHT
+    )[0];
+
+    expect(result.sourceBackground).toEqual(expected);
   });
 
   it('把 ort wasm 路径指向自托管 MinIO,并按目标 URL 建 session', async () => {
@@ -276,9 +303,9 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     ).rejects.toThrow('network down');
     expect(createMock).toHaveBeenCalledTimes(1);
 
-    await expect(segmentToCutout(makeFile(), 'balanced', 'wasm')).resolves.toBe(
-      cutoutBitmap
-    );
+    await expect(
+      segmentToCutout(makeFile(), 'balanced', 'wasm')
+    ).resolves.toMatchObject({ bitmap: cutoutBitmap });
     expect(createMock).toHaveBeenCalledTimes(2);
   });
 

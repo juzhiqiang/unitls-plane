@@ -45,7 +45,7 @@ function ascii(bytes: Uint8Array, start: number, end: number): string {
  */
 function buildExifPayload(dpi: number): Uint8Array {
   const TIFF_HEADER_SIZE = 8;
-  const IFD_OFFSET = 8;
+  const IFD_OFFSET = TIFF_HEADER_SIZE;
   const ENTRY_COUNT = 3;
   const IFD_SIZE = 2 + ENTRY_COUNT * 12 + 4;
   const X_RESOLUTION_OFFSET = IFD_OFFSET + IFD_SIZE;

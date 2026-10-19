@@ -32,6 +32,38 @@ function jpegWithExif(): Uint8Array<ArrayBuffer> {
   ]);
 }
 
+/** 带 APP0(JFIF)段的 JPEG：SOI + APP0 + EOI。 */
+function jpegWithApp0(): Uint8Array<ArrayBuffer> {
+  const payload = [
+    0x4a,
+    0x46,
+    0x49,
+    0x46,
+    0x00, // 'JFIF\0'
+    0x01,
+    0x01, // version 1.1
+    0x00, // density units
+    0x00,
+    0x01,
+    0x00,
+    0x01, // density 1×1
+    0x00,
+    0x00, // thumbnail 0×0
+  ];
+  const length = payload.length + 2;
+  return new Uint8Array([
+    0xff,
+    0xd8,
+    0xff,
+    0xe0,
+    (length >> 8) & 0xff,
+    length & 0xff,
+    ...payload,
+    0xff,
+    0xd9,
+  ]);
+}
+
 /** 最小的合法 PNG 头：签名 + IHDR（附带正确 CRC）。 */
 function minimalPng(): Uint8Array<ArrayBuffer> {
   const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -50,21 +82,16 @@ function minimalPng(): Uint8Array<ArrayBuffer> {
     0,
     0, // bit depth 8, color type 6, rest 0
   ]);
-  const ihdr = new Uint8Array([
-    0,
-    0,
-    0,
-    13, // length
-    73,
-    72,
-    68,
-    82, // 'IHDR'
-    ...ihdrData,
-    0,
-    0,
-    0,
-    0, // crc placeholder（IHDR 本身不校验 CRC）
-  ]);
+  const ihdr = new Uint8Array(4 + 4 + ihdrData.length + 4);
+  const view = new DataView(ihdr.buffer);
+  view.setUint32(0, ihdrData.length); // length
+  ihdr.set([73, 72, 68, 82], 4); // 'IHDR'
+  ihdr.set(ihdrData, 8);
+  // CRC 覆盖 type + data，与 PNG 规范一致（IHDR 本身也要被校验）。
+  view.setUint32(
+    8 + ihdrData.length,
+    crc32(ihdr.subarray(4, 8 + ihdrData.length))
+  );
   const out = new Uint8Array(signature.length + ihdr.length);
   out.set(signature, 0);
   out.set(ihdr, signature.length);
@@ -138,6 +165,27 @@ describe('injectJpegDpi', () => {
     const count = (latin1(twice).match(/Exif/g) ?? []).length;
     expect(count).toBe(1);
     expect(twice).toEqual(once);
+  });
+
+  it('inserts APP1 before an existing APP0 segment and stays idempotent', () => {
+    const original = jpegWithApp0();
+    const out = injectJpegDpi(original, 300);
+
+    // SOI 之后仍然紧跟 APP1（Exif），而不是被 APP0 挡在后面。
+    expect(Array.from(out.subarray(0, 4))).toEqual([0xff, 0xd8, 0xff, 0xe1]);
+
+    // 原有 APP0 段原样保留在 APP1 之后。
+    const view = viewOf(out);
+    const app1End = 4 + view.getUint16(4);
+    expect(Array.from(out.subarray(app1End, app1End + 4))).toEqual([
+      0xff, 0xe0, 0x00, 0x10,
+    ]);
+    expect(Array.from(out.subarray(app1End + 4, app1End + 9))).toEqual([
+      0x4a, 0x46, 0x49, 0x46, 0x00,
+    ]);
+
+    // 已带 Exif APP1 时再次注入必须原样返回。
+    expect(injectJpegDpi(out, 300)).toBe(out);
   });
 
   it('leaves an existing Exif APP1 untouched', () => {

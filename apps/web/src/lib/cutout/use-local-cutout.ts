@@ -61,14 +61,19 @@ export function useLocalCutout(): UseLocalCutout {
       const isStale = () => sid !== sessionIdRef.current;
 
       try {
-        const cutout = await segmentToCutout(file, tier, ep ?? 'wasm', {
-          onDownloadProgress: ratio => {
-            if (isStale()) return;
-            setProgress(ratio);
-            setStatus('loading-model');
-          },
-          isStale,
-        });
+        const { bitmap: cutout } = await segmentToCutout(
+          file,
+          tier,
+          ep ?? 'wasm',
+          {
+            onDownloadProgress: ratio => {
+              if (isStale()) return;
+              setProgress(ratio);
+              setStatus('loading-model');
+            },
+            isStale,
+          }
+        );
         if (isStale()) return;
 
         setStatus('compositing');

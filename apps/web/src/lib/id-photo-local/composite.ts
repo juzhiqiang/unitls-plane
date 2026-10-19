@@ -12,6 +12,12 @@ export interface Rgb {
   b: number;
 }
 
+/**
+ * 从 cutout 反推底色时，三通道都低于此值视为「背景已被 alpha 归零」，
+ * 估计不可信，跳过反预乘。
+ */
+const UNTRUSTED_BACKGROUND_CHANNEL = 8;
+
 export function hexToRgb(hex: string): Rgb {
   const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
   if (!m) throw new Error(`invalid background color: ${hex}`);
@@ -33,11 +39,18 @@ export function hexToRgb(hex: string): Rgb {
  * 抠图 alpha 再干净，边缘像素的 RGB 仍是「前景 × a + 原背景 × (1-a)」，
  * 不还原就会在新底色上留下原背景色的光晕。
  *
+ * 底色必须来自**原图**：抠图经过 destination-in 后背景像素的 RGB 已归零，
+ * 从 cutout 反推必然得到黑色。反预乘代入 bg=0 会退化成 `c' = c/a`，
+ * 半透明边缘被整体放大（白底上就是白边），比不去污染更差。
+ * 因此调用方应传入 `sourceBackground`；只有在缺失时才退回 cutout 估计，
+ * 并对「三通道都 < 8」的不可信结果跳过整段去污染。
+ *
  * 旋转必须作用在目标尺寸画布上、绕成片中心进行，方向与服务端 sharp
  * `.rotate(-rotation)` 保持一致：canvas 的正角同样是顺时针，因此这里也取负。
  *
  * @param cutout 抠图产出的透明 ImageBitmap（自带 alpha）
  * @param rotation 自动构图算出的旋转角（度，逆时针为正），0 表示不转
+ * @param sourceBackground 从原图估出的底色；缺省时才从 cutout 估计
  */
 export async function compositeIdPhoto(
   cutout: ImageBitmap,
@@ -46,7 +59,8 @@ export async function compositeIdPhoto(
   presetH: number,
   outputType: 'image/jpeg' | 'image/png',
   crop?: IdPhotoCrop,
-  rotation = 0
+  rotation = 0,
+  sourceBackground?: Rgb
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
   const box = resolveIdPhotoCropBox(
@@ -64,40 +78,52 @@ export async function compositeIdPhoto(
   sctx.drawImage(cutout, 0, 0);
   const srcData = sctx.getImageData(0, 0, cutout.width, cutout.height);
 
-  // 2) 从 RGBA 里提取紧密的 3 通道 RGB 用于底色估计
-  const pixelCount = cutout.width * cutout.height;
-  const rgbTriples = new Uint8ClampedArray(pixelCount * 3);
-  for (let i = 0; i < pixelCount; i += 1) {
-    rgbTriples[i * 3] = srcData.data[i * 4] ?? 0;
-    rgbTriples[i * 3 + 1] = srcData.data[i * 4 + 1] ?? 0;
-    rgbTriples[i * 3 + 2] = srcData.data[i * 4 + 2] ?? 0;
+  // 2) 底色：优先用调用方从原图估出的值。退回 cutout 估计时，透明背景
+  //    已经是 (0,0,0)，估计结果必然取黑 —— 三通道都 < 8 视为不可信，
+  //    整段跳过去污染（宁可不去污染，也不要制造白边）。
+  let background: Rgb | null = sourceBackground ?? null;
+  if (!background) {
+    const pixelCount = cutout.width * cutout.height;
+    const rgbTriples = new Uint8ClampedArray(pixelCount * 3);
+    for (let i = 0; i < pixelCount; i += 1) {
+      rgbTriples[i * 3] = srcData.data[i * 4] ?? 0;
+      rgbTriples[i * 3 + 1] = srcData.data[i * 4 + 1] ?? 0;
+      rgbTriples[i * 3 + 2] = srcData.data[i * 4 + 2] ?? 0;
+    }
+    const estimated = estimateSourceBackgroundColors(
+      rgbTriples,
+      cutout.width,
+      cutout.height
+    )[0] ?? { r: 255, g: 255, b: 255 };
+    if (
+      estimated.r < UNTRUSTED_BACKGROUND_CHANNEL &&
+      estimated.g < UNTRUSTED_BACKGROUND_CHANNEL &&
+      estimated.b < UNTRUSTED_BACKGROUND_CHANNEL
+    ) {
+      background = null;
+    } else {
+      background = estimated;
+    }
   }
-  const sourceBackground = estimateSourceBackgroundColors(
-    rgbTriples,
-    cutout.width,
-    cutout.height
-  )[0] ?? {
-    r: 255,
-    g: 255,
-    b: 255,
-  };
 
-  // 3) 去污染后写回源 canvas
-  const cleaned = decontaminateIdPhotoForeground(
-    srcData.data,
-    cutout.width,
-    cutout.height,
-    sourceBackground
-  );
-  // 复制到显式 ArrayBuffer 支撑的视图：共享 utils 的返回类型是
-  // Uint8ClampedArray<ArrayBufferLike>，而 ImageData 只接受 ArrayBuffer。
-  const cleanedPixels = new Uint8ClampedArray(cleaned.length);
-  cleanedPixels.set(cleaned);
-  sctx.putImageData(
-    new ImageData(cleanedPixels, cutout.width, cutout.height),
-    0,
-    0
-  );
+  // 3) 去污染后写回源 canvas（底色不可信时保持原像素不变）
+  if (background) {
+    const cleaned = decontaminateIdPhotoForeground(
+      srcData.data,
+      cutout.width,
+      cutout.height,
+      background
+    );
+    // 复制到显式 ArrayBuffer 支撑的视图：共享 utils 的返回类型是
+    // Uint8ClampedArray<ArrayBufferLike>，而 ImageData 只接受 ArrayBuffer。
+    const cleanedPixels = new Uint8ClampedArray(cleaned.length);
+    cleanedPixels.set(cleaned);
+    sctx.putImageData(
+      new ImageData(cleanedPixels, cutout.width, cutout.height),
+      0,
+      0
+    );
+  }
 
   // 4) 合成：纯色底 + 裁剪框内的前景（可选旋转）
   const out = new OffscreenCanvas(presetW, presetH);

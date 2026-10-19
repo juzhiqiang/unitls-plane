@@ -18,6 +18,10 @@
 
 import { modnetInputSize, refinePortraitAlphaBytes } from '@utils-plane/utils';
 import {
+  estimateSourceBackgroundColors,
+  type BackgroundCandidate,
+} from '@utils-plane/validators';
+import {
   ID_PHOTO_MODELS,
   modnetModelUrl,
   ortWasmPath,
@@ -140,16 +144,55 @@ async function getSession(
 }
 
 /**
- * 跑一次分割,产出带 alpha 的抠图位图(与输入同尺寸)。
+ * 分割产物。
  *
- * 调用方负责 close() 返回的 ImageBitmap。
+ * `sourceBackground` 必须在应用 matte 之前从原图估出：cutout 的背景像素
+ * 经 destination-in 后 RGB 已归零，从它反推底色只能得到黑色，合成阶段
+ * 的反预乘会因此把半透明边缘放大成白边。
+ */
+export interface SegmentationResult {
+  bitmap: ImageBitmap;
+  sourceBackground: BackgroundCandidate;
+}
+
+/**
+ * 从原图（应用 matte 前的 canvas）的 RGBA 像素估计底色。
+ *
+ * 只取频次最高的候选；与证件照合成共用同一份
+ * `estimateSourceBackgroundColors` 实现，避免两端算法漂移。
+ */
+function estimateSourceBackgroundFromRgba(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number
+): BackgroundCandidate {
+  const plane = width * height;
+  const rgb = new Uint8ClampedArray(plane * 3);
+  for (let i = 0; i < plane; i += 1) {
+    rgb[i * 3] = rgba[i * 4] ?? 0;
+    rgb[i * 3 + 1] = rgba[i * 4 + 1] ?? 0;
+    rgb[i * 3 + 2] = rgba[i * 4 + 2] ?? 0;
+  }
+  return (
+    estimateSourceBackgroundColors(rgb, width, height)[0] ?? {
+      r: 0,
+      g: 0,
+      b: 0,
+    }
+  );
+}
+
+/**
+ * 跑一次分割,产出带 alpha 的抠图位图(与输入同尺寸)与原图底色。
+ *
+ * 调用方负责 close() 返回的 bitmap。
  */
 export async function segmentToCutout(
   file: Blob,
   requestedTier: ModelTier,
   ep: LocalEp,
   options: SegmentationOptions = {}
-): Promise<ImageBitmap> {
+): Promise<SegmentationResult> {
   const { onDownloadProgress, isStale } = options;
 
   const effectiveTier = tierFor(ep === 'webgpu', requestedTier);
@@ -188,6 +231,14 @@ export async function segmentToCutout(
     if (!ctx) throw new Error('2D canvas context unavailable');
     ctx.drawImage(bitmap, 0, 0, inputW, inputH);
     const pixels = ctx.getImageData(0, 0, inputW, inputH).data;
+
+    // 底色必须在这里取:此时 canvas 里还是原图。等 matte 用 destination-in
+    // 应用之后,背景像素的 RGB 已经被归零,再也反推不出真实底色。
+    const sourceBackground = estimateSourceBackgroundFromRgba(
+      pixels,
+      inputW,
+      inputH
+    );
 
     const plane = inputW * inputH;
     const tensor = new Float32Array(3 * plane);
@@ -259,7 +310,7 @@ export async function segmentToCutout(
     );
     octx.globalCompositeOperation = 'source-over';
 
-    return await createImageBitmap(out);
+    return { bitmap: await createImageBitmap(out), sourceBackground };
   } finally {
     bitmap.close?.();
   }

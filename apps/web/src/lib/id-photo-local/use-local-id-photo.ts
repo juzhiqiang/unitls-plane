@@ -78,14 +78,15 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
       setResultBlob(null);
       const isStale = () => sid !== sessionIdRef.current;
       try {
-        const cutoutBitmap = await segmentToCutout(file, tier, ep ?? 'wasm', {
-          onDownloadProgress: ratio => {
-            if (isStale()) return;
-            setProgress(ratio);
-            setStatus('loading-model');
-          },
-          isStale,
-        });
+        const { bitmap: cutoutBitmap, sourceBackground } =
+          await segmentToCutout(file, tier, ep ?? 'wasm', {
+            onDownloadProgress: ratio => {
+              if (isStale()) return;
+              setProgress(ratio);
+              setStatus('loading-model');
+            },
+            isStale,
+          });
         if (isStale()) return;
 
         setStatus('compositing');
@@ -98,7 +99,10 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             spec.widthPx,
             spec.heightPx,
             opts.outputType,
-            opts.crop
+            opts.crop,
+            // 旋转由 Task 13 的自动构图接入，这里显式走默认值 0。
+            undefined,
+            sourceBackground
           );
           if (isStale()) return;
           setResultBlob(blob);

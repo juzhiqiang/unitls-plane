@@ -1,15 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveIdPhotoCropBox } from '@utils-plane/validators';
 
+type Decontaminate = (
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  background: { r: number; g: number; b: number },
+  options?: { alphaFloor?: number; spillStrength?: number }
+) => Uint8ClampedArray;
+
 const mocks = vi.hoisted(() => ({
-  decontaminate: vi.fn((rgba: Uint8ClampedArray) => rgba),
+  decontaminate: vi.fn<Decontaminate>(),
+  // 由 mock 工厂在模块加载时填充真实实现，测试默认委托给它，
+  // 这样「反预乘是否生效」能按真实算法断言，而不只是看调用次数。
+  realDecontaminate: null as Decontaminate | null,
   writeDpi: vi.fn(async (blob: Blob, _dpi?: number) => blob),
 }));
 
-// composite.ts 只从 utils 取去污染函数，整模块替换可以避免加载无关实现。
-vi.mock('@utils-plane/utils', () => ({
-  decontaminateIdPhotoForeground: mocks.decontaminate,
-}));
+// composite.ts 只从 utils 取去污染函数；保留其余真实导出，按需委托。
+vi.mock('@utils-plane/utils', async importOriginal => {
+  const actual = await importOriginal<typeof import('@utils-plane/utils')>();
+  mocks.realDecontaminate = actual.decontaminateIdPhotoForeground;
+  return {
+    ...actual,
+    decontaminateIdPhotoForeground: mocks.decontaminate,
+  };
+});
 vi.mock('@/lib/id-photo-local/dpi-metadata', () => ({
   writeDpi: mocks.writeDpi,
 }));
@@ -30,14 +46,24 @@ interface FakeContext {
   rotate: ReturnType<typeof vi.fn>;
 }
 
+interface StubPixel {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
 interface StubOptions {
   /** getImageData 返回的像素；默认浅灰不透明，保证底色估计有值。 */
-  pixel?: { r: number; g: number; b: number; a: number };
+  pixel?: StubPixel;
+  /** 按像素定制颜色；优先级高于 pixel。index = y * width + x。 */
+  pixelAt?: (x: number, y: number, index: number) => StubPixel;
 }
 
 /** jsdom 没有 OffscreenCanvas / ImageData，用最小桩替换并记录调用。 */
 function stubOffscreenCanvas(options: StubOptions = {}) {
   const pixel = options.pixel ?? { r: 240, g: 240, b: 240, a: 255 };
+  const pixelAt = options.pixelAt;
   const contexts: FakeContext[] = [];
   const blobs: { opts: unknown; canvas: unknown }[] = [];
 
@@ -59,7 +85,6 @@ function stubOffscreenCanvas(options: StubOptions = {}) {
       public width: number,
       public height: number
     ) {
-      const self = this;
       this.ctx = {
         fillStyle: '',
         drawImage: vi.fn(),
@@ -67,10 +92,11 @@ function stubOffscreenCanvas(options: StubOptions = {}) {
         getImageData: vi.fn((_x: number, _y: number, w: number, h: number) => {
           const data = new Uint8ClampedArray(w * h * 4);
           for (let i = 0; i < w * h; i += 1) {
-            data[i * 4] = pixel.r;
-            data[i * 4 + 1] = pixel.g;
-            data[i * 4 + 2] = pixel.b;
-            data[i * 4 + 3] = pixel.a;
+            const px = pixelAt ? pixelAt(i % w, Math.floor(i / w), i) : pixel;
+            data[i * 4] = px.r;
+            data[i * 4 + 1] = px.g;
+            data[i * 4 + 2] = px.b;
+            data[i * 4 + 3] = px.a;
           }
           return { data, width: w, height: h };
         }),
@@ -79,7 +105,6 @@ function stubOffscreenCanvas(options: StubOptions = {}) {
         rotate: vi.fn(),
       };
       contexts.push(this.ctx);
-      void self;
     }
     getContext(): FakeContext {
       return this.ctx;
@@ -103,7 +128,15 @@ function outputCalls(ctx: FakeContext, arity: number) {
 }
 
 beforeEach(() => {
-  mocks.decontaminate.mockClear();
+  mocks.decontaminate.mockReset();
+  mocks.decontaminate.mockImplementation(
+    (rgba, width, height, background, options) => {
+      // 真实实现由 mock 工厂注入；没有时原样返回（仅断言调用参数的用例不关心结果）。
+      return mocks.realDecontaminate
+        ? mocks.realDecontaminate(rgba, width, height, background, options)
+        : rgba;
+    }
+  );
   mocks.writeDpi.mockClear();
   mocks.writeDpi.mockImplementation(async (blob: Blob) => blob);
 });
@@ -237,6 +270,89 @@ describe('compositeIdPhoto pipeline', () => {
 
     expect(blobs[0]!.opts).toEqual({ type: 'image/png' });
     expect(mocks.writeDpi.mock.calls[0]![1]).toBe(300);
+  });
+});
+
+describe('compositeIdPhoto source background', () => {
+  it('uses a caller-provided background instead of re-deriving it from the cutout', async () => {
+    // 真实边缘像素 = 前景 128 × a + 白底 255 × (1-a)，a=128/255 → 存储值 191。
+    // 传白底时反预乘应还原到 128；若拿黑底反推，c/a 会把 191 放大成 ~381，
+    // 钳制后就是 255 的白边。
+    const { contexts } = stubOffscreenCanvas({
+      pixel: { r: 191, g: 191, b: 191, a: 128 },
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg',
+      undefined,
+      0,
+      { r: 255, g: 255, b: 255 }
+    );
+
+    expect(mocks.decontaminate).toHaveBeenCalledTimes(1);
+    expect(mocks.decontaminate.mock.calls[0]![3]).toEqual({
+      r: 255,
+      g: 255,
+      b: 255,
+    });
+
+    const written = contexts[0]!.putImageData.mock.calls[0]![0] as {
+      data: Uint8ClampedArray;
+    };
+    // 还原到真实前景色 128，而不是白边 255；alpha 保持不变。
+    expect(Array.from(written.data.subarray(0, 4))).toEqual([
+      128, 128, 128, 128,
+    ]);
+  });
+
+  it('skips decontamination when the cutout-derived background is untrustworthy', async () => {
+    // destination-in 之后的背景像素是 (0,0,0,0)，采样到的上边缘与左右边缘全黑。
+    // 中心放一个半透明边缘像素：守卫生效时它必须保持原样，不被 c/a 放大成白边。
+    const { contexts } = stubOffscreenCanvas({
+      pixelAt: (x, y) =>
+        x === 50 && y === 70
+          ? { r: 191, g: 191, b: 191, a: 128 }
+          : { r: 0, g: 0, b: 0, a: 0 },
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg'
+    );
+
+    // 估计结果三通道都为 0 → 不可信 → 整段跳过，源 canvas 像素保持不变。
+    expect(mocks.decontaminate).not.toHaveBeenCalled();
+    expect(contexts[0]!.putImageData).not.toHaveBeenCalled();
+  });
+
+  it('still decontaminates when the estimated background is plausible', async () => {
+    // 回归：正常（非黑）底色估计仍要走反预乘 —— 默认 240 灰会触发去污染。
+    stubOffscreenCanvas();
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg'
+    );
+
+    expect(mocks.decontaminate).toHaveBeenCalledTimes(1);
+    const background = mocks.decontaminate.mock.calls[0]![3] as {
+      r: number;
+      g: number;
+      b: number;
+    };
+    expect(background.r).toBeGreaterThanOrEqual(224);
+    expect(background.g).toBeGreaterThanOrEqual(224);
+    expect(background.b).toBeGreaterThanOrEqual(224);
   });
 });
 

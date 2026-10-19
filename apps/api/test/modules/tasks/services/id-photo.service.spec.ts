@@ -787,3 +787,63 @@ describe('IdPhotoService RGBA assembly', () => {
     expect(right.r).toBeLessThan(40);
   });
 });
+
+describe('IdPhotoService brightness correction', () => {
+  async function meanOutput(buffer: Buffer): Promise<number> {
+    const { data, info } = await sharp(buffer)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let sum = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+      sum += ((data[i] ?? 0) + (data[i + 1] ?? 0) + (data[i + 2] ?? 0)) / 3;
+    }
+    return sum / (data.length / info.channels);
+  }
+
+  async function renderFlatGray(value: number): Promise<number> {
+    const width = 300;
+    const height = 400;
+    const pixels = Buffer.alloc(width * height * 3, value);
+    const input = await sharp(pixels, {
+      raw: { width, height, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask: await sharp(Buffer.alloc(width * height, 255), {
+          raw: { width, height, channels: 1 },
+        })
+          .png()
+          .toBuffer(),
+        bounds: { x: 0, y: 0, width, height },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const output = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#ffffff',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+    return meanOutput(output.buffer);
+  }
+
+  it('brightens an underexposed photo toward mid-grey', async () => {
+    const mean = await renderFlatGray(40);
+    // 40 → 建议 +18;透明区外的整幅前景都应抬亮。
+    expect(mean).toBeCloseTo(58, 0);
+    expect(Math.abs(mean - 128)).toBeLessThan(Math.abs(40 - 128));
+  });
+
+  it('darkens an overexposed photo toward mid-grey', async () => {
+    const mean = await renderFlatGray(240);
+    // 240 → 建议 -12。
+    expect(mean).toBeCloseTo(228, 0);
+    expect(Math.abs(mean - 128)).toBeLessThan(Math.abs(240 - 128));
+  });
+});

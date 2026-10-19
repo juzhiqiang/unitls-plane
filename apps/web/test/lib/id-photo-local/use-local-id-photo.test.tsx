@@ -330,7 +330,7 @@ describe('useLocalIdPhoto auto framing', () => {
     compositeMock.mockImplementation(async (...args: unknown[]) => {
       const width = args[2] as number;
       const height = args[3] as number;
-      const capture = args[8] as
+      const capture = args[9] as
         | ((pixels: {
             rgba: Uint8ClampedArray;
             alpha: Uint8ClampedArray;
@@ -390,6 +390,33 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(faceDetectMock).not.toHaveBeenCalled();
     expect(result.current.autoLayout).toBeNull();
     expect(compositeMock.mock.calls[0]![5]).toEqual(manual);
+    // 手动模式下不做亮度校正,避免自动调色覆盖用户的画面判断。
+    expect(compositeMock.mock.calls[0]![8]).toBe(0);
+  });
+
+  it('passes a suggested brightness offset only in auto mode', async () => {
+    faceDetectMock.mockResolvedValue([]);
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    // 桩像素全白(mean=255)→ 压暗上限 -12。
+    expect(compositeMock.mock.calls[0]![8]).toBe(-12);
+  });
+
+  it('passes zero brightness when auto framing is disabled', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
+    });
+
+    expect(compositeMock.mock.calls[0]![8]).toBe(0);
   });
 
   it('falls back to the manual crop when no face is detected', async () => {

@@ -66,6 +66,8 @@ export function hexToRgb(hex: string): Rgb {
  * @param cutout 抠图产出的透明 ImageBitmap（自带 alpha）
  * @param rotation 自动构图算出的旋转角（度，逆时针为正），0 表示不转
  * @param sourceBackground 从原图估出的底色；缺省时才从 cutout 估计
+ * @param brightness 亮度加法偏移（-255..255 实际取小范围），只作用于前景；
+ *   在去污染之后、写回画布之前应用，透明像素保持原样
  * @param onOutput 可选：合成完成、编码前回调成片像素，供质量检查使用
  */
 export async function compositeIdPhoto(
@@ -77,6 +79,7 @@ export async function compositeIdPhoto(
   crop?: IdPhotoCrop,
   rotation = 0,
   sourceBackground?: Rgb,
+  brightness = 0,
   onOutput?: (pixels: CompositeOutputPixels) => void
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
@@ -124,6 +127,7 @@ export async function compositeIdPhoto(
   }
 
   // 3) 去污染后写回源 canvas（底色不可信时保持原像素不变）
+  let workingPixels: Uint8ClampedArray<ArrayBuffer> | null = null;
   if (background) {
     const cleaned = decontaminateIdPhotoForeground(
       srcData.data,
@@ -133,16 +137,39 @@ export async function compositeIdPhoto(
     );
     // 复制到显式 ArrayBuffer 支撑的视图：共享 utils 的返回类型是
     // Uint8ClampedArray<ArrayBufferLike>，而 ImageData 只接受 ArrayBuffer。
-    const cleanedPixels = new Uint8ClampedArray(cleaned.length);
-    cleanedPixels.set(cleaned);
+    workingPixels = new Uint8ClampedArray(cleaned.length);
+    workingPixels.set(cleaned);
+  }
+
+  // 4) 亮度自动校正：加法偏移，只作用于前景（alpha > 0）像素；透明区
+  //    保持原样。放在去污染之后，避免「反预乘还原出的真实前景色」被当成
+  //    带底色的边缘值再放大。底色不可信、跳过去污染时也要独立生效。
+  if (brightness !== 0) {
+    const target = workingPixels ?? new Uint8ClampedArray(srcData.data);
+    for (let i = 0; i < target.length; i += 4) {
+      if ((target[i + 3] ?? 0) === 0) continue;
+      target[i] = Math.max(0, Math.min(255, (target[i] ?? 0) + brightness));
+      target[i + 1] = Math.max(
+        0,
+        Math.min(255, (target[i + 1] ?? 0) + brightness)
+      );
+      target[i + 2] = Math.max(
+        0,
+        Math.min(255, (target[i + 2] ?? 0) + brightness)
+      );
+    }
+    workingPixels = target;
+  }
+
+  if (workingPixels) {
     sctx.putImageData(
-      new ImageData(cleanedPixels, cutout.width, cutout.height),
+      new ImageData(workingPixels, cutout.width, cutout.height),
       0,
       0
     );
   }
 
-  // 4) 合成：纯色底 + 裁剪框内的前景（可选旋转）
+  // 5) 合成：纯色底 + 裁剪框内的前景（可选旋转）
   const out = new OffscreenCanvas(presetW, presetH);
   const octx = out.getContext('2d');
   if (!octx) throw new Error('2D canvas context unavailable');
@@ -168,7 +195,7 @@ export async function compositeIdPhoto(
     presetH
   );
 
-  // 5) 质量检查需要成片尺寸的像素。rgba 直接取最终画布（含底色）；
+  // 6) 质量检查需要成片尺寸的像素。rgba 直接取最终画布（含底色）；
   //    alpha 必须在「只画前景」的透明画布上取——最终画布已被底色铺满，
   //    其 alpha 恒为 255，用它算 matteEdge 会永远通过。
   if (onOutput) {
@@ -205,6 +232,6 @@ export async function compositeIdPhoto(
     quality: outputType === 'image/jpeg' ? 0.95 : undefined,
   });
 
-  // 6) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释
+  // 7) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释
   return writeDpi(blob, 300);
 }

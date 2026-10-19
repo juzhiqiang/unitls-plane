@@ -5,6 +5,7 @@ import {
   inspectIdPhoto,
   mapFaceToOutput,
   resolveIdPhotoCropBox,
+  suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
   type IdPhotoCrop,
   type IdPhotoLayout,
@@ -196,12 +197,16 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           // 2) 只在「用户没手动改过裁剪框」时才自动构图。
           //    守卫读 ref:同一事件里先 markUserOverride() 再 process() 时,
           //    state 尚未重渲染,不能依赖闭包里的 userOverride。
+          //    亮度自动校正也只在自动模式下生效:用户手动构图时不自动调色。
+          const autoFraming = Boolean(
+            opts.autoFrame && !userOverrideRef.current
+          );
           let crop = opts.crop;
           let rotation = 0;
           let layout: IdPhotoLayout | null = null;
           let faces: Awaited<ReturnType<typeof detectFaces>> = [];
 
-          if (opts.autoFrame && !userOverrideRef.current) {
+          if (autoFraming) {
             faces = await detectFaces(file);
             if (isStale()) return;
 
@@ -223,6 +228,26 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             }
           }
 
+          // 2.5) 亮度自动校正:只统计前景(alpha > 0)像素的平均亮度,
+          //      避免大面积透明背景把均值拉低。与质量检查共用上面读出的
+          //      srcData,不再重复读像素;偏移量算法与服务端是同一个函数。
+          let brightness = 0;
+          if (autoFraming) {
+            const pixels = srcData.data;
+            let sum = 0;
+            let count = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+              if ((pixels[i + 3] ?? 0) === 0) continue;
+              sum +=
+                ((pixels[i] ?? 0) +
+                  (pixels[i + 1] ?? 0) +
+                  (pixels[i + 2] ?? 0)) /
+                3;
+              count += 1;
+            }
+            brightness = suggestBrightnessAdjustment(sum / Math.max(1, count));
+          }
+
           // 3) 合成(去污染 + 旋转 + DPI 都在 composite 内完成),同时拿回
           //    成片尺寸的像素供质量检查。
           setStatus('compositing');
@@ -236,6 +261,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             crop,
             rotation,
             sourceBackground,
+            brightness,
             pixels => {
               pixelsFromComposite = pixels;
             }

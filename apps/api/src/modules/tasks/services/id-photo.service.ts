@@ -8,6 +8,7 @@ import {
   idPhotoCropFromLayout,
   mapFaceToOutput,
   resolveIdPhotoCropBox,
+  suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
   type IdPhotoTaskConfig,
   type QualityReport,
@@ -169,8 +170,28 @@ export class IdPhotoService {
       .toBuffer();
 
     const baseRgbRaw = await sharp(base).removeAlpha().raw().toBuffer();
+    const pixelCount = preset.widthPx * preset.heightPx;
 
-    // 底色聚类（替换原四角均值），取出现频次最高的那个
+    // 亮度自动校正：只统计前景（alpha > 0）的平均亮度，透明区不参与 ——
+    // 否则大面积的 alpha=0 会把均值拉向 0，导致不必要的提亮。
+    // 偏移量算法与本地 canvas 路共用 suggestBrightnessAdjustment。
+    let meanSum = 0;
+    let meanCount = 0;
+    for (let i = 0; i < pixelCount; i += 1) {
+      if ((resizedAlpha[i] ?? 0) === 0) continue;
+      meanSum +=
+        ((baseRgbRaw[i * 3] ?? 0) +
+          (baseRgbRaw[i * 3 + 1] ?? 0) +
+          (baseRgbRaw[i * 3 + 2] ?? 0)) /
+        3;
+      meanCount += 1;
+    }
+    const brightnessOffset = suggestBrightnessAdjustment(
+      meanSum / Math.max(1, meanCount)
+    );
+
+    // 底色聚类必须用**未调色**的原图：亮度是前景校正，若先把偏移加到全幅
+    // 再聚类，会把估计出的底色整体推亮/推暗，进而影响去污染的反预乘结果。
     const candidates = estimateSourceBackgroundColors(
       baseRgbRaw,
       preset.widthPx,
@@ -178,12 +199,27 @@ export class IdPhotoService {
     );
     const sourceBackground = candidates[0] ?? { r: 0, g: 0, b: 0 };
 
+    // 前景 RGB 的调色结果：只对 alpha > 0 的像素做加法偏移并钳制到 0..255。
+    const adjustedBaseRgb =
+      brightnessOffset === 0 ? baseRgbRaw : Buffer.from(baseRgbRaw);
+    if (brightnessOffset !== 0) {
+      for (let i = 0; i < pixelCount; i += 1) {
+        if ((resizedAlpha[i] ?? 0) === 0) continue;
+        for (let c = 0; c < 3; c += 1) {
+          adjustedBaseRgb[i * 3 + c] = Math.max(
+            0,
+            Math.min(255, (adjustedBaseRgb[i * 3 + c] ?? 0) + brightnessOffset)
+          );
+        }
+      }
+    }
+
     // 共享纯函数做去污染，返回 RGBA
-    const rgba = new Uint8ClampedArray(preset.widthPx * preset.heightPx * 4);
-    for (let i = 0; i < preset.widthPx * preset.heightPx; i += 1) {
-      rgba[i * 4] = baseRgbRaw[i * 3] ?? 0;
-      rgba[i * 4 + 1] = baseRgbRaw[i * 3 + 1] ?? 0;
-      rgba[i * 4 + 2] = baseRgbRaw[i * 3 + 2] ?? 0;
+    const rgba = new Uint8ClampedArray(pixelCount * 4);
+    for (let i = 0; i < pixelCount; i += 1) {
+      rgba[i * 4] = adjustedBaseRgb[i * 3] ?? 0;
+      rgba[i * 4 + 1] = adjustedBaseRgb[i * 3 + 1] ?? 0;
+      rgba[i * 4 + 2] = adjustedBaseRgb[i * 3 + 2] ?? 0;
       rgba[i * 4 + 3] = resizedAlpha[i] ?? 0;
     }
     const cleaned = decontaminateIdPhotoForeground(
@@ -232,7 +268,8 @@ export class IdPhotoService {
     // 质量检查在最终成片上做。人脸框/关键点是源图坐标，必须先映射到成片坐标，
     // 否则 faceRatio、faceCentered、headroom 会按源图尺寸计算而失真。
     const quality = inspectIdPhoto({
-      rgb: baseRgbRaw,
+      // 曝光项按调色后的前景 RGB 判定，与最终成片一致。
+      rgb: adjustedBaseRgb,
       width: preset.widthPx,
       height: preset.heightPx,
       face: face ? mapFaceToOutput(face, baseBox, preset, rotation) : null,

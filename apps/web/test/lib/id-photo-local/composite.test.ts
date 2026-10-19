@@ -421,3 +421,130 @@ describe('compositeIdPhoto rotation', () => {
     );
   });
 });
+
+describe('compositeIdPhoto brightness', () => {
+  function pixelAtCentre(
+    width: number,
+    height: number,
+    foreground: StubPixel
+  ): (x: number, y: number) => StubPixel {
+    const cx = Math.floor(width / 2);
+    const cy = Math.floor(height / 2);
+    return (x, y) =>
+      x === cx && y === cy ? foreground : { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  function writtenPixels(ctx: FakeContext, width: number, height: number) {
+    const call = ctx.putImageData.mock.calls.at(-1);
+    expect(call).toBeDefined();
+    return (call![0] as { data: Uint8ClampedArray }).data;
+  }
+
+  it('adds brightness to foreground pixels and leaves transparent pixels untouched', async () => {
+    const width = 100;
+    const height = 140;
+    const { contexts } = stubOffscreenCanvas({
+      pixelAt: pixelAtCentre(width, height, { r: 100, g: 100, b: 100, a: 255 }),
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(width, height),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      0,
+      undefined,
+      12
+    );
+
+    const data = writtenPixels(contexts[0]!, width, height);
+    const centre = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
+    expect(Array.from(data.subarray(centre, centre + 4))).toEqual([
+      112, 112, 112, 255,
+    ]);
+    // 透明像素完全不动(alpha=0 的 RGB 即便有残留值也不参与调色)。
+    expect(Array.from(data.subarray(0, 4))).toEqual([0, 0, 0, 0]);
+  });
+
+  it('clamps adjusted channels to 0..255', async () => {
+    const width = 20;
+    const height = 20;
+    const { contexts } = stubOffscreenCanvas({
+      pixelAt: (x, y) => {
+        const cx = Math.floor(width / 2);
+        const cy = Math.floor(height / 2);
+        if (x === cx && y === cy) return { r: 250, g: 3, b: 128, a: 255 };
+        return { r: 250, g: 3, b: 128, a: 0 };
+      },
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(width, height),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      0,
+      undefined,
+      20
+    );
+
+    let data = writtenPixels(contexts[0]!, width, height);
+    let centre = (10 * width + 10) * 4;
+    expect(Array.from(data.subarray(centre, centre + 3))).toEqual([
+      255, 23, 148,
+    ]);
+
+    const second = stubOffscreenCanvas({
+      pixelAt: (x, y) => {
+        const cx = Math.floor(width / 2);
+        const cy = Math.floor(height / 2);
+        if (x === cx && y === cy) return { r: 250, g: 3, b: 128, a: 255 };
+        return { r: 250, g: 3, b: 128, a: 0 };
+      },
+    });
+    await compositeIdPhoto(
+      fakeCutout(width, height),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      0,
+      undefined,
+      -20
+    );
+    data = writtenPixels(second.contexts[0]!, width, height);
+    centre = (10 * width + 10) * 4;
+    expect(Array.from(data.subarray(centre, centre + 3))).toEqual([
+      230, 0, 108,
+    ]);
+  });
+
+  it('applies brightness after decontamination so recovered colours are shifted', async () => {
+    mocks.decontaminate.mockImplementationOnce(rgba => rgba);
+    const width = 10;
+    const height = 10;
+    const { contexts } = stubOffscreenCanvas({
+      pixelAt: () => ({ r: 120, g: 120, b: 120, a: 255 }),
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(width, height),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      0,
+      { r: 255, g: 255, b: 255 },
+      8
+    );
+
+    const data = writtenPixels(contexts[0]!, width, height);
+    expect(Array.from(data.subarray(0, 4))).toEqual([128, 128, 128, 255]);
+  });
+});

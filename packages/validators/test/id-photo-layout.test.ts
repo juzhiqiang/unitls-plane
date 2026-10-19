@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   eyeTiltDegrees,
   idPhotoCropFromLayout,
+  suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
   type FaceDetection,
   type IdPhotoLayout,
@@ -292,5 +293,35 @@ describe('idPhotoCropFromLayout', () => {
     expect(crop.x).toBeLessThan(1);
     expect(crop.y).toBeGreaterThan(0);
     expect(crop.y).toBeLessThan(1);
+  });
+});
+
+describe('suggestBrightnessAdjustment', () => {
+  it('returns exact integer offsets at the threshold boundaries', () => {
+    // 阈值本身就是「不调整」的一侧:<75 才提亮,>205 才压暗。
+    expect(suggestBrightnessAdjustment(0)).toBe(18);
+    expect(suggestBrightnessAdjustment(74)).toBe(6);
+    expect(suggestBrightnessAdjustment(75)).toBe(0);
+    expect(suggestBrightnessAdjustment(128)).toBe(0);
+    expect(suggestBrightnessAdjustment(205)).toBe(0);
+    expect(suggestBrightnessAdjustment(206)).toBe(-5);
+    expect(suggestBrightnessAdjustment(255)).toBe(-12);
+  });
+
+  it('caps the correction for extremely dark and blown-out photos', () => {
+    expect(suggestBrightnessAdjustment(0)).toBeLessThanOrEqual(18);
+    expect(suggestBrightnessAdjustment(255)).toBeGreaterThanOrEqual(-12);
+  });
+
+  it('never returns a fractional value', () => {
+    for (const mean of [0, 10, 50, 74, 75, 128, 205, 206, 210, 255]) {
+      expect(Number.isInteger(suggestBrightnessAdjustment(mean))).toBe(true);
+    }
+  });
+
+  it('returns 0 for non-finite input', () => {
+    expect(suggestBrightnessAdjustment(Number.NaN)).toBe(0);
+    expect(suggestBrightnessAdjustment(Number.POSITIVE_INFINITY)).toBe(0);
+    expect(suggestBrightnessAdjustment(Number.NEGATIVE_INFINITY)).toBe(0);
   });
 });

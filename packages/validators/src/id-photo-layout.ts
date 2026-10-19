@@ -70,6 +70,29 @@ const CROWN_PLAUSIBLE_SLACK = 0.12;
 const ROTATION_THRESHOLD = 3;
 const ROTATION_GAIN = 1.4;
 const MAX_ROTATION = 5;
+const UNDEREXPOSED_MEAN = 75;
+const OVEREXPOSED_MEAN = 205;
+
+/**
+ * 按整体亮度给出建议的亮度偏移（-30..30，0 = 不动）。
+ *
+ * 照搬参考实现的阈值与系数：暗片提亮、过曝压暗，幅度都收得很紧 ——
+ * 证件照要的是「还原」而不是「风格化调色」，过度提亮会让人脸发灰。
+ *
+ * 本地 canvas 路与服务器 sharp 路共用本函数，保证两端给出同一个偏移量。
+ * 输入应只统计前景像素（alpha > 0）的平均亮度，否则大面积透明背景会把
+ * 均值拉向 0、导致不必要的提亮。
+ */
+export function suggestBrightnessAdjustment(meanBrightness: number): number {
+  if (!Number.isFinite(meanBrightness)) return 0;
+  if (meanBrightness < UNDEREXPOSED_MEAN) {
+    return Math.round(Math.min(18, (90 - meanBrightness) * 0.35));
+  }
+  if (meanBrightness > OVEREXPOSED_MEAN) {
+    return Math.round(Math.max(-12, (190 - meanBrightness) * 0.3));
+  }
+  return 0;
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));

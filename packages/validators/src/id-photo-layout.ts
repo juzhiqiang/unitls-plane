@@ -9,6 +9,10 @@
  * - 头顶留白约为成片高度的 8%
  * - 眼线倾斜超过 3° 才旋转修正，且最多 ±5°（再多就该重拍了）
  *
+ * 缩放只放大不缩小。`IdPhotoCrop.scale` 的契约是 `[1, 3]`（只放大不缩小），
+ * 参考实现里 `zoom < 100` 的「缩小画面补画布」扩展能力受该契约限制，未实现；
+ * 因此本模块输出的 `zoom` 下限为 100。
+ *
  * 纯函数：不依赖 DOM、不依赖模型，输入是普通对象。
  */
 
@@ -29,30 +33,36 @@ export interface FaceDetection {
 }
 
 export interface IdPhotoLayout {
-  /** 100 = 基准框不缩放；>100 放大画面（裁得更紧）。区间 [90, 145]。 */
+  /** 100 = 基准框不缩放；>100 放大画面（裁得更紧）。区间 [100, 145]。 */
   zoom: number;
   /** 裁剪框中心相对源图中心的归一化水平偏移，区间 [-20, 20]。 */
   offsetX: number;
   /** 同上，垂直方向。 */
   offsetY: number;
-  /** 逆时针为正（与 PIL / canvas 一致），区间 [-5, 5]。 */
+  /**
+   * 眼线倾斜的修正量，区间 [-5, 5]。
+   *
+   * 正值表示右眼低于左眼时的修正方向；具体旋转方向（顺时针/逆时针）由调用方
+   * 结合自身坐标系决定，本模块不做约定。
+   */
   rotation: number;
   /** 人脸宽度占裁剪框宽度的比例，用于质量面板与调试。 */
   faceRatio: number;
   /**
-   * 人脸框上沿到裁剪框上沿的距离占裁剪框高度的比例，用于质量面板与调试。
+   * 人脸框（发际线）上沿到裁剪框上沿的距离占裁剪框高度的比例。
    *
-   * 构图本身会把「头顶」固定在 8% 的留白上，所以若直接报告头顶到裁剪框
-   * 上沿的距离，结果恒为 8%、无法反映蒙版提供的真实头顶。这里改报人脸框
-   * （发际线）的留白：提供真实头顶时裁剪框会被整体上移，发际线留白随之
-   * 变大；只靠人脸框估算时留白更小。
+   * 不等于 Task 5 质量检查里的 `headroom`：那边按「真实头顶到成片上沿」重新
+   * 计算，而这里用 YuNet 人脸框上沿（发际线）估算。构图本身会把「头顶」固定
+   * 在 8% 的留白上，若直接报告头顶到裁剪框上沿的距离，结果恒为 8%、无法反映
+   * 蒙版提供的真实头顶。提供真实头顶时裁剪框会被整体上移，该值随之变大；
+   * 只靠人脸框估算时更小。
    */
-  headroom: number;
+  faceTopMargin: number;
 }
 
 const DESIRED_FACE_RATIO = 0.35;
 const TOP_MARGIN_RATIO = 0.08;
-const MIN_ZOOM = 90;
+const MIN_ZOOM = 100;
 const MAX_ZOOM = 145;
 const MAX_OFFSET = 20;
 const CROWN_FACE_GAP = 0.28;
@@ -90,12 +100,29 @@ export function suggestIdPhotoLayout(
   targetAspect: number,
   crownY?: number
 ): IdPhotoLayout | null {
-  if (!face || source.width <= 0 || source.height <= 0) return null;
+  if (
+    !face ||
+    !Number.isFinite(source.width) ||
+    !Number.isFinite(source.height) ||
+    source.width <= 0 ||
+    source.height <= 0
+  ) {
+    return null;
+  }
   if (!(targetAspect > 0) || !Number.isFinite(targetAspect)) return null;
 
   const { width, height } = source;
   const { x, y, width: faceWidth, height: faceHeight } = face.box;
-  if (faceWidth <= 0 || faceHeight <= 0) return null;
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(faceWidth) ||
+    !Number.isFinite(faceHeight) ||
+    faceWidth <= 0 ||
+    faceHeight <= 0
+  ) {
+    return null;
+  }
 
   // 基准框：源图内符合目标宽高比的最大框
   const sourceRatio = width / height;
@@ -118,25 +145,19 @@ export function suggestIdPhotoLayout(
   // 水平：让人脸中心对齐裁剪框中心
   const faceCenterX = x + faceWidth / 2;
   const desiredLeft = faceCenterX - cropWidth / 2;
-  // 裁剪框比源图宽时已经放不下，保持人脸居中；放得下时夹回源图内
-  const left =
-    cropWidth > width
-      ? desiredLeft
-      : clamp(desiredLeft, 0, Math.max(0, width - cropWidth));
+  // zoom >= 100 保证裁剪框不宽于基准框，而基准框在源图内，故这里直接夹回源图。
+  const left = clamp(desiredLeft, 0, Math.max(0, width - cropWidth));
 
   // 垂直：头顶留出 8% 的空白
   let crown = Math.max(0, y - faceHeight * CROWN_FACE_GAP);
   if (typeof crownY === 'number' && Number.isFinite(crownY)) {
     const plausibleLimit = y + faceHeight * CROWN_PLAUSIBLE_SLACK;
-    if (crownY <= plausibleLimit) crown = Math.max(0, crownY);
+    // 负值或落在人脸框下部之后都视为不可信，忽略并退回发际线估算。
+    if (crownY >= 0 && crownY <= plausibleLimit) crown = crownY;
   }
   const desiredTop = crown - cropHeight * TOP_MARGIN_RATIO;
-  // 裁剪框比源图高时无法再上移，底部对齐（多出的背景留在头顶）；
-  // 还放得下时按头顶留白放置并夹回源图内。
-  const top =
-    cropHeight > height
-      ? height - cropHeight
-      : clamp(desiredTop, 0, Math.max(0, height - cropHeight));
+  // zoom >= 100 保证裁剪框不高于基准框，而基准框在源图内，故这里直接夹回源图。
+  const top = clamp(desiredTop, 0, Math.max(0, height - cropHeight));
 
   const offsetX = Math.round(
     clamp(
@@ -168,7 +189,7 @@ export function suggestIdPhotoLayout(
     // 不能用 crown - top：构图已把 crown 固定在 8%，该差值恒等于
     // TOP_MARGIN_RATIO。改用人脸框上沿到裁剪框上沿的距离，才能区分
     // 「蒙版真实头顶」与「人脸框估算」两种输入。
-    headroom: Math.max(0, (y - top) / Math.max(1, cropHeight)),
+    faceTopMargin: Math.max(0, (y - top) / Math.max(1, cropHeight)),
   };
 }
 
@@ -184,6 +205,22 @@ export function idPhotoCropFromLayout(
   source: { width: number; height: number },
   targetAspect: number
 ): IdPhotoCrop {
+  if (
+    !Number.isFinite(source.width) ||
+    !Number.isFinite(source.height) ||
+    source.width <= 0 ||
+    source.height <= 0
+  ) {
+    throw new RangeError(
+      'idPhotoCropFromLayout: source dimensions must be positive finite numbers'
+    );
+  }
+  if (!(targetAspect > 0) || !Number.isFinite(targetAspect)) {
+    throw new RangeError(
+      'idPhotoCropFromLayout: targetAspect must be a positive finite number'
+    );
+  }
+
   const sourceRatio = source.width / source.height;
   const baseCropWidth =
     sourceRatio >= targetAspect ? source.height * targetAspect : source.width;
@@ -191,10 +228,10 @@ export function idPhotoCropFromLayout(
     sourceRatio >= targetAspect ? source.height : source.width / targetAspect;
 
   /*
-   * IdPhotoCrop 只允许 scale >= 1（裁得比基准框更紧）。layout.zoom < 100
-   * 描述的是比基准框更大的框，服务端契约无法表达；此时 scale 会被夹到 1，
-   * 实际出图用的是基准框。这里的宽高必须按「夹取后的 scale」计算，而不是
-   * 按 layout.zoom 的虚拟框计算，否则 x/y 会指向一个并不存在的框中心。
+   * IdPhotoCrop 只允许 scale >= 1（裁得比基准框更紧）。suggestIdPhotoLayout
+   * 的 zoom 下限是 100，正常情况下这里不会被夹取；但 layout 也可能来自外部
+   * 构造，zoom < 100 在服务端契约里无法表达，此时 scale 夹到 1，宽高必须按
+   * 「夹取后的 scale」计算，否则 x/y 会指向一个并不存在的框中心。
    */
   const scale = clamp(layout.zoom / 100, 1, 3);
   const cropWidth = baseCropWidth / scale;

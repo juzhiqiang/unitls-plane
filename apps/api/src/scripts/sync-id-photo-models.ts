@@ -13,13 +13,14 @@ import * as path from 'node:path';
 const logger = new Logger('SyncIdPhotoModels');
 
 /**
- * 把镜像内置的证件照本地抠图资产树同步到 MinIO/S3 models 桶(只读匿名)。
+ * 把镜像内置的证件照资产树同步到 MinIO/S3 models 桶(只读匿名)。
  *
- * 资产为 BRIA RMBG-1.4 模型 + onnxruntime-web wasm 运行时,由
- * @huggingface/transformers 在浏览器端取用(见 apps/web/src/lib/id-photo-local/model-registry.ts):
- *   rmbg/<版本>/{config.json, preprocessor_config.json, onnx/model*.onnx}
- *   ort/ort-wasm-simd-threaded{,.jsep}.{wasm,mjs}
- * 本脚本递归上传 `ID_PHOTO_MODELS_DIR` 下这两个前缀的全部文件,保持相对路径作为 S3 key,
+ * 资产：
+ *   rmbg/<version>/{config.json, preprocessor_config.json, onnx/model*.onnx}  RMBG-1.4（BRIA 许可，仅回落）
+ *   modnet/modnet_photographic.onnx                                          MODNet photographic（Apache-2.0，主分割）
+ *   face/yunet/face_detection_yunet_2023mar.onnx                             YuNet 人脸检测（MIT）
+ *   ort/ort-wasm-simd-threaded{,.jsep}.{wasm,mjs}                            onnxruntime-web 运行时
+ * 本脚本递归上传 `ID_PHOTO_MODELS_DIR` 下这些前缀的全部文件,保持相对路径作为 S3 key,
  * 使 MinIO 公网 URL 与前端 remoteHost / wasmPaths 期望一致。
  *
  * 离线镜像启动时由 docker/start-all.sh 调用,保证无外网环境也能取到资产
@@ -31,7 +32,7 @@ const logger = new Logger('SyncIdPhotoModels');
  *   S3_MODELS_BUCKET(默认 models)
  *   ID_PHOTO_MODELS_DIR(默认 /app/models/id-photo,镜像内资产目录)
  */
-const ASSET_PREFIXES = ['rmbg/', 'ort/'];
+const ASSET_PREFIXES = ['rmbg/', 'ort/', 'modnet/', 'face/'];
 const CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 function contentTypeFor(name: string): string {
@@ -146,7 +147,7 @@ async function main(): Promise<number> {
       logger.warn(`CORS config set skipped: ${(err as Error).message}`);
     }
 
-    // 3. 递归列出资产树,只同步 rmbg/ 与 ort/ 前缀下的文件(版本无关,便于将来升级)
+    // 3. 递归列出资产树,只同步 ASSET_PREFIXES 下的文件(版本无关,便于将来升级)
     let all: string[];
     try {
       all = await walk(modelsDir, modelsDir);

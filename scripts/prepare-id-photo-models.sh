@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
-# 预置证件照本地抠图资产(BRIA RMBG-1.4 + onnxruntime-web wasm 运行时)到本地 MinIO
-# models 桶(匿名只读)。
+# 预置证件照本地处理资产(BRIA RMBG-1.4 + MODNet photographic + YuNet 人脸检测 +
+# onnxruntime-web wasm 运行时)到本地 MinIO models 桶(匿名只读)。
 #
-# 本地开发用:把 @huggingface/transformers 运行 RMBG-1.4 所需的模型与 ort wasm 拉到 MinIO,
-# 前端即可在浏览器本地完成证件照抠图,无需服务端。
+# 本地开发用:把浏览器端运行 RMBG-1.4、MODNet 分割与 YuNet 人脸检测所需的模型,
+# 以及 ort wasm 拉到 MinIO,前端即可在浏览器本地完成证件照处理,无需服务端。
 #
 # 步骤:
 #   1) node scripts/download-rmbg-assets.cjs all
 #      → 模型从 HF 下载到 docker/models/rmbg/1.4/
 #      → ort wasm 从 node_modules 复制到 docker/models/ort/(保证与 transformers 依赖版本一致)
-#   2) aws-cli 把 docker/models/{rmbg,ort} 同步到 s3://models/
+#      → modnet 权重优先从本地参考仓库复制到 docker/models/modnet/
+#      → YuNet 优先本地复制,缺失时从 OpenCV Zoo 下载到 docker/models/face/yunet/
+#   2) aws-cli 把 docker/models/{rmbg,ort,modnet,face} 同步到 s3://models/
 #
 # 公网访问 URL(与前端 model-registry.ts 对齐):
 #   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/rmbg/1.4/config.json
 #   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/rmbg/1.4/onnx/model_fp16.onnx
 #   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/ort-wasm-simd-threaded.jsep.wasm
+#   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/modnet/modnet_photographic.onnx
+#   ${NEXT_PUBLIC_S3_PUBLIC_URL}/models/face/yunet/face_detection_yunet_2023mar.onnx
 #
 # 许可提醒:RMBG-1.4 为 BRIA 自有许可(license: other),商用需向 BRIA 申请授权。
+# MODNet photographic 为 Apache-2.0,YuNet 为 MIT。
 #
 # 用法:
 #   export S3_ENDPOINT=http://localhost:9000
@@ -33,6 +38,8 @@ REGION="${AWS_DEFAULT_REGION:-${S3_REGION:-us-east-1}}"
 VERSION="1.4"
 MODEL_DIR="$ROOT/docker/models/rmbg/$VERSION"
 ORT_DIR="$ROOT/docker/models/ort"
+MODNET_DIR="$ROOT/docker/models/modnet"
+FACE_DIR="$ROOT/docker/models/face"
 
 : "${S3_ENDPOINT:?S3_ENDPOINT is required (e.g. http://localhost:9000)}"
 : "${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}"
@@ -45,6 +52,10 @@ export AWS_S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-true}"
 
 # 1. 下载模型 + 复制 ort 运行时(幂等:已存在且非空则跳过)
 node "$ROOT/scripts/download-rmbg-assets.cjs" all
+
+# 1b. 参考对齐资产(幂等;all 已包含,这里显式执行以便单独失败时定位)
+node "$ROOT/scripts/download-rmbg-assets.cjs" modnet
+node "$ROOT/scripts/download-rmbg-assets.cjs" yunet
 
 # 2. 确保 models 桶存在 + 匿名只读策略(允许前端公开拉取)
 aws --endpoint-url "$S3_ENDPOINT" s3 mb "s3://$BUCKET" --region "$REGION" 2>/dev/null || true
@@ -65,7 +76,19 @@ aws --endpoint-url "$S3_ENDPOINT" s3 sync "$ORT_DIR" "s3://$BUCKET/ort/" \
   --region "$REGION" --no-progress \
   --cache-control "public, max-age=31536000, immutable"
 
+echo "==> uploading $MODNET_DIR → s3://$BUCKET/modnet/"
+aws --endpoint-url "$S3_ENDPOINT" s3 sync "$MODNET_DIR" "s3://$BUCKET/modnet/" \
+  --region "$REGION" --no-progress \
+  --cache-control "public, max-age=31536000, immutable"
+
+echo "==> uploading $FACE_DIR → s3://$BUCKET/face/"
+aws --endpoint-url "$S3_ENDPOINT" s3 sync "$FACE_DIR" "s3://$BUCKET/face/" \
+  --region "$REGION" --no-progress \
+  --cache-control "public, max-age=31536000, immutable"
+
 echo
-echo "==> 证件照 RMBG-1.4 资产已就绪。"
-echo "    模型:     \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/rmbg/$VERSION/"
-echo "    ort wasm: \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/<ORT_VERSION>/"
+echo "==> 证件照模型资产已就绪。"
+echo "    模型:      \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/rmbg/$VERSION/"
+echo "    ort wasm:  \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/<ORT_VERSION>/"
+echo "    MODNet:    \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/modnet/modnet_photographic.onnx"
+echo "    YuNet:     \${NEXT_PUBLIC_S3_PUBLIC_URL}/models/face/yunet/face_detection_yunet_2023mar.onnx"

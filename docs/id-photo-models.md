@@ -44,6 +44,18 @@ RMBG-2.0（BiRefNet 架构）在 HF 上是
 
 > 档位映射在 `apps/web/src/lib/id-photo-local/model-registry.ts`，改档位需同步此文件与下载脚本。
 
+## 参考对齐新增资产
+
+| 资产 | MinIO key | 体积 | 许可 | 用途 |
+| --- | --- | --- | --- | --- |
+| MODNet photographic | `models/modnet/modnet_photographic.onnx` | ~25MB | Apache-2.0 | 两端主分割（512×512，保长宽比） |
+| YuNet 人脸检测 | `models/face/yunet/face_detection_yunet_2023mar.onnx` | ~227KB | MIT | 两端人脸检测与自动构图 |
+
+`prepare-id-photo-models.sh` 会一并下载；`sync-id-photo-models.ts` 的
+`ASSET_PREFIXES` 已包含 `modnet/` 与 `face/`，离线镜像启动时自动同步。
+下载脚本优先从本地参考仓库复制权重（`ID_PHOTO_REF_ROOT` / `MODNET_LOCAL_PATH` /
+`YUNET_LOCAL_PATH` 可覆盖），本地缺失时 YuNet 回落到 OpenCV Zoo 下载。
+
 ## 资产结构
 
 transformers.js 按 HF 仓库的相对路径取文件，所以 MinIO 上保持与仓库一致的目录结构即可：
@@ -57,9 +69,11 @@ models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.wasm
 models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.mjs
 models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.jsep.wasm     # WebGPU 用
 models/ort/<ORT_VERSION>/ort-wasm-simd-threaded.jsep.mjs
+models/modnet/modnet_photographic.onnx
+models/face/yunet/face_detection_yunet_2023mar.onnx
 ```
 
-共 8 个文件（约 288MB）。相比上一版 @imgly 的 76 个 SHA256 分块，结构大幅简化。
+共 10 个文件（约 313MB）。相比上一版 @imgly 的 76 个 SHA256 分块，结构大幅简化。
 
 **ort
 wasm 必须自托管**：transformers.js 默认从 jsDelivr 取 ort 运行时，离线镜像内没有公网会直接失败。
@@ -136,8 +150,8 @@ bundle 里 stub 成空模块；client 侧对 onnxruntime-web 的预打包 .mjs �
 - 组合镜像构建时把 `docker/models/` 树 `COPY` 进 `/app/models/id-photo/`
   （Dockerfile，`docker/models/` 已 gitignore，仅保留 `.gitkeep`）。
 - `docker/start-all.sh` 在 migrate 之后、API 启动前调用
-  `node apps/api/dist/scripts/sync-id-photo-models.js`，用 `@aws-sdk/client-s3` 递归上传 `rmbg/` 与
-  `ort/` 前缀下的资产到本地 MinIO `models` 桶并设匿名只读策略。
+  `node apps/api/dist/scripts/sync-id-photo-models.js`，用 `@aws-sdk/client-s3` 递归上传
+  `rmbg/`、`ort/`、`modnet/`、`face/` 前缀下的资产到本地 MinIO `models` 桶并设匿名只读策略。
 - 同步脚本失败不阻塞启动（返回 0，打印 skip 日志），便于 MinIO 未就绪时下次重启重试。
 - 资产不进 Git（大），构建前先跑 `scripts/prepare-id-photo-models.sh` 或
   `node scripts/download-rmbg-assets.cjs all`。

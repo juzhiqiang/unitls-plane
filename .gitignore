@@ -82,3 +82,5 @@ apps/api/models/*.onnx
 apps/web/public/onnx/
 docker/models/*
 !docker/models/.gitkeep
+# 本地模型权重暂存目录(供 download-rmbg-assets.cjs 本地复制),不进 Git。
+vendor/

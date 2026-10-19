@@ -51,10 +51,12 @@ RMBG-2.0（BiRefNet 架构）在 HF 上是
 | MODNet photographic | `models/modnet/modnet_photographic.onnx` | ~25MB | Apache-2.0 | 两端主分割（512×512，保长宽比） |
 | YuNet 人脸检测 | `models/face/yunet/face_detection_yunet_2023mar.onnx` | ~227KB | MIT | 两端人脸检测与自动构图 |
 
-`prepare-id-photo-models.sh` 会一并下载；`sync-id-photo-models.ts` 的
+`prepare-id-photo-models.sh` 会一并准备；`sync-id-photo-models.ts` 的
 `ASSET_PREFIXES` 已包含 `modnet/` 与 `face/`，离线镜像启动时自动同步。
-下载脚本优先从本地参考仓库复制权重（`ID_PHOTO_REF_ROOT` / `MODNET_LOCAL_PATH` /
-`YUNET_LOCAL_PATH` 可覆盖），本地缺失时 YuNet 回落到 OpenCV Zoo 下载。
+下载脚本优先从本地候选复制权重（`vendor/`、项目内相对路径，或显式设置
+`ID_PHOTO_REF_ROOT` / `MODNET_LOCAL_PATH` / `YUNET_LOCAL_PATH`），本地缺失时
+YuNet 回落到 OpenCV Zoo 下载并校验 sha256。`vendor/` 已被 `.gitignore` 忽略，
+模型权重不进 Git。
 
 ## 资产结构
 
@@ -114,12 +116,18 @@ env.backends.onnx.wasm.wasmPaths = `${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/`; /
    ```
 3. 执行：`./scripts/prepare-id-photo-models.sh`。
 4. 脚本会：
-   - `node scripts/download-rmbg-assets.cjs all`：模型从 HF 下载到 `docker/models/rmbg/1.4/`；ort
-     wasm 从 `node_modules` **复制**到 `docker/models/ort/` （复制而非下载，保证与
-     `@huggingface/transformers`
-     实际依赖的 ort 版本严格一致 ——版本错配会导致 wasm 与 glue 导出对不上，参见 git 历史里的
-     `jsepInit`/`webgpuInit` 事故）。
-   - `aws s3 sync` 把两棵树同步到 `s3://models/`，设匿名只读策略与不可变缓存。
+   - `node scripts/download-rmbg-assets.cjs all` 依次准备四个目标：
+     - `model`：RMBG-1.4 从 HF 下载到 `docker/models/rmbg/1.4/`；
+     - `runtime`：ort wasm 从 `node_modules` **复制**到
+       `docker/models/ort/<ORT_VERSION>/`（复制而非下载，保证与
+       `@huggingface/transformers` 实际依赖的 ort 版本严格一致 ——版本错配会导致
+       wasm 与 glue 导出对不上，参见 git 历史里的 `jsepInit`/`webgpuInit` 事故）；
+     - `modnet`：`modnet_photographic.onnx` 优先从本地候选复制到
+       `docker/models/modnet/`，缺失时明确报错；
+     - `yunet`：`face_detection_yunet_2023mar.onnx` 优先本地复制，缺失时从
+       OpenCV Zoo 下载并校验 sha256 到 `docker/models/face/yunet/`。
+   - `aws s3 sync` 把 `rmbg/`、`ort/`、`modnet/`、`face/` 四个前缀分别同步到
+     `s3://models/`，设匿名只读策略与不可变缓存。
 
 ## 前端如何使用
 

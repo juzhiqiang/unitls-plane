@@ -88,6 +88,8 @@ COPY --from=builder /app/apps/api/models ./models
 # (或 node scripts/download-rmbg-assets.cjs all)生成:
 #   docker/models/rmbg/1.4/  RMBG-1.4 模型(config/preprocessor_config/onnx)
 #   docker/models/ort/       onnxruntime-web wasm 运行时(离线必须自托管,否则回落 jsDelivr)
+#   docker/models/modnet/    MODNet photographic 主分割权重
+#   docker/models/face/      YuNet 人脸检测权重(face/yunet/ 子目录)
 COPY docker/models/ ./models/id-photo/
 COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules

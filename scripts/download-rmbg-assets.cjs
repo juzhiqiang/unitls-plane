@@ -24,6 +24,7 @@
 // MODNet photographic 为 Apache-2.0,YuNet 为 MIT。
 //
 // 用法: node scripts/download-rmbg-assets.cjs [model|runtime|modnet|yunet|all]
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -66,14 +67,14 @@ const ORT_FILES = [
 ];
 
 // MODNet photographic:Apache-2.0,参考实现仓库已内置,优先本地复制,无需联网。
-// 参考仓库根目录可用 ID_PHOTO_REF_ROOT 覆盖(默认指向开发机上的临时克隆)。
-const REF_ROOT =
-  process.env.ID_PHOTO_REF_ROOT ||
-  path.join('C:', 'Users', '10208', 'AppData', 'Local', 'Temp', 'id_photo_ref');
+// 参考仓库根目录只在显式设置 ID_PHOTO_REF_ROOT 时参与候选 —— 不把任何开发机
+// 临时路径写进共享脚本默认值。未设置时只用 vendor/ 与项目内相对路径。
+const REF_ROOT = process.env.ID_PHOTO_REF_ROOT || null;
 const MODNET_LOCAL_CANDIDATES = [
   process.env.MODNET_LOCAL_PATH,
   path.join(ROOT, 'vendor', 'modnet_photographic.onnx'),
-  path.join(REF_ROOT, 'pictone', 'models', 'modnet_photographic.onnx'),
+  REF_ROOT &&
+    path.join(REF_ROOT, 'pictone', 'models', 'modnet_photographic.onnx'),
   path.join(
     ROOT,
     '..',
@@ -85,12 +86,24 @@ const MODNET_LOCAL_CANDIDATES = [
 ].filter(Boolean);
 
 // YuNet:OpenCV Zoo 官方发行,MIT。同样优先本地复制,离线环境可用。
+// 风险:锁定到 `main` 意味着上游改名/改内容会静默改变构建输入。任务报告未提供
+// 可锁定的 commit hash,故暂保持 `main`;拿到上游 commit 后应改为
+// `raw/<commit>/...` 并同步更新下面的 YUNET_SHA256。
 const YUNET_URL =
   'https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx';
+// 实测哈希(见 .git/sdd/task-7-report.md,与本地参考仓库及下载结果一致)。
+const YUNET_SHA256 =
+  '8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4';
 const YUNET_LOCAL_CANDIDATES = [
   process.env.YUNET_LOCAL_PATH,
   path.join(ROOT, 'vendor', 'face_detection_yunet_2023mar.onnx'),
-  path.join(REF_ROOT, 'pictone', 'models', 'face_detection_yunet_2023mar.onnx'),
+  REF_ROOT &&
+    path.join(
+      REF_ROOT,
+      'pictone',
+      'models',
+      'face_detection_yunet_2023mar.onnx'
+    ),
 ].filter(Boolean);
 
 function ortDistDir() {
@@ -117,6 +130,39 @@ function ortDistDir() {
   return dir;
 }
 
+/**
+ * 先写 `<dest>.tmp` 再 rename 到目标名。下载/复制中断时只会残留 .tmp,
+ * 不会留下一个被后续运行误认为「已完成」的半截资产。
+ */
+function writeFileAtomic(dest, data) {
+  const tmp = `${dest}.tmp`;
+  try {
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, dest);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+}
+
+function copyFileAtomic(src, dest) {
+  const tmp = `${dest}.tmp`;
+  try {
+    fs.copyFileSync(src, tmp);
+    fs.renameSync(tmp, dest);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+}
+
+function sha256File(file) {
+  return crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(file))
+    .digest('hex');
+}
+
 async function download(url, dest) {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   if (fs.existsSync(dest) && fs.statSync(dest).size > 0) {
@@ -128,7 +174,7 @@ async function download(url, dest) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(dest, buf);
+  writeFileAtomic(dest, buf);
   console.log(`${(buf.length / 1024 / 1024).toFixed(1)}MB`);
 }
 
@@ -167,7 +213,7 @@ function copyOrt() {
       throw new Error(`ort runtime file missing: ${src}`);
     }
     const dest = path.join(ortDir, f);
-    fs.copyFileSync(src, dest);
+    copyFileAtomic(src, dest);
     const mb = (fs.statSync(dest).size / 1024 / 1024).toFixed(1);
     console.log(`copy   ${path.relative(ROOT, dest)}  ${mb}MB`);
   }
@@ -184,7 +230,7 @@ async function downloadFile(url, dest) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(dest, buf);
+  writeFileAtomic(dest, buf);
   console.log(`${(buf.length / 1024 / 1024).toFixed(1)}MB`);
   return buf.length;
 }
@@ -199,12 +245,13 @@ async function fetchModnetPhotographic() {
   const local = MODNET_LOCAL_CANDIDATES.find(p => fs.existsSync(p));
   if (!local) {
     throw new Error(
-      'modnet_photographic.onnx not found. Place it at vendor/modnet_photographic.onnx\n' +
+      'modnet_photographic.onnx not found. Place it at vendor/modnet_photographic.onnx,\n' +
+        'or set MODNET_LOCAL_PATH / ID_PHOTO_REF_ROOT to a local reference checkout.\n' +
         '(source: https://github.com/you-xiu/id_photo_bg_changer/blob/main/pictone/models/modnet_photographic.onnx)'
     );
   }
   fs.mkdirSync(MODNET_DIR, { recursive: true });
-  fs.copyFileSync(local, dest);
+  copyFileAtomic(local, dest);
   console.log(
     `[modnet] copied from ${local} -> ${path.relative(ROOT, dest)} (${fs.statSync(dest).size} bytes)`
   );
@@ -220,15 +267,23 @@ async function fetchYunet() {
   const local = YUNET_LOCAL_CANDIDATES.find(p => fs.existsSync(p));
   if (local) {
     fs.mkdirSync(YUNET_DIR, { recursive: true });
-    fs.copyFileSync(local, dest);
+    copyFileAtomic(local, dest);
     console.log(
       `[yunet] copied from ${local} -> ${path.relative(ROOT, dest)} (${fs.statSync(dest).size} bytes)`
     );
     return;
   }
   const size = await downloadFile(YUNET_URL, dest);
+  const actual = sha256File(dest);
+  if (actual !== YUNET_SHA256) {
+    fs.rmSync(dest, { force: true });
+    throw new Error(
+      `[yunet] sha256 mismatch: expected ${YUNET_SHA256}, got ${actual}. ` +
+        `Deleted ${path.relative(ROOT, dest)}.`
+    );
+  }
   console.log(
-    `[yunet] downloaded ${size} bytes -> ${path.relative(ROOT, dest)}`
+    `[yunet] downloaded ${size} bytes -> ${path.relative(ROOT, dest)} (sha256 verified)`
   );
 }
 

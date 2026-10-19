@@ -51,11 +51,8 @@ export AWS_DEFAULT_REGION="$REGION"
 export AWS_S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-true}"
 
 # 1. 下载模型 + 复制 ort 运行时(幂等:已存在且非空则跳过)
+#    all 已依次覆盖 model / runtime / modnet / yunet,无需再单独调用。
 node "$ROOT/scripts/download-rmbg-assets.cjs" all
-
-# 1b. 参考对齐资产(幂等;all 已包含,这里显式执行以便单独失败时定位)
-node "$ROOT/scripts/download-rmbg-assets.cjs" modnet
-node "$ROOT/scripts/download-rmbg-assets.cjs" yunet
 
 # 2. 确保 models 桶存在 + 匿名只读策略(允许前端公开拉取)
 aws --endpoint-url "$S3_ENDPOINT" s3 mb "s3://$BUCKET" --region "$REGION" 2>/dev/null || true

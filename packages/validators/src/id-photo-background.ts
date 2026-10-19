@@ -54,7 +54,8 @@ export function estimateSourceBackgroundColors(
   // 1) 采样：上边全宽 + 上 28% 的左右两条边
   const samples: [number, number, number][] = [];
   for (let x = 0; x < width; x += step) samples.push(readPixel(rgb, x));
-  for (let y = 0; y < upper; y += step) {
+  // 侧边从 y = step 开始，避免与上边缘采样在 x=0 / x=width-1 两个顶角重复计数。
+  for (let y = step; y < upper; y += step) {
     samples.push(readPixel(rgb, y * width));
     samples.push(readPixel(rgb, y * width + width - 1));
   }

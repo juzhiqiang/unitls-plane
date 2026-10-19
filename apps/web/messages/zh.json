@@ -768,6 +768,34 @@
       "sw": "左下角",
       "w": "左边",
       "move": "移动裁剪框"
+    },
+    "quality": {
+      "title": "质量检查",
+      "score": "评分 {score}",
+      "passed": "检查通过",
+      "needsAttention": "需注意:{items}",
+      "unavailable": "检查不可用",
+      "items": {
+        "faceCount": "人脸数量",
+        "faceCentered": "人脸位置",
+        "faceRatio": "人脸比例",
+        "eyeTilt": "眼线水平",
+        "headroom": "头顶留白",
+        "sharpness": "清晰度",
+        "exposure": "曝光",
+        "matteEdge": "抠图边缘"
+      },
+      "hints": {
+        "singleFrontalPortrait": "建议使用单人正面照片",
+        "adjustHorizontalPosition": "可水平拖动裁剪框微调",
+        "faceRatioRange": "建议人脸宽度约占成片 26% 至 42%",
+        "levelEyes": "可重新拍摄或微调旋转",
+        "headroomTooSmall": "头顶不宜贴住上边缘",
+        "faceNotDetected": "未检测到清晰人脸",
+        "avoidBlurrySource": "原图较模糊,会影响抠图与打印",
+        "avoidUnderexposedOrBlown": "避免整体过暗或过曝",
+        "checkHairAndShoulder": "请检查发丝、耳廓与肩线"
+      }
     }
   },
   "ImageCutout": {

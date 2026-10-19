@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatBytes } from '@/lib/format';
 import { FileDropzone } from '@/components/tools/file-dropzone';
@@ -11,8 +11,10 @@ import {
 } from '@/components/tools/id-photo-options';
 import { ImageCropField } from '@/components/tools/image-crop-field';
 import { IdPhotoSheetPanel } from '@/components/tools/id-photo-sheet-panel';
+import { IdPhotoQualityPanel } from '@/components/tools/id-photo-quality-panel';
 import {
   idPhotoCropFromBox,
+  idPhotoCropFromLayout,
   idPhotoPresetSpecs,
   resolveIdPhotoCropBox,
 } from '@utils-plane/validators';
@@ -96,6 +98,35 @@ export default function IdPhotoPage() {
   const resultUrl = useObjectUrl(resultFile);
   const local = useLocalIdPhoto();
   const localResultUrl = useObjectUrl(local.resultBlob);
+  const autoLayout = local.autoLayout;
+
+  // 自动构图算出结果后回填裁剪框。用户手动改过框后不再覆盖,
+  // 否则刚拖好的框会被下一次处理结果冲掉。
+  useEffect(() => {
+    // 解码失败的图片可能以 0 尺寸触发 onLoad;idPhotoCropFromLayout 会抛
+    // RangeError,放进 effect 会直接把页面打崩,这里先挡掉。
+    if (
+      !autoLayout ||
+      !natural ||
+      natural.width <= 0 ||
+      natural.height <= 0 ||
+      local.userOverride
+    ) {
+      return;
+    }
+    const crop = idPhotoCropFromLayout(
+      autoLayout,
+      { width: natural.width, height: natural.height },
+      preset.widthPx / preset.heightPx
+    );
+    setOptions(prev => ({ ...prev, crop }));
+  }, [
+    autoLayout,
+    natural,
+    local.userOverride,
+    preset.widthPx,
+    preset.heightPx,
+  ]);
 
   const taskQuery = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
@@ -135,6 +166,7 @@ export default function IdPhotoPage() {
           backgroundColor: options.backgroundColor,
           outputType: options.outputType,
           crop: options.crop,
+          autoFrame: !local.userOverride,
         });
       } catch (err) {
         setError((err as Error).message);
@@ -243,6 +275,9 @@ export default function IdPhotoPage() {
               value={cropRect}
               onChange={box => {
                 if (!natural) return;
+                // 先标记 override 再改 crop:同一事件里 hook 的 process 守卫
+                // 读 ref,顺序反了会用旧值重跑自动构图。
+                local.markUserOverride();
                 setOptions(o => ({
                   ...o,
                   crop: idPhotoCropFromBox(
@@ -260,6 +295,7 @@ export default function IdPhotoPage() {
                 }));
               }}
               aspect={preset.widthPx / preset.heightPx}
+              guides={options.guides}
               disabled={isProcessing}
               t={t}
             />
@@ -336,22 +372,29 @@ export default function IdPhotoPage() {
       )}
 
       {processingMode === 'local' && localResultFile && (
-        <ResultPanel
-          title={t('resultTitle')}
-          description={`id-photo.${ext}`}
-          preview={
-            localResultUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={localResultUrl}
-                alt={t('previewAlt')}
-                className="mx-auto max-h-80 w-auto object-contain rounded-md border border-border"
-              />
-            ) : null
-          }
-          meta={[]}
-          action={<DownloadButton file={localResultFile} />}
-        />
+        <>
+          <ResultPanel
+            title={t('resultTitle')}
+            description={`id-photo.${ext}`}
+            preview={
+              localResultUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={localResultUrl}
+                  alt={t('previewAlt')}
+                  className="mx-auto max-h-80 w-auto object-contain rounded-md border border-border"
+                />
+              ) : null
+            }
+            meta={[]}
+            action={<DownloadButton file={localResultFile} />}
+          />
+          {/*
+            服务端路目前没有质量报告(resultFile 上不带 quality 字段),
+            因此只在本地路渲染,避免「检查不可用」被误解为照片本身有问题。
+          */}
+          <IdPhotoQualityPanel report={local.quality} t={t} />
+        </>
       )}
 
       {processingMode === 'server' && resultFile && (

@@ -14,7 +14,12 @@ export function IdPhotoQualityPanel({
   t,
 }: {
   report: QualityReport | null;
-  t: (key: string) => string;
+  /**
+   * 支持变量的翻译函数。next-intl 在缺少 ICU 变量时会回退成 key
+   * (`ImageIdPhoto.quality.score`),所以必须把变量传进去,不能拿到文案后
+   * 自己 replace 占位符。
+   */
+  t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   if (!report) {
     return (
@@ -32,7 +37,7 @@ export function IdPhotoQualityPanel({
   const summary = report.passed
     ? t('quality.passed')
     : failedItems.length > 0
-      ? t('quality.needsAttention').replace('{items}', failedNames)
+      ? t('quality.needsAttention', { items: failedNames })
       : t('quality.unavailable');
 
   return (
@@ -51,7 +56,7 @@ export function IdPhotoQualityPanel({
       </summary>
 
       <p className="mt-2 font-mono text-xs text-muted-foreground">
-        {t('quality.score').replace('{score}', String(report.score))}
+        {t('quality.score', { score: report.score })}
       </p>
 
       <ul className="mt-3 space-y-2">

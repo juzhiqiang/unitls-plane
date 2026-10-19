@@ -5,20 +5,25 @@ import type { QualityReport } from '@utils-plane/validators';
 
 const t = (key: string) => key;
 
-// 假 t 返回带占位符的文案，确保组件真的做了替换，而不是把字面 key 渲染出来。
-const chineseT = (key: string) =>
+type TVars = Record<string, string | number>;
+
+// 假 t 模拟 next-intl 的变量插值:组件必须把变量传给 t,而不是拿到文案后
+// 自己 replace 占位符(next-intl 在缺变量时会直接回退成 key)。
+const chineseT = (key: string, values?: TVars) =>
   key === 'quality.needsAttention'
-    ? '需注意:{items}'
+    ? `需注意:${values?.items}`
     : key === 'quality.listSeparator'
       ? '、'
       : key;
 
-const englishT = (key: string) =>
+const englishT = (key: string, values?: TVars) =>
   key === 'quality.needsAttention'
-    ? 'Needs attention: {items}'
+    ? `Needs attention: ${values?.items}`
     : key === 'quality.listSeparator'
       ? ', '
-      : key;
+      : key === 'quality.score'
+        ? `Score ${values?.score}`
+        : key;
 
 function fullReport(): QualityReport {
   return {
@@ -126,6 +131,11 @@ describe('IdPhotoQualityPanel', () => {
       'Needs attention: quality.items.faceCount, quality.items.faceRatio'
     );
     expect(text).not.toContain('、');
+  });
+
+  it('shows the score with the value interpolated by the translator', () => {
+    render(<IdPhotoQualityPanel report={fullReport()} t={englishT} />);
+    expect(screen.getByText('Score 100')).toBeTruthy();
   });
 
   it('falls back to the unavailable message when no item failed but the report did', () => {

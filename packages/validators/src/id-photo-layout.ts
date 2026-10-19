@@ -1,0 +1,223 @@
+/**
+ * 人脸自动构图。
+ *
+ * 对应参考实现 face.py:suggest_layout —— 用 YuNet 的人脸框与 5 点关键点，
+ * 算出「让这张脸在成片里占到标准比例」所需的缩放、偏移与旋转。
+ *
+ * 关键指标（证件照通用经验值，与参考实现一致）：
+ * - 人脸宽度占成片 35%（质量检查的合格区间是 26%~42%）
+ * - 头顶留白约为成片高度的 8%
+ * - 眼线倾斜超过 3° 才旋转修正，且最多 ±5°（再多就该重拍了）
+ *
+ * 纯函数：不依赖 DOM、不依赖模型，输入是普通对象。
+ */
+
+import type { IdPhotoCrop } from './id-photo';
+
+export interface FaceBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface FaceDetection {
+  box: FaceBox;
+  /** 5 点：左眼、右眼、鼻尖、左嘴角、右嘴角。 */
+  landmarks: ReadonlyArray<readonly [number, number]>;
+  score: number;
+}
+
+export interface IdPhotoLayout {
+  /** 100 = 基准框不缩放；>100 放大画面（裁得更紧）。区间 [90, 145]。 */
+  zoom: number;
+  /** 裁剪框中心相对源图中心的归一化水平偏移，区间 [-20, 20]。 */
+  offsetX: number;
+  /** 同上，垂直方向。 */
+  offsetY: number;
+  /** 逆时针为正（与 PIL / canvas 一致），区间 [-5, 5]。 */
+  rotation: number;
+  /** 人脸宽度占裁剪框宽度的比例，用于质量面板与调试。 */
+  faceRatio: number;
+  /**
+   * 人脸框上沿到裁剪框上沿的距离占裁剪框高度的比例，用于质量面板与调试。
+   *
+   * 构图本身会把「头顶」固定在 8% 的留白上，所以若直接报告头顶到裁剪框
+   * 上沿的距离，结果恒为 8%、无法反映蒙版提供的真实头顶。这里改报人脸框
+   * （发际线）的留白：提供真实头顶时裁剪框会被整体上移，发际线留白随之
+   * 变大；只靠人脸框估算时留白更小。
+   */
+  headroom: number;
+}
+
+const DESIRED_FACE_RATIO = 0.35;
+const TOP_MARGIN_RATIO = 0.08;
+const MIN_ZOOM = 90;
+const MAX_ZOOM = 145;
+const MAX_OFFSET = 20;
+const CROWN_FACE_GAP = 0.28;
+const CROWN_PLAUSIBLE_SLACK = 0.12;
+const ROTATION_THRESHOLD = 3;
+const ROTATION_GAIN = 1.4;
+const MAX_ROTATION = 5;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** 两眼连线相对水平线的夹角（度）。右眼低于左眼时为正。 */
+export function eyeTiltDegrees(
+  landmarks: ReadonlyArray<readonly [number, number]>
+): number {
+  const left = landmarks[0];
+  const right = landmarks[1];
+  if (!left || !right) return 0;
+  return (Math.atan2(right[1] - left[1], right[0] - left[0]) * 180) / Math.PI;
+}
+
+/**
+ * 给定人脸与源图尺寸，算出自动构图参数。
+ *
+ * `crownY` 是分割蒙版前景最高行的像素 y（真实头顶）。YuNet 的人脸框起点在发际线
+ * 附近而不是头顶，所以有蒙版时优先用蒙版；蒙版给出的位置明显不合理（落在人脸框中
+ * 下部之后）时退回估算。
+ *
+ * 无人脸时返回 null，调用方应保持原有的居中 crop。
+ */
+export function suggestIdPhotoLayout(
+  face: FaceDetection | null,
+  source: { width: number; height: number },
+  targetAspect: number,
+  crownY?: number
+): IdPhotoLayout | null {
+  if (!face || source.width <= 0 || source.height <= 0) return null;
+  if (!(targetAspect > 0) || !Number.isFinite(targetAspect)) return null;
+
+  const { width, height } = source;
+  const { x, y, width: faceWidth, height: faceHeight } = face.box;
+  if (faceWidth <= 0 || faceHeight <= 0) return null;
+
+  // 基准框：源图内符合目标宽高比的最大框
+  const sourceRatio = width / height;
+  const baseCropWidth =
+    sourceRatio >= targetAspect ? height * targetAspect : width;
+  const baseCropHeight =
+    sourceRatio >= targetAspect ? height : width / targetAspect;
+
+  const zoom = Math.round(
+    clamp(
+      ((DESIRED_FACE_RATIO * baseCropWidth) / faceWidth) * 100,
+      MIN_ZOOM,
+      MAX_ZOOM
+    )
+  );
+  const zoomRatio = zoom / 100;
+  const cropWidth = baseCropWidth / zoomRatio;
+  const cropHeight = baseCropHeight / zoomRatio;
+
+  // 水平：让人脸中心对齐裁剪框中心
+  const faceCenterX = x + faceWidth / 2;
+  const desiredLeft = faceCenterX - cropWidth / 2;
+  // 裁剪框比源图宽时已经放不下，保持人脸居中；放得下时夹回源图内
+  const left =
+    cropWidth > width
+      ? desiredLeft
+      : clamp(desiredLeft, 0, Math.max(0, width - cropWidth));
+
+  // 垂直：头顶留出 8% 的空白
+  let crown = Math.max(0, y - faceHeight * CROWN_FACE_GAP);
+  if (typeof crownY === 'number' && Number.isFinite(crownY)) {
+    const plausibleLimit = y + faceHeight * CROWN_PLAUSIBLE_SLACK;
+    if (crownY <= plausibleLimit) crown = Math.max(0, crownY);
+  }
+  const desiredTop = crown - cropHeight * TOP_MARGIN_RATIO;
+  // 裁剪框比源图高时无法再上移，底部对齐（多出的背景留在头顶）；
+  // 还放得下时按头顶留白放置并夹回源图内。
+  const top =
+    cropHeight > height
+      ? height - cropHeight
+      : clamp(desiredTop, 0, Math.max(0, height - cropHeight));
+
+  const offsetX = Math.round(
+    clamp(
+      ((left + cropWidth / 2 - width / 2) / Math.max(1, width)) * 100,
+      -MAX_OFFSET,
+      MAX_OFFSET
+    )
+  );
+  const offsetY = Math.round(
+    clamp(
+      ((top + cropHeight / 2 - height / 2) / Math.max(1, height)) * 100,
+      -MAX_OFFSET,
+      MAX_OFFSET
+    )
+  );
+
+  const tilt = eyeTiltDegrees(face.landmarks);
+  const rotation =
+    Math.abs(tilt) < ROTATION_THRESHOLD
+      ? 0
+      : clamp(tilt * ROTATION_GAIN, -MAX_ROTATION, MAX_ROTATION);
+
+  return {
+    zoom,
+    offsetX,
+    offsetY,
+    rotation,
+    faceRatio: faceWidth / Math.max(1, cropWidth),
+    // 不能用 crown - top：构图已把 crown 固定在 8%，该差值恒等于
+    // TOP_MARGIN_RATIO。改用人脸框上沿到裁剪框上沿的距离，才能区分
+    // 「蒙版真实头顶」与「人脸框估算」两种输入。
+    headroom: Math.max(0, (y - top) / Math.max(1, cropHeight)),
+  };
+}
+
+/**
+ * 把自动构图结果换算成服务端契约的 `IdPhotoCrop`。
+ *
+ * 两套模型描述的是同一个框：`suggestIdPhotoLayout` 用「zoom/offset」，
+ * `resolveIdPhotoCropBox` 用「中心 + 相对基准框的放大倍数」。这里做一次换算，
+ * 保证自动构图与服务端/本地合成用的是同一个几何函数。
+ */
+export function idPhotoCropFromLayout(
+  layout: IdPhotoLayout,
+  source: { width: number; height: number },
+  targetAspect: number
+): IdPhotoCrop {
+  const sourceRatio = source.width / source.height;
+  const baseCropWidth =
+    sourceRatio >= targetAspect ? source.height * targetAspect : source.width;
+  const baseCropHeight =
+    sourceRatio >= targetAspect ? source.height : source.width / targetAspect;
+
+  /*
+   * IdPhotoCrop 只允许 scale >= 1（裁得比基准框更紧）。layout.zoom < 100
+   * 描述的是比基准框更大的框，服务端契约无法表达；此时 scale 会被夹到 1，
+   * 实际出图用的是基准框。这里的宽高必须按「夹取后的 scale」计算，而不是
+   * 按 layout.zoom 的虚拟框计算，否则 x/y 会指向一个并不存在的框中心。
+   */
+  const scale = clamp(layout.zoom / 100, 1, 3);
+  const cropWidth = baseCropWidth / scale;
+  const cropHeight = baseCropHeight / scale;
+
+  // offset 是「裁剪框中心相对源图中心的百分比」，与 suggestIdPhotoLayout 的写入口径一致
+  const centerX = source.width / 2 + (layout.offsetX / 100) * source.width;
+  const centerY = source.height / 2 + (layout.offsetY / 100) * source.height;
+
+  const left = clamp(
+    centerX - cropWidth / 2,
+    0,
+    Math.max(0, source.width - cropWidth)
+  );
+  const top = clamp(
+    centerY - cropHeight / 2,
+    0,
+    Math.max(0, source.height - cropHeight)
+  );
+
+  return {
+    x: (left + cropWidth / 2) / source.width,
+    y: (top + cropHeight / 2) / source.height,
+    scale,
+  };
+}

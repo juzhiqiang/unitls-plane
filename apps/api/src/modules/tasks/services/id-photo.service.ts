@@ -174,7 +174,9 @@ export class IdPhotoService {
 
     // 亮度自动校正：只统计前景（alpha > 0）的平均亮度，透明区不参与 ——
     // 否则大面积的 alpha=0 会把均值拉向 0，导致不必要的提亮。
-    // 偏移量算法与本地 canvas 路共用 suggestBrightnessAdjustment。
+    // 偏移量算法与本地 canvas 路共用 suggestBrightnessAdjustment；但统计范围不同：
+    // 本地在合成前对整幅 cutout 求均值，服务端在这里对裁剪并缩放后的成片尺寸
+    // 求均值，因此非均匀曝光的照片两端可能得到不同偏移。
     let meanSum = 0;
     let meanCount = 0;
     for (let i = 0; i < pixelCount; i += 1) {
@@ -199,27 +201,17 @@ export class IdPhotoService {
     );
     const sourceBackground = candidates[0] ?? { r: 0, g: 0, b: 0 };
 
-    // 前景 RGB 的调色结果：只对 alpha > 0 的像素做加法偏移并钳制到 0..255。
-    const adjustedBaseRgb =
-      brightnessOffset === 0 ? baseRgbRaw : Buffer.from(baseRgbRaw);
-    if (brightnessOffset !== 0) {
-      for (let i = 0; i < pixelCount; i += 1) {
-        if ((resizedAlpha[i] ?? 0) === 0) continue;
-        for (let c = 0; c < 3; c += 1) {
-          adjustedBaseRgb[i * 3 + c] = Math.max(
-            0,
-            Math.min(255, (adjustedBaseRgb[i * 3 + c] ?? 0) + brightnessOffset)
-          );
-        }
-      }
-    }
-
-    // 共享纯函数做去污染，返回 RGBA
+    // 共享纯函数做去污染，返回 RGBA。
+    //
+    // 必须先把**未调色**的前景 + alpha 交给去污染，再对结果调色：反预乘
+    // `(C - bg(1-a))/a` 会把任何人工偏移放大成 `k/a`。若先调色，a≈0.5 的边缘
+    // 偏移会翻倍，暗片出现亮晕、过曝片出现暗边，且与本地 canvas 路
+    // （先去污染后调色）结果不一致。
     const rgba = new Uint8ClampedArray(pixelCount * 4);
     for (let i = 0; i < pixelCount; i += 1) {
-      rgba[i * 4] = adjustedBaseRgb[i * 3] ?? 0;
-      rgba[i * 4 + 1] = adjustedBaseRgb[i * 3 + 1] ?? 0;
-      rgba[i * 4 + 2] = adjustedBaseRgb[i * 3 + 2] ?? 0;
+      rgba[i * 4] = baseRgbRaw[i * 3] ?? 0;
+      rgba[i * 4 + 1] = baseRgbRaw[i * 3 + 1] ?? 0;
+      rgba[i * 4 + 2] = baseRgbRaw[i * 3 + 2] ?? 0;
       rgba[i * 4 + 3] = resizedAlpha[i] ?? 0;
     }
     const cleaned = decontaminateIdPhotoForeground(
@@ -229,6 +221,8 @@ export class IdPhotoService {
       sourceBackground
     );
 
+    // 从去污染结果提取前景 RGB 与 alpha，然后才应用亮度：加法偏移只作用于
+    // alpha > 0 的像素；去污染把内边缘 alpha 压到 0 的像素也不再调色。
     const foregroundRgb = Buffer.alloc(preset.widthPx * preset.heightPx * 3);
     const finalAlpha = Buffer.alloc(preset.widthPx * preset.heightPx);
     for (let i = 0; i < preset.widthPx * preset.heightPx; i += 1) {
@@ -236,6 +230,17 @@ export class IdPhotoService {
       foregroundRgb[i * 3 + 1] = cleaned[i * 4 + 1] ?? 0;
       foregroundRgb[i * 3 + 2] = cleaned[i * 4 + 2] ?? 0;
       finalAlpha[i] = cleaned[i * 4 + 3] ?? 0;
+    }
+    if (brightnessOffset !== 0) {
+      for (let i = 0; i < pixelCount; i += 1) {
+        if ((finalAlpha[i] ?? 0) === 0) continue;
+        for (let c = 0; c < 3; c += 1) {
+          foregroundRgb[i * 3 + c] = Math.max(
+            0,
+            Math.min(255, (foregroundRgb[i * 3 + c] ?? 0) + brightnessOffset)
+          );
+        }
+      }
     }
 
     const alpha = await sharp(finalAlpha, {
@@ -268,8 +273,9 @@ export class IdPhotoService {
     // 质量检查在最终成片上做。人脸框/关键点是源图坐标，必须先映射到成片坐标，
     // 否则 faceRatio、faceCentered、headroom 会按源图尺寸计算而失真。
     const quality = inspectIdPhoto({
-      // 曝光项按调色后的前景 RGB 判定，与最终成片一致。
-      rgb: adjustedBaseRgb,
+      // 曝光项按「去污染后、调色后」的前景 RGB 判定，与最终成片一致；
+      // 不能用原始 baseRgbRaw——那既含原底色污染，也没算亮度偏移。
+      rgb: foregroundRgb,
       width: preset.widthPx,
       height: preset.heightPx,
       face: face ? mapFaceToOutput(face, baseBox, preset, rotation) : null,

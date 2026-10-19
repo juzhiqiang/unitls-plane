@@ -308,9 +308,16 @@ describe('suggestBrightnessAdjustment', () => {
     expect(suggestBrightnessAdjustment(255)).toBe(-12);
   });
 
-  it('caps the correction for extremely dark and blown-out photos', () => {
-    expect(suggestBrightnessAdjustment(0)).toBeLessThanOrEqual(18);
-    expect(suggestBrightnessAdjustment(255)).toBeGreaterThanOrEqual(-12);
+  it('raises darker photos more and lowers brighter ones more', () => {
+    // 单调性:暗区内越暗提亮越多,亮区内越亮压暗越多。
+    expect(suggestBrightnessAdjustment(20)).toBeGreaterThan(
+      suggestBrightnessAdjustment(70)
+    );
+    expect(suggestBrightnessAdjustment(70)).toBeGreaterThan(0);
+    expect(suggestBrightnessAdjustment(210)).toBeLessThan(0);
+    expect(suggestBrightnessAdjustment(210)).toBeGreaterThan(
+      suggestBrightnessAdjustment(250)
+    );
   });
 
   it('never returns a fractional value', () => {

@@ -525,7 +525,19 @@ describe('compositeIdPhoto brightness', () => {
   });
 
   it('applies brightness after decontamination so recovered colours are shifted', async () => {
-    mocks.decontaminate.mockImplementationOnce(rgba => rgba);
+    // mock 返回固定灰度 200,与输入无关：这样最终值只可能是
+    // 「去污染输出 200 + 亮度 8 = 208」；若亮度被错误地放在去污染之前,
+    // 偏移会被恒定的 mock 输出吞掉,最终仍是 200。
+    mocks.decontaminate.mockImplementationOnce(rgba => {
+      const out = new Uint8ClampedArray(rgba.length);
+      for (let i = 0; i < rgba.length; i += 4) {
+        out[i] = 200;
+        out[i + 1] = 200;
+        out[i + 2] = 200;
+        out[i + 3] = rgba[i + 3] ?? 0;
+      }
+      return out;
+    });
     const width = 10;
     const height = 10;
     const { contexts } = stubOffscreenCanvas({
@@ -544,7 +556,43 @@ describe('compositeIdPhoto brightness', () => {
       8
     );
 
+    // 去污染入参必须是未调色的原值(120),不能是 120 + 8。
+    const input = mocks.decontaminate.mock.calls[0]![0] as Uint8ClampedArray;
+    expect(Array.from(input.subarray(0, 4))).toEqual([120, 120, 120, 255]);
+
     const data = writtenPixels(contexts[0]!, width, height);
-    expect(Array.from(data.subarray(0, 4))).toEqual([128, 128, 128, 255]);
+    expect(Array.from(data.subarray(0, 4))).toEqual([208, 208, 208, 255]);
+  });
+
+  it('keeps RGB of fully transparent pixels even when it is non-zero', async () => {
+    const width = 10;
+    const height = 10;
+    const { contexts } = stubOffscreenCanvas({
+      pixelAt: (x, y) =>
+        x === 5 && y === 5
+          ? { r: 100, g: 100, b: 100, a: 255 }
+          : { r: 50, g: 60, b: 70, a: 0 },
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(width, height),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      0,
+      { r: 50, g: 60, b: 70 },
+      12
+    );
+
+    const data = writtenPixels(contexts[0]!, width, height);
+    // (0,0) 是透明像素：亮度只作用于 alpha > 0,残留 RGB 必须原样保留。
+    expect(Array.from(data.subarray(0, 4))).toEqual([50, 60, 70, 0]);
+    // 前景像素照常加偏移。
+    const centre = (5 * width + 5) * 4;
+    expect(Array.from(data.subarray(centre, centre + 4))).toEqual([
+      112, 112, 112, 255,
+    ]);
   });
 });

@@ -67,7 +67,10 @@ export function hexToRgb(hex: string): Rgb {
  * @param rotation 自动构图算出的旋转角（度，逆时针为正），0 表示不转
  * @param sourceBackground 从原图估出的底色；缺省时才从 cutout 估计
  * @param brightness 亮度加法偏移（-255..255 实际取小范围），只作用于前景；
- *   在去污染之后、写回画布之前应用，透明像素保持原样
+ *   在去污染之后、写回画布之前应用，透明像素保持原样。偏移由调用方用共享的
+ *   suggestBrightnessAdjustment 算好；两端统计范围不同（本地对整幅 cutout 求
+ *   均值，服务端对裁剪并缩放后的成片区域求均值），因此非均匀曝光的照片可能
+ *   得到不同偏移。
  * @param onOutput 可选：合成完成、编码前回调成片像素，供质量检查使用
  */
 export async function compositeIdPhoto(

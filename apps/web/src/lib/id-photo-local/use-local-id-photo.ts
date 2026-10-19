@@ -231,6 +231,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           // 2.5) 亮度自动校正:只统计前景(alpha > 0)像素的平均亮度,
           //      避免大面积透明背景把均值拉低。与质量检查共用上面读出的
           //      srcData,不再重复读像素;偏移量算法与服务端是同一个函数。
+          //      注意统计范围不同:这里用整幅 cutout,服务端用裁剪并缩放后的
+          //      成片区域,非均匀曝光的照片两端得到的偏移可能不同。
           let brightness = 0;
           if (autoFraming) {
             const pixels = srcData.data;

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import sharp from 'sharp';
 import {
+  estimateSourceBackgroundColors,
   idPhotoCropFromLayout,
   mapFaceToOutput,
   resolveIdPhotoCropBox,
+  suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
 } from '@utils-plane/validators';
+import { decontaminateIdPhotoForeground } from '@utils-plane/utils';
 import { IdPhotoService } from '../../../../src/modules/tasks/services/id-photo.service';
 
 describe('IdPhotoService', () => {
@@ -845,5 +848,156 @@ describe('IdPhotoService brightness correction', () => {
     // 240 → 建议 -12。
     expect(mean).toBeCloseTo(228, 0);
     expect(Math.abs(mean - 128)).toBeLessThan(Math.abs(240 - 128));
+  });
+});
+
+describe('IdPhotoService brightness ordering', () => {
+  // one_inch 成片 295×413。源图做成同尺寸，裁剪框正好是整幅、缩放也是恒等变换，
+  // 输出像素与输入像素一一对应，便于精确取样。
+  const WIDTH = 295;
+  const HEIGHT = 413;
+  const DARK = 40;
+  const RING_ALPHA = 128;
+  const RING = 20;
+
+  // 不透明主体 + 一圈 alpha=128 的边缘；边缘 RGB 与整幅暗图一样是 40，
+  // 即物理上的存储值 C = F·a + B·(1−a) = 40。
+  const OPAQUE = { left: 100, top: 100, width: 95, height: 213 };
+
+  function alphaAt(x: number, y: number): number {
+    const inOpaque =
+      x >= OPAQUE.left &&
+      x < OPAQUE.left + OPAQUE.width &&
+      y >= OPAQUE.top &&
+      y < OPAQUE.top + OPAQUE.height;
+    if (inOpaque) return 255;
+    const inRing =
+      x >= OPAQUE.left - RING &&
+      x < OPAQUE.left + OPAQUE.width + RING &&
+      y >= OPAQUE.top - RING &&
+      y < OPAQUE.top + OPAQUE.height + RING;
+    return inRing ? RING_ALPHA : 0;
+  }
+
+  function sampleIndex(x: number, y: number, channels: number): number {
+    return (y * WIDTH + x) * channels;
+  }
+
+  async function renderWithRing(): Promise<Buffer> {
+    const rgb = Buffer.alloc(WIDTH * HEIGHT * 3, DARK);
+    const input = await sharp(rgb, {
+      raw: { width: WIDTH, height: HEIGHT, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    const mask = Buffer.alloc(WIDTH * HEIGHT);
+    for (let y = 0; y < HEIGHT; y += 1) {
+      for (let x = 0; x < WIDTH; x += 1) {
+        mask[y * WIDTH + x] = alphaAt(x, y);
+      }
+    }
+    const maskPng = await sharp(mask, {
+      raw: { width: WIDTH, height: HEIGHT, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask: maskPng,
+        bounds: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const output = await service.render(input, {
+      preset: 'one_inch',
+      // 黑色底：半透明边缘的成片值只由前景 × alpha 决定，便于和两条预期比较。
+      backgroundColor: '#000000',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+    return output.buffer;
+  }
+
+  it('decontaminates before applying brightness so edges are not amplified by 1/alpha', async () => {
+    const buffer = await renderWithRing();
+    const { data, info } = await sharp(buffer)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const alpha = new Uint8Array(WIDTH * HEIGHT);
+    const rgba = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
+    for (let y = 0; y < HEIGHT; y += 1) {
+      for (let x = 0; x < WIDTH; x += 1) {
+        const i = y * WIDTH + x;
+        alpha[i] = alphaAt(x, y);
+        rgba[i * 4] = DARK;
+        rgba[i * 4 + 1] = DARK;
+        rgba[i * 4 + 2] = DARK;
+        rgba[i * 4 + 3] = alpha[i]!;
+      }
+    }
+
+    // 服务端底色聚类用未调色的原图，这里同样用原图估计并复用共享去污染。
+    const sourceBackground = estimateSourceBackgroundColors(
+      Buffer.alloc(WIDTH * HEIGHT * 3, DARK),
+      WIDTH,
+      HEIGHT
+    )[0]!;
+    const offset = suggestBrightnessAdjustment(DARK);
+
+    const cleaned = decontaminateIdPhotoForeground(
+      rgba,
+      WIDTH,
+      HEIGHT,
+      sourceBackground
+    );
+    // 正确顺序的预期：去污染 → 调色。
+    const correctForeground = (i: number) =>
+      Math.min(255, (cleaned[i * 4] ?? 0) + offset);
+
+    // 错误顺序的预期：先调色 → 去污染（反预乘把偏移放大成 offset/a）。
+    const preAdjusted = new Uint8ClampedArray(rgba);
+    for (let i = 0; i < WIDTH * HEIGHT; i += 1) {
+      if (alpha[i] === 0) continue;
+      for (let c = 0; c < 3; c += 1) {
+        preAdjusted[i * 4 + c] = Math.min(
+          255,
+          (preAdjusted[i * 4 + c] ?? 0) + offset
+        );
+      }
+    }
+    const oldCleaned = decontaminateIdPhotoForeground(
+      preAdjusted,
+      WIDTH,
+      HEIGHT,
+      sourceBackground
+    );
+
+    // 取外圈像素：距离不透明主体 15px，超过去污染的内边缘阈值 3.5px，
+    // alpha 不会被压制；同时远离透明边界，不受重采样污染（此处无缩放）。
+    const ringX = OPAQUE.left - 15;
+    const ringY = OPAQUE.top + Math.floor(OPAQUE.height / 2);
+    const ringI = ringY * WIDTH + ringX;
+    const actual = data[sampleIndex(ringX, ringY, info.channels)] ?? 0;
+    const correct = Math.round(
+      ((correctForeground(ringI) ?? 0) * RING_ALPHA) / 255
+    );
+    const old = Math.round(((oldCleaned[ringI * 4] ?? 0) * RING_ALPHA) / 255);
+
+    // 旧实现把 k/a ≈ 2k 的反预乘结果叠加到边缘，旧预期明显高于正确预期。
+    expect(old - correct).toBeGreaterThan(2);
+    // 实际输出应落在「先去污染后调色」的预期附近，而不是旧实现。
+    expect(Math.abs(actual - correct)).toBeLessThanOrEqual(1);
+    expect(Math.abs(actual - old)).toBeGreaterThanOrEqual(2);
+
+    // 半透明边缘不得比不透明前景更亮（旧实现的 k/a 放大正是亮晕来源）。
+    const opaqueX = OPAQUE.left + Math.floor(OPAQUE.width / 2);
+    const opaque = data[sampleIndex(opaqueX, ringY, info.channels)] ?? 0;
+    expect(actual).toBeLessThanOrEqual(opaque + 1);
   });
 });

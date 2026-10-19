@@ -11,6 +11,8 @@ export type IdPhotoOptionsState = {
   outputType: 'image/jpeg' | 'image/png';
   segmentationMode: 'local' | 'ai';
   crop: { x: number; y: number; scale: number };
+  /** 是否显示构图辅助线；不影响导出。 */
+  guides: boolean;
 };
 
 type Props = {
@@ -133,6 +135,7 @@ export function IdPhotoOptions({
           <label className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm">
             <input
               type="checkbox"
+              data-testid="id-photo-high-precision-toggle"
               checked={highPrecision}
               disabled={disabled || highPrecisionDisabled}
               onChange={e => onHighPrecisionChange?.(e.target.checked)}
@@ -167,6 +170,17 @@ export function IdPhotoOptions({
           <option value="image/png">PNG</option>
         </select>
       </div>
+
+      <label className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm">
+        <input
+          type="checkbox"
+          data-testid="id-photo-guides-toggle"
+          checked={value.guides}
+          disabled={disabled}
+          onChange={e => onChange({ ...value, guides: e.target.checked })}
+        />
+        <span>{t('guides')}</span>
+      </label>
     </div>
   );
 }

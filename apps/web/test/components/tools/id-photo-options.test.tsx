@@ -31,6 +31,7 @@ const baseValue: IdPhotoOptionsState = {
   outputType: 'image/jpeg',
   segmentationMode: 'local',
   crop: { x: 0.5, y: 0.5, scale: 1 },
+  guides: false,
 };
 
 // en.json 的真实结构与 next-intl 的 AbstractIntlMessages 索引签名不完全
@@ -91,8 +92,11 @@ describe('IdPhotoOptions', () => {
 
     // 高精度开关不应出现
     expect(screen.queryByText('localHighPrecision')).not.toBeInTheDocument();
-    // 服务端模式没有 checkbox
-    expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+    // 服务端模式没有高精度 checkbox；构图辅助线开关与处理模式无关,仍是另一个复选框
+    expect(
+      screen.queryByTestId('id-photo-high-precision-toggle')
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('id-photo-guides-toggle')).toBeInTheDocument();
   });
 
   it('high precision toggle disabled when highPrecisionDisabled', () => {

@@ -39,6 +39,7 @@ const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   outputType: 'image/jpeg',
   segmentationMode: 'local',
   crop: { x: 0.5, y: 0.5, scale: 1 },
+  guides: false,
 };
 
 export default function IdPhotoPage() {

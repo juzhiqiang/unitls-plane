@@ -69,6 +69,8 @@ export interface ImageCropFieldProps {
   onChange: (rect: CropRect) => void;
   aspect: number | null;
   disabled?: boolean;
+  /** 是否显示证件照构图辅助线(中心线、头顶安全区、眼部参考区、肩线)。不影响导出。 */
+  guides?: boolean;
   t: (key: string) => string;
 }
 
@@ -87,6 +89,7 @@ export function ImageCropField({
   onChange,
   aspect,
   disabled,
+  guides = false,
   t,
 }: ImageCropFieldProps) {
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -220,6 +223,35 @@ export function ImageCropField({
                 <div className="absolute inset-x-0 top-1/3 border-t border-white/40" />
                 <div className="absolute inset-x-0 top-2/3 border-t border-white/40" />
               </div>
+
+              {/* 证件照构图辅助线:全部 pointer-events-none,否则会挡住拖动 */}
+              {guides && (
+                <div className="pointer-events-none absolute inset-0">
+                  {/* 中心竖线:人脸应对准这条线 */}
+                  <div
+                    data-testid="crop-guide-center"
+                    className="pointer-events-none absolute inset-y-0 left-1/2 border-l border-dashed border-sky-400/70"
+                  />
+                  {/* 头顶安全区:顶部 8% 淡色填充 + 分界线 */}
+                  <div
+                    data-testid="crop-guide-headroom"
+                    className="pointer-events-none absolute inset-x-0 top-0 border-b border-dashed border-emerald-400/80 bg-emerald-400/10"
+                    style={{ height: '8%' }}
+                  />
+                  {/* 眼部参考区:40%~50% */}
+                  <div
+                    data-testid="crop-guide-eye"
+                    className="pointer-events-none absolute inset-x-0 border-y border-dashed border-amber-400/80"
+                    style={{ top: '40%', height: '10%' }}
+                  />
+                  {/* 肩线参考:75% */}
+                  <div
+                    data-testid="crop-guide-shoulder"
+                    className="pointer-events-none absolute inset-x-0 border-t border-dashed border-violet-400/70"
+                    style={{ top: '75%' }}
+                  />
+                </div>
+              )}
 
               {HANDLES.map(handle => (
                 <span

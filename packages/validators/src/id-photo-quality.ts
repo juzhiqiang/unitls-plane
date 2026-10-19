@@ -47,6 +47,37 @@ const MAX_TRANSLUCENT_RATIO = 0.75;
 const MAX_SHARPNESS_DIMENSION = 512;
 const MAX_BRIGHTNESS_SAMPLES = 200_000;
 
+type RgbChannels = 3 | 4;
+
+/**
+ * 按缓冲区长度推断通道数。
+ *
+ * 本地路传 canvas `ImageData.data`（RGBA），服务端路传 sharp 解出的 RGB。
+ * 同一张图两种布局必须得到相同的清晰度/曝光结论，因此所有读像素的地方都由
+ * 这里统一决定步长，而不是硬编码 3 通道。
+ *
+ * 长度既不是 `width × height × 3` 也不是 `× 4` 时直接抛错：这通常意味着
+ * 调用方传错了尺寸或缓冲区，静默猜测会让两端结论继续悄悄分叉。
+ */
+function resolveRgbChannels(
+  length: number,
+  width: number,
+  height: number
+): RgbChannels {
+  const pixels = width * height;
+  if (Number.isFinite(pixels) && pixels > 0) {
+    if (length === pixels * 4) return 4;
+    if (length === pixels * 3) return 3;
+  }
+  throw new RangeError(
+    `rgb buffer length ${length} does not match ${width}x${height} as RGB or RGBA`
+  );
+}
+
+function pixelOffset(pixelIndex: number, channels: RgbChannels): number {
+  return pixelIndex * channels;
+}
+
 /**
  * Laplacian 方差，清晰度指标。
  *
@@ -60,7 +91,8 @@ const MAX_BRIGHTNESS_SAMPLES = 200_000;
 function laplacianVariance(
   rgb: Uint8ClampedArray | Uint8Array,
   width: number,
-  height: number
+  height: number,
+  channels: RgbChannels
 ): number {
   if (
     !Number.isFinite(width) ||
@@ -80,7 +112,7 @@ function laplacianVariance(
   if (gw <= 0 || gh <= 0) return 0;
 
   const grayAt = (x: number, y: number): number => {
-    const p = (y * width + x) * 3;
+    const p = pixelOffset(y * width + x, channels);
     return (
       (rgb[p] ?? 0) * 0.299 +
       (rgb[p + 1] ?? 0) * 0.587 +
@@ -114,7 +146,8 @@ function laplacianVariance(
 function meanBrightness(
   rgb: Uint8ClampedArray | Uint8Array,
   width: number,
-  height: number
+  height: number,
+  channels: RgbChannels
 ): number {
   const total = width * height;
   if (!Number.isFinite(total) || total <= 0) return 0;
@@ -123,7 +156,7 @@ function meanBrightness(
   let sum = 0;
   let count = 0;
   for (let i = 0; i < total; i += stride) {
-    const p = i * 3;
+    const p = pixelOffset(i, channels);
     sum += ((rgb[p] ?? 0) + (rgb[p + 1] ?? 0) + (rgb[p + 2] ?? 0)) / 3;
     count += 1;
   }
@@ -183,10 +216,15 @@ export function inspectIdPhoto(input: {
   height: number;
   face: FaceDetection | null;
   faceCount: number;
-  /** 可选：分割 alpha（1 通道，0..255）。提供时才检查抠图边缘。 */
+  /**
+   * 可选：分割 alpha。支持单通道（长度 = width × height），也支持交错 RGBA
+   * （长度 = width × height × 4，只取第 4 通道）。提供该参数（即使为空数组）
+   * 时始终输出 matteEdge 项。
+   */
   alpha?: Uint8ClampedArray | Uint8Array;
 }): QualityReport {
   const { rgb, width, height, face, faceCount, alpha } = input;
+  const channels = resolveRgbChannels(rgb.length, width, height);
   const items: QualityItem[] = [];
 
   items.push({
@@ -214,13 +252,23 @@ export function inspectIdPhoto(input: {
       hint: 'faceRatioRange',
     });
 
-    const tilt = eyeTiltDegrees(face.landmarks);
-    items.push({
-      name: 'eyeTilt',
-      value: `${tilt >= 0 ? '+' : ''}${tilt.toFixed(1)}°`,
-      passed: Math.abs(tilt) <= MAX_EYE_TILT,
-      hint: 'levelEyes',
-    });
+    if (face.landmarks.length >= 2) {
+      const tilt = eyeTiltDegrees(face.landmarks);
+      items.push({
+        name: 'eyeTilt',
+        value: `${tilt >= 0 ? '+' : ''}${tilt.toFixed(1)}°`,
+        passed: Math.abs(tilt) <= MAX_EYE_TILT,
+        hint: 'levelEyes',
+      });
+    } else {
+      // 少于两个点无法算眼线，不能把 eyeTiltDegrees 的兜底 0 当成「水平」。
+      items.push({
+        name: 'eyeTilt',
+        value: '—',
+        passed: false,
+        hint: 'faceNotDetected',
+      });
+    }
 
     const headroom = face.box.y / height;
     items.push({
@@ -241,7 +289,7 @@ export function inspectIdPhoto(input: {
     }
   }
 
-  const sharpness = laplacianVariance(rgb, width, height);
+  const sharpness = laplacianVariance(rgb, width, height, channels);
   items.push({
     name: 'sharpness',
     value: sharpness.toFixed(0),
@@ -249,7 +297,7 @@ export function inspectIdPhoto(input: {
     hint: 'avoidBlurrySource',
   });
 
-  const brightness = meanBrightness(rgb, width, height);
+  const brightness = meanBrightness(rgb, width, height, channels);
   items.push({
     name: 'exposure',
     value: `${brightness.toFixed(0)}/255`,
@@ -257,15 +305,26 @@ export function inspectIdPhoto(input: {
     hint: 'avoidUnderexposedOrBlown',
   });
 
-  const matte = alpha ? inspectMatte(alpha, width * height) : null;
-  if (matte) {
-    items.push({
-      name: 'matteEdge',
-      value: `${(matte.translucentRatio * 100).toFixed(1)}%`,
-      passed:
-        matte.translucentRatio < MAX_TRANSLUCENT_RATIO && matte.hasForeground,
-      hint: 'checkHairAndShoulder',
-    });
+  if (alpha !== undefined) {
+    const matte = inspectMatte(alpha, width * height);
+    // 空数组 / 尺寸不匹配也要保留这一项：少一项会改变评分分母。
+    items.push(
+      matte
+        ? {
+            name: 'matteEdge',
+            value: `${(matte.translucentRatio * 100).toFixed(1)}%`,
+            passed:
+              matte.translucentRatio < MAX_TRANSLUCENT_RATIO &&
+              matte.hasForeground,
+            hint: 'checkHairAndShoulder',
+          }
+        : {
+            name: 'matteEdge',
+            value: '—',
+            passed: false,
+            hint: 'checkHairAndShoulder',
+          }
+    );
   }
 
   const passedCount = items.filter(i => i.passed).length;

@@ -15,14 +15,29 @@
  */
 
 export const MODNET_LONG_EDGE = 512;
+/**
+ * 输入像素数上限（2 MP）。
+ *
+ * 参考口径「长边 >= 512 且短边 <= 512 时保持原尺寸」没有长边上限，
+ * 20000×400 这类极端长图会直接变成 20000×384，即约 768 万像素/通道：
+ * float32 输入 tensor 约 92MB，MODNet 内部激活值可达数 GB。API worker
+ * 并发为 2 且容器未限制内存，足以触发 OOM。2 MP 对全部证件照尺寸都没有
+ * 实际影响（4000×6000、1280×1706 等经正常缩放后都远低于该值）。
+ */
+export const MODNET_MAX_INPUT_PIXELS = 2_097_152;
 const ALIGN = 32;
+
+function alignDown(value: number): number {
+  return Math.max(ALIGN, value - (value % ALIGN));
+}
 
 export function modnetInputSize(
   source: { width: number; height: number },
   longEdge: number = MODNET_LONG_EDGE
 ): { width: number; height: number } {
   if (source.width <= 0 || source.height <= 0) {
-    return { width: longEdge, height: longEdge };
+    const edge = alignDown(Math.round(longEdge));
+    return { width: edge, height: edge };
   }
 
   const longest = Math.max(source.width, source.height);
@@ -36,7 +51,24 @@ export function modnetInputSize(
     height = Math.round(source.height * scale);
   }
 
-  width = Math.max(ALIGN, width - (width % ALIGN));
-  height = Math.max(ALIGN, height - (height % ALIGN));
+  width = alignDown(width);
+  height = alignDown(height);
+
+  // 极端长宽比保护：保持比例继续缩小到 2 MP 以内，仍然不补边。
+  if (width * height > MODNET_MAX_INPUT_PIXELS) {
+    const scale = Math.sqrt(MODNET_MAX_INPUT_PIXELS / (width * height));
+    width = alignDown(Math.floor(width * scale));
+    height = alignDown(Math.floor(height * scale));
+
+    // 32 对齐的最小值可能让极窄/极扁输入在缩放后仍超限，再压一次长边。
+    if (width * height > MODNET_MAX_INPUT_PIXELS) {
+      if (width <= height) {
+        height = alignDown(Math.floor(MODNET_MAX_INPUT_PIXELS / width));
+      } else {
+        width = alignDown(Math.floor(MODNET_MAX_INPUT_PIXELS / height));
+      }
+    }
+  }
+
   return { width, height };
 }

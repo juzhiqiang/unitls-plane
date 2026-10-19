@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as path from 'node:path';
+import * as ort from 'onnxruntime-node';
 import sharp from 'sharp';
 import {
   MODNET_LONG_EDGE,
@@ -16,6 +18,11 @@ import {
 } from '../../../../src/modules/tasks/services/portrait-segmentation.service';
 
 describe('resolvePortraitSegmentationModelPath', () => {
+  // Windows 上 path.resolve('/app', ...) 会带当前盘符，用 path.resolve 生成
+  // 期望值可以同时覆盖容器与 Windows 本地开发。
+  const inApp = (...segments: string[]) => path.resolve('/app', ...segments);
+  const normalize = (modelPath: string) => modelPath.replaceAll('\\', '/');
+
   it('prefers the photographic model over the generic model', () => {
     const modelPath = resolvePortraitSegmentationModelPath({
       cwd: 'D:/project/unitls-plane',
@@ -34,7 +41,37 @@ describe('resolvePortraitSegmentationModelPath', () => {
     );
   });
 
-  it('prefers the repository-root model path when it exists', () => {
+  it('finds the photographic model in the image-baked container layout', () => {
+    // Dockerfile: COPY docker/models/ ./models/id-photo/，容器内 cwd=/app。
+    const expected = inApp('models/id-photo/modnet/modnet_photographic.onnx');
+    const modelPath = resolvePortraitSegmentationModelPath({
+      cwd: '/app',
+      exists: candidate => candidate === expected,
+    });
+
+    expect(modelPath).toBe(expected);
+    expect(normalize(modelPath)).toEndWith(
+      'models/id-photo/modnet/modnet_photographic.onnx'
+    );
+  });
+
+  it('finds the photographic model in the repository docker assets', () => {
+    // 仓库本地开发：权重在 docker/models/modnet/，不在 apps/api/models/。
+    const expected = path.resolve(
+      'D:/project/unitls-plane',
+      'docker/models/modnet/modnet_photographic.onnx'
+    );
+    const modelPath = resolvePortraitSegmentationModelPath({
+      cwd: 'D:/project/unitls-plane',
+      exists: candidate => candidate === expected,
+    });
+
+    expect(normalize(modelPath)).toBe(
+      'D:/project/unitls-plane/docker/models/modnet/modnet_photographic.onnx'
+    );
+  });
+
+  it('falls back to the app-local generic model when no photographic model exists', () => {
     const modelPath = resolvePortraitSegmentationModelPath({
       cwd: 'D:/project/unitls-plane',
       exists: path =>
@@ -241,6 +278,82 @@ describe('PortraitSegmentationService.segment', () => {
 
     expect(result.faceCount).toBe(1);
     expect(localRunCount).toBe(1);
+  });
+});
+
+describe('PortraitSegmentationService.getSession', () => {
+  const MODEL_ENV = 'ID_PHOTO_SEGMENTATION_MODEL';
+  let savedModelEnv: string | undefined;
+  let restoreCreate: (() => void) | undefined;
+
+  beforeEach(() => {
+    savedModelEnv = process.env[MODEL_ENV];
+    // 固定成 photographic 路径，确保它与 generic 回落路径不同，才能触发回落。
+    process.env[MODEL_ENV] = '/models/modnet_photographic.onnx';
+  });
+
+  afterEach(() => {
+    restoreCreate?.();
+    restoreCreate = undefined;
+    if (savedModelEnv === undefined) {
+      delete process.env[MODEL_ENV];
+    } else {
+      process.env[MODEL_ENV] = savedModelEnv;
+    }
+  });
+
+  function mockModelCreate() {
+    const create = spyOn(ort.InferenceSession, 'create');
+    restoreCreate = () => create.mockRestore();
+    return create;
+  }
+
+  it('falls back to generic modnet when the photographic model fails to load', async () => {
+    const session = {
+      inputNames: ['input'],
+    } as unknown as ort.InferenceSession;
+    const create = mockModelCreate()
+      .mockRejectedValueOnce(new Error('photographic unavailable'))
+      .mockResolvedValueOnce(session);
+    const service = new PortraitSegmentationService() as any;
+
+    await expect(service.getSession()).resolves.toBe(session);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    const firstPath = String(create.mock.calls[0]?.[0]);
+    const genericPath = String(create.mock.calls[1]?.[0]);
+    expect(firstPath).toContain('modnet_photographic.onnx');
+    expect(genericPath).toEndWith('modnet.onnx');
+    expect(genericPath).not.toContain('modnet_photographic');
+  });
+
+  it('throws instead of retrying forever when the generic model also fails', async () => {
+    const create = mockModelCreate()
+      .mockRejectedValueOnce(new Error('photographic unavailable'))
+      .mockRejectedValueOnce(new Error('generic unavailable'));
+    const service = new PortraitSegmentationService() as any;
+
+    await expect(service.getSession()).rejects.toThrow('generic unavailable');
+
+    // photographic + generic 各一次；不会在两者之间死循环。
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the cached promise after a failure so the next call can retry', async () => {
+    const session = {
+      inputNames: ['input'],
+    } as unknown as ort.InferenceSession;
+    const create = mockModelCreate()
+      .mockRejectedValueOnce(new Error('photographic unavailable'))
+      .mockRejectedValueOnce(new Error('generic unavailable'))
+      .mockResolvedValueOnce(session);
+    const service = new PortraitSegmentationService() as any;
+
+    await expect(service.getSession()).rejects.toThrow('generic unavailable');
+    expect(service.sessionPromise).toBeUndefined();
+
+    await expect(service.getSession()).resolves.toBe(session);
+    expect(create).toHaveBeenCalledTimes(3);
   });
 });
 

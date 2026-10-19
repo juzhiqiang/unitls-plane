@@ -80,11 +80,22 @@ export function resolvePortraitSegmentationModelPath({
   // photographic 优先：它是证件照专用变体，通用 modnet 只作文件缺失时的回落。
   // 注意：Task 1 实测两者逐像素等价（max abs diff = 0），回落的意义仅在
   // 「photographic 文件缺失时不至于整条链路不可用」，不带来画质差异。
+  //
+  // 候选顺序与 resolveYunetModelPath 保持一致：
+  //   env 覆盖 → 仓库内 apps/api/models → 仓库根 docker/models → 镜像内置 models/id-photo。
+  // 组合镜像把 docker/models/ 复制到 /app/models/id-photo/（见根 Dockerfile），
+  // 所以容器内 cwd=/app 时 photographic 实际位于 models/id-photo/modnet/；
+  // 仓库本地开发时它位于 docker/models/modnet/。
   const candidates = [
     path.resolve(cwd, `apps/api/models/${MODNET_PHOTOGRAPHIC_NAME}`),
     path.resolve(cwd, `models/modnet/${MODNET_PHOTOGRAPHIC_NAME}`),
+    path.resolve(cwd, `models/id-photo/modnet/${MODNET_PHOTOGRAPHIC_NAME}`),
+    path.resolve(cwd, `docker/models/modnet/${MODNET_PHOTOGRAPHIC_NAME}`),
     path.resolve(cwd, `models/${MODNET_PHOTOGRAPHIC_NAME}`),
     path.resolve(cwd, `apps/api/models/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `models/modnet/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `models/id-photo/modnet/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `docker/models/modnet/${MODNET_GENERIC_NAME}`),
     path.resolve(cwd, `models/${MODNET_GENERIC_NAME}`),
   ];
   return candidates.find(candidate => exists(candidate)) ?? candidates[0]!;
@@ -96,6 +107,9 @@ function resolveGenericModNetModelPath(
 ): string {
   const candidates = [
     path.resolve(cwd, `apps/api/models/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `models/modnet/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `models/id-photo/modnet/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `docker/models/modnet/${MODNET_GENERIC_NAME}`),
     path.resolve(cwd, `models/${MODNET_GENERIC_NAME}`),
   ];
   return candidates.find(candidate => exists(candidate)) ?? candidates[1]!;

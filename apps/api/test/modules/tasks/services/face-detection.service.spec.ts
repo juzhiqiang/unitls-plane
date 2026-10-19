@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import * as path from 'node:path';
+import * as ort from 'onnxruntime-node';
+import sharp from 'sharp';
+import type { YunetRawOutputs } from '@utils-plane/utils';
 import {
-  createYunetInputTensor,
-  decodeYunetRawOutputs,
+  FaceDetectionService,
   resolveYunetModelPath,
-  type YunetRawOutputs,
 } from '../../../../src/modules/tasks/services/face-detection.service';
 
 // brief 里的用例写的是 POSIX 绝对路径；在 Windows 上 path.resolve('/app', ...)
@@ -51,124 +52,193 @@ describe('resolveYunetModelPath', () => {
   });
 });
 
-describe('createYunetInputTensor', () => {
-  it('produces a CHW float32 tensor normalised to 0..1', () => {
-    const size = 2;
-    // 第 1 个像素为品红 (R=255, G=0, B=255)，这样 B 平面起点的断言才能
-    // 同时区分通道偏移（brief 原数据首像素是纯红，B 平面首元素实际为 0）。
-    const raw = Buffer.from([255, 0, 255, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
-    const tensor = createYunetInputTensor(raw, size);
-
-    expect(tensor.length).toBe(3 * size * size);
-    // R 平面
-    expect(tensor[0]).toBeCloseTo(1, 5);
-    expect(tensor[1]).toBeCloseTo(0, 5);
-    // G 平面起点 = size*size
-    expect(tensor[4]).toBeCloseTo(0, 5);
-    expect(tensor[5]).toBeCloseTo(1, 5);
-    // B 平面起点 = 2*size*size
-    expect(tensor[8]).toBeCloseTo(1, 5);
-    expect(tensor[11]).toBeCloseTo(1, 5);
-  });
-
-  it('uses 0..1 normalisation, not -1..1', () => {
-    const raw = Buffer.alloc(3 * 4, 127);
-    const tensor = createYunetInputTensor(raw, 2);
-    expect(tensor[0]).toBeCloseTo(127 / 255, 5);
-  });
-});
-
-type RawCell = {
-  row: number;
-  col: number;
-  score: number;
-  bbox?: [number, number, number, number];
-  kps?: number[];
+type FakeSession = {
+  inputNames: string[];
+  outputNames: string[];
+  inputMetadata?: ReadonlyArray<{ shape?: readonly (number | string)[] }>;
+  run: (feeds: Record<string, ort.Tensor>) => Promise<YunetRawOutputs>;
 };
 
-/**
- * 构造官方 2023mar 模型的 12 输出布局：每个 stride 一组
- * cls/obj/bbox/kps。输入固定为 64x64，stride=8 时网格为 8x8。
- */
-function makeRawOutputs(
-  size: number,
-  stride: number,
-  cells: RawCell[]
-): YunetRawOutputs {
-  const grid = size / stride;
+/** 官方 12 输出中 stride=8 的一组；其余 stride 缺失时解码器会跳过。 */
+function makeRawOutputs(inputSize: number): YunetRawOutputs {
+  const stride = 8;
+  const grid = inputSize / stride;
   const anchors = grid * grid;
+  const row = Math.floor(grid / 2);
+  const col = Math.floor(grid / 2);
+  const index = row * grid + col;
+
   const cls = new Float32Array(anchors);
   const obj = new Float32Array(anchors);
   const bbox = new Float32Array(anchors * 4);
   const kps = new Float32Array(anchors * 10);
-
-  for (const cell of cells) {
-    const idx = cell.row * grid + cell.col;
-    cls[idx] = cell.score;
-    obj[idx] = cell.score;
-    bbox.set(cell.bbox ?? [0.5, 0.5, 0, 0], idx * 4);
-    kps.set(cell.kps ?? new Array(10).fill(0), idx * 10);
-  }
+  cls[index] = 0.81;
+  obj[index] = 0.81;
+  bbox.set([0.5, 0.5, 0, 0], index * 4);
 
   return {
-    [`cls_${stride}`]: { data: cls, dims: [1, anchors] },
-    [`obj_${stride}`]: { data: obj, dims: [1, anchors] },
-    [`bbox_${stride}`]: { data: bbox, dims: [1, anchors, 4] },
-    [`kps_${stride}`]: { data: kps, dims: [1, anchors, 10] },
+    cls_8: { data: cls, dims: [1, anchors] },
+    obj_8: { data: obj, dims: [1, anchors] },
+    bbox_8: { data: bbox, dims: [1, anchors, 4] },
+    kps_8: { data: kps, dims: [1, anchors, 10] },
   };
 }
 
-describe('decodeYunetRawOutputs', () => {
-  it('decodes box and landmarks from the grid cell prior', () => {
-    const faces = decodeYunetRawOutputs(
-      makeRawOutputs(64, 8, [
-        { row: 2, col: 3, score: 0.9, bbox: [0.5, 0.25, 0, 0] },
-      ]),
-      { inputWidth: 64, inputHeight: 64 }
-    );
+function makeSession(inputSize?: number): FakeSession {
+  return {
+    inputNames: ['input'],
+    outputNames: ['cls_8', 'obj_8', 'bbox_8', 'kps_8'],
+    ...(inputSize === undefined
+      ? {}
+      : { inputMetadata: [{ shape: [1, 3, inputSize, inputSize] }] }),
+    run: async () => makeRawOutputs(inputSize ?? 320),
+  };
+}
 
-    expect(faces).toHaveLength(1);
-    // cx = (3 + 0.5) * 8 = 28, cy = (2 + 0.25) * 8 = 18, w = h = exp(0) * 8
-    expect(faces[0]?.box.x).toBeCloseTo(24, 5);
-    expect(faces[0]?.box.y).toBeCloseTo(14, 5);
-    expect(faces[0]?.box.width).toBeCloseTo(8, 5);
-    expect(faces[0]?.box.height).toBeCloseTo(8, 5);
-    // 关键点先加网格坐标再乘 stride
-    expect(faces[0]?.landmarks[0]).toEqual([24, 16]);
-  });
+let restoreOrt: (() => void) | undefined;
 
-  it('combines cls and obj with a square root and drops low scores', () => {
-    const faces = decodeYunetRawOutputs(
-      makeRawOutputs(64, 8, [
-        // sqrt(1 * 0.25) = 0.5 < 0.6
-        { row: 1, col: 1, score: 0.5 },
-        // sqrt(0.81 * 0.81) = 0.81
-        { row: 5, col: 5, score: 0.81 },
-      ]),
-      { inputWidth: 64, inputHeight: 64 }
-    );
+afterEach(() => {
+  restoreOrt?.();
+  restoreOrt = undefined;
+});
+
+function mockSession(session: FakeSession) {
+  const spy = spyOn(ort.InferenceSession, 'create').mockResolvedValue(
+    session as unknown as ort.InferenceSession
+  );
+  restoreOrt = () => spy.mockRestore();
+  return spy;
+}
+
+async function makeImage(width: number, height: number) {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 255, g: 0, b: 0 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
+describe('FaceDetectionService.detect', () => {
+  it('runs the official 640 model, feeds 0..255 BGR and maps boxes back', async () => {
+    let fed: ort.Tensor | undefined;
+    const session = makeSession(640);
+    session.run = async feeds => {
+      fed = feeds.input;
+      return makeRawOutputs(640);
+    };
+    mockSession(session);
+
+    const service = new FaceDetectionService();
+    const faces = await service.detect(await makeImage(100, 50));
 
     expect(faces).toHaveLength(1);
     expect(faces[0]?.score).toBeCloseTo(0.81, 5);
+
+    // stride 8、网格中心 anchor (40,40)、bbox 偏移 (0.5,0.5) → 输入空间
+    // 中心 (324,324)、边长 8；fill 缩放到 100×50 后为：
+    // x=320*100/640=50, y=320*50/640=25, w=8*100/640=1.25, h=8*50/640=0.625。
+    expect(faces[0]?.box.x).toBeCloseTo(50, 5);
+    expect(faces[0]?.box.y).toBeCloseTo(25, 5);
+    expect(faces[0]?.box.width).toBeCloseTo(1.25, 5);
+    expect(faces[0]?.box.height).toBeCloseTo(0.625, 5);
+    // 关键点 (0,0) + 网格坐标 (40,40) → 输入空间 (320,320)，再映射回源图。
+    expect(faces[0]?.landmarks[0]?.[0]).toBeCloseTo(50, 5);
+    expect(faces[0]?.landmarks[0]?.[1]).toBeCloseTo(25, 5);
+
+    expect(fed).toBeDefined();
+    expect(fed!.dims).toEqual([1, 3, 640, 640]);
+    const data = fed!.data as Float32Array;
+    const plane = 640 * 640;
+    // 默认预处理是官方权重的 0..255 BGR：纯红图 → B=0, G=0, R=255。
+    expect(data[0]).toBe(0);
+    expect(data[plane]).toBe(0);
+    expect(data[2 * plane]).toBe(255);
   });
 
-  it('suppresses overlapping boxes with NMS', () => {
-    const overlapping = { bbox: [0.5, 0.5, 1, 1] as RawCell['bbox'] };
-    const faces = decodeYunetRawOutputs(
-      makeRawOutputs(64, 8, [
-        { row: 2, col: 2, score: 0.9, ...overlapping },
-        { row: 2, col: 3, score: 0.7, ...overlapping },
-      ]),
-      { inputWidth: 64, inputHeight: 64 }
-    );
+  it('falls back to 320 when the session exposes no input shape', async () => {
+    let fed: ort.Tensor | undefined;
+    const session = makeSession();
+    session.run = async feeds => {
+      fed = feeds.input;
+      return makeRawOutputs(320);
+    };
+    mockSession(session);
 
+    const service = new FaceDetectionService();
+    const faces = await service.detect(await makeImage(100, 50));
+
+    expect(fed?.dims).toEqual([1, 3, 320, 320]);
     expect(faces).toHaveLength(1);
-    expect(faces[0]?.score).toBeCloseTo(0.9, 5);
+    expect(faces[0]?.box.x).toBeCloseTo(50, 5);
+    expect(faces[0]?.box.y).toBeCloseTo(25, 5);
   });
 
-  it('returns an empty list when the model outputs are missing', () => {
-    expect(
-      decodeYunetRawOutputs({}, { inputWidth: 64, inputHeight: 64 })
-    ).toEqual([]);
+  it('rejects unsupported legacy output layouts without running inference', async () => {
+    let ran = false;
+    const session: FakeSession = {
+      inputNames: ['input'],
+      outputNames: ['output0'],
+      inputMetadata: [{ shape: [1, 3, 320, 320] }],
+      run: async () => {
+        ran = true;
+        return {};
+      },
+    };
+    mockSession(session);
+
+    const service = new FaceDetectionService();
+    const faces = await service.detect(await makeImage(10, 10));
+
+    expect(faces).toEqual([]);
+    expect(ran).toBe(false);
+  });
+
+  it('returns an empty list when the session exposes no input name', async () => {
+    let ran = false;
+    const session: FakeSession = {
+      inputNames: [],
+      outputNames: ['cls_8', 'obj_8', 'bbox_8', 'kps_8'],
+      inputMetadata: [{ shape: [1, 3, 320, 320] }],
+      run: async () => {
+        ran = true;
+        return {};
+      },
+    };
+    mockSession(session);
+
+    const service = new FaceDetectionService();
+    const faces = await service.detect(await makeImage(10, 10));
+
+    expect(faces).toEqual([]);
+    expect(ran).toBe(false);
+  });
+
+  it('returns an empty list when the image cannot be decoded', async () => {
+    const create = mockSession(makeSession(640));
+    const service = new FaceDetectionService();
+
+    const faces = await service.detect(Buffer.from('not an image'));
+
+    expect(faces).toEqual([]);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty list when the model cannot be loaded', async () => {
+    const spy = spyOn(ort.InferenceSession, 'create').mockRejectedValue(
+      new Error('model missing')
+    );
+    restoreOrt = () => spy.mockRestore();
+    const service = new FaceDetectionService();
+    const image = await makeImage(10, 10);
+
+    expect(await service.detect(image)).toEqual([]);
+    // 失败的 promise 不应被缓存：第二次调用会重新尝试加载。
+    expect(await service.detect(image)).toEqual([]);
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 });

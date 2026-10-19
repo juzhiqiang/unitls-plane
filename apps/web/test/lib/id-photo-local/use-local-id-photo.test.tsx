@@ -284,7 +284,7 @@ describe('useLocalIdPhoto', () => {
       await Promise.resolve();
     });
     act(() => {
-      result.current.reset();
+      result.current.resetAll();
     });
     expect(result.current.status).toBe('idle');
     // 即便旧的推理此刻 resolve,也不应改 status(已被 sid 丢弃)
@@ -470,13 +470,35 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(result.current.quality!.items.length).toBe(8);
   });
 
-  it('reset clears autoLayout, userOverride and quality', async () => {
+  it('resetAll clears autoLayout, userOverride and quality', async () => {
     const { result } = renderHook(() => useLocalIdPhoto());
 
     act(() => result.current.markUserOverride());
-    act(() => result.current.reset());
+    act(() => result.current.resetAll());
 
     expect(result.current.userOverride).toBe(false);
+    expect(result.current.autoLayout).toBeNull();
+    expect(result.current.quality).toBeNull();
+  });
+
+  it('resetResult clears results but keeps the user override', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    // 先跑一次处理拿到结果,再标记手动构图。
+    await act(async () => {
+      await result.current.process(makeFile(), 'balanced', defaultOpts);
+    });
+    act(() => result.current.markUserOverride());
+    expect(result.current.status).toBe('done');
+    expect(result.current.resultBlob).not.toBeNull();
+
+    act(() => result.current.resetResult());
+
+    // 切模式共用裁剪框:结果要清,但用户手动调过的构图不能被清,
+    // 否则服务端会误判为「没调过」而重新自动构图。
+    expect(result.current.userOverride).toBe(true);
+    expect(result.current.status).toBe('idle');
+    expect(result.current.resultBlob).toBeNull();
     expect(result.current.autoLayout).toBeNull();
     expect(result.current.quality).toBeNull();
   });

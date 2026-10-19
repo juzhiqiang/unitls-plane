@@ -152,7 +152,7 @@ export default function IdPhotoPage() {
     // 换图必须清掉上一张的本地状态(autoLayout/quality/resultBlob/userOverride)。
     // 否则 effect 会把 A 图的自动构图灌给 B 图;若用户此前拖过框,B 图还会因为
     // userOverride=true 永远拿不到自动构图。
-    local.reset();
+    local.resetAll();
     setNatural(null);
     resetOutput();
     setError(null);
@@ -331,7 +331,10 @@ export default function IdPhotoPage() {
             value={processingMode}
             onChange={m => {
               setProcessingMode(m);
-              local.reset();
+              // 只清结果,保留 userOverride:裁剪框状态(options.crop)在两条路
+              // 之间是共享的,清掉 override 会导致「框还显示手动结果,服务端却
+              // 不发送 crop」,自动构图把它覆盖掉。
+              local.resetResult();
               resetOutput();
               setError(null);
             }}
@@ -374,7 +377,7 @@ export default function IdPhotoPage() {
           onRetry={handleProcess}
           onReset={() => {
             setFile(null);
-            local.reset();
+            local.resetAll();
           }}
         />
       )}

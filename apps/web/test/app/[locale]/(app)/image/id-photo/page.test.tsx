@@ -27,7 +27,8 @@ const mocks = vi.hoisted(() => ({
   useLocalIdPhoto: vi.fn(),
   localProcess: vi.fn(),
   localMarkUserOverride: vi.fn(),
-  localReset: vi.fn(),
+  localResetResult: vi.fn(),
+  localResetAll: vi.fn(),
   cropFieldProps: {
     current: null as null | {
       value: { x: number; y: number; width: number; height: number } | null;
@@ -155,7 +156,8 @@ function makeLocalState(overrides: Record<string, unknown> = {}) {
     quality: null,
     process: mocks.localProcess,
     markUserOverride: mocks.localMarkUserOverride,
-    reset: mocks.localReset,
+    resetResult: mocks.localResetResult,
+    resetAll: mocks.localResetAll,
     ...overrides,
   };
 }
@@ -214,8 +216,23 @@ function installStatefulLocal(initial: ReturnType<typeof makeLocalState>) {
     return {
       ...state,
       process: mocks.localProcess,
-      reset: () => {
-        mocks.localReset();
+      // 与真实 hook 一致:resetResult 保留 userOverride,resetAll 连它一起清。
+      resetResult: () => {
+        mocks.localResetResult();
+        const current = mocks.localStore.current ?? makeLocalState();
+        mocks.localStore.current = {
+          ...current,
+          status: 'idle',
+          progress: 0,
+          error: null,
+          resultBlob: null,
+          autoLayout: null,
+          quality: null,
+        };
+        mocks.localRerender.current?.();
+      },
+      resetAll: () => {
+        mocks.localResetAll();
         mocks.localStore.current = makeLocalState();
         mocks.localRerender.current?.();
       },
@@ -285,7 +302,8 @@ describe('IdPhotoPage', () => {
     mocks.useLocalIdPhoto.mockReturnValue(makeLocalState());
     mocks.localProcess.mockReset();
     mocks.localMarkUserOverride.mockReset();
-    mocks.localReset.mockReset();
+    mocks.localResetResult.mockReset();
+    mocks.localResetAll.mockReset();
     mocks.cropFieldProps.current = null;
     mocks.effectSequence.length = 0;
     mocks.localStore.current = null;
@@ -454,7 +472,8 @@ describe('IdPhotoPage server auto framing', () => {
     mocks.useTaskProgress.mockReturnValue({ data: undefined });
     mocks.localProcess.mockReset();
     mocks.localMarkUserOverride.mockReset();
-    mocks.localReset.mockReset();
+    mocks.localResetResult.mockReset();
+    mocks.localResetAll.mockReset();
     mocks.cropFieldProps.current = null;
     mocks.effectSequence.length = 0;
     mocks.localStore.current = null;
@@ -532,6 +551,100 @@ describe('IdPhotoPage server auto framing', () => {
       )
     );
   });
+
+  it('keeps a manual crop when switching from local to server mode', async () => {
+    // 回归:切模式曾调用整体 reset,清掉 userOverride 却保留 options.crop。
+    // 结果框里仍显示手动构图,服务端却收不到 crop,自动构图把它覆盖掉。
+    installStatefulLocal(makeLocalState());
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+
+    const { container } = renderPage();
+    await dropPhoto(container);
+    await loadCropImage();
+
+    // 默认本地模式下拖动裁剪框。
+    act(() => {
+      mocks.cropFieldProps.current?.onChange({
+        x: 100,
+        y: 200,
+        width: 400,
+        height: 560,
+      });
+    });
+    expect(mocks.localStore.current?.userOverride).toBe(true);
+
+    // 只观察切模式这一次调用(拖入文件时 handleDrop 已调过一次 resetAll)。
+    mocks.localResetResult.mockClear();
+    mocks.localResetAll.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+
+    // 切模式只能清结果,不能清 override;裁剪框也应保持手动值。
+    expect(mocks.localResetResult).toHaveBeenCalled();
+    expect(mocks.localResetAll).not.toHaveBeenCalled();
+    expect(mocks.localStore.current?.userOverride).toBe(true);
+    expect(mocks.cropFieldProps.current?.value).toEqual(
+      cropRectFor(
+        idPhotoCropFromBox(
+          SOURCE.width,
+          SOURCE.height,
+          PRESET.widthPx,
+          PRESET.heightPx,
+          { left: 100, top: 200, width: 400, height: 560 }
+        )
+      )
+    );
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate ID photo' })
+    );
+    await waitFor(() => expect(taskMutate).toHaveBeenCalled());
+
+    const config = (
+      taskMutate.mock.calls[0]![0] as {
+        inputConfig: Record<string, unknown>;
+      }
+    ).inputConfig;
+    expect(config.crop).toEqual(
+      idPhotoCropFromBox(
+        SOURCE.width,
+        SOURCE.height,
+        PRESET.widthPx,
+        PRESET.heightPx,
+        { left: 100, top: 200, width: 400, height: 560 }
+      )
+    );
+  });
+
+  it('still omits crop when switching from local to server without adjusting the box', async () => {
+    installStatefulLocal(makeLocalState());
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+
+    const { container } = renderPage();
+    await dropPhoto(container);
+    await loadCropImage();
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+
+    // 未手动改框:resetResult 后 override 仍为 false,服务端自动构图继续生效。
+    expect(mocks.localStore.current?.userOverride).toBe(false);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate ID photo' })
+    );
+    await waitFor(() => expect(taskMutate).toHaveBeenCalled());
+
+    const config = (
+      taskMutate.mock.calls[0]![0] as {
+        inputConfig: Record<string, unknown>;
+      }
+    ).inputConfig;
+    expect('crop' in config).toBe(false);
+  });
 });
 
 describe('IdPhotoPage local auto framing and quality wiring', () => {
@@ -542,7 +655,8 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
     mocks.useLocalIdPhoto.mockReturnValue(makeLocalState());
     mocks.localProcess.mockReset();
     mocks.localMarkUserOverride.mockReset();
-    mocks.localReset.mockReset();
+    mocks.localResetResult.mockReset();
+    mocks.localResetAll.mockReset();
     mocks.cropFieldProps.current = null;
     mocks.effectSequence.length = 0;
     mocks.localStore.current = null;
@@ -683,10 +797,10 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
       resultBlob: expect.any(Blob),
     });
 
-    // 拖入 B 图:handleDrop 必须调用 reset,否则 A 的构图与质量报告会残留。
+    // 拖入 B 图:handleDrop 必须调用 resetAll,否则 A 的构图与质量报告会残留。
     await dropPhoto(container, makeFile('b.jpg'));
 
-    expect(mocks.localReset).toHaveBeenCalled();
+    expect(mocks.localResetAll).toHaveBeenCalled();
     expect(mocks.localStore.current).toMatchObject({
       autoLayout: null,
       quality: null,
@@ -711,6 +825,8 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
     await dropPhoto(container, makeFile('b.jpg'));
 
     // 行为验证:B 图不再继承 A 图的手动框,处理时仍走自动构图。
+    expect(mocks.localResetAll).toHaveBeenCalled();
+    expect(mocks.localResetResult).not.toHaveBeenCalled();
     expect(mocks.localStore.current?.userOverride).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Generate ID photo' }));
     expect(mocks.localProcess).toHaveBeenCalledWith(

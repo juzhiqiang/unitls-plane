@@ -175,10 +175,24 @@ export class IdPhotoService {
     const baseRgbRaw = await sharp(base).removeAlpha().raw().toBuffer();
     const pixelCount = preset.widthPx * preset.heightPx;
 
-    // 底色聚类必须用**未调色**的原图：亮度是前景校正，若先把偏移加到全幅
-    // 再聚类，会把估计出的底色整体推亮/推暗，进而影响去污染的反预乘结果。
+    // 底色聚类必须用**未调色、未旋转**的原图裁剪：
+    // - 未调色：亮度是前景校正，若先把偏移加到全幅再聚类，会把估计出的底色
+    //   整体推亮/推暗，进而影响去污染的反预乘结果；
+    // - 未旋转：`rotate(-rotation)` 会为四角补透明像素，边缘取样会把补出的
+    //   黑角算进底色。本地路是从未旋转原图按同一裁剪框取样的，服务端保持
+    //   同一语义，旋转照片的边缘底色才不会出现两端不一致。
+    const baseUnrotatedRgbRaw = await sharp(baseCropped)
+      .resize({
+        width: preset.widthPx,
+        height: preset.heightPx,
+        fit: 'cover',
+        position: 'centre',
+      })
+      .removeAlpha()
+      .raw()
+      .toBuffer();
     const candidates = estimateSourceBackgroundColors(
-      baseRgbRaw,
+      baseUnrotatedRgbRaw,
       preset.widthPx,
       preset.heightPx
     );

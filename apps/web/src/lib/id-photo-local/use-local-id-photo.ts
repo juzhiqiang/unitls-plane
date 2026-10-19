@@ -62,7 +62,16 @@ export interface UseLocalIdPhoto {
     }
   ) => Promise<void>;
   markUserOverride: () => void;
-  reset: () => void;
+  /**
+   * 只清本次处理结果与状态,保留 `userOverride`。
+   * 切换本地/服务端模式时使用:两条路共用同一个裁剪框,用户手动调过的构图
+   * 必须继续有效(服务端据此决定是否发送 crop)。
+   */
+  resetResult: () => void;
+  /**
+   * 清结果并清掉 `userOverride`。换图时使用:新图不应继承上一张图的手动构图。
+   */
+  resetAll: () => void;
 }
 
 /**
@@ -316,7 +325,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     [ep]
   );
 
-  const reset = useCallback(() => {
+  const resetCommon = useCallback((clearOverride: boolean) => {
     // 使在途 removeBackground/进度回调失效;ep 保留(WebGPU 探测结果不随 reset 失效)。
     sessionIdRef.current++;
     inFlightRef.current = false;
@@ -325,10 +334,18 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     setError(null);
     setResultBlob(null);
     setAutoLayout(null);
-    userOverrideRef.current = false;
-    setUserOverride(false);
     setQuality(null);
+    if (clearOverride) {
+      userOverrideRef.current = false;
+      setUserOverride(false);
+    }
   }, []);
+
+  // 切模式只清结果:裁剪框(以及 options.crop)在两条路之间共享,清掉 override
+  // 会让服务端误判为「用户没调过」而用自动构图覆盖掉用户刚拖好的框。
+  const resetResult = useCallback(() => resetCommon(false), [resetCommon]);
+  // 换图必须连 override 一起清,否则新图永远走不到自动构图。
+  const resetAll = useCallback(() => resetCommon(true), [resetCommon]);
 
   // unmount 时使在途回调失效(无需 terminate worker)。
   useEffect(
@@ -361,6 +378,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     quality,
     process,
     markUserOverride,
-    reset,
+    resetResult,
+    resetAll,
   };
 }

@@ -1779,8 +1779,9 @@ export function parseYunetOutput(
 /**
  * 把人脸框与关键点从模型输入分辨率映射回源图分辨率。
  *
- * 预处理若是等比缩放 + 居中补边，需要传 `letterbox` 的偏移与比例；
- * 简单拉伸则传 `scaleX/scaleY` 即可。
+ * YuNet 的预处理是直接拉伸到 320×320（`fit: 'fill'`），两轴比例独立，
+ * 调用方传 `scaleX = 源宽/320`、`scaleY = 源高/320` 即可，偏移恒为 0。
+ * `offsetX/offsetY` 保留给将来可能引入的补边预处理，当前两端都不用。
  */
 export function scaleDetectedFaces(
   faces: DetectedFace[],
@@ -2230,64 +2231,94 @@ git commit -m "feat(api): 新增 YuNet 人脸检测服务"
 
 ---
 
-### Task 9: 服务端分割升级（512 保长宽比 + photographic 回落链）
+### Task 9: 服务端分割升级（动态尺寸，不补边 + photographic 回落链）
+
+> **Task 1 实测修正**：原计划用 `letterboxResize` 补边成 512×512，实测证明这是**唯一**稳定复现「衣服破洞」的路径（1524 px 洞，含人脸 1176 px）。同一权重不补边时 0 洞。本任务因此改为参考实现口径：长边 512、保持长宽比、宽高取 32 的倍数、**不补边**（见 `docs/id-photo-model-comparison.md`）。
 
 **Files:**
-- Modify: `apps/api/src/modules/tasks/services/portrait-segmentation.service.ts:11,66-82,399-428,449-487`
+- Create: `packages/utils/src/id-photo-modnet-size.ts`
+- Create: `packages/utils/test/id-photo-modnet-size.test.ts`
+- Modify: `packages/utils/src/index.ts`
+- Modify: `apps/api/src/modules/tasks/services/portrait-segmentation.service.ts:11,66-82,84-103,399-428,449-487`
 - Test: `apps/api/test/modules/tasks/services/portrait-segmentation.service.spec.ts`
 
 **Interfaces:**
 - Consumes: 无
 - Produces:
-  - `export const MODNET_INPUT_SIZE: number` = `512`（原 `256`）
+  - `export const MODNET_LONG_EDGE: number` = `512`（`packages/utils`）
+  - `export function modnetInputSize(source: { width: number; height: number }, longEdge?: number): { width: number; height: number }` —— 返回模型输入尺寸，**无 padding、无 offset**，宽高均为 32 的倍数。**两端共用这一个函数**，本地路 Task 11 也 import 它。
+  - `apps/api/.../portrait-segmentation.service.ts` 导出 `MODNET_INPUT_SIZE = 512` 并 re-export `modnetInputSize`（保持既有 import 路径可用）
   - `export function resolvePortraitSegmentationModelPath(...)` 候选顺序改为 photographic 优先
-  - `export function letterboxResize(source: { width: number; height: number }, size: number): { width: number; height: number; offsetX: number; offsetY: number }`
+  - `createModNetInputTensor(rawRgb, width, height)`（由原 `(rawRgb, size)` 扩成宽高）
 
-- [ ] **Step 1: 写 letterbox 的失败测试**
+- [ ] **Step 1: 在 `packages/utils` 写 `modnetInputSize` 的失败测试**
 
-追加到既有 spec 文件末尾：
+新建 `packages/utils/test/id-photo-modnet-size.test.ts`：
 
 ```ts
-// apps/api/test/modules/tasks/services/portrait-segmentation.service.spec.ts —— 追加
-import {
-  MODNET_INPUT_SIZE,
-  letterboxResize,
-} from '../../../../src/modules/tasks/services/portrait-segmentation.service';
+import { describe, expect, it } from 'bun:test';
+import { MODNET_LONG_EDGE, modnetInputSize } from '../src/id-photo-modnet-size';
 
-describe('letterboxResize', () => {
-  it('fits a landscape image into a square canvas with vertical padding', () => {
-    const box = letterboxResize({ width: 1600, height: 900 }, 512);
-    expect(box.width).toBe(512);
-    expect(box.height).toBe(288);
-    expect(box.offsetX).toBe(0);
-    expect(box.offsetY).toBe(112);
+describe('modnetInputSize', () => {
+  it('exposes 512 as the default long edge', () => {
+    expect(MODNET_LONG_EDGE).toBe(512);
   });
 
-  it('fits a portrait image into a square canvas with horizontal padding', () => {
-    const box = letterboxResize({ width: 900, height: 1600 }, 512);
-    expect(box.height).toBe(512);
-    expect(box.width).toBe(288);
-    expect(box.offsetY).toBe(0);
-    expect(box.offsetX).toBe(112);
+  it('scales a tall image so the long edge is 512', () => {
+    expect(modnetInputSize({ width: 1280, height: 1706 }, 512)).toEqual({
+      width: 384,
+      height: 512,
+    });
   });
 
-  it('uses the full canvas for a square image', () => {
-    const box = letterboxResize({ width: 800, height: 800 }, 512);
-    expect(box).toEqual({ width: 512, height: 512, offsetX: 0, offsetY: 0 });
+  it('scales a landscape image so the long edge is 512', () => {
+    expect(modnetInputSize({ width: 1600, height: 900 }, 512)).toEqual({
+      width: 512,
+      height: 288,
+    });
   });
 
-  it('never exceeds the canvas', () => {
-    for (const size of [512, 300]) {
-      const box = letterboxResize({ width: 1000, height: 3000 }, size);
-      expect(box.width).toBeLessThanOrEqual(size);
-      expect(box.height).toBeLessThanOrEqual(size);
+  it('upscales an image smaller than the long edge', () => {
+    expect(modnetInputSize({ width: 300, height: 400 }, 512)).toEqual({
+      width: 384,
+      height: 512,
+    });
+  });
+
+  it('keeps an already-large image at its own size', () => {
+    // 长边已 >= 512 且短边 <= 512：不缩放，只做 32 对齐
+    expect(modnetInputSize({ width: 1000, height: 300 }, 512)).toEqual({
+      width: 992,
+      height: 288,
+    });
+  });
+
+  it('always returns multiples of 32 and never below 32', () => {
+    for (const source of [
+      { width: 1, height: 1 },
+      { width: 333, height: 777 },
+      { width: 4000, height: 17 },
+      { width: 513, height: 513 },
+    ]) {
+      const box = modnetInputSize(source, 512);
+      expect(box.width % 32).toBe(0);
+      expect(box.height % 32).toBe(0);
+      expect(box.width).toBeGreaterThanOrEqual(32);
+      expect(box.height).toBeGreaterThanOrEqual(32);
     }
   });
-});
 
-describe('MODNET_INPUT_SIZE', () => {
-  it('is 512 to match the photographic model', () => {
-    expect(MODNET_INPUT_SIZE).toBe(512);
+  it('preserves the aspect ratio within 32px rounding', () => {
+    const source = { width: 1280, height: 1706 };
+    const box = modnetInputSize(source, 512);
+    expect(
+      Math.abs(box.width / box.height - source.width / source.height)
+    ).toBeLessThan(0.08);
+  });
+
+  it('returns no padding fields', () => {
+    const box = modnetInputSize({ width: 1280, height: 1706 }, 512);
+    expect(Object.keys(box).sort()).toEqual(['height', 'width']);
   });
 });
 ```
@@ -2295,19 +2326,91 @@ describe('MODNET_INPUT_SIZE', () => {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd apps/api && bun test test/modules/tasks/services/portrait-segmentation.service.spec.ts
+cd packages/utils && bun test test/id-photo-modnet-size.test.ts
 ```
 
-预期:FAIL —— `letterboxResize` 未导出，`MODNET_INPUT_SIZE` 仍为 256。
+预期:FAIL,module not found。
 
-- [ ] **Step 3: 改常量与模型路径解析**
+- [ ] **Step 3: 实现共享函数**
+
+新建 `packages/utils/src/id-photo-modnet-size.ts`：
 
 ```ts
-// 第 11 行：256 → 512
-export const MODNET_INPUT_SIZE = 512;
+/**
+ * MODNet 模型输入尺寸：长边 512、保持长宽比、宽高取 32 的倍数、**不补边**。
+ *
+ * 口径与参考实现 matting.py:portrait_alpha 一致：
+ *   长边 < 512 或 短边 > 512 → 按长边缩放到 512；否则保持原尺寸；
+ *   最后把宽高向下取整到 32 的倍数（MODNet 的下采样需要 32 对齐）。
+ *
+ * 为什么不能补边成正方形：实测证明同一份 photographic 权重在
+ * 「512×512 + 补黑边」下会稳定产生衣服 2 个洞 + 人脸 1 个大洞（1524 px），
+ * 而不补边时是 0 个洞（见 docs/id-photo-model-comparison.md）。
+ * 补边引入的纯色区域会被模型当成前景断开处，后处理补不回来。
+ *
+ * 放在 packages/utils 而不是各端各写一份：服务端 onnxruntime-node 与
+ * 浏览器 onnxruntime-web 必须看到完全相同的输入尺寸，否则两端出图不一致。
+ */
+
+export const MODNET_LONG_EDGE = 512;
+const ALIGN = 32;
+
+export function modnetInputSize(
+  source: { width: number; height: number },
+  longEdge: number = MODNET_LONG_EDGE
+): { width: number; height: number } {
+  if (source.width <= 0 || source.height <= 0) {
+    return { width: longEdge, height: longEdge };
+  }
+
+  const longest = Math.max(source.width, source.height);
+  const shortest = Math.min(source.width, source.height);
+
+  let width = source.width;
+  let height = source.height;
+  if (longest < longEdge || shortest > longEdge) {
+    const scale = longEdge / longest;
+    width = Math.round(source.width * scale);
+    height = Math.round(source.height * scale);
+  }
+
+  width = Math.max(ALIGN, width - (width % ALIGN));
+  height = Math.max(ALIGN, height - (height % ALIGN));
+  return { width, height };
+}
+```
+
+从 `packages/utils/src/index.ts` 导出：
+
+```ts
+export * from './id-photo-modnet-size';
+```
+
+- [ ] **Step 4: 运行共享函数测试**
+
+```bash
+cd packages/utils && bun test test/id-photo-modnet-size.test.ts
+```
+
+预期:PASS,8 个用例全过。
+
+- [ ] **Step 5: 改服务端常量、模型路径解析与 re-export**
+
+```ts
+// portrait-segmentation.service.ts 第 11 行：256 → 512
+export const MODNET_INPUT_SIZE = MODNET_LONG_EDGE;
 
 const MODNET_PHOTOGRAPHIC_NAME = 'modnet_photographic.onnx';
 const MODNET_GENERIC_NAME = 'modnet.onnx';
+```
+
+顶部 import 追加：
+
+```ts
+import { MODNET_LONG_EDGE, modnetInputSize } from '@utils-plane/utils';
+
+// 保持既有 import 路径可用（既有测试从本文件 import 这个函数）
+export { modnetInputSize };
 ```
 
 ```ts
@@ -2319,7 +2422,9 @@ export function resolvePortraitSegmentationModelPath({
 }: ResolveModelPathOptions = {}): string {
   if (configuredPath) return configuredPath;
 
-  // photographic 优先：它是证件照专用变体，通用 modnet 只作回落。
+  // photographic 优先：它是证件照专用变体，通用 modnet 只作文件缺失时的回落。
+  // 注意：Task 1 实测两者逐像素等价（max abs diff = 0），回落的意义仅在
+  // 「photographic 文件缺失时不至于整条链路不可用」，不带来画质差异。
   const candidates = [
     path.resolve(cwd, `apps/api/models/${MODNET_PHOTOGRAPHIC_NAME}`),
     path.resolve(cwd, `models/modnet/${MODNET_PHOTOGRAPHIC_NAME}`),
@@ -2331,36 +2436,7 @@ export function resolvePortraitSegmentationModelPath({
 }
 ```
 
-- [ ] **Step 4: 加 letterbox 工具函数**
-
-```ts
-/**
- * 等比缩放 + 居中补边的目标框。
- *
- * 原实现用 `fit: 'fill'` 把任意宽高比强拉到正方形，人脸会被横向或纵向压扁，
- * 后续 alpha 回贴到原图时再拉伸一次 —— 一压一拉，发丝细节在这一步就没了。
- * 改成 contain 后，模型看到的是正确比例，回贴也只做一次缩放。
- */
-export function letterboxResize(
-  source: { width: number; height: number },
-  size: number
-): { width: number; height: number; offsetX: number; offsetY: number } {
-  if (source.width <= 0 || source.height <= 0) {
-    return { width: size, height: size, offsetX: 0, offsetY: 0 };
-  }
-  const scale = Math.min(size / source.width, size / source.height);
-  const width = Math.max(1, Math.round(source.width * scale));
-  const height = Math.max(1, Math.round(source.height * scale));
-  return {
-    width,
-    height,
-    offsetX: Math.floor((size - width) / 2),
-    offsetY: Math.floor((size - height) / 2),
-  };
-}
-```
-
-- [ ] **Step 5: 改 `inferAlphaBytes` 用 letterbox**
+- [ ] **Step 6: 改 `inferAlphaBytes` 用动态尺寸（不补边）**
 
 ```ts
 // 替换 inferAlphaBytes 的预处理段（原 453-458 行）
@@ -2369,24 +2445,65 @@ private async inferAlphaBytes(
   input: Buffer,
   sourceSize: { width: number; height: number }
 ): Promise<Buffer> {
-  const box = letterboxResize(sourceSize, MODNET_INPUT_SIZE);
+  const box = modnetInputSize(sourceSize, MODNET_INPUT_SIZE);
+  // 宽高比已保持，fit:'fill' 不会产生形变；这里不 extend 补边
   const raw = await sharp(input)
     .resize(box.width, box.height, { fit: 'fill' })
     .removeAlpha()
-    .extend({
-      top: box.offsetY,
-      bottom: MODNET_INPUT_SIZE - box.height - box.offsetY,
-      left: box.offsetX,
-      right: MODNET_INPUT_SIZE - box.width - box.offsetX,
-      background: { r: 0, g: 0, b: 0 },
-    })
     .raw()
     .toBuffer();
+  const tensorData = createModNetInputTensor(raw, box.width, box.height);
+  const inputName = session.inputNames[0];
+  const outputName = session.outputNames[0];
+  if (!inputName || !outputName) {
+    return Buffer.alloc(0);
+  }
+
+  const result = await session.run({
+    [inputName]: new ort.Tensor('float32', tensorData, [
+      1,
+      3,
+      box.height,
+      box.width,
+    ]),
+  });
+  const output = result[outputName];
+  if (!output) {
+    return Buffer.alloc(0);
+  }
+
+  return normalizeModNetMatteValues(output.data as Float32Array);
+}
 ```
 
-其余（张量、`session.run`、`normalizeModNetMatteValues`）保持不变。
+`createModNetInputTensor` 需要同时接受宽高（原来只接受正方形边长）：
 
-- [ ] **Step 6: 改 `segment` 用 letterbox 回贴 alpha**
+```ts
+export function createModNetInputTensor(
+  rawRgb: Buffer,
+  width: number,
+  height: number
+): Float32Array {
+  const plane = width * height;
+  const tensorData = new Float32Array(3 * plane);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixel = (y * width + x) * 3;
+      const target = y * width + x;
+      tensorData[target] = ((rawRgb[pixel] ?? 0) / 255 - 0.5) / 0.5;
+      tensorData[plane + target] =
+        ((rawRgb[pixel + 1] ?? 0) / 255 - 0.5) / 0.5;
+      tensorData[2 * plane + target] =
+        ((rawRgb[pixel + 2] ?? 0) / 255 - 0.5) / 0.5;
+    }
+  }
+  return tensorData;
+}
+```
+
+既有测试若以 `createModNetInputTensor(raw, 256)` 调用，改为 `(raw, 256, 256)`。
+
+- [ ] **Step 7: 改 `segment` 把 alpha 直接缩回原尺寸（无 extract）**
 
 ```ts
 // 替换 segment 的 405-428 行
@@ -2399,24 +2516,9 @@ if (!alphaBytes.length) {
   return { mask: Buffer.alloc(0), faceCount: 0 };
 }
 
-// 裁掉 letterbox 补的边，再把有效区域缩放回原尺寸
-const box = letterboxResize(sourceSize, MODNET_INPUT_SIZE);
-const cropped = await sharp(alphaBytes, {
-  raw: {
-    width: MODNET_INPUT_SIZE,
-    height: MODNET_INPUT_SIZE,
-    channels: 1,
-  },
-})
-  .extract({
-    left: box.offsetX,
-    top: box.offsetY,
-    width: box.width,
-    height: box.height,
-  })
-  .toBuffer();
-
-const fullSize = await sharp(cropped, {
+// 输入没有补边，蒙版就是整张图的前景概率，直接缩放回原尺寸
+const box = modnetInputSize(sourceSize, MODNET_INPUT_SIZE);
+const mask = await sharp(alphaBytes, {
   raw: { width: box.width, height: box.height, channels: 1 },
 })
   .resize(metadata.width, metadata.height, { fit: 'fill' })
@@ -2424,13 +2526,13 @@ const fullSize = await sharp(cropped, {
   .toBuffer();
 
 return {
-  mask: fullSize,
+  mask,
   bounds: { x: 0, y: 0, width: metadata.width, height: metadata.height },
   faceCount: 1,
 };
 ```
 
-- [ ] **Step 7: 加 photographic → 通用 modnet 的回落**
+- [ ] **Step 8: 加 photographic → 通用 modnet 的回落**
 
 ```ts
 // 替换 getSession（原 481-487 行）
@@ -2453,7 +2555,7 @@ private getSession(): Promise<ort.InferenceSession> {
 }
 ```
 
-- [ ] **Step 8: 运行全部相关测试**
+- [ ] **Step 9: 运行全部相关测试**
 
 ```bash
 cd apps/api && bun test test/modules/tasks/services/portrait-segmentation.service.spec.ts
@@ -2461,11 +2563,11 @@ cd apps/api && bun test test/modules/tasks/services/portrait-segmentation.servic
 
 预期:PASS。若既有用例断言 256，一并更新为 `MODNET_INPUT_SIZE`（不要硬编码 512，用常量以免下次再改）。
 
-- [ ] **Step 9: 提交**
+- [ ] **Step 10: 提交**
 
 ```bash
 git add apps/api/src/modules/tasks/services/portrait-segmentation.service.ts apps/api/test/modules/tasks/services/portrait-segmentation.service.spec.ts
-git commit -m "feat(api): 分割输入升到 512 且保长宽比,photographic 优先并回落通用 modnet"
+git commit -m "feat(api): 分割输入改为长边512动态尺寸不补边,photographic 优先并回落通用 modnet"
 ```
 
 ---
@@ -3060,23 +3162,19 @@ export async function segmentToCutout(
     onDownloadProgress?.(1);
   }
 
-  // 保长宽比缩放到 512，黑边补到正方形
+  // 动态尺寸：长边 512、保持长宽比、32 对齐、**不补边**
+  // （补边会稳定复现衣服/人脸破洞，见 docs/id-photo-model-comparison.md）
   const bitmap = await createImageBitmap(file);
-  const size = MODNET_INPUT_SIZE;
-  const scale = Math.min(size / bitmap.width, size / bitmap.height);
-  const drawW = Math.max(1, Math.round(bitmap.width * scale));
-  const drawH = Math.max(1, Math.round(bitmap.height * scale));
-  const offsetX = Math.floor((size - drawW) / 2);
-  const offsetY = Math.floor((size - drawH) / 2);
+  const box = modnetInputSize({ width: bitmap.width, height: bitmap.height });
+  const inputW = box.width;
+  const inputH = box.height;
 
-  const canvas = new OffscreenCanvas(size, size);
+  const canvas = new OffscreenCanvas(inputW, inputH);
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, size, size);
-  ctx.drawImage(bitmap, offsetX, offsetY, drawW, drawH);
-  const pixels = ctx.getImageData(0, 0, size, size).data;
+  ctx.drawImage(bitmap, 0, 0, inputW, inputH);
+  const pixels = ctx.getImageData(0, 0, inputW, inputH).data;
 
-  const plane = size * size;
+  const plane = inputW * inputH;
   const tensor = new Float32Array(3 * plane);
   for (let i = 0; i < plane; i += 1) {
     for (let c = 0; c < 3; c += 1) {
@@ -3085,16 +3183,16 @@ export async function segmentToCutout(
   }
 
   const result = await session.run({
-    [session.inputNames[0]!]: new ort.Tensor('float32', tensor, [1, 3, size, size]),
+    [session.inputNames[0]!]: new ort.Tensor('float32', tensor, [1, 3, inputH, inputW]),
   });
   if (isStale?.()) throw new StaleSegmentationError();
 
   const matte = result[session.outputNames[0]!]!.data;
 
-  // 蒙版回贴：裁掉补边 → 缩放回原尺寸 → 作为 alpha 与原图合成
-  const matteCanvas = new OffscreenCanvas(size, size);
+  // 蒙版缩放回原尺寸 → 作为 alpha 与原图合成（输入没有补边，直接用整张蒙版）
+  const matteCanvas = new OffscreenCanvas(inputW, inputH);
   const mctx = matteCanvas.getContext('2d')!;
-  const imageData = mctx.createImageData(size, size);
+  const imageData = mctx.createImageData(inputW, inputH);
   for (let i = 0; i < plane; i += 1) {
     const a = Math.max(0, Math.min(255, Math.round((matte[i] ?? 0) * 255)));
     imageData.data[i * 4] = 255;
@@ -3110,10 +3208,10 @@ export async function segmentToCutout(
   octx.globalCompositeOperation = 'destination-in';
   octx.drawImage(
     matteCanvas,
-    offsetX,
-    offsetY,
-    drawW,
-    drawH,
+    0,
+    0,
+    inputW,
+    inputH,
     0,
     0,
     bitmap.width,
@@ -3130,10 +3228,14 @@ export async function segmentToCutout(
 同文件顶部加模块级缓存与常量：
 
 ```ts
-export const MODNET_INPUT_SIZE = 512;
-
 type OrtSession = Awaited<ReturnType<typeof createOrtSession>>;
 const cachedSessions = new Map<string, OrtSession>();
+```
+
+并从共享包 import 尺寸函数（不要在本文件重定义）：
+
+```ts
+import { modnetInputSize } from '@utils-plane/utils';
 ```
 
 并把原 `cached`（transformers pipeline 缓存）与 `resetSegmentationCacheForTests` 改为清空 `cachedSessions`：
@@ -5045,4 +5147,12 @@ git commit -m "feat(id-photo): 新增亮度自动校正(暗片提亮/过曝压�
 
 ### 4. 执行顺序提醒
 
-Task 2–7 互相独立,可并行;Task 8 之后的任务依赖前面的产出。Task 1 的实测结论决定 Task 11 的档位实现是否需要保留 RMBG 回落分支 —— 若实测结论是「无破洞」,Task 11 Step 2 里 `high` 档可以简化为与 `balanced` 同模型(只保留体积字段占位),不必真的接 RMBG。
+Task 2–7 互相独立，可并行；Task 8 之后的任务依赖前面的产出。
+
+**Task 1 实测结论已落地到计划（2026-10-20 修订）**：
+
+- 破洞由「补边成 512×512」触发，不是 photographic 权重的问题。同一权重不补边时 0 洞。
+- 因此 Task 9 从 `letterboxResize`（补边）改为共享的 `modnetInputSize`（动态宽高、32 对齐、不补边），Task 11 本地路同步改用同一个函数。
+- `modnet.onnx` 与 photographic 逐像素等价（max abs diff = 0）。Task 11 的 `high` 档不需要真接 RMBG-1.4 —— 简化为与 `balanced` 同模型即可，RMBG 资产仅作为既有资产保留、不再作为默认回落。
+- 服务端「photographic → 通用 modnet」的回落只为文件缺失兜底，不带来画质差异，文档里已写明。
+

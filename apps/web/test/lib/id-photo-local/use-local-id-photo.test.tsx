@@ -37,6 +37,17 @@ beforeEach(() => {
     fillStyle = '';
     drawImage(..._args: unknown[]): void {}
     fillRect(_x: number, _y: number, _w: number, _h: number): void {}
+    getImageData(
+      _x: number,
+      _y: number,
+      width: number,
+      height: number
+    ): { data: Uint8ClampedArray } {
+      return { data: new Uint8ClampedArray(width * height * 4).fill(255) };
+    }
+    putImageData(): void {}
+    translate(): void {}
+    rotate(): void {}
   }
   class FakeCanvas {
     ctx: FakeCtx;
@@ -53,6 +64,17 @@ beforeEach(() => {
       return Promise.resolve(new Blob(['x']));
     }
   }
+  Object.defineProperty(globalThis, 'ImageData', {
+    value: class {
+      constructor(
+        public data: Uint8ClampedArray,
+        public width: number,
+        public height: number
+      ) {}
+    },
+    configurable: true,
+    writable: true,
+  });
   Object.defineProperty(globalThis, 'OffscreenCanvas', {
     value: FakeCanvas,
     configurable: true,

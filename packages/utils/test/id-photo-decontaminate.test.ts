@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  INF,
   approximateDistanceTransform,
   decontaminateIdPhotoForeground,
 } from '../src/id-photo-decontaminate';
+
+const BG = { r: 67, g: 142, b: 219 };
+
+function buildEdgeRow(
+  edge: [number, number, number, number],
+  foreground: [number, number, number, number]
+): Uint8ClampedArray {
+  const rgba = new Uint8ClampedArray(3 * 4);
+  rgba.set(foreground, 0);
+  rgba.set(edge, 4);
+  rgba.set(foreground, 8);
+  return rgba;
+}
 
 function bruteForceDistance(fg: Uint8Array, width: number, height: number) {
   const out = new Float32Array(width * height);
@@ -49,6 +63,21 @@ describe('approximateDistanceTransform', () => {
       expect(label[i]).toBe(0);
     }
   });
+
+  it('reports unreachable distance and label -1 when there is no foreground', () => {
+    const width = 4;
+    const height = 3;
+    const fg = new Uint8Array(width * height);
+
+    const { distance, label } = approximateDistanceTransform(fg, width, height);
+
+    for (let i = 0; i < distance.length; i += 1) {
+      // 哨兵必须是真正可比较的 Infinity，Float32Array 能原样保留它。
+      expect(distance[i]).toBe(INF);
+      expect(Number.isFinite(distance[i]!)).toBe(false);
+      expect(label[i]).toBe(-1);
+    }
+  });
 });
 
 describe('decontaminateIdPhotoForeground', () => {
@@ -91,5 +120,46 @@ describe('decontaminateIdPhotoForeground', () => {
     const out = decontaminateIdPhotoForeground(rgba, 2, 1, bg);
     expect(Array.from(out.slice(0, 4))).toEqual([10, 20, 30, 0]);
     expect(Array.from(out.slice(4, 8))).toEqual([200, 100, 50, 255]);
+  });
+
+  it('suppresses alpha of a semi-transparent edge pixel whose color matches the background', () => {
+    // 边缘像素 alpha=128 且 RGB 就等于背景色，可判定其 alpha 被底色撑起。
+    const rgba = buildEdgeRow([BG.r, BG.g, BG.b, 128], [255, 255, 255, 255]);
+
+    const out = decontaminateIdPhotoForeground(rgba, 3, 1, BG);
+
+    expect(out[7]!).toBeLessThan(128);
+  });
+
+  it('keeps alpha of a semi-transparent edge pixel whose color is far from the background', () => {
+    // alpha=128，但真实前景是纯红，与蓝色背景差异极大，alpha 应予保留。
+    const rgba = buildEdgeRow([255, 0, 0, 128], [255, 255, 255, 255]);
+
+    const out = decontaminateIdPhotoForeground(rgba, 3, 1, BG);
+
+    expect(out[7]!).toBe(128);
+  });
+
+  it('replaces background-colored edge RGB with the nearest opaque foreground color', () => {
+    // 边缘像素 RGB 就是原背景蓝，左右是完全不透明的前景红。
+    const rgba = buildEdgeRow([BG.r, BG.g, BG.b, 128], [255, 0, 0, 255]);
+
+    const out = decontaminateIdPhotoForeground(rgba, 3, 1, BG);
+
+    // 处理后应明显向红色靠拢，而不再停留在背景蓝。
+    expect(out[4]!).toBeGreaterThan(150);
+    expect(out[6]!).toBeLessThan(100);
+    expect(Array.from(out.slice(4, 7))).not.toEqual([BG.r, BG.g, BG.b]);
+  });
+
+  it('returns a new array and leaves the input untouched', () => {
+    const rgba = buildEdgeRow([BG.r, BG.g, BG.b, 128], [255, 0, 0, 255]);
+    const snapshot = Array.from(rgba);
+
+    const out = decontaminateIdPhotoForeground(rgba, 3, 1, BG);
+
+    expect(out).not.toBe(rgba);
+    expect(Array.from(rgba)).toEqual(snapshot);
+    expect(Array.from(out)).not.toEqual(snapshot);
   });
 });

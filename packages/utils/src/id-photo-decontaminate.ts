@@ -19,16 +19,22 @@ export interface Rgb {
   b: number;
 }
 
-const INF = 1e20;
+/**
+ * 距离变换的哨兵值：整图无前景时每个像素到最近前景的距离均为 `Infinity`。
+ *
+ * 使用 `Infinity` 而非有限的魔法数，保证 Float32Array 读回后仍可用
+ * `Number.isFinite` / `=== Infinity` 可靠判断，下游无需知道具体常量值。
+ */
+export const INF = Infinity;
 
 /**
- * 两遍扫描的近似欧氏距离变换（Felzenszwalb 简化版），O(w*h)。
+ * 两遍扫描的 3×3 chamfer 距离变换，O(w*h)。
  *
  * `fg[i] !== 0` 视为前景。返回每个像素到最近前景像素的欧氏距离，
  * 以及该最近前景像素的下标（用于溢色替换时取"源色"）。
  *
  * 前景像素自身 distance = 0、label = 自己。
- * 整图无前景时 distance 全为 INF、label 全为 -1。
+ * 整图无前景时 distance 全为 INF（`Infinity`）、label 全为 -1。
  */
 export function approximateDistanceTransform(
   fg: Uint8Array,
@@ -49,8 +55,8 @@ export function approximateDistanceTransform(
     }
   }
 
-  // 四邻域松弛，两个方向各扫一遍。对 ±1 步长的格点足够精确到
-  // 亚像素级误差（实测与暴力最近邻偏差 < 1.5px），且是 O(n) 的。
+  // 8 邻域（含对角）松弛，两个方向各扫一遍。正交步长 1、对角步长 √2，
+  // 小距离下与暴力最近邻的偏差 < 1.5px，且是 O(n) 的。
   const relax = (i: number, j: number) => {
     const dj = distance[j]! + 1;
     if (dj < distance[i]!) {
@@ -120,8 +126,9 @@ function colorDistance(rgb: Uint8ClampedArray, index: number, bg: Rgb): number {
  * 返回新数组（不修改入参），调用方自行 putImageData / 拼接。
  *
  * 参数：
- * - `alphaFloor`：反预乘时的 alpha 下限，默认 0.15。低于它的像素视为几乎全透明，
- *   直接跳过而不是把噪声放大 6 倍。
+ * - `alphaFloor`：反预乘时的 alpha 下限，默认 0.15。alpha 低于它的像素不做反预乘
+ *   （避免把噪声放大），但仍会继续执行内边缘 alpha 压制与溢色替换；只有 alpha
+ *   不高于 0.02 的像素才整体跳过。
  * - `spillStrength`：溢色替换的最大强度，默认 0.85。
  */
 export function decontaminateIdPhotoForeground(

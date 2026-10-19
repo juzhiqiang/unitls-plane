@@ -44,6 +44,13 @@ const mocks = vi.hoisted(() => ({
   onFailed: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
+  /** markUserOverride 与 setOptions 引起的渲染共用一个序列,用来验证调用顺序。 */
+  effectSequence: [] as string[],
+  /** 有状态版本地 hook 的可控状态;仅在换图用例里启用。 */
+  localStore: {
+    current: null as ReturnType<typeof makeLocalState> | null,
+  },
+  localRerender: { current: null as (() => void) | null },
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -88,6 +95,9 @@ vi.mock('@/components/tools/image-crop-field', async importOriginal => {
       props: React.ComponentProps<typeof actual.ImageCropField>
     ) => {
       mocks.cropFieldProps.current = props;
+      // setOptions 没有可观测的副作用,用「裁剪组件按新 value 重渲染」作为
+      // 状态已应用的信号,与 markUserOverride 放进同一个序列比较先后。
+      mocks.effectSequence.push('crop-render');
       return actual.ImageCropField(props);
     },
   };
@@ -129,8 +139,8 @@ function renderPage() {
   );
 }
 
-function makeFile() {
-  return new File(['pixel-data'], 'photo.jpg', { type: 'image/jpeg' });
+function makeFile(name = 'photo.jpg') {
+  return new File(['pixel-data'], name, { type: 'image/jpeg' });
 }
 
 function makeLocalState(overrides: Record<string, unknown> = {}) {
@@ -180,12 +190,57 @@ function cropRectFor(crop: IdPhotoCrop) {
   };
 }
 
-async function dropPhoto(container: HTMLElement) {
+async function dropPhoto(container: HTMLElement, file: File = makeFile()) {
   const input = container.querySelector(
     'input[type="file"]'
   ) as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [makeFile()] } });
+  fireEvent.change(input, { target: { files: [file] } });
   await screen.findByRole('button', { name: 'Generate ID photo' });
+}
+
+/**
+ * 有状态版本的 useLocalIdPhoto mock。
+ *
+ * 静态 makeLocalState 无法验证「换图后状态被清空」——reset 只是个 spy,页面渲染
+ * 读到的仍是旧返回值。这里用页面自身的 React 渲染循环保存状态:reset 真正把
+ * 状态归零并触发重渲染,因此既能断言 store 字段,也能断言质量面板确实消失。
+ */
+function installStatefulLocal(initial: ReturnType<typeof makeLocalState>) {
+  mocks.localStore.current = initial;
+  mocks.useLocalIdPhoto.mockImplementation(() => {
+    const [, force] = React.useReducer((count: number) => count + 1, 0);
+    mocks.localRerender.current = force;
+    const state = mocks.localStore.current ?? makeLocalState();
+    return {
+      ...state,
+      process: mocks.localProcess,
+      reset: () => {
+        mocks.localReset();
+        mocks.localStore.current = makeLocalState();
+        mocks.localRerender.current?.();
+      },
+      markUserOverride: () => {
+        mocks.localMarkUserOverride();
+        mocks.localStore.current = {
+          ...(mocks.localStore.current ?? makeLocalState()),
+          userOverride: true,
+          autoLayout: null,
+        };
+        mocks.localRerender.current?.();
+      },
+    };
+  });
+}
+
+/** 模拟一次本地处理完成:写入 autoLayout/quality/resultBlob 等结果字段。 */
+function setLocalState(partial: Partial<ReturnType<typeof makeLocalState>>) {
+  mocks.localStore.current = {
+    ...(mocks.localStore.current ?? makeLocalState()),
+    ...partial,
+  };
+  act(() => {
+    mocks.localRerender.current?.();
+  });
 }
 
 /**
@@ -226,11 +281,14 @@ describe('IdPhotoPage', () => {
     mocks.useUploadFile.mockReturnValue({ mutateAsync: vi.fn() });
     mocks.useCreateTask.mockReturnValue({ mutateAsync: vi.fn() });
     mocks.useTaskProgress.mockReturnValue({ data: undefined });
+    mocks.useLocalIdPhoto.mockReset();
     mocks.useLocalIdPhoto.mockReturnValue(makeLocalState());
     mocks.localProcess.mockReset();
     mocks.localMarkUserOverride.mockReset();
     mocks.localReset.mockReset();
     mocks.cropFieldProps.current = null;
+    mocks.effectSequence.length = 0;
+    mocks.localStore.current = null;
   });
 
   it('renders an uploaded image preview after a file is dropped', async () => {
@@ -388,11 +446,14 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useSession.mockReturnValue({ data: null, isPending: false });
+    mocks.useLocalIdPhoto.mockReset();
     mocks.useLocalIdPhoto.mockReturnValue(makeLocalState());
     mocks.localProcess.mockReset();
     mocks.localMarkUserOverride.mockReset();
     mocks.localReset.mockReset();
     mocks.cropFieldProps.current = null;
+    mocks.effectSequence.length = 0;
+    mocks.localStore.current = null;
   });
 
   it('backfills the crop box once the local auto layout arrives', async () => {
@@ -447,6 +508,13 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
     await dropPhoto(container);
     await loadCropImage();
 
+    // 只记录本次 onChange 引发的顺序:markUserOverride 是显式副作用,
+    // setOptions 通过裁剪组件按新 value 重渲染来观测。
+    mocks.effectSequence.length = 0;
+    mocks.localMarkUserOverride.mockImplementation(() => {
+      mocks.effectSequence.push('markUserOverride');
+    });
+
     act(() => {
       mocks.cropFieldProps.current?.onChange({
         x: 100,
@@ -457,6 +525,12 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
     });
 
     expect(mocks.localMarkUserOverride).toHaveBeenCalledTimes(1);
+    const markIndex = mocks.effectSequence.indexOf('markUserOverride');
+    const appliedIndex = mocks.effectSequence.indexOf('crop-render');
+    expect(markIndex).toBeGreaterThanOrEqual(0);
+    // 顺序反了(先 setOptions 再 mark)时,裁剪组件会先以旧值渲染,
+    // 而 hook 的 autoFrame 守卫读 ref,会用旧值重跑自动构图。
+    expect(appliedIndex).toBeGreaterThan(markIndex);
     expect(mocks.cropFieldProps.current?.value).toEqual(
       cropRectFor(
         idPhotoCropFromBox(
@@ -497,6 +571,63 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
     );
   });
 
+  it('clears the previous local result when a new photo replaces the processed one', async () => {
+    installStatefulLocal(makeLocalState());
+    const { container } = renderPage();
+    await dropPhoto(container, makeFile('a.jpg'));
+
+    // 模拟 A 图本地处理完成:autoLayout / quality / resultBlob 都有值。
+    setLocalState({
+      status: 'done',
+      resultBlob: new Blob(['a'], { type: 'image/jpeg' }),
+      autoLayout: AUTO_LAYOUT,
+      quality: QUALITY_REPORT,
+    });
+
+    expect(await screen.findByTestId('id-photo-quality-panel')).toBeVisible();
+    expect(mocks.localStore.current).toMatchObject({
+      autoLayout: AUTO_LAYOUT,
+      quality: QUALITY_REPORT,
+      resultBlob: expect.any(Blob),
+    });
+
+    // 拖入 B 图:handleDrop 必须调用 reset,否则 A 的构图与质量报告会残留。
+    await dropPhoto(container, makeFile('b.jpg'));
+
+    expect(mocks.localReset).toHaveBeenCalled();
+    expect(mocks.localStore.current).toMatchObject({
+      autoLayout: null,
+      quality: null,
+      resultBlob: null,
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('id-photo-quality-panel')
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('clears a previous user override so the next photo can auto frame again', async () => {
+    installStatefulLocal(makeLocalState());
+    const { container } = renderPage();
+    await dropPhoto(container, makeFile('a.jpg'));
+
+    // A 图:用户拖动过裁剪框,userOverride 置位(autoLayout 已被 hook 清空)。
+    setLocalState({ status: 'done', userOverride: true, autoLayout: null });
+    expect(mocks.localStore.current?.userOverride).toBe(true);
+
+    await dropPhoto(container, makeFile('b.jpg'));
+
+    // 行为验证:B 图不再继承 A 图的手动框,处理时仍走自动构图。
+    expect(mocks.localStore.current?.userOverride).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate ID photo' }));
+    expect(mocks.localProcess).toHaveBeenCalledWith(
+      expect.any(File),
+      'balanced',
+      expect.objectContaining({ autoFrame: true })
+    );
+  });
+
   it('renders the quality panel when local processing produced a report', async () => {
     mocks.useLocalIdPhoto.mockReturnValue(
       makeLocalState({
@@ -530,15 +661,46 @@ describe('IdPhotoPage local auto framing and quality wiring', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('does not render the quality panel in server mode', async () => {
+  it('does not render the quality panel in server mode even when a result exists', async () => {
+    // 之前只切到服务端就断言,没有服务端产物,近乎恒真。这里真的跑完一次
+    // 服务端任务并拿到结果,确认结果区出现的同时质量面板仍不渲染。
+    mocks.useSession.mockReturnValue({
+      data: { user: { name: 'Tester', email: 't@example.com' } },
+      isPending: false,
+    });
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        blob: () =>
+          Promise.resolve(new Blob(['result'], { type: 'image/jpeg' })),
+      })
+    );
+
     const { container } = renderPage();
     await dropPhoto(container);
     fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate ID photo' })
+    );
+    await waitFor(() => expect(taskMutate).toHaveBeenCalled());
+    await act(async () => {
+      await mocks.onCompleted('output-file-1');
+    });
 
-    expect(screen.queryByText('Check unavailable')).not.toBeInTheDocument();
+    // 服务端产物已渲染
+    expect(await screen.findByAltText('ID photo preview')).toBeInTheDocument();
+    // 但质量面板只属于本地路
     expect(
       screen.queryByTestId('id-photo-quality-panel')
     ).not.toBeInTheDocument();
+    expect(screen.queryByText('Check unavailable')).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
   });
 
   it('passes the guides toggle through to the crop field', async () => {

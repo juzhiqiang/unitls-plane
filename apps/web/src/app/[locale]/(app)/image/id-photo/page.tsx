@@ -149,6 +149,10 @@ export default function IdPhotoPage() {
   const handleDrop = (files: File[]) => {
     if (!files[0]) return;
     setFile(files[0]);
+    // 换图必须清掉上一张的本地状态(autoLayout/quality/resultBlob/userOverride)。
+    // 否则 effect 会把 A 图的自动构图灌给 B 图;若用户此前拖过框,B 图还会因为
+    // userOverride=true 永远拿不到自动构图。
+    local.reset();
     setNatural(null);
     resetOutput();
     setError(null);

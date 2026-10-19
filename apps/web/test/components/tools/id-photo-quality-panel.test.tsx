@@ -7,23 +7,37 @@ const t = (key: string) => key;
 
 type TVars = Record<string, string | number>;
 
-// 假 t 模拟 next-intl 的变量插值:组件必须把变量传给 t,而不是拿到文案后
-// 自己 replace 占位符(next-intl 在缺变量时会直接回退成 key)。
+// 假 t 模拟 next-intl 的变量插值:占位符只在传了对应变量时才替换,否则原样保留。
+// 这样 `not.toContain('{items}')` 才有区分力——组件若没把 items 传给 t,
+// 输出会保留占位符,断言就会失败。
+const interpolate = (template: string, values?: TVars) =>
+  template.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
+    values && Object.prototype.hasOwnProperty.call(values, name)
+      ? String(values[name])
+      : placeholder
+  );
+
 const chineseT = (key: string, values?: TVars) =>
-  key === 'quality.needsAttention'
-    ? `需注意:${values?.items}`
-    : key === 'quality.listSeparator'
-      ? '、'
-      : key;
+  interpolate(
+    key === 'quality.needsAttention'
+      ? '需注意:{items}'
+      : key === 'quality.listSeparator'
+        ? '、'
+        : key,
+    values
+  );
 
 const englishT = (key: string, values?: TVars) =>
-  key === 'quality.needsAttention'
-    ? `Needs attention: ${values?.items}`
-    : key === 'quality.listSeparator'
-      ? ', '
-      : key === 'quality.score'
-        ? `Score ${values?.score}`
-        : key;
+  interpolate(
+    key === 'quality.needsAttention'
+      ? 'Needs attention: {items}'
+      : key === 'quality.listSeparator'
+        ? ', '
+        : key === 'quality.score'
+          ? 'Score {score}'
+          : key,
+    values
+  );
 
 function fullReport(): QualityReport {
   return {

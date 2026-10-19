@@ -2,6 +2,7 @@ export * from './entitlements';
 export * from './release';
 export * from './plan-display';
 export * from './id-photo-decontaminate';
+export * from './id-photo-modnet-size';
 export * from './id-photo-yunet';
 
 export function formatDate(date: Date): string {

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import sharp from 'sharp';
 import {
+  MODNET_LONG_EDGE,
+  modnetInputSize as sharedModnetInputSize,
+} from '@utils-plane/utils';
+import {
   createModNetInputTensor,
+  MODNET_INPUT_SIZE,
+  modnetInputSize,
   OpenAiCompatiblePortraitSegmentationProvider,
   normalizeModNetMatteValues,
   PortraitSegmentationService,
@@ -10,6 +16,24 @@ import {
 } from '../../../../src/modules/tasks/services/portrait-segmentation.service';
 
 describe('resolvePortraitSegmentationModelPath', () => {
+  it('prefers the photographic model over the generic model', () => {
+    const modelPath = resolvePortraitSegmentationModelPath({
+      cwd: 'D:/project/unitls-plane',
+      exists: path => {
+        const normalized = path.replaceAll('\\', '/');
+        return (
+          normalized ===
+            'D:/project/unitls-plane/apps/api/models/modnet_photographic.onnx' ||
+          normalized === 'D:/project/unitls-plane/apps/api/models/modnet.onnx'
+        );
+      },
+    });
+
+    expect(modelPath.replaceAll('\\', '/')).toBe(
+      'D:/project/unitls-plane/apps/api/models/modnet_photographic.onnx'
+    );
+  });
+
   it('prefers the repository-root model path when it exists', () => {
     const modelPath = resolvePortraitSegmentationModelPath({
       cwd: 'D:/project/unitls-plane',
@@ -47,10 +71,18 @@ describe('resolvePortraitSegmentationModelPath', () => {
   });
 });
 
+describe('MODNET_INPUT_SIZE', () => {
+  it('matches the shared long edge and re-exports the shared size helper', () => {
+    expect(MODNET_INPUT_SIZE).toBe(MODNET_LONG_EDGE);
+    expect(modnetInputSize).toBe(sharedModnetInputSize);
+  });
+});
+
 describe('createModNetInputTensor', () => {
   it('writes RGB pixels in CHW order with MODNet normalization', () => {
     const tensor = createModNetInputTensor(
       Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 128, 128, 128]),
+      2,
       2
     );
 
@@ -65,11 +97,29 @@ describe('createModNetInputTensor', () => {
   it('keeps absolute brightness instead of stretching dim inputs', () => {
     const tensor = createModNetInputTensor(
       Buffer.from([128, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0]),
+      2,
       2
     );
 
     expect(tensor[0]).toBeCloseTo(128 / 255 / 0.5 - 1, 5);
     expect(tensor[5]).toBeCloseTo(64 / 255 / 0.5 - 1, 5);
+  });
+
+  it('uses width and height independently for non-square inputs', () => {
+    // 宽 2、高 1：R 平面值 [255, 0]，G 平面值 [0, 255]，B 平面值 [0, 0]。
+    const tensor = createModNetInputTensor(
+      Buffer.from([255, 0, 0, 0, 255, 0]),
+      2,
+      1
+    );
+
+    expect(tensor.length).toBe(6);
+    expect(tensor[0]).toBeCloseTo(1, 5);
+    expect(tensor[1]).toBeCloseTo(-1, 5);
+    expect(tensor[2]).toBeCloseTo(-1, 5);
+    expect(tensor[3]).toBeCloseTo(1, 5);
+    expect(tensor[4]).toBeCloseTo(-1, 5);
+    expect(tensor[5]).toBeCloseTo(-1, 5);
   });
 });
 
@@ -104,7 +154,7 @@ describe('refinePortraitAlphaBytes', () => {
 });
 
 describe('PortraitSegmentationService.segment', () => {
-  it('runs one full-image MODNet inference instead of amplifying rough masks with ROI re-inference', async () => {
+  it('runs one full-image MODNet inference at the dynamic long-edge size without padding', async () => {
     const input = await sharp({
       create: {
         width: 64,
@@ -115,15 +165,18 @@ describe('PortraitSegmentationService.segment', () => {
     })
       .png()
       .toBuffer();
+    const box = modnetInputSize({ width: 64, height: 96 }, MODNET_INPUT_SIZE);
     let runCount = 0;
+    let observedDims: number[] | undefined;
     const session = {
       inputNames: ['input'],
       outputNames: ['output'],
-      run: async () => {
+      run: async (feeds: Record<string, { dims: number[] }>) => {
         runCount += 1;
+        observedDims = feeds.input?.dims;
         return {
           output: {
-            data: new Float32Array(256 * 256).fill(1),
+            data: new Float32Array(box.width * box.height).fill(1),
           },
         };
       },
@@ -135,6 +188,19 @@ describe('PortraitSegmentationService.segment', () => {
 
     expect(result.faceCount).toBe(1);
     expect(runCount).toBe(1);
+    // 长边缩放到 512、保持比例、宽高 32 对齐、不补边。
+    expect(observedDims).toEqual([1, 3, box.height, box.width]);
+    expect(box).toEqual({ width: 320, height: 512 });
+    // 蒙版直接缩回原图尺寸，没有 letterbox 裁剪偏移。
+    const maskMetadata = await sharp(result.mask).metadata();
+    expect(maskMetadata.width).toBe(64);
+    expect(maskMetadata.height).toBe(96);
+    expect(result.bounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 96,
+    });
   });
 
   it('uses OpenAI-compatible segmentation when ai mode is requested and falls back to local on failure', async () => {
@@ -148,6 +214,7 @@ describe('PortraitSegmentationService.segment', () => {
     })
       .png()
       .toBuffer();
+    const box = modnetInputSize({ width: 64, height: 96 }, MODNET_INPUT_SIZE);
     let localRunCount = 0;
     const session = {
       inputNames: ['input'],
@@ -156,7 +223,7 @@ describe('PortraitSegmentationService.segment', () => {
         localRunCount += 1;
         return {
           output: {
-            data: new Float32Array(256 * 256).fill(1),
+            data: new Float32Array(box.width * box.height).fill(1),
           },
         };
       },

@@ -3,12 +3,17 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import sharp from 'sharp';
 import * as ort from 'onnxruntime-node';
+import { MODNET_LONG_EDGE, modnetInputSize } from '@utils-plane/utils';
 import {
   bufferFromGeneratedImagePayload,
   normalizeOpenAiCompatibleImageEditUrl,
 } from './openai-compatible-image';
 
-const MODNET_INPUT_SIZE = 256;
+export { modnetInputSize };
+export const MODNET_INPUT_SIZE = MODNET_LONG_EDGE;
+
+const MODNET_PHOTOGRAPHIC_NAME = 'modnet_photographic.onnx';
+const MODNET_GENERIC_NAME = 'modnet.onnx';
 const PORTRAIT_ALPHA_BLACK_POINT = 72;
 const PORTRAIT_ALPHA_WHITE_POINT = 144;
 const PORTRAIT_ALPHA_GAMMA = 0.55;
@@ -72,31 +77,48 @@ export function resolvePortraitSegmentationModelPath({
     return configuredPath;
   }
 
-  const fallbackPath = path.resolve(cwd, 'models/modnet.onnx');
+  // photographic 优先：它是证件照专用变体，通用 modnet 只作文件缺失时的回落。
+  // 注意：Task 1 实测两者逐像素等价（max abs diff = 0），回落的意义仅在
+  // 「photographic 文件缺失时不至于整条链路不可用」，不带来画质差异。
   const candidates = [
-    fallbackPath,
-    path.resolve(cwd, 'apps/api/models/modnet.onnx'),
+    path.resolve(cwd, `apps/api/models/${MODNET_PHOTOGRAPHIC_NAME}`),
+    path.resolve(cwd, `models/modnet/${MODNET_PHOTOGRAPHIC_NAME}`),
+    path.resolve(cwd, `models/${MODNET_PHOTOGRAPHIC_NAME}`),
+    path.resolve(cwd, `apps/api/models/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `models/${MODNET_GENERIC_NAME}`),
   ];
+  return candidates.find(candidate => exists(candidate)) ?? candidates[0]!;
+}
 
-  return candidates.find(candidate => exists(candidate)) ?? fallbackPath;
+function resolveGenericModNetModelPath(
+  cwd: string = process.cwd(),
+  exists: (modelPath: string) => boolean = existsSync
+): string {
+  const candidates = [
+    path.resolve(cwd, `apps/api/models/${MODNET_GENERIC_NAME}`),
+    path.resolve(cwd, `models/${MODNET_GENERIC_NAME}`),
+  ];
+  return candidates.find(candidate => exists(candidate)) ?? candidates[1]!;
 }
 
 export function createModNetInputTensor(
   rawRgb: Buffer,
-  size: number
+  width: number,
+  height: number
 ): Float32Array {
-  const tensorData = new Float32Array(1 * 3 * size * size);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const pixel = (y * size + x) * 3;
-      const target = y * size + x;
+  const plane = width * height;
+  const tensorData = new Float32Array(3 * plane);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixel = (y * width + x) * 3;
+      const target = y * width + x;
       const r = ((rawRgb[pixel] ?? 0) / 255 - 0.5) / 0.5;
       const g = ((rawRgb[pixel + 1] ?? 0) / 255 - 0.5) / 0.5;
       const b = ((rawRgb[pixel + 2] ?? 0) / 255 - 0.5) / 0.5;
 
       tensorData[target] = r;
-      tensorData[size * size + target] = g;
-      tensorData[2 * size * size + target] = b;
+      tensorData[plane + target] = g;
+      tensorData[2 * plane + target] = b;
     }
   }
   return tensorData;
@@ -403,17 +425,20 @@ export class PortraitSegmentationService {
     }
 
     const session = await this.getSession();
+    const sourceSize = { width: metadata.width, height: metadata.height };
     const alphaBytes = refinePortraitAlphaBytes(
-      await this.inferAlphaBytes(session, orientedInput)
+      await this.inferAlphaBytes(session, orientedInput, sourceSize)
     );
     if (!alphaBytes.length) {
       return { mask: Buffer.alloc(0), faceCount: 0 };
     }
 
+    // 输入没有补边，蒙版就是整张图的前景概率，直接缩放回原尺寸
+    const box = modnetInputSize(sourceSize, MODNET_INPUT_SIZE);
     const mask = await sharp(alphaBytes, {
       raw: {
-        width: MODNET_INPUT_SIZE,
-        height: MODNET_INPUT_SIZE,
+        width: box.width,
+        height: box.height,
         channels: 1,
       },
     })
@@ -448,14 +473,17 @@ export class PortraitSegmentationService {
 
   private async inferAlphaBytes(
     session: ort.InferenceSession,
-    input: Buffer
+    input: Buffer,
+    sourceSize: { width: number; height: number }
   ): Promise<Buffer> {
+    const box = modnetInputSize(sourceSize, MODNET_INPUT_SIZE);
+    // 宽高比已保持，fit:'fill' 不会产生形变；这里不 extend 补边
     const raw = await sharp(input)
-      .resize(MODNET_INPUT_SIZE, MODNET_INPUT_SIZE, { fit: 'fill' })
+      .resize(box.width, box.height, { fit: 'fill' })
       .removeAlpha()
       .raw()
       .toBuffer();
-    const tensorData = createModNetInputTensor(raw, MODNET_INPUT_SIZE);
+    const tensorData = createModNetInputTensor(raw, box.width, box.height);
     const inputName = session.inputNames[0];
     const outputName = session.outputNames[0];
     if (!inputName || !outputName) {
@@ -466,8 +494,8 @@ export class PortraitSegmentationService {
       [inputName]: new ort.Tensor('float32', tensorData, [
         1,
         3,
-        MODNET_INPUT_SIZE,
-        MODNET_INPUT_SIZE,
+        box.height,
+        box.width,
       ]),
     });
     const output = result[outputName];
@@ -481,7 +509,26 @@ export class PortraitSegmentationService {
   private getSession(): Promise<ort.InferenceSession> {
     if (!this.sessionPromise) {
       const modelPath = resolvePortraitSegmentationModelPath();
-      this.sessionPromise = ort.InferenceSession.create(modelPath);
+      const sessionPromise = ort.InferenceSession.create(modelPath).catch(
+        err => {
+          // photographic 缺失时退回通用 modnet，保证任务仍能产出
+          const genericPath = resolveGenericModNetModelPath();
+          if (modelPath === genericPath) {
+            throw err;
+          }
+          this.logger.warn(
+            `falling back to generic modnet (${modelPath} unavailable): ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+          return ort.InferenceSession.create(genericPath);
+        }
+      );
+      // 被拒绝的 promise 不能缓存，否则一次模型加载失败会让后续任务永远失败。
+      this.sessionPromise = sessionPromise.catch(err => {
+        this.sessionPromise = undefined;
+        throw err;
+      });
     }
     return this.sessionPromise;
   }

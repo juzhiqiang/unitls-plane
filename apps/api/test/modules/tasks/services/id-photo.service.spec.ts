@@ -2,13 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import sharp from 'sharp';
 import {
   idPhotoCropFromLayout,
+  mapFaceToOutput,
   resolveIdPhotoCropBox,
   suggestIdPhotoLayout,
 } from '@utils-plane/validators';
-import {
-  IdPhotoService,
-  mapFaceToOutput,
-} from '../../../../src/modules/tasks/services/id-photo.service';
+import { IdPhotoService } from '../../../../src/modules/tasks/services/id-photo.service';
 
 describe('IdPhotoService', () => {
   it('renders a JPEG with the selected preset size and background color', async () => {

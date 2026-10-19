@@ -13,6 +13,21 @@ export interface Rgb {
 }
 
 /**
+ * 成片尺寸的像素快照，供质量检查使用。
+ *
+ * - `rgba` 是含底色的最终画布像素（清晰度/曝光按成片判定）；
+ * - `alpha` 是同一几何下前景的 alpha 单通道（边缘半透明比例按成片判定）。
+ *
+ * 两者都必须取成片尺寸——用源图尺寸会让人脸比例与头顶留白按错误的分母计算。
+ */
+export interface CompositeOutputPixels {
+  rgba: Uint8ClampedArray;
+  alpha: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
+/**
  * 从 cutout 反推底色时，三通道都低于此值视为「背景已被 alpha 归零」，
  * 估计不可信，跳过反预乘。
  */
@@ -51,6 +66,7 @@ export function hexToRgb(hex: string): Rgb {
  * @param cutout 抠图产出的透明 ImageBitmap（自带 alpha）
  * @param rotation 自动构图算出的旋转角（度，逆时针为正），0 表示不转
  * @param sourceBackground 从原图估出的底色；缺省时才从 cutout 估计
+ * @param onOutput 可选：合成完成、编码前回调成片像素，供质量检查使用
  */
 export async function compositeIdPhoto(
   cutout: ImageBitmap,
@@ -60,7 +76,8 @@ export async function compositeIdPhoto(
   outputType: 'image/jpeg' | 'image/png',
   crop?: IdPhotoCrop,
   rotation = 0,
-  sourceBackground?: Rgb
+  sourceBackground?: Rgb,
+  onOutput?: (pixels: CompositeOutputPixels) => void
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
   const box = resolveIdPhotoCropBox(
@@ -151,11 +168,43 @@ export async function compositeIdPhoto(
     presetH
   );
 
+  // 5) 质量检查需要成片尺寸的像素。rgba 直接取最终画布（含底色）；
+  //    alpha 必须在「只画前景」的透明画布上取——最终画布已被底色铺满，
+  //    其 alpha 恒为 255，用它算 matteEdge 会永远通过。
+  if (onOutput) {
+    const rgba = octx.getImageData(0, 0, presetW, presetH).data;
+    const foreground = new OffscreenCanvas(presetW, presetH);
+    const fgctx = foreground.getContext('2d');
+    if (!fgctx) throw new Error('2D canvas context unavailable');
+    if (rotation) {
+      fgctx.translate(presetW / 2, presetH / 2);
+      fgctx.rotate((-rotation * Math.PI) / 180);
+      fgctx.translate(-presetW / 2, -presetH / 2);
+    }
+    fgctx.drawImage(
+      srcCanvas,
+      box.left,
+      box.top,
+      box.width,
+      box.height,
+      0,
+      0,
+      presetW,
+      presetH
+    );
+    const fgData = fgctx.getImageData(0, 0, presetW, presetH).data;
+    const alpha = new Uint8ClampedArray(presetW * presetH);
+    for (let i = 0; i < alpha.length; i += 1) {
+      alpha[i] = fgData[i * 4 + 3] ?? 0;
+    }
+    onOutput({ rgba, alpha, width: presetW, height: presetH });
+  }
+
   const blob = await out.convertToBlob({
     type: outputType,
     quality: outputType === 'image/jpeg' ? 0.95 : undefined,
   });
 
-  // 5) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释
+  // 6) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释
   return writeDpi(blob, 300);
 }

@@ -45,7 +45,10 @@ vi.mock('@/lib/id-photo-local/composite', async importOriginal => {
   };
 });
 
-import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
+import {
+  findCrownY,
+  useLocalIdPhoto,
+} from '@/lib/id-photo-local/use-local-id-photo';
 
 let lastCutout: {
   width: number;
@@ -322,7 +325,27 @@ describe('useLocalIdPhoto auto framing', () => {
 
   beforeEach(() => {
     compositeMock.mockReset();
-    compositeMock.mockResolvedValue(new Blob(['ok'], { type: 'image/jpeg' }));
+    // 自动构图用例把 composite 换成 mock;质量检查依赖成片像素回调,
+    // 因此这里按预设尺寸回调一份不透明像素。
+    compositeMock.mockImplementation(async (...args: unknown[]) => {
+      const width = args[2] as number;
+      const height = args[3] as number;
+      const capture = args[8] as
+        | ((pixels: {
+            rgba: Uint8ClampedArray;
+            alpha: Uint8ClampedArray;
+            width: number;
+            height: number;
+          }) => void)
+        | undefined;
+      capture?.({
+        rgba: new Uint8ClampedArray(width * height * 4).fill(255),
+        alpha: new Uint8ClampedArray(width * height).fill(255),
+        width,
+        height,
+      });
+      return new Blob(['ok'], { type: 'image/jpeg' });
+    });
   });
 
   it('computes an auto layout on the first run', async () => {
@@ -358,7 +381,9 @@ describe('useLocalIdPhoto auto framing', () => {
       await result.current.process(makeFile('a.jpg'), 'balanced', {
         ...defaultOpts,
         crop: manual,
-        autoFrame: false,
+        // 必须传 true,否则即使删掉 userOverride 守卫,检测也不会被调用,
+        // 用例就无法验证「override 后停止自动构图」。
+        autoFrame: true,
       });
     });
 
@@ -409,5 +434,60 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(result.current.userOverride).toBe(false);
     expect(result.current.autoLayout).toBeNull();
     expect(result.current.quality).toBeNull();
+  });
+});
+
+describe('findCrownY', () => {
+  function alphaMask(
+    width: number,
+    height: number,
+    alphaAt: (x: number, y: number) => number
+  ): Uint8ClampedArray {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        data[(y * width + x) * 4 + 3] = alphaAt(x, y);
+      }
+    }
+    return data;
+  }
+
+  it('ignores sparse noise rows below the minimum foreground count', () => {
+    // width=10 → 门槛 max(3, 0.2)=3。第 0 行只有 1 个像素、第 1 行只有
+    // 2 个像素,都属于零星噪点,不能把头顶推到 y=0。
+    const data = alphaMask(10, 4, (x, y) => {
+      if (y === 0) return x === 0 ? 200 : 0;
+      if (y === 1) return x < 2 ? 200 : 0;
+      if (y === 2) return x < 3 ? 200 : 0;
+      return 0;
+    });
+
+    expect(findCrownY(data, 10, 4)).toBe(2);
+  });
+
+  it('scales the minimum foreground count with the mask width', () => {
+    // width=1000 → 门槛 max(3, 20)=20。19 个像素的行仍算噪点,20 个才算头顶。
+    const data = alphaMask(1000, 3, (x, y) => {
+      if (y === 0) return x < 19 ? 200 : 0;
+      if (y === 1) return x < 20 ? 200 : 0;
+      return 0;
+    });
+
+    expect(findCrownY(data, 1000, 3)).toBe(1);
+  });
+
+  it('counts only alpha above 96 as foreground', () => {
+    // 半透明边缘(<=96)不是前景;第 0 行即使整行都是 96 也不通过。
+    const data = alphaMask(10, 2, (x, y) => {
+      if (y === 0) return 96;
+      return x < 3 ? 97 : 0;
+    });
+
+    expect(findCrownY(data, 10, 2)).toBe(1);
+  });
+
+  it('returns undefined when no row reaches the threshold', () => {
+    const data = alphaMask(10, 4, () => 0);
+    expect(findCrownY(data, 10, 4)).toBeUndefined();
   });
 });

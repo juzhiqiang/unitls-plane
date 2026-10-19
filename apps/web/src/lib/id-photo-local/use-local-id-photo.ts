@@ -3,6 +3,8 @@ import {
   idPhotoPresetSpecs,
   idPhotoCropFromLayout,
   inspectIdPhoto,
+  mapFaceToOutput,
+  resolveIdPhotoCropBox,
   suggestIdPhotoLayout,
   type IdPhotoCrop,
   type IdPhotoLayout,
@@ -10,7 +12,7 @@ import {
   type IdPhotoPreset,
   type QualityReport,
 } from '@utils-plane/validators';
-import { compositeIdPhoto } from './composite';
+import { compositeIdPhoto, type CompositeOutputPixels } from './composite';
 import { detectFaces } from './face-detection';
 import { type ModelTier } from './model-registry';
 import {
@@ -64,24 +66,45 @@ export interface UseLocalIdPhoto {
 }
 
 /**
- * 蒙版 alpha 中第一个「像前景」的像素行,作为真实头顶的 y。
+ * 蒙版 alpha 中第一个「像一条头顶边缘」的像素行，作为真实头顶的 y。
  *
- * YuNet 人脸框上沿在发际线附近,不是头顶;suggestIdPhotoLayout 在有真实头顶
- * 时会据此上移裁剪框。本地路的抠图自带 alpha,不必额外再跑一次分割,直接取
- * 第一个不透明像素所在的扫描行即可。阈值 96 用于跳过边缘的半透明噪点。
+ * YuNet 人脸框上沿在发际线附近，不是头顶;suggestIdPhotoLayout 在有真实头顶
+ * 时会据此上移裁剪框。本地路的抠图自带 alpha,不必额外再跑一次分割,直接扫描
+ * alpha 通道即可。
+ *
+ * 但不能「单个像素命中就返回」:抠图顶部常有零星半透明噪点,哪怕只有一两个
+ * 像素,也足以把裁剪框整体上移导致构图失真。因此每行要求前景像素数不少于
+ * `max(3, 2% * width)` —— 与服务端 detectCrownY 的门槛保持一致。
+ * 阈值 96 用于跳过边缘的半透明像素。
  */
-function findCrownY(
+export function findCrownY(
   rgba: Uint8ClampedArray,
   width: number,
   height: number
 ): number | undefined {
+  const minForeground = Math.max(3, width * 0.02);
   for (let y = 0; y < height; y += 1) {
     const rowStart = y * width * 4;
+    let foreground = 0;
     for (let x = 0; x < width; x += 1) {
-      if ((rgba[rowStart + x * 4 + 3] ?? 0) > 96) return y;
+      if ((rgba[rowStart + x * 4 + 3] ?? 0) > 96) foreground += 1;
     }
+    if (foreground >= minForeground) return y;
   }
   return undefined;
+}
+
+/**
+ * 收窄合成回调写回的像素。
+ *
+ * TypeScript 的控制流分析看不到「回调里对局部变量的赋值」,会把变量
+ * 一直窄化成 null;用函数参数重新建立联合类型,避免误报 never。
+ */
+function requireOutputPixels(
+  pixels: CompositeOutputPixels | null
+): CompositeOutputPixels {
+  if (!pixels) throw new Error('composite did not expose output pixels');
+  return pixels;
 }
 
 /**
@@ -101,8 +124,17 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
   const [userOverride, setUserOverride] = useState(false);
   const [quality, setQuality] = useState<QualityReport | null>(null);
 
+  // 守卫必须用 ref:同一事件里可能先 markUserOverride() 再立刻 process(),
+  // 此时 state 还没触发重渲染,process 的闭包仍会读到旧的 false。
+  // state 只负责渲染(例如页面据此隐藏「重新自动构图」入口)。
+  const userOverrideRef = useRef(false);
+
   const markUserOverride = useCallback(() => {
+    userOverrideRef.current = true;
     setUserOverride(true);
+    // 页面层可能用 autoLayout 回填裁剪框。用户已经手动改框后必须清掉它,
+    // 否则一次重渲染就会把自动构图的结果重新灌回去。
+    setAutoLayout(null);
   }, []);
 
   // 处理重入守卫:整个 process 期间置位,防止并发推理(会重复加载模型)。
@@ -134,7 +166,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           });
         if (isStale()) return;
 
-        setStatus('compositing');
+        // 人脸检测与构图属于「处理中」(running),不是合成阶段。
+        setStatus('running');
         try {
           const spec = idPhotoPresetSpecs[opts.preset];
           if (!spec) throw new Error(`unknown preset: ${opts.preset}`);
@@ -161,12 +194,14 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           );
 
           // 2) 只在「用户没手动改过裁剪框」时才自动构图。
+          //    守卫读 ref:同一事件里先 markUserOverride() 再 process() 时,
+          //    state 尚未重渲染,不能依赖闭包里的 userOverride。
           let crop = opts.crop;
           let rotation = 0;
           let layout: IdPhotoLayout | null = null;
           let faces: Awaited<ReturnType<typeof detectFaces>> = [];
 
-          if (opts.autoFrame && !userOverride) {
+          if (opts.autoFrame && !userOverrideRef.current) {
             faces = await detectFaces(file);
             if (isStale()) return;
 
@@ -188,7 +223,10 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             }
           }
 
-          // 3) 合成(去污染 + 旋转 + DPI 都在 composite 内完成)。
+          // 3) 合成(去污染 + 旋转 + DPI 都在 composite 内完成),同时拿回
+          //    成片尺寸的像素供质量检查。
+          setStatus('compositing');
+          let pixelsFromComposite: CompositeOutputPixels | null = null;
           const blob = await compositeIdPhoto(
             cutoutBitmap,
             opts.backgroundColor,
@@ -197,27 +235,43 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             opts.outputType,
             crop,
             rotation,
-            sourceBackground
+            sourceBackground,
+            pixels => {
+              pixelsFromComposite = pixels;
+            }
           );
           if (isStale()) return;
+          const outputPixels = requireOutputPixels(pixelsFromComposite);
 
-          // 4) 质量检查:源图像素 + 人脸 + 原始 alpha。
-          const pixelCount = cutoutBitmap.width * cutoutBitmap.height;
-          const alphaChannel = new Uint8ClampedArray(pixelCount);
-          for (let i = 0; i < pixelCount; i += 1) {
-            alphaChannel[i] = srcData.data[i * 4 + 3] ?? 0;
-          }
+          // 4) 质量检查必须在成片坐标上做:人脸框/关键点先从源图映射到
+          //    成片(裁剪 + 缩放 + 旋转),rgb/alpha 也用成片尺寸的像素。
+          //    否则自动构图已经居中的照片仍会因按源图尺寸计算而判失败。
+          const baseBox = resolveIdPhotoCropBox(
+            sourceSize.width,
+            sourceSize.height,
+            spec.widthPx,
+            spec.heightPx,
+            crop
+          );
+          const outputFace = faces[0]
+            ? mapFaceToOutput(
+                faces[0],
+                baseBox,
+                { widthPx: spec.widthPx, heightPx: spec.heightPx },
+                rotation
+              )
+            : null;
 
           setAutoLayout(layout);
           setQuality(
             inspectIdPhoto({
               // RGBA;inspectIdPhoto 按缓冲区长度自动识别 4 通道。
-              rgb: srcData.data,
-              width: cutoutBitmap.width,
-              height: cutoutBitmap.height,
-              face: faces[0] ?? null,
+              rgb: outputPixels.rgba,
+              width: outputPixels.width,
+              height: outputPixels.height,
+              face: outputFace,
               faceCount: faces.length,
-              alpha: alphaChannel,
+              alpha: outputPixels.alpha,
             })
           );
           setResultBlob(blob);
@@ -239,7 +293,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
         inFlightRef.current = false;
       }
     },
-    [ep, userOverride]
+    [ep]
   );
 
   const reset = useCallback(() => {
@@ -251,6 +305,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
     setError(null);
     setResultBlob(null);
     setAutoLayout(null);
+    userOverrideRef.current = false;
     setUserOverride(false);
     setQuality(null);
   }, []);

@@ -1612,6 +1612,12 @@ git commit -m "feat(id-photo): 新增 8 项质量检查(人脸/构图/清晰度/
 
 ### Task 6: YuNet 输出张量解析(两端共享)
 
+> **⚠️ 本节已被 Task 8 实测取代。** 真实 YuNet 权重（OpenCV 2023mar）输出 12 个张量
+> 而非单个 `[N,15]`，`parseYunetOutput` 已删除。实际交付的共享模块是
+> `packages/utils/src/id-photo-yunet.ts`（`createYunetInputTensor` /
+> `decodeYunetRawOutputs` / `usesRawYunetLayout` / `resolveYunetInputSize` /
+> `scaleDetectedFaces` / `DetectedFace`）。下文保留为历史记录，执行时以实际模块为准。
+
 **Files:**
 - Create: `packages/utils/src/id-photo-face-tensor.ts`
 - Test: `packages/utils/test/id-photo-face-tensor.test.ts`
@@ -1986,6 +1992,11 @@ git commit -m "chore(id-photo): 资产脚本支持 photographic 与 YuNet 模型
 ---
 
 ### Task 8: 服务端人脸检测服务
+
+> **⚠️ 本节假设已被实测修正。** 真实权重要求 640×640 输入、0..255 BGR、12 个输出张量；
+> 本节原文的 320 / 0..1 / 单输出会让 `detect()` 永久返回空数组且测试全绿。实际交付为
+> 「共享解码 + 服务层薄适配」，见 `apps/api/src/modules/tasks/services/face-detection.service.ts`
+> 与 `packages/utils/src/id-photo-yunet.ts`。下文保留为历史记录。
 
 **Files:**
 - Create: `apps/api/src/modules/tasks/services/face-detection.service.ts`
@@ -3073,11 +3084,22 @@ git commit -m "feat(api): 证件照渲染接入自动构图/共享去污染/质�
 - Create: `apps/web/src/lib/id-photo-local/face-detection.ts`
 - Modify: `apps/web/package.json`
 
+> **Task 8 实测修正（2026-10-20）**：真实 YuNet 权重（OpenCV 2023mar）是
+> **640×640 输入、12 个输出张量、0..255 BGR**，不是原计划的 320 / 单 `[N,15]` / 0..1。
+> 解码逻辑已于 Task 8 提升到 `packages/utils/src/id-photo-yunet.ts` 共享，
+> 本地路必须直接复用，不得重写一份。
+
 **Interfaces:**
-- Consumes: `YUNET_INPUT_SIZE`, `parseYunetOutput`, `scaleDetectedFaces`, `DetectedFace` from `@utils-plane/utils`
+- Consumes（全部来自 `@utils-plane/utils`）:
+  - `createYunetInputTensor(rawPixels, size, options?)` —— 默认 0..255 + BGR，与生产权重一致
+  - `decodeYunetRawOutputs(outputs, { inputWidth, inputHeight, scoreThreshold?, iouThreshold? })`
+  - `usesRawYunetLayout(outputNames)` —— 校验确实是 12 输出布局
+  - `scaleDetectedFaces(faces, { scaleX, scaleY })`
+  - `type DetectedFace`
 - Produces:
   - `export const MODNET_MODEL_URL: (base: string) => string`
   - `export const YUNET_MODEL_URL: (base: string) => string`
+  - `export const YUNET_INPUT_SIZE = 640`（写在 `model-registry.ts`，与权重一致）
   - `export async function segmentToCutout(file: Blob, tier: ModelTier, ep: LocalEp, options?): Promise<ImageBitmap>`（签名不变）
   - `export async function detectFaces(file: Blob): Promise<DetectedFace[]>`（新增）
 
@@ -3256,20 +3278,29 @@ export function resetSegmentationCacheForTests(): void {
  * 本地人脸检测（YuNet，onnxruntime-web）。
  *
  * 为什么不用 transformers.js：它不对外暴露裸 InferenceSession，而 YuNet 不是
- * 它支持的 pipeline 任务。因此这里直接用 onnxruntime-web，与分割共用同一份
- * wasm 运行时路径（见 model-registry.ortWasmPath）。
+ * 它支持的 pipeline 任务。这里直接用 onnxruntime-web，与分割共用同一份 wasm
+ * 运行时路径（见 model-registry.ortWasmPath）。
  *
- * 检测失败一律返回空数组 —— 自动构图是增强，失败时退回居中裁剪即可，
- * 不该让整张证件照失败。
+ * 解码、NMS、输入尺寸推导、坐标映射全部来自 packages/utils 的共享实现 ——
+ * 服务端（onnxruntime-node）与本地路必须得出完全相同的人脸框，否则同一张图在
+ * 两种处理模式下会被自动构图裁到不同位置。
+ *
+ * 检测失败一律返回空数组：自动构图是增强，失败时退回居中裁剪即可，不该让整张
+ * 证件照失败。
  */
 
 import {
-  YUNET_INPUT_SIZE,
-  parseYunetOutput,
+  createYunetInputTensor,
+  decodeYunetRawOutputs,
   scaleDetectedFaces,
+  usesRawYunetLayout,
   type DetectedFace,
 } from '@utils-plane/utils';
-import { ortWasmPath, yunetModelUrl } from './model-registry';
+import {
+  YUNET_INPUT_SIZE,
+  ortWasmPath,
+  yunetModelUrl,
+} from './model-registry';
 
 type OrtLike = {
   env: { wasm: { wasmPaths: string } };
@@ -3277,10 +3308,18 @@ type OrtLike = {
     create: (url: string) => Promise<{
       inputNames: string[];
       outputNames: string[];
-      run: (feeds: Record<string, unknown>) => Promise<Record<string, { data: Float32Array }>>;
+      run: (
+        feeds: Record<string, unknown>
+      ) => Promise<
+        Record<string, { data: Float32Array; dims: readonly number[] } | undefined>
+      >;
     }>;
   };
-  Tensor: new (type: 'float32', data: Float32Array, dims: number[]) => unknown;
+  Tensor: new (
+    type: 'float32',
+    data: Float32Array,
+    dims: number[]
+  ) => unknown;
 };
 
 type CachedSession = Awaited<ReturnType<OrtLike['InferenceSession']['create']>>;
@@ -3299,7 +3338,11 @@ async function getOrt(): Promise<OrtLike> {
 async function getSession(): Promise<CachedSession> {
   if (!sessionPromise) {
     const ort = await getOrt();
-    sessionPromise = ort.InferenceSession.create(yunetModelUrl());
+    sessionPromise = ort.InferenceSession.create(yunetModelUrl()).catch(err => {
+      // 加载失败不能缓存 rejected promise，否则下一次调用永远拿不到重试机会。
+      sessionPromise = null;
+      throw err;
+    });
   }
   return sessionPromise;
 }
@@ -3313,33 +3356,56 @@ export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
   try {
     const ort = await getOrt();
     const session = await getSession();
-    const bitmap = await createImageBitmap(file);
 
+    // 我们自托管的权重是官方 2023mar，固定 640。浏览器端的 session 不保证
+    // 暴露 inputMetadata，因此以已知常量为准，不静默回落 320。
     const size = YUNET_INPUT_SIZE;
+
+    const bitmap = await createImageBitmap(file);
+    const srcWidth = bitmap.width;
+    const srcHeight = bitmap.height;
+
     const canvas = new OffscreenCanvas(size, size);
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(bitmap, 0, 0, size, size);
-    const pixels = ctx.getImageData(0, 0, size, size).data;
+    const rgba = ctx.getImageData(0, 0, size, size).data;
+    bitmap.close?.();
 
-    const plane = size * size;
-    const tensor = new Float32Array(3 * plane);
-    for (let i = 0; i < plane; i += 1) {
-      tensor[i] = (pixels[i * 4] ?? 0) / 255;
-      tensor[plane + i] = (pixels[i * 4 + 1] ?? 0) / 255;
-      tensor[2 * plane + i] = (pixels[i * 4 + 2] ?? 0) / 255;
+    // canvas 给的是 RGBA；共享的 tree 构造假定紧密排列的 3 通道，
+    // 这里先剥掉 A 通道，避免步长错位（步长错位不会报错，只会给出离谱的框）。
+    const rgb = new Uint8ClampedArray(size * size * 3);
+    for (let i = 0; i < size * size; i += 1) {
+      rgb[i * 3] = rgba[i * 4] ?? 0;
+      rgb[i * 3 + 1] = rgba[i * 4 + 1] ?? 0;
+      rgb[i * 3 + 2] = rgba[i * 4 + 2] ?? 0;
     }
 
-    const result = await session.run({
-      [session.inputNames[0]!]: new ort.Tensor('float32', tensor, [1, 3, size, size]),
-    });
-    const output = result[session.outputNames[0]!];
-    bitmap.close?.();
-    if (!output) return [];
+    // 默认参数就是生产参数：0..255 + BGR。
+    const tensor = createYunetInputTensor(rgb, size);
 
-    const faces = parseYunetOutput(output.data, 15);
+    const result = await session.run({
+      [session.inputNames[0]!]: new ort.Tensor('float32', tensor, [
+        1,
+        3,
+        size,
+        size,
+      ]),
+    });
+
+    if (!usesRawYunetLayout(session.outputNames)) {
+      throw new Error(
+        `unexpected YuNet output layout: ${session.outputNames.join(', ')}`
+      );
+    }
+
+    const faces = decodeYunetRawOutputs(result, {
+      inputWidth: size,
+      inputHeight: size,
+    });
+
     return scaleDetectedFaces(faces, {
-      scaleX: bitmap.width / size,
-      scaleY: bitmap.height / size,
+      scaleX: srcWidth / size,
+      scaleY: srcHeight / size,
     });
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
@@ -3351,19 +3417,15 @@ export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
 }
 ```
 
-注意:`bitmap.close?.()` 在 `result` 之后调用，但 `scaleDetectedFaces` 用的是 `bitmap.width/height`，需在 close 前先取值。改成：
+- [ ] **Step 5: 在 model-registry 里声明 640**
 
 ```ts
-    const srcW = bitmap.width;
-    const srcH = bitmap.height;
-    bitmap.close?.();
-    if (!output) return [];
-
-    const faces = parseYunetOutput(output.data, 15);
-    return scaleDetectedFaces(faces, { scaleX: srcW / size, scaleY: srcH / size });
+/// 本地人脸检测：YuNet（MIT），官方 2023mar 权重固定 640×640 输入。
+/// 这个常量必须与自托管权重一致；写错不会报错，只会静默检测不到人脸。
+export const YUNET_INPUT_SIZE = 640;
 ```
 
-- [ ] **Step 5: 构建验证**
+- [ ] **Step 6: 构建验证**
 
 ```bash
 cd apps/web && bun run build 2>&1 | tail -20
@@ -3371,7 +3433,7 @@ cd apps/web && bun run build 2>&1 | tail -20
 
 预期:构建成功，无 `onnxruntime-web` 解析错误，无 `@huggingface/transformers` 残留引用。
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
 git add apps/web/src/lib/id-photo-local/model-registry.ts apps/web/src/lib/id-photo-local/segmentation.ts apps/web/src/lib/id-photo-local/face-detection.ts apps/web/package.json
@@ -5143,6 +5205,11 @@ git commit -m "feat(id-photo): 新增亮度自动校正(暗片提亮/过曝压�
 - `compositeIdPhoto` 参数:`Task 12` 引入第 7 个 `rotation`,`Task 18` 引入第 8 个 `brightness`。Task 13 的调用已按 8 个参数写,Task 18 不需再改调用点。
 - `IdPhotoOptionsState.guides` 在 Task 15 引入,Task 16 的 `DEFAULT_OPTIONS` 已包含。
 - `isStaleSegmentation` 在 Task 11 改写 `segmentation.ts` 时保留导出,Task 13 继续使用。
+- **YuNet 人脸检测（2026-10-20 Task 8 实测修正）**：真实权重是 640×640 / 12 输出 / 0..255 BGR。
+  Task 6 的 `parseYunetOutput` 与 `YUNET_INPUT_SIZE`(320) 已删除；Task 11 必须 import
+  `packages/utils/src/id-photo-yunet.ts` 的共享实现，并在 `model-registry.ts` 声明
+  `YUNET_INPUT_SIZE = 640`。本地 canvas 给的是 RGBA，需先剥掉 A 通道再调
+  `createYunetInputTensor`（步长错位不会报错，只会给出离谱的框）。
 - `resetSegmentationCacheForTests` 在 Task 11 改为清空 `cachedSessions`,`apps/web/test/lib/id-photo-local/` 下若有引用它的既有测试需同步(执行 Task 11 时一并检查)。
 
 ### 4. 执行顺序提醒

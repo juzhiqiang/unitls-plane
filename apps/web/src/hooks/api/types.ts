@@ -58,6 +58,8 @@ export interface ImageGenerateModelDto {
   capabilities: Array<'generate' | 'edit' | 'inpaint'>;
   /** 该模型支持的尺寸("auto" 或 "WxH"),画面比例档位由它派生。 */
   sizes: string[];
+  /** 是否接受档位之外的尺寸;为 true 时画面比例行显示可用的「自定义」入口。 */
+  customSizes: boolean;
 }
 
 /** 生图会话(由 image_generate 任务按 sessionId 派生,非独立实体)。 */

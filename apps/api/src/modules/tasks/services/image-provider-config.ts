@@ -119,6 +119,14 @@ export const imageProviderModelSchema = z
       .min(1)
       .default([...DEFAULT_AI_IMAGE_SIZES])
       .transform(list => [...new Set(list)]),
+    /**
+     * 是否接受 sizes 之外的尺寸(前端「自定义画面比例」）。
+     *
+     * 默认 false:严格校验请求体的网关(OpenAI 官方等)收到未声明的 size 会整个
+     * 400,能不能放开只有部署者知道。声明 true 后路由层跳过尺寸交叉校验,
+     * sizes 仍然下发(前端据此派生等比档位),两者互不排斥。
+     */
+    customSizes: z.boolean().default(false),
   })
   .strict();
 

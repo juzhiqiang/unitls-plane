@@ -114,16 +114,20 @@ export interface ImageProviderDescriptor {
   capabilities: ImageProviderCapability[];
   /** 该来源(模型)支持的尺寸,路由时做交叉校验。 */
   sizes: string[];
+  /** 声明后可接受 sizes 之外的尺寸(前端自定义画面比例);测试注入口用。 */
+  customSizes?: boolean;
   /** 可选归并键,测试注入口用来模拟 displayAs;真实路径从 config.models 解析。 */
   displayAs?: string;
 }
 
-/** 下发给前端的模型信息。只有这三个字段可以出网:来源的 baseUrl/apiKey/label 永不外泄。 */
+/** 下发给前端的模型信息。只有这几个字段可以出网:来源的 baseUrl/apiKey/label 永不外泄。 */
 export interface ImageModelDescriptor {
   model: string;
   capabilities: ImageProviderCapability[];
   /** 所有服务该模型的来源的尺寸并集,前端据此派生画面比例档位。 */
   sizes: string[];
+  /** 所有服务该模型的来源是否接受自定义尺寸(取或),前端据此启用「自定义」chip。 */
+  customSizes: boolean;
 }
 
 /**
@@ -752,6 +756,7 @@ export class ImageGenerationService {
           : {}),
         capabilities: provider.descriptor?.capabilities ?? ['generate', 'edit'],
         sizes: provider.descriptor?.sizes ?? [...DEFAULT_AI_IMAGE_SIZES],
+        customSizes: provider.descriptor?.customSizes ?? false,
       },
       provider,
     });
@@ -774,16 +779,20 @@ export class ImageGenerationService {
     for (const [displayKey, entries] of this.byModel) {
       const capabilities = new Set<ImageProviderCapability>();
       const sizes = new Set<string>();
+      // customSizes 取或:任一来源声明支持自定义尺寸,这一组模型就放行任意尺寸。
+      let customSizes = false;
       for (const entry of entries) {
         for (const capability of entry.model.capabilities) {
           capabilities.add(capability);
         }
         for (const size of entry.model.sizes) sizes.add(size);
+        if (entry.model.customSizes) customSizes = true;
       }
       models.push({
         model: displayKey,
         capabilities: [...capabilities],
         sizes: [...sizes],
+        customSizes,
       });
     }
     return models;
@@ -821,10 +830,13 @@ export class ImageGenerationService {
       candidates = [first];
     }
     const required = REQUIRED_CAPABILITY[config.mode];
+    // 声明 customSizes 的模型跳过尺寸交叉校验:前端「自定义画面比例」合成的
+    // WxH 不可能出现在 sizes 里,按档位过滤会把唯一候选滤空。能力过滤保留。
     const filtered = candidates.filter(
       entry =>
         entry.model.capabilities.includes(required) &&
-        entry.model.sizes.includes(config.size)
+        (entry.model.customSizes === true ||
+          entry.model.sizes.includes(config.size))
     );
     if (filtered.length === 0) {
       this.logger.warn(

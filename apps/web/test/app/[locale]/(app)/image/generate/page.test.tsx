@@ -58,6 +58,7 @@ const DEFAULT_MODEL = {
     '864x1536',
     '1536x864',
   ],
+  customSizes: false,
 };
 
 vi.mock('@/i18n/navigation', () => ({

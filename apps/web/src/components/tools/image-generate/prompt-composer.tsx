@@ -7,7 +7,10 @@ import { IMAGE_GENERATE_MAX_REFERENCE_IMAGES } from '@utils-plane/validators';
 import type { ImageGenerateChatDraft } from './types';
 import { SettingsPanel } from './settings-panel';
 import { ImageLightbox } from './image-lightbox';
-import type { ImageGenerateModelDto } from '@/hooks/api/types';
+import type {
+  ImageGenerateModelDto,
+  ImageGeneratePresetDto,
+} from '@/hooks/api/types';
 import { useObjectUrls } from '@/hooks/use-object-urls';
 
 interface PromptComposerProps {
@@ -26,6 +29,10 @@ interface PromptComposerProps {
   editSupported: boolean;
   /** 参考图大小上限(字节);超限文件直接拒收并提示。 */
   maxReferenceSize?: number;
+  /** 提示词模板;设置面板底部的模板入口用它,空列表时不显示入口。 */
+  presets?: ImageGeneratePresetDto[];
+  /** 选中模板:填入输入框(页面层负责聚焦)。 */
+  onPickPreset?: (prompt: string) => void;
 }
 
 /**
@@ -47,6 +54,8 @@ export function PromptComposer({
   quota,
   editSupported,
   maxReferenceSize,
+  presets = [],
+  onPickPreset,
 }: PromptComposerProps) {
   const t = useTranslations('ImageGenerate');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -76,6 +85,11 @@ export function PromptComposer({
         target instanceof Element &&
         target.closest('[data-radix-popper-content-wrapper]')
       ) {
+        return;
+      }
+      // 模板弹窗同样走 portal,而且在设置面板内部打开:点在弹窗里不该收起面板
+      // (否则选完模板面板已经没了)。Radix 的 Content 自带 role="dialog"。
+      if (target instanceof Element && target.closest('[role="dialog"]')) {
         return;
       }
       setSettingsOpen(false);
@@ -169,6 +183,8 @@ export function PromptComposer({
             disabled={busy}
             models={models}
             quotaRemaining={quota?.remaining}
+            presets={presets}
+            onPickPreset={onPickPreset}
           />
         </div>
       )}
@@ -189,9 +205,7 @@ export function PromptComposer({
                 <button
                   type="button"
                   aria-label={t('enlargeReference')}
-                  onClick={() =>
-                    setLightboxUrl(referenceUrls[index] ?? null)
-                  }
+                  onClick={() => setLightboxUrl(referenceUrls[index] ?? null)}
                   className="block overflow-hidden rounded-md border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {referenceUrls[index] ? (
@@ -306,7 +320,10 @@ export function PromptComposer({
         )}
 
         {referenceError && (
-          <p role="alert" className="px-2 pb-1 pt-1 text-[11px] text-destructive">
+          <p
+            role="alert"
+            className="px-2 pb-1 pt-1 text-[11px] text-destructive"
+          >
             {referenceError}
           </p>
         )}

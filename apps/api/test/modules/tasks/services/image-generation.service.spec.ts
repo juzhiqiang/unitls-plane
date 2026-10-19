@@ -1016,7 +1016,8 @@ describe('ImageGenerationService (multi provider registry)', () => {
     capabilities: Array<'generate' | 'edit'> = ['generate', 'edit'],
     model = 'gpt-image-1',
     sizes: string[] = ['1024x1024', '1024x1536', '1536x1024'],
-    displayAs?: string
+    displayAs?: string,
+    customSizes?: boolean
   ) {
     return {
       generate: vi.fn(async () => Buffer.from(id)),
@@ -1026,6 +1027,7 @@ describe('ImageGenerationService (multi provider registry)', () => {
         capabilities,
         sizes,
         ...(displayAs ? { displayAs } : {}),
+        ...(customSizes !== undefined ? { customSizes } : {}),
       },
       model,
       ...(displayAs ? { displayAs } : {}),
@@ -1125,11 +1127,13 @@ describe('ImageGenerationService (multi provider registry)', () => {
         model: 'gpt-image-1',
         capabilities: ['generate', 'edit'],
         sizes: ['1024x1024', '1024x1536', '1536x1024'],
+        customSizes: false,
       },
       {
         model: 'KMage V2',
         capabilities: ['generate', 'edit', 'inpaint'],
         sizes: ['1024x1024', '1024x1536', '1536x1024'],
+        customSizes: false,
       },
     ]);
 
@@ -1188,6 +1192,67 @@ describe('ImageGenerationService (multi provider registry)', () => {
     expect(result.buffer.toString()).toBe('strict');
   });
 
+  it('accepts a non-listed size when the model declares customSizes', async () => {
+    // 前端「自定义画面比例」合成的 1536x656 不在 sizes 里,声明 customSizes 后放行。
+    const provider = stub(
+      'flexible',
+      ['generate', 'edit'],
+      'gpt-image-1',
+      ['1024x1024'],
+      undefined,
+      true
+    );
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    const result = await service.generate({ ...config, size: '1536x656' });
+
+    expect(provider.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ size: '1536x656' }),
+      undefined
+    );
+    expect(result.buffer.toString()).toBe('flexible');
+  });
+
+  it('still rejects a non-listed size when customSizes is not declared', async () => {
+    // 防回归:未声明的来源(严格网关)不能因为前端能提交就放行。
+    const provider = stub('strict', ['generate', 'edit'], 'gpt-image-1', [
+      '1024x1024',
+    ]);
+    const service = new ImageGenerationService({ providers: [provider] });
+
+    const error = (await service
+      .generate({ ...config, size: '1536x656' })
+      .catch(caught => caught)) as ImageGenerationError;
+
+    expect(error.code).toBe(ErrorCodes.AI_IMAGE_PROVIDER_UNAVAILABLE);
+    expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  it('unions customSizes across every source serving the same model', () => {
+    const service = new ImageGenerationService({
+      providers: [
+        stub('strict', ['generate', 'edit'], 'gpt-image-1', ['1024x1024']),
+        stub(
+          'flexible',
+          ['generate', 'edit'],
+          'gpt-image-1',
+          ['1024x1024'],
+          undefined,
+          true
+        ),
+      ],
+    });
+
+    expect(service.listModels()).toEqual([
+      {
+        model: 'gpt-image-1',
+        capabilities: ['generate', 'edit'],
+        sizes: ['1024x1024'],
+        customSizes: true,
+      },
+    ]);
+  });
+
   it('reports unconfigured when the injected provider list is empty', async () => {
     const service = new ImageGenerationService({ providers: [] });
 
@@ -1226,6 +1291,7 @@ describe('ImageGenerationService (multi provider registry)', () => {
         model: 'gpt-image-2',
         capabilities: ['generate', 'edit', 'inpaint'],
         sizes: ['1024x1024', '1024x1536', '1536x1024'],
+        customSizes: false,
       },
     ]);
   });

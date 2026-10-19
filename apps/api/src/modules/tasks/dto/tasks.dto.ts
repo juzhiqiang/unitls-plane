@@ -230,6 +230,12 @@ export class ImageGenerateModelDto {
     isArray: true,
   })
   sizes!: string[];
+
+  @ApiProperty({
+    description:
+      '是否接受 sizes 之外的尺寸（所有服务它的来源取或）。为 true 时前端显示可用的「自定义画面比例」入口；创建任务时把解析/合成出的 WxH 放进 inputConfig.size',
+  })
+  customSizes!: boolean;
 }
 
 export class ImageGenerateSessionDto {

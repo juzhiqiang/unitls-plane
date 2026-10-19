@@ -45,6 +45,7 @@ beforeEach(() => {
       model: 'gpt-image-1',
       capabilities: ['generate', 'edit'],
       sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
+      customSizes: false,
     },
   ]);
 });
@@ -154,6 +155,7 @@ it('returns the configured models for an authenticated user', async () => {
       model: 'gpt-image-1',
       capabilities: ['generate', 'edit'],
       sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
+      customSizes: false,
     },
   ]);
 });

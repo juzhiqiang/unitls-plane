@@ -569,6 +569,8 @@ export interface components {
             capabilities: ("generate" | "edit" | "inpaint")[];
             /** @description 该模型支持的尺寸（"auto" 或 "WxH"，所有服务它的来源的并集）。前端据此派生画面比例档位，创建任务时把选中的原始尺寸串放进 inputConfig.size */
             sizes: string[][];
+            /** @description 是否接受 sizes 之外的尺寸（所有服务它的来源取或）。为 true 时前端显示可用的「自定义画面比例」入口；创建任务时把解析/合成出的 WxH 放进 inputConfig.size */
+            customSizes: boolean;
         };
         ImageGenerateQuotaDto: {
             /** @description 当日生图张数上限 */

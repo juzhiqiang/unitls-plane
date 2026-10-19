@@ -104,6 +104,8 @@ it('applies OpenAI-compatible defaults to a minimal entry', () => {
           '864x1536',
           '1536x864',
         ],
+        // 默认关:严格网关收到未声明尺寸会 400,是否放开由部署者显式声明。
+        customSizes: false,
       },
     ],
     editTransport: 'multipart',
@@ -271,6 +273,27 @@ it('reads declared sizes and drops duplicates', () => {
   );
 
   expect(provider?.models[0]?.sizes).toEqual(['1024x1024', '1344x768', 'auto']);
+});
+
+it('reads customSizes when declared and defaults it to false otherwise', () => {
+  const [provider] = loadImageProviderConfigs(
+    env({
+      AI_IMAGE_PROVIDERS: JSON.stringify([
+        {
+          id: 'friendly',
+          label: '宽松网关',
+          baseUrl: 'https://friendly.example.com',
+          models: [
+            { name: 'sdxl-xl', customSizes: true },
+            { name: 'strict-xl' },
+          ],
+        },
+      ]),
+    })
+  );
+
+  expect(provider?.models[0]?.customSizes).toBe(true);
+  expect(provider?.models[1]?.customSizes).toBe(false);
 });
 
 it('rejects a malformed size entry', () => {

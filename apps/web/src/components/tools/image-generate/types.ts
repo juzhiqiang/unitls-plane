@@ -78,6 +78,67 @@ export function sizeToRatioLabel(size: string): string {
 }
 
 /**
+ * 自定义画面比例解析(前端设置面板的「自定义」chip)。
+ *
+ * 接受两种写法:
+ * - `W:H`(比例,如 `21:9`):先按约分后的比例找模型档位(16:9 → 1536x864);
+ *   没有等比档位时按比例合成尺寸 —— 长边 1536,短边取整到 16 的倍数(21:9 → 1536x656)。
+ * - `WxH`(尺寸,如 `1920x824`):原样返回,由模型决定是否接受(声明 customSizes 时原样提交;
+ *   否则提交前会被 resolveDraftSize 按比例最近邻映射回档位)。
+ *
+ * 解析失败返回 null,调用方据此提示且不修改草稿。
+ *
+ * 参数校验:比例两侧 1–4096(比例是相对值,`16:9` 的 9 不该按像素下限卡掉);
+ * 尺寸两侧 16–4096 且至少一边 ≥ 64,避免出现 `1x1` 这种无意义请求。
+ */
+export function resolveCustomRatio(
+  input: string,
+  modelSizes: string[] | undefined
+): string | null {
+  const match = /^\s*(\d{1,4})\s*([:xX])\s*(\d{1,4})\s*$/.exec(input.trim());
+  if (!match) return null;
+  const first = Number(match[1]);
+  const separator = match[2] ?? '';
+  const second = Number(match[3]);
+
+  if (separator === ':') {
+    if (first < 1 || first > 4096 || second < 1 || second > 4096) return null;
+    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+    const divisor = gcd(first, second) || 1;
+    const label = `${first / divisor}:${second / divisor}`;
+
+    // 等比档位:与 chip 上的标签完全一致即视为同一比例(不要求等像素)。
+    const declared = (modelSizes ?? []).find(
+      size => size !== 'auto' && sizeToRatioLabel(size) === label
+    );
+    if (declared) return declared;
+
+    // 无等比档位:长边固定 1536,短边按比例缩放并取整到 16 的倍数。
+    const longSide = 1536;
+    const shortSide = Math.max(
+      16,
+      Math.round(
+        (longSide * Math.min(first, second)) / Math.max(first, second) / 16
+      ) * 16
+    );
+    return first >= second
+      ? `${longSide}x${shortSide}`
+      : `${shortSide}x${longSide}`;
+  }
+
+  if (
+    first < 16 ||
+    first > 4096 ||
+    second < 16 ||
+    second > 4096 ||
+    (first < 64 && second < 64)
+  ) {
+    return null;
+  }
+  return `${first}x${second}`;
+}
+
+/**
  * 草稿尺寸对模型 sizes 的回退解析:
  * 1. 列表里有完全匹配的值(含 "auto")时原样返回;
  * 2. 如果输入是 WxH 格式(例如编辑时根据原图物理分辨率传入,或上游返回的非标分辨率),

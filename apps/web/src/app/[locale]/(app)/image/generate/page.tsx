@@ -314,8 +314,12 @@ export default function ImageGeneratePage() {
     const clientGroupId = randomUUID();
     const prompt = draft.prompt.trim();
     // 草稿尺寸(默认 auto)不在当前模型支持列表时回落到第一档,免得提交一个
-    // 会在 processor 被尺寸交叉校验拒掉的值。
-    const size = resolveDraftSize(draft.size, selectedModel?.sizes);
+    // 会在 processor 被尺寸交叉校验拒掉的值。模型声明 customSizes 时草稿里的
+    // 自定义 WxH 原样提交(服务端对该模型跳过尺寸过滤),不能映射回档位。
+    const size =
+      selectedModel?.customSizes === true && draft.size !== 'auto'
+        ? draft.size
+        : resolveDraftSize(draft.size, selectedModel?.sizes);
 
     setFailure(null);
     setSubmitting(true);
@@ -649,6 +653,8 @@ export default function ImageGeneratePage() {
               quota={session ? quota.data : undefined}
               editSupported={editSupported}
               maxReferenceSize={getImageUploadMaxFileSize(session)}
+              presets={presetsQuery.data ?? []}
+              onPickPreset={pickPreset}
             />
           </div>
         </div>

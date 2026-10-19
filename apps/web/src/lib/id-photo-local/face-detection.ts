@@ -120,6 +120,13 @@ export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
       const inputName = session.inputNames[0];
       if (!inputName) throw new Error('YuNet session has no input');
 
+      // 布局校验放在推理之前:布局不匹配时结果无法解码,没必要先白跑一次 session.run。
+      if (!usesRawYunetLayout(session.outputNames)) {
+        throw new Error(
+          `unexpected YuNet output layout: ${session.outputNames.join(', ')}`
+        );
+      }
+
       const result = await session.run({
         [inputName]: new ort.Tensor('float32', tensor, [
           1,
@@ -128,12 +135,6 @@ export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
           size,
         ]) as unknown as OrtTensor,
       });
-
-      if (!usesRawYunetLayout(session.outputNames)) {
-        throw new Error(
-          `unexpected YuNet output layout: ${session.outputNames.join(', ')}`
-        );
-      }
 
       const faces = decodeYunetRawOutputs(result, {
         inputWidth: size,

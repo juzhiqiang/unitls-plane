@@ -16,18 +16,14 @@ describe('model-registry', () => {
     delete process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
   });
 
-  it('balanced 档为 photographic fp32(CPU 可用),high 档仍是 fp32 + WebGPU', () => {
-    expect(ID_PHOTO_MODELS.balanced.dtype).toBe('fp32');
-    expect(ID_PHOTO_MODELS.balanced.requiresWebGpu).toBe(false);
-    // photographic 约 25MB,不再是 RMBG 的 88MB
-    expect(ID_PHOTO_MODELS.balanced.sizeBytes).toBeGreaterThan(
-      20 * 1024 * 1024
-    );
-    expect(ID_PHOTO_MODELS.balanced.sizeBytes).toBeLessThan(40 * 1024 * 1024);
-
-    expect(ID_PHOTO_MODELS.high.dtype).toBe('fp32');
-    expect(ID_PHOTO_MODELS.high.requiresWebGpu).toBe(true);
-    expect(ID_PHOTO_MODELS.high.sizeBytes).toBeGreaterThan(160 * 1024 * 1024);
+  it('两档共用同一份 photographic fp32 权重与真实体积', () => {
+    // photographic 单档:high 不再是 RMBG fp32 退路,元数据与 balanced 一致。
+    expect(ID_PHOTO_MODELS.balanced).toEqual({
+      dtype: 'fp32',
+      requiresWebGpu: false,
+      sizeBytes: 25_969_398,
+    });
+    expect(ID_PHOTO_MODELS.high).toEqual(ID_PHOTO_MODELS.balanced);
   });
 
   it('主分割指向自托管的 MODNet photographic 权重', () => {
@@ -67,9 +63,10 @@ describe('model-registry', () => {
     expect(() => ortWasmPath()).toThrow();
   });
 
-  it('tierFor locks balanced when webgpu unavailable, honors request when available', () => {
+  it('tierFor 恒定落到 balanced(photographic 单档,兼容既有 tier 参数)', () => {
     expect(tierFor(false, 'high')).toBe('balanced');
-    expect(tierFor(true, 'high')).toBe('high');
+    expect(tierFor(true, 'high')).toBe('balanced');
     expect(tierFor(true, 'balanced')).toBe('balanced');
+    expect(tierFor(false, 'balanced')).toBe('balanced');
   });
 });

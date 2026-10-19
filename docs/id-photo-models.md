@@ -1,66 +1,82 @@
-# 证件照本地抠图模型预置（BRIA RMBG-1.4）
+# 证件照本地抠图模型预置:MODNet photographic(证件照专用,Apache-2.0)
 
-证件照本地处理使用
-[`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers) 的
-`background-removal` pipeline 运行 **BRIA
-RMBG-1.4**，在浏览器内完成人像分割，产出透明 cutout 后再合成证件照底色。模型资产自托管在 MinIO/S3，离线镜像内置、启动时同步到本地 MinIO。
+证件照本地处理使用 **MODNet photographic(证件照专用,Apache-2.0)**,通过 `onnxruntime-web` 直接创建
+`InferenceSession` 在浏览器内完成人像分割,产出透明 cutout 后再合成证件照底色; 人脸检测使用 OpenCV
+Zoo 的 **YuNet 2023mar**(MIT)。两者都不再经过 `@huggingface/transformers` 的 `background-removal`
+pipeline。模型资产自托管在 MinIO/S3, 离线镜像内置、启动时同步到本地 MinIO。
+
+模型选型、alpha 指标与破洞分析以 [id-photo-model-comparison.md](./id-photo-model-comparison.md)
+为**权威数据源**;本文只保留结论摘要与部署/资产说明。
 
 ## ⚠️ 许可
 
-RMBG-1.4 使用 **BRIA 自有许可**（HF model card 标注 `license: other`），
-**商用需向 BRIA 申请授权**。本项目当前定位为免费受限公测，是否构成商用需自行判断。升级或替换模型前请复核
-<https://huggingface.co/briaai/RMBG-1.4> 的许可条款。
+- **MODNet photographic**:Apache-2.0。
+- **YuNet 2023mar**:MIT。
+- **BRIA RMBG-1.4**:BRIA 自有许可(HF model card 标注
+  `license: other`),**商用需向 BRIA 申请授权**。它现在**不再是默认模型**,仅作为历史资产保留（见下文「为什么不是 ISNet
+  / BiRefNet / MODNet」）。升级或替换模型前请复核 <https://huggingface.co/briaai/RMBG-1.4>
+  的许可条款。
 
 ## 为什么不是 ISNet / BiRefNet / MODNet
 
-上一版使用
-`@imgly/background-removal`（ISNet）。实测在「黑帽子 + 暗背景」这类低对比样张上，ISNet 会把整顶帽子判成背景，换底色后帽子染色甚至消失。同一张图的实测对比：
+以下是历史选型结论与 Task 1 实测修正。完整数据、样张与复现命令见
+[id-photo-model-comparison.md](./id-photo-model-comparison.md)。
 
-| 模型              | 许可       | 帽子         | 衣服   | 推理耗时 | 浏览器可用性              |
-| ----------------- | ---------- | ------------ | ------ | -------- | ------------------------- |
-| ISNet（旧）       | 无顾虑     | ✗ 半透明鬼影 | ✓ 实心 | 9~12s    | 可用                      |
-| **RMBG-1.4**      | BRIA 专有  | ✓ 实心       | ✓ 实心 | **0.6s** | 可用（当前方案）          |
-| MODNet            | Apache-2.0 | ✓ 实心       | ✗ 破洞 | 1.1s     | 可用                      |
-| BiRefNet_lite     | MIT        | —            | —      | —        | ✗ OOM                     |
-| BiRefNet-portrait | MIT        | —            | —      | —        | ✗ OOM（需一次分配 490MB） |
+- **ISNet**(上一版
+  `@imgly/background-removal`):在「黑帽子 + 暗背景」低对比样张上会把整顶帽子判成背景, 换底色后帽子染色甚至消失,因此淘汰。
+- **BiRefNet_lite / BiRefNet-portrait**:浏览器端内存不足(OOM,portrait 需一次分配约 490MB),无法落地。
+- **RMBG-1.4**:质量可用,但权重约 84MB(fp16)/168MB(fp32)、BRIA 专有许可,且与 photographic在洞检测上没有质量优势,因此不再是默认模型。
+- **MODNet 的历史结论已被 Task 1 修正**:旧结论「通用 MODNet 会让衣服破洞」来自 **通用 modnet 256×256
+  fill(拉伸)+ 旧后处理管线**;Task 1 用同一批权重实测后发现:
+  - 破洞的真正触发因素是**补边预处理**。photographic 按
+    `512 contain`(等比缩放 + 黑边补成正方形) 会在衣服与人脸/眼睛处稳定破洞;
+  - 改成参考实现口径(`refpipe`:长边 512、保持长宽比、宽高向下取 32 的倍数、**不补边**)后, 同一张样张**洞像素为 0**;
+  - `apps/api/models/modnet.onnx` 与 `modnet_photographic.onnx` 在同一输入下逐像素输出完全相同 (max
+    abs diff = 0),破洞不能归因于模型权重差异。
 
-关键量化指标（同一张样张）：
+Task 1 主表摘要(样张 A:黑帽子 + 暗背景;数值来自权威数据源):
 
-| 指标                | ISNet            | RMBG-1.4  |
-| ------------------- | ---------------- | --------- |
-| 半透明像素占比      | 16.13%           | **0.63%** |
-| 帽子区 alpha 中位数 | 217（44% < 102） | **249**   |
-| 衣服区 alpha p05    | —                | **255**   |
+| 指标                          | photographic refpipe(当前) | RMBG-1.4 fp16        | 通用 MODNet 256 fill |
+| ----------------------------- | -------------------------- | -------------------- | -------------------- |
+| 半透明像素占比(0.02–0.98)     | 3.68%                      | 1.97%                | 2.42%                |
+| 前景占比(alpha>0.5)           | 58.80%                     | 58.39%               | 59.60%               |
+| 洞像素总数                    | **0**                      | 0                    | 7                    |
+| 衣服区 alpha p05              | 0.969                      | 1.000                | 1.000                |
+| 推理耗时(CPU,含加载,量级参考) | 192 ms                     | 1100 ms(fp32 808 ms) | 129 ms               |
 
-RMBG-2.0（BiRefNet 架构）在 HF 上是
-**gated 仓库**，未登录无法下载（`Unauthorized access`），故未采用。
+对照的 `photographic 512 contain`
+在同一张图上洞像素为 1524(衣服 347 + 人脸/眼睛 1176), 这正是当前实现**禁止 letterbox 补边**的原因。RMBG-2.0(BiRefNet 架构)在 HF 上是 gated 仓库, 未登录无法下载,故未采用。
 
 ## 档位与模型
 
-| 档位   | dtype  | 文件                   | 大小   | 设备         | 说明                              |
-| ------ | ------ | ---------------------- | ------ | ------------ | --------------------------------- |
-| 均衡   | `fp16` | `onnx/model_fp16.onnx` | ~84MB  | CPU / WebGPU | 默认档；无 WebGPU 时强制使用      |
-| 高精度 | `fp32` | `onnx/model.onnx`      | ~168MB | WebGPU       | 需 WebGPU；无 WebGPU 时回退均衡档 |
+photographic 是**单档**模型:只有一个 fp32 权重,`balanced` 与 `high`
+指向同一 URL、复用同一个 session。保留 `ModelTier` 与 `high`
+条目仅为了兼容既有的高精度开关调用方,不存在「high → RMBG-1.4 fp32」的代码路径。
 
-> 档位映射在 `apps/web/src/lib/id-photo-local/model-registry.ts`，改档位需同步此文件与下载脚本。
+| 档位          | dtype  | 文件                              | 大小                      | 设备         | 说明                     |
+| ------------- | ------ | --------------------------------- | ------------------------- | ------------ | ------------------------ |
+| 均衡 / 高精度 | `fp32` | `modnet/modnet_photographic.onnx` | 25,969,398 B(约 24.8 MiB) | CPU / WebGPU | 单档;无 WebGPU 时走 wasm |
 
-## 参考对齐新增资产
+> 档位映射与资产 URL 在 `apps/web/src/lib/id-photo-local/model-registry.ts`;`tierFor()` 恒定返回
+> `balanced`,改档位/资产需同步此文件、下载脚本与本文档。
 
-| 资产 | MinIO key | 体积 | 许可 | 用途 |
-| --- | --- | --- | --- | --- |
-| MODNet photographic | `models/modnet/modnet_photographic.onnx` | ~25MB | Apache-2.0 | 两端主分割（512×512，保长宽比） |
-| YuNet 人脸检测 | `models/face/yunet/face_detection_yunet_2023mar.onnx` | ~227KB | MIT | 两端人脸检测与自动构图 |
+## 资产清单
 
-`prepare-id-photo-models.sh` 会一并准备；`sync-id-photo-models.ts` 的
-`ASSET_PREFIXES` 已包含 `modnet/` 与 `face/`，离线镜像启动时自动同步。
-下载脚本优先从本地候选复制权重（`vendor/`、项目内相对路径，或显式设置
-`ID_PHOTO_REF_ROOT` / `MODNET_LOCAL_PATH` / `YUNET_LOCAL_PATH`），本地缺失时
-YuNet 回落到 OpenCV Zoo 下载并校验 sha256。`vendor/` 已被 `.gitignore` 忽略，
-模型权重不进 Git。
+| 资产                | MinIO key                                             | 体积                     | 许可       | 用途                                     |
+| ------------------- | ----------------------------------------------------- | ------------------------ | ---------- | ---------------------------------------- |
+| MODNet photographic | `models/modnet/modnet_photographic.onnx`              | 25,969,398 B             | Apache-2.0 | 两端主分割(长边 512、保持长宽比、不补边) |
+| YuNet 人脸检测      | `models/face/yunet/face_detection_yunet_2023mar.onnx` | 232,589 B                | MIT        | 两端人脸检测与自动构图                   |
+| BRIA RMBG-1.4(历史) | `models/rmbg/1.4/...`                                 | ~84MB fp16 / ~168MB fp32 | BRIA 专有  | 非默认;仅为历史资产与紧急排查保留        |
+
+`prepare-id-photo-models.sh` 会一并准备；`sync-id-photo-models.ts` 的 `ASSET_PREFIXES` 已包含
+`rmbg/`、`ort/`、`modnet/` 与
+`face/`，离线镜像启动时自动同步。下载脚本优先从本地候选复制权重（`vendor/`、项目内相对路径，或显式设置
+`ID_PHOTO_REF_ROOT` / `MODNET_LOCAL_PATH` / `YUNET_LOCAL_PATH`），本地缺失时 YuNet 回落到 OpenCV
+Zoo 下载并校验 sha256。`vendor/` 已被 `.gitignore` 忽略，模型权重不进 Git。
 
 ## 资产结构
 
-transformers.js 按 HF 仓库的相对路径取文件，所以 MinIO 上保持与仓库一致的目录结构即可：
+`onnxruntime-web` 直接按 URL 取文件，MinIO 上保持以下目录结构：
 
 ```text
 models/rmbg/1.4/config.json
@@ -75,34 +91,35 @@ models/modnet/modnet_photographic.onnx
 models/face/yunet/face_detection_yunet_2023mar.onnx
 ```
 
-共 10 个文件（约 313MB）。相比上一版 @imgly 的 76 个 SHA256 分块，结构大幅简化。
+共 10 个文件（约 308 MiB）。RMBG 的四项是历史资产，当前代码不再加载；真正参与运行时下载的是
+`modnet/`、`face/` 与 `ort/`。
 
-**ort
-wasm 必须自托管**：transformers.js 默认从 jsDelivr 取 ort 运行时，离线镜像内没有公网会直接失败。
+**ort wasm 必须自托管**：默认从 jsDelivr 取 ort 运行时的做法在离线镜像内没有公网，会直接失败。
 
 ### ort 路径为什么带版本
 
 ort 的 JS glue 与 `.wasm` 是**配对**的，版本错配会让 wasm 缺少 JS 期望的导出。这个坑已经踩过两次：
 
 - `webgpuInit is not a function`（ISNet 时期，ort 1.21 与 1.27 之争）
-- `_OrtGetInputOutputMetadata is not a function`（本次，误从仓库根解析到残留的 1.21.0）
+- `_OrtGetInputOutputMetadata is not a function`（误从仓库根解析到残留的 1.21.0）
 
 而资产按 `immutable` 长缓存发布，**路径不带版本的话，升级后浏览器会继续命中旧 wasm**。所以
 `ortWasmPath()` 拼上了 `ORT_VERSION`，靠路径变化破缓存。
 
 `scripts/download-rmbg-assets.cjs` 会校验 `model-registry.ts` 的 `ORT_VERSION`
-与实际解析到的 ort 包版本是否一致，不一致直接失败并提示改哪里 ——宁可构建期炸，也不要运行期错配。升级
-`@huggingface/transformers` 后若 ort 版本变了，按提示更新常量即可。
+与实际解析到的 ort 包版本是否一致，不一致直接失败并提示改哪里 ——宁可构建期炸，也不要运行期错配。
 
 ## 路径映射
 
 前端 `model-registry.ts`：
 
 ```ts
-env.remoteHost = `${NEXT_PUBLIC_S3_PUBLIC_URL}/models/`; // modelsBaseUrl()
-env.remotePathTemplate = '{model}/';
-env.backends.onnx.wasm.wasmPaths = `${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/`; // ortWasmPath()
-// model id = 'rmbg/1.4' → 拼出 ${base}/models/rmbg/1.4/<file>
+// 主分割
+`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/modnet/modnet_photographic.onnx`; // modnetModelUrl()
+// 人脸检测
+`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/face/yunet/face_detection_yunet_2023mar.onnx`; // yunetModelUrl()
+// ort 运行时
+`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/${ORT_VERSION}/`; // ortWasmPath()
 ```
 
 ## 预置步骤（本地开发）
@@ -117,39 +134,40 @@ env.backends.onnx.wasm.wasmPaths = `${NEXT_PUBLIC_S3_PUBLIC_URL}/models/ort/`; /
 3. 执行：`./scripts/prepare-id-photo-models.sh`。
 4. 脚本会：
    - `node scripts/download-rmbg-assets.cjs all` 依次准备四个目标：
-     - `model`：RMBG-1.4 从 HF 下载到 `docker/models/rmbg/1.4/`；
+     - `model`：RMBG-1.4 从 HF 下载到 `docker/models/rmbg/1.4/`（历史资产）；
      - `runtime`：ort wasm 从 `node_modules` **复制**到
-       `docker/models/ort/<ORT_VERSION>/`（复制而非下载，保证与
-       `@huggingface/transformers` 实际依赖的 ort 版本严格一致 ——版本错配会导致
-       wasm 与 glue 导出对不上，参见 git 历史里的 `jsepInit`/`webgpuInit` 事故）；
+       `docker/models/ort/<ORT_VERSION>/`（复制而非下载，保证与实际依赖的 ort 版本严格一致）；
      - `modnet`：`modnet_photographic.onnx` 优先从本地候选复制到
        `docker/models/modnet/`，缺失时明确报错；
-     - `yunet`：`face_detection_yunet_2023mar.onnx` 优先本地复制，缺失时从
-       OpenCV Zoo 下载并校验 sha256 到 `docker/models/face/yunet/`。
+     - `yunet`：`face_detection_yunet_2023mar.onnx` 优先本地复制，缺失时从 OpenCV
+       Zoo 下载并校验 sha256 到 `docker/models/face/yunet/`。
    - `aws s3 sync` 把 `rmbg/`、`ort/`、`modnet/`、`face/` 四个前缀分别同步到
      `s3://models/`，设匿名只读策略与不可变缓存。
 
 ## 前端如何使用
 
-`apps/web/src/lib/id-photo-local/use-local-id-photo.ts`：
+`apps/web/src/lib/id-photo-local/segmentation.ts`：
 
 - 挂载时探测 WebGPU（`navigator.gpu.requestAdapter()`）→ `ep: 'webgpu' | 'wasm'`。
-- `tierFor(ep === 'webgpu', requestedTier)`：无 WebGPU 时把高精度请求锁回均衡档。
-- `pipeline('background-removal', 'rmbg/1.4', { dtype, device, progress_callback })`；pipeline 按档位缓存在 ref 里，同档复用（模型大，不能每次重建）。
-- 进度：transformers.js 发 `{status:'progress', progress:0..100}`，映射为 `loading-model`。
-- 产出 RawImage → `toCanvas()` → `createImageBitmap` → `compositeIdPhoto` 合成底色与裁剪。
+- `tierFor(...)`：photographic 单档，恒定返回 `balanced`；session 按 `ep` 缓存。
+- `segmentToCutout(file, tier, ep)`：动态尺寸走 `modnetInputSize`（长边 512、保持长宽比、32 对齐、
+  **不补边**）→ 裸 `onnxruntime-web` session 推理 → matte 转 0..255 → **共享的
+  `refinePortraitAlphaBytes`**（黑点 72 / 白点 144 / gamma 0.55）→ 与原图合成。
+- alpha 收敛函数位于
+  `packages/utils/src/id-photo-alpha.ts`，服务端 sharp 路径与浏览器本地路共用同一份实现，避免同一张图在两端出现不同的边缘。
 
-`@huggingface/transformers` 在 Next.js 构建时有特殊处理，见 `apps/web/next.config.mjs` 的 `webpack`
-钩子注释（server
-bundle 里 stub 成空模块；client 侧对 onnxruntime-web 的预打包 .mjs 关掉 URL 改写并替换
-`import.meta.url`）。
+`apps/web/src/lib/id-photo-local/face-detection.ts`：
+
+- `detectFaces(file)` 以 640×640、0..255 BGR 输入运行 YuNet 2023mar；
+- 解码、NMS、坐标映射复用 `packages/utils/src/id-photo-yunet.ts`，与服务端得出相同人脸框；
+- 检测失败一律返回空数组，自动构图退回居中裁剪。
 
 ## 对象存储
 
 - 桶：`models`（只读匿名下载，`put-bucket-policy` 允许 `s3:GetObject`）。
 - 公网 URL：`${NEXT_PUBLIC_S3_PUBLIC_URL}/models/...`。
-- 跨域：同步脚本会通过 `PutBucketCorsCommand` 给 `models` 桶设置 CORS 规则
-  （`AllowedOrigins: ['*']`、`GET/HEAD`），确保浏览器跨域拉取模型资产时收到
+- 跨域：同步脚本会通过 `PutBucketCorsCommand` 给 `models`
+  桶设置 CORS 规则（`AllowedOrigins: ['*']`、`GET/HEAD`），确保浏览器跨域拉取模型资产时收到
   `Access-Control-Allow-Origin`。
 - 缓存：上传时设 `Cache-Control: public, max-age=31536000, immutable`（资产按版本不可变）。
 

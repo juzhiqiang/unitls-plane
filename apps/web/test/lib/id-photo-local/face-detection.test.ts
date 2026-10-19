@@ -46,7 +46,13 @@ const SRC_WIDTH = 1280;
 const SRC_HEIGHT = 640;
 
 function rgbaAt(index: number): [number, number, number, number] {
-  return [index % 256, (index * 3) % 256, (index * 11) % 256, 255];
+  // 每个通道都非零:像素 0 的断言才有鉴别力(若通道值全为 0,步长写错也读不到差异)。
+  return [
+    (index + 1) % 256,
+    (index * 3 + 7) % 256,
+    (index * 11 + 13) % 256,
+    255,
+  ];
 }
 
 function makeRgba(width: number, height: number): Uint8ClampedArray {
@@ -230,6 +236,8 @@ describe('detectFaces (本地 YuNet)', () => {
   it('输出布局不是 12 张量时拒绝结果并返回空数组', async () => {
     createMock.mockResolvedValue(makeSession(['output']));
     await expect(detectFaces(makeFile())).resolves.toEqual([]);
+    // 布局校验必须在推理之前,不应白跑一次 session.run。
+    expect(runMock).not.toHaveBeenCalled();
   });
 
   it('session 在多次调用间复用', async () => {

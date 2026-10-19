@@ -3,20 +3,21 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import sharp from 'sharp';
 import * as ort from 'onnxruntime-node';
-import { MODNET_LONG_EDGE, modnetInputSize } from '@utils-plane/utils';
+import {
+  MODNET_LONG_EDGE,
+  modnetInputSize,
+  refinePortraitAlphaBytes,
+} from '@utils-plane/utils';
 import {
   bufferFromGeneratedImagePayload,
   normalizeOpenAiCompatibleImageEditUrl,
 } from './openai-compatible-image';
 
-export { modnetInputSize };
+export { modnetInputSize, refinePortraitAlphaBytes };
 export const MODNET_INPUT_SIZE = MODNET_LONG_EDGE;
 
 const MODNET_PHOTOGRAPHIC_NAME = 'modnet_photographic.onnx';
 const MODNET_GENERIC_NAME = 'modnet.onnx';
-const PORTRAIT_ALPHA_BLACK_POINT = 72;
-const PORTRAIT_ALPHA_WHITE_POINT = 144;
-const PORTRAIT_ALPHA_GAMMA = 0.55;
 const DEFAULT_OPENAI_SEGMENTATION_MODEL = 'gpt-4o-mini';
 const DEFAULT_OPENAI_SEGMENTATION_PROVIDER = 'chat_mask';
 
@@ -147,30 +148,6 @@ export function normalizeModNetMatteValues(
     maskBytes[i] = Math.max(0, Math.min(255, Math.round(normalized * 255)));
   }
   return maskBytes;
-}
-
-export function refinePortraitAlphaBytes(alphaBytes: Buffer): Buffer {
-  const refined = Buffer.alloc(alphaBytes.length);
-  const range = PORTRAIT_ALPHA_WHITE_POINT - PORTRAIT_ALPHA_BLACK_POINT;
-
-  for (let i = 0; i < alphaBytes.length; i += 1) {
-    const alpha = alphaBytes[i] ?? 0;
-    if (alpha <= PORTRAIT_ALPHA_BLACK_POINT) {
-      refined[i] = 0;
-      continue;
-    }
-    if (alpha >= PORTRAIT_ALPHA_WHITE_POINT) {
-      refined[i] = 255;
-      continue;
-    }
-
-    const normalized = (alpha - PORTRAIT_ALPHA_BLACK_POINT) / range;
-    refined[i] = Math.round(
-      Math.max(0, Math.min(1, normalized ** PORTRAIT_ALPHA_GAMMA)) * 255
-    );
-  }
-
-  return refined;
 }
 
 function normalizeOpenAiCompatibleBaseUrl(baseUrl: string): string {

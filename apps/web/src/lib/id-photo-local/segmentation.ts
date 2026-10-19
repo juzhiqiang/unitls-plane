@@ -16,7 +16,7 @@
  * docs/id-photo-model-comparison.md。
  */
 
-import { modnetInputSize } from '@utils-plane/utils';
+import { modnetInputSize, refinePortraitAlphaBytes } from '@utils-plane/utils';
 import {
   ID_PHOTO_MODELS,
   modnetModelUrl,
@@ -223,12 +223,21 @@ export async function segmentToCutout(
     const mctx = matteCanvas.getContext('2d');
     if (!mctx) throw new Error('2D canvas context unavailable');
     const imageData = mctx.createImageData(inputW, inputH);
+    // 与服务端 sharp 路径共用同一份 alpha 收敛:0..1 matte → 0..255 → 黑白点 + gamma。
+    // 不收敛会让本地路残留背景/光晕,同一张图在两端出现明显不同的边缘。
+    const rawAlpha = new Uint8Array(plane);
     for (let i = 0; i < plane; i += 1) {
-      const a = Math.max(0, Math.min(255, Math.round((matte[i] ?? 0) * 255)));
+      rawAlpha[i] = Math.max(
+        0,
+        Math.min(255, Math.round((matte[i] ?? 0) * 255))
+      );
+    }
+    const alpha = refinePortraitAlphaBytes(rawAlpha);
+    for (let i = 0; i < plane; i += 1) {
       imageData.data[i * 4] = 255;
       imageData.data[i * 4 + 1] = 255;
       imageData.data[i * 4 + 2] = 255;
-      imageData.data[i * 4 + 3] = a;
+      imageData.data[i * 4 + 3] = alpha[i] ?? 0;
     }
     mctx.putImageData(imageData, 0, 0);
 

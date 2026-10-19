@@ -36,11 +36,7 @@ vi.mock('onnxruntime-web', () => ({
   },
 }));
 
-import {
-  ORT_VERSION,
-  tierFor,
-  type ModelTier,
-} from '@/lib/id-photo-local/model-registry';
+import { ORT_VERSION, tierFor } from '@/lib/id-photo-local/model-registry';
 import {
   StaleSegmentationError,
   resetSegmentationCacheForTests,
@@ -218,7 +214,7 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     expect(putData.data[0]).toBe(255);
     expect(putData.data[1]).toBe(255);
     expect(putData.data[2]).toBe(255);
-    expect(putData.data[3]).toBe(128); // round(0.5 * 255)
+    expect(putData.data[3]).toBe(222); // 128 经共享 alpha 收敛(72/144/gamma 0.55)
 
     // 输出画布(第 3 个)按原图尺寸,先画原图再 destination-in 蒙版
     const outCanvas = canvases[2];
@@ -251,14 +247,22 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     expect(onDownloadProgress.mock.calls.map(call => call[0])).toEqual([0, 1]);
   });
 
-  it('同档位复用 session,不同档位/后端分别建 session', async () => {
+  it('同后端下 high 复用 balanced 的 session,不同后端分别建 session', async () => {
     await segmentToCutout(makeFile(), 'balanced', 'wasm');
     await segmentToCutout(makeFile(), 'balanced', 'wasm');
     expect(createMock).toHaveBeenCalledTimes(1);
 
+    // photographic 单档:high 与 balanced 指向同一 URL、复用同一 session。
+    await segmentToCutout(makeFile(), 'high', 'wasm');
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(tierFor(true, 'high')).toBe('balanced');
+
+    // 后端不同不能共用 session。
     await segmentToCutout(makeFile(), 'high', 'webgpu');
     expect(createMock).toHaveBeenCalledTimes(2);
-    expect(tierFor(true, 'high')).toBe('high');
+    expect(createMock.mock.calls.at(-1)?.[0]).toBe(
+      'http://localhost:9000/models/modnet/modnet_photographic.onnx'
+    );
     expect(createMock.mock.calls.at(-1)?.[1]).toEqual({
       executionProviders: ['webgpu'],
     });
@@ -300,14 +304,17 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     ).rejects.toBeInstanceOf(StaleSegmentationError);
   });
 
-  it('无 webgpu 时 high 锁回 balanced(asset 体积 25MB)', async () => {
+  it('high 档在任何后端都落到 balanced(photographic 单档)', async () => {
     await segmentToCutout(makeFile(), 'high', 'wasm');
-    // 两个档位现在是同一份 photographic 权重,但档位元数据仍区分
+    // 单档模型:无论请求 high 还是 balanced,都是同一份 photographic 权重。
     expect(createMock).toHaveBeenCalledTimes(1);
+    expect(createMock.mock.calls[0]?.[0]).toBe(
+      'http://localhost:9000/models/modnet/modnet_photographic.onnx'
+    );
     expect(createMock.mock.calls[0]?.[1]).toEqual({
       executionProviders: ['wasm'],
     });
-    const tier: ModelTier = tierFor(false, 'high');
-    expect(tier).toBe('balanced');
+    expect(tierFor(false, 'high')).toBe('balanced');
+    expect(tierFor(true, 'high')).toBe('balanced');
   });
 });

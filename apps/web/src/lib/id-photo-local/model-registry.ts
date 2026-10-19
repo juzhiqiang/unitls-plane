@@ -32,31 +32,33 @@ export interface ModelMeta {
   dtype: 'fp16' | 'fp32';
   /**
    * 是否必须有 WebGPU 才启用。
-   * photographic 25MB 在 CPU wasm 上可接受,故 balanced 不再锁 WebGPU;
-   * high 档保留为「photographic 实测破洞 → 用户手动切 RMBG-1.4 fp32」的退路。
+   * photographic 25MB 在 CPU wasm 上可接受,故两档都不锁 WebGPU。
    */
   requiresWebGpu: boolean;
   /** 资产体积(文档/估算用,运行时不依赖)。 */
   sizeBytes: number;
 }
 
+/** `modnet_photographic.onnx` 的实际体积。 */
+const MODNET_PHOTOGRAPHIC_BYTES = 25_969_398;
+
 /**
  * 档位。
  *
- * 换 photographic 后主分割统一使用同一份 ~25MB 权重;`high` 档保留给
- * 「photographic 实测破洞 → 用户手动切 RMBG-1.4 fp32」这条退路
- * (见 docs/id-photo-model-comparison.md)。
+ * photographic 是单档模型:balanced 与 high 使用同一份权重、同一个 session。
+ * 保留 `ModelTier` 与 `high` 条目只是为了兼容既有的高精度开关调用方,
+ * 不再存在「high → RMBG-1.4 fp32」的代码路径。
  */
 export const ID_PHOTO_MODELS: Record<ModelTier, ModelMeta> = {
   balanced: {
     dtype: 'fp32',
     requiresWebGpu: false,
-    sizeBytes: 25 * 1024 * 1024,
+    sizeBytes: MODNET_PHOTOGRAPHIC_BYTES,
   },
   high: {
     dtype: 'fp32',
-    requiresWebGpu: true,
-    sizeBytes: 176 * 1024 * 1024,
+    requiresWebGpu: false,
+    sizeBytes: MODNET_PHOTOGRAPHIC_BYTES,
   },
 };
 
@@ -100,12 +102,14 @@ export function ortWasmPath(): string {
 }
 
 /**
- * 给定 WebGPU 是否可用,决定实际使用哪一档。
- * 无 WebGPU 时锁均衡档,避免 high 档在 CPU 上卡死/OOM。
+ * 给定 WebGPU 是否可用与请求档位,决定实际使用哪一档。
+ *
+ * photographic 单档:两档共用同一份权重与 session,因此恒定返回 balanced。
+ * 保留 `webgpuAvailable` / `requested` 参数是为了兼容既有调用方。
  */
 export function tierFor(
-  webgpuAvailable: boolean,
-  requested: ModelTier
+  _webgpuAvailable: boolean,
+  _requested: ModelTier
 ): ModelTier {
-  return webgpuAvailable ? requested : 'balanced';
+  return 'balanced';
 }

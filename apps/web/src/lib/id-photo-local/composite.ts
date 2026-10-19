@@ -1,9 +1,13 @@
 import {
   estimateSourceBackgroundColors,
   resolveIdPhotoCropBox,
+  suggestBrightnessAdjustment,
   type IdPhotoCrop,
 } from '@utils-plane/validators';
-import { decontaminateIdPhotoForeground } from '@utils-plane/utils';
+import {
+  computeForegroundMeanBrightness,
+  decontaminateIdPhotoForeground,
+} from '@utils-plane/utils';
 import { writeDpi } from './dpi-metadata';
 
 export interface Rgb {
@@ -28,6 +32,14 @@ export interface CompositeOutputPixels {
 }
 
 /**
+ * 亮度校正参数：
+ * - 数字：直接使用该加法偏移；
+ * - `'auto'`：在裁剪后的成片尺寸上、只对 alpha > 0 的前景求均值，再交给共享的
+ *   `suggestBrightnessAdjustment`。与服务端同一口径。
+ */
+export type IdPhotoBrightness = number | 'auto';
+
+/**
  * 从 cutout 反推底色时，三通道都低于此值视为「背景已被 alpha 归零」，
  * 估计不可信，跳过反预乘。
  */
@@ -44,33 +56,44 @@ export function hexToRgb(hex: string): Rgb {
   };
 }
 
+function rgbPlane(rgba: Uint8ClampedArray, width: number, height: number) {
+  const pixelCount = width * height;
+  const rgb = new Uint8ClampedArray(pixelCount * 3);
+  for (let i = 0; i < pixelCount; i += 1) {
+    rgb[i * 3] = rgba[i * 4] ?? 0;
+    rgb[i * 3 + 1] = rgba[i * 4 + 1] ?? 0;
+    rgb[i * 3 + 2] = rgba[i * 4 + 2] ?? 0;
+  }
+  return rgb;
+}
+
 /**
  * 把透明抠图叠到纯色背景上，按 crop 解算出的框裁剪并缩放到目标像素。
  *
  * 剪辑几何一律走 validators 的 resolveIdPhotoCropBox —— 服务端 sharp 路径用的是
  * 同一个函数，这样同一组 crop 参数在本地与服务端产出完全一致的构图。
  *
- * 边缘去污染走共享的 decontaminateIdPhotoForeground（反预乘 + 溢色替换）：
- * 抠图 alpha 再干净，边缘像素的 RGB 仍是「前景 × a + 原背景 × (1-a)」，
- * 不还原就会在新底色上留下原背景色的光晕。
+ * 去污染与底色估计都必须在**裁剪后的成片尺寸**上做，与服务端一致：
+ * 1. 先把 cutout 按 crop 框缩放到 `presetW × presetH`；
+ * 2. 从原图（`source`）按同一个裁剪框取同尺寸像素，估计底色；
+ * 3. 在成片尺寸的 RGBA 上做去污染；
+ * 4. 最后才叠到新底色上。
  *
- * 底色必须来自**原图**：抠图经过 destination-in 后背景像素的 RGB 已归零，
- * 从 cutout 反推必然得到黑色。反预乘代入 bg=0 会退化成 `c' = c/a`，
- * 半透明边缘被整体放大（白底上就是白边），比不去污染更差。
- * 因此调用方应传入 `sourceBackground`；只有在缺失时才退回 cutout 估计，
- * 并对「三通道都 < 8」的不可信结果跳过整段去污染。
+ * 距离带的 3.5px 阈值是像素单位：在源图尺寸上去污染会让发丝/肩线的光晕抑制
+ * 范围随图片分辨率变化，两端结果明显不同。底色也不能从 overlay 之后的新画布
+ * 估计（那时底色已经被换成用户选择的新颜色）。
+ *
+ * `source` 必须是未抠图的原图：cutout 的透明背景经 destination-in 后 RGB 已归零，
+ * 从它反推底色只能得到黑色。缺失时退回 cutout 估计，并对「三通道都 < 8」
+ * 的不可信结果跳过整段去污染（宁可不去污染，也不要制造白边）。
  *
  * 旋转必须作用在目标尺寸画布上、绕成片中心进行，方向与服务端 sharp
  * `.rotate(-rotation)` 保持一致：canvas 的正角同样是顺时针，因此这里也取负。
  *
  * @param cutout 抠图产出的透明 ImageBitmap（自带 alpha）
  * @param rotation 自动构图算出的旋转角（度，逆时针为正），0 表示不转
- * @param sourceBackground 从原图估出的底色；缺省时才从 cutout 估计
- * @param brightness 亮度加法偏移（-255..255 实际取小范围），只作用于前景；
- *   在去污染之后、写回画布之前应用，透明像素保持原样。偏移由调用方用共享的
- *   suggestBrightnessAdjustment 算好；两端统计范围不同（本地对整幅 cutout 求
- *   均值，服务端对裁剪并缩放后的成片区域求均值），因此非均匀曝光的照片可能
- *   得到不同偏移。
+ * @param source 原图；用于在成片尺寸上估计底色。调用方负责 close
+ * @param brightness 亮度校正；`'auto'` 时按裁剪后的前景均值计算
  * @param onOutput 可选：合成完成、编码前回调成片像素，供质量检查使用
  */
 export async function compositeIdPhoto(
@@ -81,8 +104,8 @@ export async function compositeIdPhoto(
   outputType: 'image/jpeg' | 'image/png',
   crop?: IdPhotoCrop,
   rotation = 0,
-  sourceBackground?: Rgb,
-  brightness = 0,
+  source?: ImageBitmap | null,
+  brightness: IdPhotoBrightness = 0,
   onOutput?: (pixels: CompositeOutputPixels) => void
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
@@ -94,29 +117,54 @@ export async function compositeIdPhoto(
     crop
   );
 
-  // 1) 先把抠图画到离屏 canvas，取回 RGBA 像素
-  const srcCanvas = new OffscreenCanvas(cutout.width, cutout.height);
-  const sctx = srcCanvas.getContext('2d');
-  if (!sctx) throw new Error('2D canvas context unavailable');
-  sctx.drawImage(cutout, 0, 0);
-  const srcData = sctx.getImageData(0, 0, cutout.width, cutout.height);
+  // 1) 按 crop 框把抠图缩放到成片尺寸。此时背景仍是 cutout 的透明像素
+  //    （RGB 可能已被归零），但 alpha 与前景像素已与成片一一对应。
+  const fgCanvas = new OffscreenCanvas(presetW, presetH);
+  const fgCtx = fgCanvas.getContext('2d');
+  if (!fgCtx) throw new Error('2D canvas context unavailable');
+  fgCtx.drawImage(
+    cutout,
+    box.left,
+    box.top,
+    box.width,
+    box.height,
+    0,
+    0,
+    presetW,
+    presetH
+  );
+  const fgData = fgCtx.getImageData(0, 0, presetW, presetH);
 
-  // 2) 底色：优先用调用方从原图估出的值。退回 cutout 估计时，透明背景
-  //    已经是 (0,0,0)，估计结果必然取黑 —— 三通道都 < 8 视为不可信，
-  //    整段跳过去污染（宁可不去污染，也不要制造白边）。
-  let background: Rgb | null = sourceBackground ?? null;
-  if (!background) {
-    const pixelCount = cutout.width * cutout.height;
-    const rgbTriples = new Uint8ClampedArray(pixelCount * 3);
-    for (let i = 0; i < pixelCount; i += 1) {
-      rgbTriples[i * 3] = srcData.data[i * 4] ?? 0;
-      rgbTriples[i * 3 + 1] = srcData.data[i * 4 + 1] ?? 0;
-      rgbTriples[i * 3 + 2] = srcData.data[i * 4 + 2] ?? 0;
-    }
+  // 2) 底色：从原图同一裁剪框、同一成片尺寸取样，语义与服务端完全一致。
+  let background: Rgb | null = null;
+  if (source) {
+    const sourceCanvas = new OffscreenCanvas(presetW, presetH);
+    const sourceCtx = sourceCanvas.getContext('2d');
+    if (!sourceCtx) throw new Error('2D canvas context unavailable');
+    sourceCtx.drawImage(
+      source,
+      box.left,
+      box.top,
+      box.width,
+      box.height,
+      0,
+      0,
+      presetW,
+      presetH
+    );
+    const sourceData = sourceCtx.getImageData(0, 0, presetW, presetH).data;
     const estimated = estimateSourceBackgroundColors(
-      rgbTriples,
-      cutout.width,
-      cutout.height
+      rgbPlane(sourceData, presetW, presetH),
+      presetW,
+      presetH
+    )[0];
+    // 原图给出的黑色底是可信的（真实黑底），不做「不可信」拦截。
+    background = estimated ?? null;
+  } else {
+    const estimated = estimateSourceBackgroundColors(
+      rgbPlane(fgData.data, presetW, presetH),
+      presetW,
+      presetH
     )[0] ?? { r: 255, g: 255, b: 255 };
     if (
       estimated.r < UNTRUSTED_BACKGROUND_CHANNEL &&
@@ -129,13 +177,21 @@ export async function compositeIdPhoto(
     }
   }
 
-  // 3) 去污染后写回源 canvas（底色不可信时保持原像素不变）
+  // 3) 亮度均值与去污染都在成片尺寸的未调色前景上做。
+  //    均值必须在去污染/调色之前取，与服务端的输入一致。
+  const brightnessOffset =
+    brightness === 'auto'
+      ? suggestBrightnessAdjustment(
+          computeForegroundMeanBrightness(fgData.data, presetW, presetH)
+        )
+      : brightness;
+
   let workingPixels: Uint8ClampedArray<ArrayBuffer> | null = null;
   if (background) {
     const cleaned = decontaminateIdPhotoForeground(
-      srcData.data,
-      cutout.width,
-      cutout.height,
+      fgData.data,
+      presetW,
+      presetH,
       background
     );
     // 复制到显式 ArrayBuffer 支撑的视图：共享 utils 的返回类型是
@@ -147,32 +203,31 @@ export async function compositeIdPhoto(
   // 4) 亮度自动校正：加法偏移，只作用于前景（alpha > 0）像素；透明区
   //    保持原样。放在去污染之后，避免「反预乘还原出的真实前景色」被当成
   //    带底色的边缘值再放大。底色不可信、跳过去污染时也要独立生效。
-  if (brightness !== 0) {
-    const target = workingPixels ?? new Uint8ClampedArray(srcData.data);
+  if (brightnessOffset !== 0) {
+    const target = workingPixels ?? new Uint8ClampedArray(fgData.data);
     for (let i = 0; i < target.length; i += 4) {
       if ((target[i + 3] ?? 0) === 0) continue;
-      target[i] = Math.max(0, Math.min(255, (target[i] ?? 0) + brightness));
+      target[i] = Math.max(
+        0,
+        Math.min(255, (target[i] ?? 0) + brightnessOffset)
+      );
       target[i + 1] = Math.max(
         0,
-        Math.min(255, (target[i + 1] ?? 0) + brightness)
+        Math.min(255, (target[i + 1] ?? 0) + brightnessOffset)
       );
       target[i + 2] = Math.max(
         0,
-        Math.min(255, (target[i + 2] ?? 0) + brightness)
+        Math.min(255, (target[i + 2] ?? 0) + brightnessOffset)
       );
     }
     workingPixels = target;
   }
 
   if (workingPixels) {
-    sctx.putImageData(
-      new ImageData(workingPixels, cutout.width, cutout.height),
-      0,
-      0
-    );
+    fgCtx.putImageData(new ImageData(workingPixels, presetW, presetH), 0, 0);
   }
 
-  // 5) 合成：纯色底 + 裁剪框内的前景（可选旋转）
+  // 5) 合成：纯色底 + 成片尺寸的前景（可选旋转）
   const out = new OffscreenCanvas(presetW, presetH);
   const octx = out.getContext('2d');
   if (!octx) throw new Error('2D canvas context unavailable');
@@ -186,17 +241,7 @@ export async function compositeIdPhoto(
     octx.translate(-presetW / 2, -presetH / 2);
   }
 
-  octx.drawImage(
-    srcCanvas,
-    box.left,
-    box.top,
-    box.width,
-    box.height,
-    0,
-    0,
-    presetW,
-    presetH
-  );
+  octx.drawImage(fgCanvas, 0, 0, presetW, presetH);
 
   // 6) 质量检查需要成片尺寸的像素。rgba 直接取最终画布（含底色）；
   //    alpha 必须在「只画前景」的透明画布上取——最终画布已被底色铺满，
@@ -211,17 +256,7 @@ export async function compositeIdPhoto(
       fgctx.rotate((-rotation * Math.PI) / 180);
       fgctx.translate(-presetW / 2, -presetH / 2);
     }
-    fgctx.drawImage(
-      srcCanvas,
-      box.left,
-      box.top,
-      box.width,
-      box.height,
-      0,
-      0,
-      presetW,
-      presetH
-    );
+    fgctx.drawImage(fgCanvas, 0, 0, presetW, presetH);
     const fgData = fgctx.getImageData(0, 0, presetW, presetH).data;
     const alpha = new Uint8ClampedArray(presetW * presetH);
     for (let i = 0; i < alpha.length; i += 1) {

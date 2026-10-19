@@ -55,6 +55,11 @@ let lastCutout: {
   height: number;
   close: ReturnType<typeof vi.fn>;
 };
+let lastSource: {
+  width: number;
+  height: number;
+  close: ReturnType<typeof vi.fn>;
+};
 
 beforeEach(() => {
   (
@@ -63,6 +68,7 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_S3_PUBLIC_URL = 'http://localhost:9000';
 
   lastCutout = { width: 10, height: 10, close: vi.fn() };
+  lastSource = { width: 10, height: 10, close: vi.fn() };
   segmentMock.mockReset();
   segmentMock.mockImplementation(async () => ({
     bitmap: lastCutout,
@@ -125,8 +131,8 @@ beforeEach(() => {
   });
   Object.defineProperty(globalThis, 'createImageBitmap', {
     value: vi.fn(async () => {
-      lastCutout = { width: 10, height: 10, close: vi.fn() };
-      return lastCutout;
+      lastSource = { width: 10, height: 10, close: vi.fn() };
+      return lastSource;
     }),
     configurable: true,
     writable: true,
@@ -308,6 +314,18 @@ describe('useLocalIdPhoto', () => {
     await waitFor(() => expect(result.current.status).toBe('done'));
     expect(lastCutout.close).toHaveBeenCalled();
   });
+
+  it('passes the original image to compositing so background estimation matches the server', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
+    });
+    await waitFor(() => expect(result.current.status).toBe('done'));
+
+    // 底色必须从原图在成片尺寸上估计,不能从背景 RGB 已被归零的 cutout 反推。
+    expect(compositeMock.mock.calls[0]![7]).toBe(lastSource);
+    expect(lastSource.close).toHaveBeenCalled();
+  });
 });
 
 describe('useLocalIdPhoto auto framing', () => {
@@ -394,7 +412,7 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(compositeMock.mock.calls[0]![8]).toBe(0);
   });
 
-  it('passes a suggested brightness offset only in auto mode', async () => {
+  it('passes auto brightness mode only in auto mode', async () => {
     faceDetectMock.mockResolvedValue([]);
     const { result } = renderHook(() => useLocalIdPhoto());
 
@@ -405,8 +423,8 @@ describe('useLocalIdPhoto auto framing', () => {
       });
     });
 
-    // 桩像素全白(mean=255)→ 压暗上限 -12。
-    expect(compositeMock.mock.calls[0]![8]).toBe(-12);
+    // 均值在 composite 内部按裁剪后的成片尺寸计算,与服务端同一口径。
+    expect(compositeMock.mock.calls[0]![8]).toBe('auto');
   });
 
   it('passes zero brightness when auto framing is disabled', async () => {

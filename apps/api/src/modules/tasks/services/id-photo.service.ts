@@ -13,7 +13,10 @@ import {
   type IdPhotoTaskConfig,
   type QualityReport,
 } from '@utils-plane/validators';
-import { decontaminateIdPhotoForeground } from '@utils-plane/utils';
+import {
+  computeForegroundMeanBrightness,
+  decontaminateIdPhotoForeground,
+} from '@utils-plane/utils';
 import { FaceDetectionService } from './face-detection.service';
 import { PortraitSegmentationService } from './portrait-segmentation.service';
 
@@ -172,26 +175,6 @@ export class IdPhotoService {
     const baseRgbRaw = await sharp(base).removeAlpha().raw().toBuffer();
     const pixelCount = preset.widthPx * preset.heightPx;
 
-    // 亮度自动校正：只统计前景（alpha > 0）的平均亮度，透明区不参与 ——
-    // 否则大面积的 alpha=0 会把均值拉向 0，导致不必要的提亮。
-    // 偏移量算法与本地 canvas 路共用 suggestBrightnessAdjustment；但统计范围不同：
-    // 本地在合成前对整幅 cutout 求均值，服务端在这里对裁剪并缩放后的成片尺寸
-    // 求均值，因此非均匀曝光的照片两端可能得到不同偏移。
-    let meanSum = 0;
-    let meanCount = 0;
-    for (let i = 0; i < pixelCount; i += 1) {
-      if ((resizedAlpha[i] ?? 0) === 0) continue;
-      meanSum +=
-        ((baseRgbRaw[i * 3] ?? 0) +
-          (baseRgbRaw[i * 3 + 1] ?? 0) +
-          (baseRgbRaw[i * 3 + 2] ?? 0)) /
-        3;
-      meanCount += 1;
-    }
-    const brightnessOffset = suggestBrightnessAdjustment(
-      meanSum / Math.max(1, meanCount)
-    );
-
     // 底色聚类必须用**未调色**的原图：亮度是前景校正，若先把偏移加到全幅
     // 再聚类，会把估计出的底色整体推亮/推暗，进而影响去污染的反预乘结果。
     const candidates = estimateSourceBackgroundColors(
@@ -214,6 +197,17 @@ export class IdPhotoService {
       rgba[i * 4 + 2] = baseRgbRaw[i * 3 + 2] ?? 0;
       rgba[i * 4 + 3] = resizedAlpha[i] ?? 0;
     }
+
+    // 亮度自动校正与本地路同一口径：在裁剪并缩放到成片尺寸的 RGBA 上、
+    // 只统计 alpha > 0 的前景像素，使用共享的均值函数与偏移算法。
+    // 用户显式指定 crop 时不做自动调色（尊重用户构图），对应本地的
+    // `autoFrame && !userOverride`。
+    const brightnessOffset = config.crop
+      ? 0
+      : suggestBrightnessAdjustment(
+          computeForegroundMeanBrightness(rgba, preset.widthPx, preset.heightPx)
+        );
+
     const cleaned = decontaminateIdPhotoForeground(
       rgba,
       preset.widthPx,
@@ -270,17 +264,25 @@ export class IdPhotoService {
       .png()
       .composite([{ input: foreground, blend: 'over' }]);
 
+    // 质量检查必须基于**最终成片**的像素：去污染 + 调色后的前景已经叠到
+    // 新底色上，alpha=0 的区域此时是新背景色，而不是原图底色。只传去污染后
+    // 的前景 RGB 会让曝光/清晰度按「透明区仍是原背景」判定，与本地路不一致。
+    const composed = await background
+      .clone()
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
     // 质量检查在最终成片上做。人脸框/关键点是源图坐标，必须先映射到成片坐标，
     // 否则 faceRatio、faceCentered、headroom 会按源图尺寸计算而失真。
     const quality = inspectIdPhoto({
-      // 曝光项按「去污染后、调色后」的前景 RGB 判定，与最终成片一致；
-      // 不能用原始 baseRgbRaw——那既含原底色污染，也没算亮度偏移。
-      rgb: foregroundRgb,
+      rgb: composed.data,
       width: preset.widthPx,
       height: preset.heightPx,
       face: face ? mapFaceToOutput(face, baseBox, preset, rotation) : null,
-      // YuNet 不可用时 detected 为空，但分割服务仍给出了真实人脸数。
-      faceCount: detected.length > 0 ? detected.length : (mask.faceCount ?? 1),
+      // YuNet 不可用时不能回退 mask.faceCount：分割服务的该值恒为 1，
+      // 会让「检测不可用」被误判为「恰好一张脸」。与本地路一致按 0 处理。
+      faceCount: detected.length,
       alpha: finalAlpha,
     });
 

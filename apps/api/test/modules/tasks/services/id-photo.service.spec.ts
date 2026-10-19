@@ -394,7 +394,7 @@ describe('IdPhotoService reference parity', () => {
     expect(result.quality!.items.length).toBe(8);
   });
 
-  it('falls back to the segmentation face count when detection is unavailable', async () => {
+  it('reports zero faces when YuNet is unavailable instead of trusting the segmentation count', async () => {
     const input = await makeInput();
     const service = new IdPhotoService(fullSegmentation());
     const result = await service.render(input, {
@@ -404,8 +404,25 @@ describe('IdPhotoService reference parity', () => {
       dpi: 300,
     });
     const faceCount = result.quality!.items.find(i => i.name === 'faceCount')!;
-    expect(faceCount.value).toBe('1');
-    expect(faceCount.passed).toBe(true);
+    // 分割服务的 faceCount 恒为 1，不能当作「检测到一张脸」的证明。
+    expect(faceCount.value).toBe('0');
+    expect(faceCount.passed).toBe(false);
+  });
+
+  it('reports zero faces when YuNet detects an empty result', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation(), {
+      detect: async () => [],
+    } as never);
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+    });
+    const faceCount = result.quality!.items.find(i => i.name === 'faceCount')!;
+    expect(faceCount.value).toBe('0');
+    expect(faceCount.passed).toBe(false);
   });
 
   it('reports face metrics in output coordinates for an auto-framed face', async () => {
@@ -791,6 +808,45 @@ describe('IdPhotoService RGBA assembly', () => {
   });
 });
 
+describe('IdPhotoService quality input', () => {
+  it('inspects the final composite so transparent pixels carry the new background', async () => {
+    const width = 295;
+    const height = 413;
+    // 全透明蒙版：成片完全由新底色组成。若质量检查仍用去污染后的前景 RGB，
+    // alpha=0 处会保留原图黑色，曝光结论会完全不同。
+    const mask = await sharp(Buffer.alloc(width * height, 0), {
+      raw: { width, height, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+    const input = await sharp(Buffer.alloc(width * height * 3, 0), {
+      raw: { width, height, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask,
+        bounds: { x: 0, y: 0, width, height },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#aaaaaa',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+
+    const exposure = result.quality!.items.find(i => i.name === 'exposure')!;
+    // #aaaaaa = 170；成片每个像素（包括 alpha=0 对应的位置）都应是 170。
+    expect(exposure.value).toBe('170/255');
+    expect(exposure.passed).toBe(true);
+  });
+});
+
 describe('IdPhotoService brightness correction', () => {
   async function meanOutput(buffer: Buffer): Promise<number> {
     const { data, info } = await sharp(buffer)
@@ -804,7 +860,10 @@ describe('IdPhotoService brightness correction', () => {
     return sum / (data.length / info.channels);
   }
 
-  async function renderFlatGray(value: number): Promise<number> {
+  async function renderFlatGray(
+    value: number,
+    crop?: { x: number; y: number; scale: number }
+  ): Promise<number> {
     const width = 300;
     const height = 400;
     const pixels = Buffer.alloc(width * height * 3, value);
@@ -832,6 +891,7 @@ describe('IdPhotoService brightness correction', () => {
       outputType: 'image/png',
       dpi: 300,
       segmentationMode: 'local',
+      ...(crop ? { crop } : {}),
     });
     return meanOutput(output.buffer);
   }
@@ -848,6 +908,12 @@ describe('IdPhotoService brightness correction', () => {
     // 240 → 建议 -12。
     expect(mean).toBeCloseTo(228, 0);
     expect(Math.abs(mean - 128)).toBeLessThan(Math.abs(240 - 128));
+  });
+
+  it('does not apply auto brightness when the user supplied an explicit crop', async () => {
+    // 用户手动构图时尊重原画面，不做自动调色 —— 与本地路的 autoFrame 守卫一致。
+    const mean = await renderFlatGray(40, { x: 0.5, y: 0.5, scale: 1 });
+    expect(mean).toBeCloseTo(40, 0);
   });
 });
 

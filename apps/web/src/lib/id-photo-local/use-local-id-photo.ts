@@ -5,7 +5,6 @@ import {
   inspectIdPhoto,
   mapFaceToOutput,
   resolveIdPhotoCropBox,
-  suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
   type IdPhotoCrop,
   type IdPhotoLayout,
@@ -156,16 +155,24 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
       setQuality(null);
       const isStale = () => sid !== sessionIdRef.current;
       try {
-        const { bitmap: cutoutBitmap, sourceBackground } =
-          await segmentToCutout(file, tier, ep ?? 'wasm', {
+        const { bitmap: cutoutBitmap } = await segmentToCutout(
+          file,
+          tier,
+          ep ?? 'wasm',
+          {
             onDownloadProgress: ratio => {
               if (isStale()) return;
               setProgress(ratio);
               setStatus('loading-model');
             },
             isStale,
-          });
+          }
+        );
         if (isStale()) return;
+
+        // 原图用于在「裁剪后的成片尺寸」上估计底色，与服务端同一语义。
+        // 解码失败不阻断出图：composite 会退回 cutout 估计。
+        let sourceBitmap: ImageBitmap | null = null;
 
         // 人脸检测与构图属于「处理中」(running),不是合成阶段。
         setStatus('running');
@@ -228,31 +235,15 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             }
           }
 
-          // 2.5) 亮度自动校正:只统计前景(alpha > 0)像素的平均亮度,
-          //      避免大面积透明背景把均值拉低。与质量检查共用上面读出的
-          //      srcData,不再重复读像素;偏移量算法与服务端是同一个函数。
-          //      注意统计范围不同:这里用整幅 cutout,服务端用裁剪并缩放后的
-          //      成片区域,非均匀曝光的照片两端得到的偏移可能不同。
-          let brightness = 0;
-          if (autoFraming) {
-            const pixels = srcData.data;
-            let sum = 0;
-            let count = 0;
-            for (let i = 0; i < pixels.length; i += 4) {
-              if ((pixels[i + 3] ?? 0) === 0) continue;
-              sum +=
-                ((pixels[i] ?? 0) +
-                  (pixels[i + 1] ?? 0) +
-                  (pixels[i + 2] ?? 0)) /
-                3;
-              count += 1;
-            }
-            brightness = suggestBrightnessAdjustment(sum / Math.max(1, count));
-          }
+          // 2.5) 亮度自动校正不再在整幅 cutout 上预算，而是交给 composite
+          //      在裁剪后的成片尺寸上、只对 alpha > 0 的前景求均值，与服务端
+          //      同一口径。手动构图（userOverride）时不启用。
 
           // 3) 合成(去污染 + 旋转 + DPI 都在 composite 内完成),同时拿回
           //    成片尺寸的像素供质量检查。
           setStatus('compositing');
+          sourceBitmap = await createImageBitmap(file).catch(() => null);
+          if (isStale()) return;
           let pixelsFromComposite: CompositeOutputPixels | null = null;
           const blob = await compositeIdPhoto(
             cutoutBitmap,
@@ -262,8 +253,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             opts.outputType,
             crop,
             rotation,
-            sourceBackground,
-            brightness,
+            sourceBitmap,
+            autoFraming ? 'auto' : 0,
             pixels => {
               pixelsFromComposite = pixels;
             }
@@ -305,6 +296,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           setResultBlob(blob);
           setStatus('done');
         } finally {
+          sourceBitmap?.close?.();
           cutoutBitmap.close?.();
         }
       } catch (err) {

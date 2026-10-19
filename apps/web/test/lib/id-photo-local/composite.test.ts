@@ -14,16 +14,39 @@ const mocks = vi.hoisted(() => ({
   // 由 mock 工厂在模块加载时填充真实实现，测试默认委托给它，
   // 这样「反预乘是否生效」能按真实算法断言，而不只是看调用次数。
   realDecontaminate: null as Decontaminate | null,
+  estimate: vi.fn(),
+  realEstimate: null as
+    | ((rgb: Uint8ClampedArray, width: number, height: number) => unknown)
+    | null,
+  meanBrightness: vi.fn(),
+  realMeanBrightness: null as
+    | ((rgba: Uint8ClampedArray, width: number, height: number) => number)
+    | null,
   writeDpi: vi.fn(async (blob: Blob, _dpi?: number) => blob),
 }));
 
-// composite.ts 只从 utils 取去污染函数；保留其余真实导出，按需委托。
+// composite.ts 只从 utils 取去污染与亮度均值；保留其余真实导出，按需委托。
 vi.mock('@utils-plane/utils', async importOriginal => {
   const actual = await importOriginal<typeof import('@utils-plane/utils')>();
   mocks.realDecontaminate = actual.decontaminateIdPhotoForeground;
+  mocks.realMeanBrightness = actual.computeForegroundMeanBrightness;
   return {
     ...actual,
     decontaminateIdPhotoForeground: mocks.decontaminate,
+    computeForegroundMeanBrightness: mocks.meanBrightness,
+  };
+});
+vi.mock('@utils-plane/validators', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('@utils-plane/validators')>();
+  mocks.realEstimate = actual.estimateSourceBackgroundColors as (
+    rgb: Uint8ClampedArray,
+    width: number,
+    height: number
+  ) => unknown;
+  return {
+    ...actual,
+    estimateSourceBackgroundColors: mocks.estimate,
   };
 });
 vi.mock('@/lib/id-photo-local/dpi-metadata', () => ({
@@ -58,14 +81,26 @@ interface StubOptions {
   pixel?: StubPixel;
   /** 按像素定制颜色；优先级高于 pixel。index = y * width + x。 */
   pixelAt?: (x: number, y: number, index: number) => StubPixel;
+  /**
+   * 按画布创建顺序定制像素（0 = 前景裁剪画布，1 = 原图取样画布）。
+   * 用于验证底色确实来自原图而不是已裁好的 cutout。
+   */
+  canvasPixelAt?: (
+    canvasIndex: number,
+    x: number,
+    y: number,
+    index: number
+  ) => StubPixel;
 }
 
 /** jsdom 没有 OffscreenCanvas / ImageData，用最小桩替换并记录调用。 */
 function stubOffscreenCanvas(options: StubOptions = {}) {
   const pixel = options.pixel ?? { r: 240, g: 240, b: 240, a: 255 };
   const pixelAt = options.pixelAt;
+  const canvasPixelAt = options.canvasPixelAt;
   const contexts: FakeContext[] = [];
   const blobs: { opts: unknown; canvas: unknown }[] = [];
+  let created = 0;
 
   // @ts-expect-error test stub
   globalThis.ImageData = class {
@@ -85,6 +120,8 @@ function stubOffscreenCanvas(options: StubOptions = {}) {
       public width: number,
       public height: number
     ) {
+      const canvasIndex = created;
+      created += 1;
       this.ctx = {
         fillStyle: '',
         drawImage: vi.fn(),
@@ -92,7 +129,11 @@ function stubOffscreenCanvas(options: StubOptions = {}) {
         getImageData: vi.fn((_x: number, _y: number, w: number, h: number) => {
           const data = new Uint8ClampedArray(w * h * 4);
           for (let i = 0; i < w * h; i += 1) {
-            const px = pixelAt ? pixelAt(i % w, Math.floor(i / w), i) : pixel;
+            const px = canvasPixelAt
+              ? canvasPixelAt(canvasIndex, i % w, Math.floor(i / w), i)
+              : pixelAt
+                ? pixelAt(i % w, Math.floor(i / w), i)
+                : pixel;
             data[i * 4] = px.r;
             data[i * 4 + 1] = px.g;
             data[i * 4 + 2] = px.b;
@@ -137,6 +178,18 @@ beforeEach(() => {
         : rgba;
     }
   );
+  mocks.estimate.mockReset();
+  mocks.estimate.mockImplementation(
+    (rgb: Uint8ClampedArray, width: number, height: number) =>
+      mocks.realEstimate!(rgb, width, height)
+  );
+  mocks.meanBrightness.mockReset();
+  mocks.meanBrightness.mockImplementation(
+    (rgba: Uint8ClampedArray, width: number, height: number) =>
+      mocks.realMeanBrightness
+        ? mocks.realMeanBrightness(rgba, width, height)
+        : 0
+  );
   mocks.writeDpi.mockClear();
   mocks.writeDpi.mockImplementation(async (blob: Blob) => blob);
 });
@@ -154,7 +207,7 @@ describe('hexToRgb', () => {
 });
 
 describe('compositeIdPhoto pipeline', () => {
-  it('runs shared decontamination before compositing', async () => {
+  it('decontaminates the cropped output at the preset size', async () => {
     const { contexts } = stubOffscreenCanvas();
     const cutout = fakeCutout(100, 140);
 
@@ -169,18 +222,19 @@ describe('compositeIdPhoto pipeline', () => {
       { r: number; g: number; b: number },
     ];
     expect(rgba).toBeInstanceOf(Uint8ClampedArray);
-    expect(rgba).toHaveLength(100 * 140 * 4);
-    expect(width).toBe(100);
-    expect(height).toBe(140);
+    // 去污染必须发生在裁剪并缩放到成片尺寸之后，而不是源图尺寸。
+    expect(rgba).toHaveLength(PRESET_W * PRESET_H * 4);
+    expect(width).toBe(PRESET_W);
+    expect(height).toBe(PRESET_H);
     // 桩像素是 240 灰，底色估计应落在附近（量化步长 16）
     expect(background.r).toBeGreaterThanOrEqual(224);
     expect(background.g).toBeGreaterThanOrEqual(224);
     expect(background.b).toBeGreaterThanOrEqual(224);
 
-    // 去污染结果必须写回源 canvas
+    // 去污染结果必须写回前景画布
     expect(contexts[0]!.putImageData).toHaveBeenCalledTimes(1);
-    // 源图先绘制到离屏 canvas 再取像素
-    expect(contexts[0]!.drawImage).toHaveBeenCalledWith(cutout, 0, 0);
+    // 抠图先按 crop 框绘制到成片尺寸的前景画布
+    expect(outputCalls(contexts[0]!, 9)).toHaveLength(1);
   });
 
   it('draws the crop box onto the preset-sized canvas', async () => {
@@ -196,7 +250,6 @@ describe('compositeIdPhoto pipeline', () => {
       crop
     );
 
-    const out = contexts[1]!;
     const expected = resolveIdPhotoCropBox(
       1000,
       1500,
@@ -204,8 +257,8 @@ describe('compositeIdPhoto pipeline', () => {
       PRESET_H,
       crop
     );
-    expect(out.fillRect).toHaveBeenCalledWith(0, 0, PRESET_W, PRESET_H);
-    expect(outputCalls(out, 9)[0]).toEqual([
+    // 前景画布先按裁剪框把 cutout 缩放成成片尺寸。
+    expect(outputCalls(contexts[0]!, 9)[0]).toEqual([
       expect.anything(),
       expected.left,
       expected.top,
@@ -216,6 +269,20 @@ describe('compositeIdPhoto pipeline', () => {
       PRESET_W,
       PRESET_H,
     ]);
+    // 成品画布只是把已裁好的前景按 1:1 叠上去。
+    expect(contexts[1]!.fillRect).toHaveBeenCalledWith(
+      0,
+      0,
+      PRESET_W,
+      PRESET_H
+    );
+    const overlay = outputCalls(contexts[1]!, 5)[0]!;
+    // 第一个参数是成片尺寸的前景画布，不再重复传入 crop 框。
+    expect(overlay[0]).toMatchObject({
+      width: PRESET_W,
+      height: PRESET_H,
+    });
+    expect(overlay.slice(1)).toEqual([0, 0, PRESET_W, PRESET_H]);
   });
 
   it('uses the shared crop geometry when crop is omitted', async () => {
@@ -229,7 +296,7 @@ describe('compositeIdPhoto pipeline', () => {
       'image/jpeg'
     );
 
-    const [, left, top, width, height] = outputCalls(contexts[1]!, 9)[0]!;
+    const [, left, top, width, height] = outputCalls(contexts[0]!, 9)[0]!;
     expect((left as number) + (width as number) / 2).toBeCloseTo(500, -1);
     expect((top as number) + (height as number) / 2).toBeCloseTo(750, -1);
   });
@@ -274,12 +341,22 @@ describe('compositeIdPhoto pipeline', () => {
 });
 
 describe('compositeIdPhoto source background', () => {
-  it('uses a caller-provided background instead of re-deriving it from the cutout', async () => {
-    // 真实边缘像素 = 前景 128 × a + 白底 255 × (1-a)，a=128/255 → 存储值 191。
-    // 传白底时反预乘应还原到 128；若拿黑底反推，c/a 会把 191 放大成 ~381，
-    // 钳制后就是 255 的白边。
+  it('estimates the background from the original source at the preset size, not from the cutout', async () => {
+    // 画布 0 = 前景 cutout（边缘存储值 191、alpha 128）；
+    // 画布 1 = 原图（纯白底）。若从 cutout 估底色会得到 191，
+    // 反预乘后仍是 191；只有用原图的 255 才能还原出真实前景 128。
     const { contexts } = stubOffscreenCanvas({
-      pixel: { r: 191, g: 191, b: 191, a: 128 },
+      canvasPixelAt: canvasIndex => {
+        if (canvasIndex === 0) return { r: 191, g: 191, b: 191, a: 128 };
+        if (canvasIndex === 1) return { r: 255, g: 255, b: 255, a: 255 };
+        return { r: 0, g: 0, b: 0, a: 0 };
+      },
+    });
+    const source = fakeCutout(100, 140);
+    const box = resolveIdPhotoCropBox(100, 140, PRESET_W, PRESET_H, {
+      x: 0.5,
+      y: 0.5,
+      scale: 1,
     });
 
     await compositeIdPhoto(
@@ -288,11 +365,15 @@ describe('compositeIdPhoto source background', () => {
       PRESET_W,
       PRESET_H,
       'image/jpeg',
-      undefined,
+      { x: 0.5, y: 0.5, scale: 1 },
       0,
-      { r: 255, g: 255, b: 255 }
+      source
     );
 
+    // 底色聚类与原图取样都必须发生在成片尺寸上，语义与服务端一致。
+    expect(mocks.estimate).toHaveBeenCalledTimes(1);
+    expect(mocks.estimate.mock.calls[0]![1]).toBe(PRESET_W);
+    expect(mocks.estimate.mock.calls[0]![2]).toBe(PRESET_H);
     expect(mocks.decontaminate).toHaveBeenCalledTimes(1);
     expect(mocks.decontaminate.mock.calls[0]![3]).toEqual({
       r: 255,
@@ -300,10 +381,23 @@ describe('compositeIdPhoto source background', () => {
       b: 255,
     });
 
+    // 原图按同一个裁剪框缩放到成片尺寸后再取样。
+    expect(outputCalls(contexts[1]!, 9)[0]).toEqual([
+      source,
+      box.left,
+      box.top,
+      box.width,
+      box.height,
+      0,
+      0,
+      PRESET_W,
+      PRESET_H,
+    ]);
+
     const written = contexts[0]!.putImageData.mock.calls[0]![0] as {
       data: Uint8ClampedArray;
     };
-    // 还原到真实前景色 128，而不是白边 255；alpha 保持不变。
+    // 还原到真实前景色 128，而不是 cutout 反推的 191；alpha 保持不变。
     expect(Array.from(written.data.subarray(0, 4))).toEqual([
       128, 128, 128, 128,
     ]);
@@ -423,45 +517,44 @@ describe('compositeIdPhoto rotation', () => {
 });
 
 describe('compositeIdPhoto brightness', () => {
+  const CENTRE_X = Math.floor(PRESET_W / 2);
+  const CENTRE_Y = Math.floor(PRESET_H / 2);
+  const CENTRE_INDEX = (CENTRE_Y * PRESET_W + CENTRE_X) * 4;
+
   function pixelAtCentre(
-    width: number,
-    height: number,
     foreground: StubPixel
   ): (x: number, y: number) => StubPixel {
-    const cx = Math.floor(width / 2);
-    const cy = Math.floor(height / 2);
     return (x, y) =>
-      x === cx && y === cy ? foreground : { r: 0, g: 0, b: 0, a: 0 };
+      x === CENTRE_X && y === CENTRE_Y
+        ? foreground
+        : { r: 0, g: 0, b: 0, a: 0 };
   }
 
-  function writtenPixels(ctx: FakeContext, width: number, height: number) {
+  function writtenPixels(ctx: FakeContext) {
     const call = ctx.putImageData.mock.calls.at(-1);
     expect(call).toBeDefined();
     return (call![0] as { data: Uint8ClampedArray }).data;
   }
 
   it('adds brightness to foreground pixels and leaves transparent pixels untouched', async () => {
-    const width = 100;
-    const height = 140;
     const { contexts } = stubOffscreenCanvas({
-      pixelAt: pixelAtCentre(width, height, { r: 100, g: 100, b: 100, a: 255 }),
+      pixelAt: pixelAtCentre({ r: 100, g: 100, b: 100, a: 255 }),
     });
 
     await compositeIdPhoto(
-      fakeCutout(width, height),
+      fakeCutout(100, 140),
       '#ffffff',
       PRESET_W,
       PRESET_H,
       'image/png',
       undefined,
       0,
-      undefined,
+      null,
       12
     );
 
-    const data = writtenPixels(contexts[0]!, width, height);
-    const centre = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
-    expect(Array.from(data.subarray(centre, centre + 4))).toEqual([
+    const data = writtenPixels(contexts[0]!);
+    expect(Array.from(data.subarray(CENTRE_INDEX, CENTRE_INDEX + 4))).toEqual([
       112, 112, 112, 255,
     ]);
     // 透明像素完全不动(alpha=0 的 RGB 即便有残留值也不参与调色)。
@@ -469,57 +562,43 @@ describe('compositeIdPhoto brightness', () => {
   });
 
   it('clamps adjusted channels to 0..255', async () => {
-    const width = 20;
-    const height = 20;
     const { contexts } = stubOffscreenCanvas({
-      pixelAt: (x, y) => {
-        const cx = Math.floor(width / 2);
-        const cy = Math.floor(height / 2);
-        if (x === cx && y === cy) return { r: 250, g: 3, b: 128, a: 255 };
-        return { r: 250, g: 3, b: 128, a: 0 };
-      },
+      pixelAt: pixelAtCentre({ r: 250, g: 3, b: 128, a: 255 }),
     });
 
     await compositeIdPhoto(
-      fakeCutout(width, height),
+      fakeCutout(20, 20),
       '#ffffff',
       PRESET_W,
       PRESET_H,
       'image/png',
       undefined,
       0,
-      undefined,
+      null,
       20
     );
 
-    let data = writtenPixels(contexts[0]!, width, height);
-    let centre = (10 * width + 10) * 4;
-    expect(Array.from(data.subarray(centre, centre + 3))).toEqual([
+    let data = writtenPixels(contexts[0]!);
+    expect(Array.from(data.subarray(CENTRE_INDEX, CENTRE_INDEX + 3))).toEqual([
       255, 23, 148,
     ]);
 
     const second = stubOffscreenCanvas({
-      pixelAt: (x, y) => {
-        const cx = Math.floor(width / 2);
-        const cy = Math.floor(height / 2);
-        if (x === cx && y === cy) return { r: 250, g: 3, b: 128, a: 255 };
-        return { r: 250, g: 3, b: 128, a: 0 };
-      },
+      pixelAt: pixelAtCentre({ r: 250, g: 3, b: 128, a: 255 }),
     });
     await compositeIdPhoto(
-      fakeCutout(width, height),
+      fakeCutout(20, 20),
       '#ffffff',
       PRESET_W,
       PRESET_H,
       'image/png',
       undefined,
       0,
-      undefined,
+      null,
       -20
     );
-    data = writtenPixels(second.contexts[0]!, width, height);
-    centre = (10 * width + 10) * 4;
-    expect(Array.from(data.subarray(centre, centre + 3))).toEqual([
+    data = writtenPixels(second.contexts[0]!);
+    expect(Array.from(data.subarray(CENTRE_INDEX, CENTRE_INDEX + 3))).toEqual([
       230, 0, 108,
     ]);
   });
@@ -538,35 +617,69 @@ describe('compositeIdPhoto brightness', () => {
       }
       return out;
     });
-    const width = 10;
-    const height = 10;
     const { contexts } = stubOffscreenCanvas({
       pixelAt: () => ({ r: 120, g: 120, b: 120, a: 255 }),
     });
 
     await compositeIdPhoto(
-      fakeCutout(width, height),
+      fakeCutout(10, 10),
       '#ffffff',
       PRESET_W,
       PRESET_H,
       'image/png',
       undefined,
       0,
-      { r: 255, g: 255, b: 255 },
+      null,
       8
     );
 
     // 去污染入参必须是未调色的原值(120),不能是 120 + 8。
     const input = mocks.decontaminate.mock.calls[0]![0] as Uint8ClampedArray;
     expect(Array.from(input.subarray(0, 4))).toEqual([120, 120, 120, 255]);
+    // 去污染同样作用在成片尺寸上。
+    expect(mocks.decontaminate.mock.calls[0]![1]).toBe(PRESET_W);
+    expect(mocks.decontaminate.mock.calls[0]![2]).toBe(PRESET_H);
 
-    const data = writtenPixels(contexts[0]!, width, height);
+    const data = writtenPixels(contexts[0]!);
     expect(Array.from(data.subarray(0, 4))).toEqual([208, 208, 208, 255]);
   });
 
+  it('computes auto brightness from the cropped foreground at the preset size', async () => {
+    const { contexts } = stubOffscreenCanvas({
+      pixelAt: pixelAtCentre({ r: 40, g: 40, b: 40, a: 255 }),
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      0,
+      null,
+      'auto'
+    );
+
+    // 与服务端共用的均值函数必须拿到裁剪后的成片像素，而不是整幅源图。
+    expect(mocks.meanBrightness).toHaveBeenCalledTimes(1);
+    const [rgba, width, height] = mocks.meanBrightness.mock.calls[0] as [
+      Uint8ClampedArray,
+      number,
+      number,
+    ];
+    expect(rgba).toHaveLength(PRESET_W * PRESET_H * 4);
+    expect(width).toBe(PRESET_W);
+    expect(height).toBe(PRESET_H);
+
+    // 40 灰 → 建议 +18，与服务端同一算法。
+    const data = writtenPixels(contexts[0]!);
+    expect(Array.from(data.subarray(CENTRE_INDEX, CENTRE_INDEX + 4))).toEqual([
+      58, 58, 58, 255,
+    ]);
+  });
+
   it('keeps RGB of fully transparent pixels even when it is non-zero', async () => {
-    const width = 10;
-    const height = 10;
     const { contexts } = stubOffscreenCanvas({
       pixelAt: (x, y) =>
         x === 5 && y === 5
@@ -575,22 +688,22 @@ describe('compositeIdPhoto brightness', () => {
     });
 
     await compositeIdPhoto(
-      fakeCutout(width, height),
+      fakeCutout(10, 10),
       '#ffffff',
       PRESET_W,
       PRESET_H,
       'image/png',
       undefined,
       0,
-      { r: 50, g: 60, b: 70 },
+      null,
       12
     );
 
-    const data = writtenPixels(contexts[0]!, width, height);
+    const data = writtenPixels(contexts[0]!);
     // (0,0) 是透明像素：亮度只作用于 alpha > 0,残留 RGB 必须原样保留。
     expect(Array.from(data.subarray(0, 4))).toEqual([50, 60, 70, 0]);
     // 前景像素照常加偏移。
-    const centre = (5 * width + 5) * 4;
+    const centre = (5 * PRESET_W + 5) * 4;
     expect(Array.from(data.subarray(centre, centre + 4))).toEqual([
       112, 112, 112, 255,
     ]);

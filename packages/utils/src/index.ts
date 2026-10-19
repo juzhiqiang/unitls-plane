@@ -1,6 +1,7 @@
 export * from './entitlements';
 export * from './release';
 export * from './plan-display';
+export * from './id-photo-decontaminate';
 
 export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0] || '';

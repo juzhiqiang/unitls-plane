@@ -442,6 +442,98 @@ describe('IdPhotoPage', () => {
   });
 });
 
+describe('IdPhotoPage server auto framing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.useSession.mockReturnValue({
+      data: { user: { name: 'Tester', email: 't@example.com' } },
+      isPending: false,
+    });
+    mocks.useLocalIdPhoto.mockReset();
+    mocks.useLocalIdPhoto.mockReturnValue(makeLocalState());
+    mocks.useTaskProgress.mockReturnValue({ data: undefined });
+    mocks.localProcess.mockReset();
+    mocks.localMarkUserOverride.mockReset();
+    mocks.localReset.mockReset();
+    mocks.cropFieldProps.current = null;
+    mocks.effectSequence.length = 0;
+    mocks.localStore.current = null;
+  });
+
+  async function submitServerTask() {
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+
+    const { container } = renderPage();
+    await dropPhoto(container);
+    await loadCropImage();
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate ID photo' })
+    );
+    await waitFor(() => expect(taskMutate).toHaveBeenCalled());
+    const config = (
+      taskMutate.mock.calls[0]![0] as {
+        inputConfig: Record<string, unknown>;
+      }
+    ).inputConfig;
+    return config;
+  }
+
+  it('omits crop so the server can auto-frame when the user has not adjusted the box', async () => {
+    installStatefulLocal(makeLocalState());
+    const config = await submitServerTask();
+
+    // 无条件发送 {x:0.5,y:0.5,scale:1} 会让服务端跳过人脸自动构图与旋转。
+    expect('crop' in config).toBe(false);
+    expect(config.crop).toBeUndefined();
+  });
+
+  it('sends the current crop after the user adjusts the box on the server path', async () => {
+    installStatefulLocal(makeLocalState());
+    const uploadMutate = vi.fn().mockResolvedValue({ id: 'input-file-1' });
+    const taskMutate = vi.fn().mockResolvedValue({ id: 'task-1' });
+    mocks.useUploadFile.mockReturnValue({ mutateAsync: uploadMutate });
+    mocks.useCreateTask.mockReturnValue({ mutateAsync: taskMutate });
+
+    const { container } = renderPage();
+    await dropPhoto(container);
+    await loadCropImage();
+    fireEvent.click(screen.getByRole('button', { name: 'Server' }));
+
+    // 服务端模式下用户拖框同样要算 override,否则手动构图会被服务端自动构图覆盖。
+    act(() => {
+      mocks.cropFieldProps.current?.onChange({
+        x: 100,
+        y: 200,
+        width: 400,
+        height: 560,
+      });
+    });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate ID photo' })
+    );
+    await waitFor(() => expect(taskMutate).toHaveBeenCalled());
+
+    const config = (
+      taskMutate.mock.calls[0]![0] as {
+        inputConfig: Record<string, unknown>;
+      }
+    ).inputConfig;
+    expect(config.crop).toEqual(
+      idPhotoCropFromBox(
+        SOURCE.width,
+        SOURCE.height,
+        PRESET.widthPx,
+        PRESET.heightPx,
+        { left: 100, top: 200, width: 400, height: 560 }
+      )
+    );
+  });
+});
+
 describe('IdPhotoPage local auto framing and quality wiring', () => {
   beforeEach(() => {
     vi.clearAllMocks();

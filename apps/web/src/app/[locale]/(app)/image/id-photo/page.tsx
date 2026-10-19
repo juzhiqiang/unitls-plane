@@ -187,17 +187,21 @@ export default function IdPhotoPage() {
 
     try {
       const uploaded = await uploadFile.mutateAsync(file);
+      // 只有用户手动调整过裁剪框才把 crop 发给服务端。未调整时省略该字段,
+      // 服务端才会跑 YuNet 自动构图并连带应用旋转修正;无条件发送默认居中框
+      // 会让自动构图与旋转在服务端路完全不生效。
+      const inputConfig = {
+        preset: options.preset,
+        backgroundColor: options.backgroundColor,
+        outputType: options.outputType,
+        segmentationMode: options.segmentationMode,
+        dpi: 300,
+        ...(local.userOverride ? { crop: options.crop } : {}),
+      };
       const task = await createTask.mutateAsync({
         type: 'image_id_photo',
         inputFileIds: [(uploaded as any).id],
-        inputConfig: {
-          preset: options.preset,
-          backgroundColor: options.backgroundColor,
-          outputType: options.outputType,
-          segmentationMode: options.segmentationMode,
-          dpi: 300,
-          crop: options.crop,
-        },
+        inputConfig,
       });
       setTaskId(task.id);
     } catch (err) {

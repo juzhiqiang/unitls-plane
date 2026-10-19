@@ -702,6 +702,7 @@
     "background": "Background",
     "segmentationMode": "Cutout mode",
     "outputType": "Output format",
+    "guides": "Composition guides",
     "start": "Generate ID photo",
     "processing": "Generating ID photo",
     "failed": "Generation failed",
@@ -774,6 +775,7 @@
       "score": "Score {score}",
       "passed": "All checks passed",
       "needsAttention": "Needs attention: {items}",
+      "listSeparator": ", ",
       "unavailable": "Check unavailable",
       "items": {
         "faceCount": "Face count",

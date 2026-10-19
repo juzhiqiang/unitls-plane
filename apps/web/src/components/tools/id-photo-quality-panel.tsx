@@ -24,10 +24,16 @@ export function IdPhotoQualityPanel({
     );
   }
 
-  const failedNames = report.items
-    .filter(item => !item.passed)
+  const failedItems = report.items.filter(item => !item.passed);
+  const failedNames = failedItems
     .map(item => t(`quality.items.${item.name}`))
-    .join('、');
+    .join(t('quality.listSeparator'));
+
+  const summary = report.passed
+    ? t('quality.passed')
+    : failedItems.length > 0
+      ? t('quality.needsAttention').replace('{items}', failedNames)
+      : t('quality.unavailable');
 
   return (
     <details
@@ -40,9 +46,7 @@ export function IdPhotoQualityPanel({
           {t('quality.title')}
         </span>
         <span className={report.passed ? 'text-emerald-600' : 'text-amber-600'}>
-          {report.passed
-            ? t('quality.passed')
-            : t('quality.needsAttention').replace('{items}', failedNames)}
+          {summary}
         </span>
       </summary>
 

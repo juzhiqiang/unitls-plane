@@ -702,6 +702,7 @@
     "background": "背景色",
     "segmentationMode": "抠图模式",
     "outputType": "输出格式",
+    "guides": "构图辅助线",
     "start": "生成证件照",
     "processing": "正在生成证件照",
     "failed": "生成失败",
@@ -774,6 +775,7 @@
       "score": "评分 {score}",
       "passed": "检查通过",
       "needsAttention": "需注意:{items}",
+      "listSeparator": "、",
       "unavailable": "检查不可用",
       "items": {
         "faceCount": "人脸数量",

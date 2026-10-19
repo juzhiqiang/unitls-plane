@@ -8,6 +8,8 @@ import {
   idPhotoCropFromLayout,
   resolveIdPhotoCropBox,
   suggestIdPhotoLayout,
+  type FaceDetection,
+  type IdPhotoCropBox,
   type IdPhotoTaskConfig,
   type QualityReport,
 } from '@utils-plane/validators';
@@ -38,6 +40,65 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
     r: Number.parseInt(normalized.slice(0, 2), 16),
     g: Number.parseInt(normalized.slice(2, 4), 16),
     b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+/**
+ * 把源图坐标下的人脸框与关键点映射到成片坐标。
+ *
+ * 渲染链路是 `extract(baseBox) → rotate(-rotation) → resize(cover)`，因此映射分三步：
+ * 1. 减去 `baseBox.left/top`，得到裁剪框局部坐标；
+ * 2. 按 `preset.widthPx / baseBox.width`、`preset.heightPx / baseBox.height` 缩放；
+ * 3. 绕成片中心旋转。sharp 的 `rotate` 正值是顺时针，渲染实际用的是
+ *    `rotate(-rotation)`，所以这里同样按 `-rotation` 旋转。
+ *
+ * `inspectIdPhoto` 用 `box.width / 成片宽度` 算 faceRatio、用 `box.x` 算居中、
+ * 用 `box.y` 算头顶留白。若把源图坐标直接传进去，这些比例会全部失真，合格照片
+ * 也会被判失败 —— 所以质量检查前必须先做这次映射。
+ */
+export function mapFaceToOutput(
+  face: FaceDetection,
+  baseBox: IdPhotoCropBox,
+  preset: { widthPx: number; heightPx: number },
+  rotation: number
+): FaceDetection {
+  const scaleX = preset.widthPx / Math.max(1, baseBox.width);
+  const scaleY = preset.heightPx / Math.max(1, baseBox.height);
+  const centerX = preset.widthPx / 2;
+  const centerY = preset.heightPx / 2;
+  const radians = (-rotation * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  const mapPoint = (point: readonly [number, number]): [number, number] => {
+    const localX = (point[0] - baseBox.left) * scaleX;
+    const localY = (point[1] - baseBox.top) * scaleY;
+    const dx = localX - centerX;
+    const dy = localY - centerY;
+    return [centerX + cos * dx - sin * dy, centerY + sin * dx + cos * dy];
+  };
+
+  // 旋转后的人脸框仍是轴对齐矩形：把四个角映射过去再取外接矩形。
+  const corners = [
+    mapPoint([face.box.x, face.box.y]),
+    mapPoint([face.box.x + face.box.width, face.box.y]),
+    mapPoint([face.box.x, face.box.y + face.box.height]),
+    mapPoint([face.box.x + face.box.width, face.box.y + face.box.height]),
+  ];
+  const xs = corners.map(([x]) => x);
+  const ys = corners.map(([, y]) => y);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+
+  return {
+    box: {
+      x: left,
+      y: top,
+      width: Math.max(...xs) - left,
+      height: Math.max(...ys) - top,
+    },
+    landmarks: face.landmarks.map(mapPoint),
+    score: face.score,
   };
 }
 
@@ -133,9 +194,15 @@ export class IdPhotoService {
       crop
     );
 
-    const base = await sharp(oriented)
-      .extract(baseBox)
-      .rotate(rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    // 注意：sharp 在同一 pipeline 内按固定顺序执行 rotate → extract → resize，
+    // 与调用顺序无关。这里必须先单独 extract，再对新 buffer 旋转，才能得到
+    // 「先裁剪、再绕裁剪框中心回正」的几何 —— 与本地 canvas 的
+    // `ctx.rotate(-rotation)` 一致，且与 mapFaceToOutput 的映射公式一致。
+    const baseCropped = await sharp(oriented).extract(baseBox).toBuffer();
+    const base = await sharp(baseCropped)
+      // sharp 的 rotate 正值是顺时针；layout.rotation 正值表示右眼更低，
+      // 需要逆时针回正，因此取负。
+      .rotate(-rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .resize({
         width: preset.widthPx,
         height: preset.heightPx,
@@ -153,9 +220,9 @@ export class IdPhotoService {
       crop
     );
 
-    const resizedAlpha = await sharp(mask.mask)
-      .extract(maskBox)
-      .rotate(rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    const alphaCropped = await sharp(mask.mask).extract(maskBox).toBuffer();
+    const resizedAlpha = await sharp(alphaCropped)
+      .rotate(-rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .resize(preset.widthPx, preset.heightPx, { fit: 'cover' })
       .greyscale()
       .raw()
@@ -222,13 +289,15 @@ export class IdPhotoService {
       .png()
       .composite([{ input: foreground, blend: 'over' }]);
 
-    // 质量检查在最终成片上做，faceCount 用真实检测结果
+    // 质量检查在最终成片上做。人脸框/关键点是源图坐标，必须先映射到成片坐标，
+    // 否则 faceRatio、faceCentered、headroom 会按源图尺寸计算而失真。
     const quality = inspectIdPhoto({
       rgb: baseRgbRaw,
       width: preset.widthPx,
       height: preset.heightPx,
-      face,
-      faceCount: detected.length,
+      face: face ? mapFaceToOutput(face, baseBox, preset, rotation) : null,
+      // YuNet 不可用时 detected 为空，但分割服务仍给出了真实人脸数。
+      faceCount: detected.length > 0 ? detected.length : (mask.faceCount ?? 1),
       alpha: finalAlpha,
     });
 
@@ -267,10 +336,15 @@ export class IdPhotoService {
         .greyscale()
         .raw()
         .toBuffer({ resolveWithObject: true });
+      // 只认「像一条头顶边缘」的行：至少 3 个像素且不少于宽度的 2%。
+      // 否则顶部零星噪点会把构图整体上移。
+      const minForeground = Math.max(3, info.width * 0.02);
       for (let y = 0; y < info.height; y += 1) {
+        let foreground = 0;
         for (let x = 0; x < info.width; x += 1) {
-          if ((data[y * info.width + x] ?? 0) > 96) return y;
+          if ((data[y * info.width + x] ?? 0) > 96) foreground += 1;
         }
+        if (foreground >= minForeground) return y;
       }
     } catch {
       // 蒙版读不出来不影响出图

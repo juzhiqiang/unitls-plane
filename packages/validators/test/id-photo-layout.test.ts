@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   eyeTiltDegrees,
   idPhotoCropFromLayout,
+  mapFaceToOutput,
   suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
   type FaceDetection,
@@ -68,6 +69,39 @@ describe('eyeTiltDegrees', () => {
         [20, 5],
       ])
     ).toBeGreaterThan(13);
+  });
+
+  it('returns NaN when the two eyes coincide', () => {
+    // atan2(0, 0) = 0 会让重合的眼点被当成「水平」而假通过。
+    expect(
+      eyeTiltDegrees([
+        [120, 80],
+        [120, 80],
+      ])
+    ).toBeNaN();
+  });
+
+  it('returns NaN when any eye coordinate is not finite', () => {
+    for (const landmarks of [
+      [
+        [Number.NaN, 10],
+        [20, 10],
+      ],
+      [
+        [0, 10],
+        [20, Number.NaN],
+      ],
+      [
+        [Number.POSITIVE_INFINITY, 10],
+        [Number.POSITIVE_INFINITY, 10],
+      ],
+      [
+        [0, Number.NEGATIVE_INFINITY],
+        [20, 10],
+      ],
+    ] as Array<Array<[number, number]>>) {
+      expect(eyeTiltDegrees(landmarks)).toBeNaN();
+    }
   });
 });
 
@@ -195,6 +229,83 @@ describe('suggestIdPhotoLayout', () => {
     )!;
     expect(layout.rotation).toBe(0);
   });
+
+  it('uses zero rotation when the eye tilt is undefined', () => {
+    const coincident = faceAt(500, 400, 240);
+    coincident.landmarks = [
+      [620, 520],
+      [620, 520],
+      ...coincident.landmarks.slice(2),
+    ];
+    const nonFinite = faceAt(500, 400, 240);
+    nonFinite.landmarks = [[Number.NaN, 520], ...nonFinite.landmarks.slice(1)];
+    const reference = suggestIdPhotoLayout(
+      faceAt(500, 400, 240),
+      SOURCE,
+      ASPECT
+    )!;
+
+    for (const face of [coincident, nonFinite]) {
+      const layout = suggestIdPhotoLayout(face, SOURCE, ASPECT);
+      expect(layout).not.toBeNull();
+      expect(layout!.rotation).toBe(0);
+      // 只有旋转受眼点影响；缩放与偏移仍由人脸框决定。
+      expect(layout!.zoom).toBe(reference.zoom);
+      expect(layout!.offsetX).toBe(reference.offsetX);
+      expect(layout!.offsetY).toBe(reference.offsetY);
+    }
+  });
+
+  it('returns either null or a layout whose every field is finite', () => {
+    const big = Number.MAX_VALUE;
+    const tiny = Number.MIN_VALUE;
+    const faces: FaceDetection[] = [
+      faceAt(500, 400, 240),
+      {
+        ...faceAt(500, 400, 240),
+        landmarks: [
+          [Number.NaN, 0],
+          [1, 1],
+        ],
+      },
+      {
+        ...faceAt(500, 400, 240),
+        landmarks: [
+          [Number.POSITIVE_INFINITY, 0],
+          [Number.POSITIVE_INFINITY, 0],
+        ],
+      },
+      {
+        box: { x: big, y: big, width: big, height: big },
+        landmarks: [],
+        score: 1,
+      },
+      {
+        box: { x: -big, y: -big, width: tiny, height: tiny },
+        landmarks: [],
+        score: 1,
+      },
+    ];
+    const sources = [
+      SOURCE,
+      { width: big, height: big },
+      { width: tiny, height: 2 },
+      { width: 1, height: tiny },
+    ];
+    for (const face of faces) {
+      for (const source of sources) {
+        for (const aspect of [ASPECT, tiny, big]) {
+          for (const crown of [undefined, 0, big, Number.NaN]) {
+            const layout = suggestIdPhotoLayout(face, source, aspect, crown);
+            if (layout === null) continue;
+            for (const value of Object.values(layout)) {
+              expect(Number.isFinite(value)).toBe(true);
+            }
+          }
+        }
+      }
+    }
+  });
 });
 
 describe('idPhotoCropFromLayout', () => {
@@ -293,6 +404,47 @@ describe('idPhotoCropFromLayout', () => {
     expect(crop.x).toBeLessThan(1);
     expect(crop.y).toBeGreaterThan(0);
     expect(crop.y).toBeLessThan(1);
+  });
+});
+
+describe('mapFaceToOutput', () => {
+  const preset = { widthPx: 295, heightPx: 413 };
+  const baseBox = { left: 100, top: 50, width: 400, height: 560 };
+
+  it('maps a finite face', () => {
+    const mapped = mapFaceToOutput(faceAt(280, 310, 40), baseBox, preset, 0);
+    expect(mapped).not.toBeNull();
+    expect(mapped!.box.x + mapped!.box.width / 2).toBeCloseTo(147.5, 6);
+    expect(mapped!.landmarks).toHaveLength(5);
+  });
+
+  it('returns null when the face box has a non-finite value', () => {
+    for (const key of ['x', 'y', 'width', 'height'] as const) {
+      for (const bad of [
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+      ]) {
+        const face = faceAt(280, 310, 40);
+        face.box[key] = bad;
+        expect(mapFaceToOutput(face, baseBox, preset, 0)).toBeNull();
+      }
+    }
+  });
+
+  it('returns null when any landmark has a non-finite coordinate', () => {
+    for (const index of [0, 1, 4]) {
+      for (const axis of [0, 1] as const) {
+        const face = faceAt(280, 310, 40);
+        const landmarks = face.landmarks.map(
+          point => [point[0], point[1]] as [number, number]
+        );
+        landmarks[index]![axis] = Number.NaN;
+        expect(
+          mapFaceToOutput({ ...face, landmarks }, baseBox, preset, 0)
+        ).toBeNull();
+      }
+    }
   });
 });
 

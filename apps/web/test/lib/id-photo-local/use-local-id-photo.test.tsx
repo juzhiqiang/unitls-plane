@@ -521,6 +521,66 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(suggestLayoutMock.mock.calls[0]![3]).toBe(4);
   });
 
+  it('uses zero rotation when the layout rotation is not finite', async () => {
+    faceDetectMock.mockResolvedValue([face]);
+    suggestLayoutMock.mockImplementation((...args: unknown[]) => {
+      const layout = actualValidators.suggestIdPhotoLayout!(...args) as {
+        rotation: number;
+      } | null;
+      return layout ? { ...layout, rotation: Number.NaN } : layout;
+    });
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    expect(result.current.status).toBe('done');
+    // 传给 canvas 旋转的角度必须是 0,不能是 NaN。
+    expect(compositeMock.mock.calls[0]![6]).toBe(0);
+    // 旋转按 0 处理后人脸仍能映射到成片坐标。
+    const centred = result.current.quality!.items.find(
+      i => i.name === 'faceCentered'
+    )!;
+    expect(centred.value).toMatch(/^\d+%$/);
+  });
+
+  it('treats a face with non-finite landmarks as no face in the quality report', async () => {
+    faceDetectMock.mockResolvedValue([
+      {
+        ...face,
+        landmarks: [[Number.NaN, 200], ...face.landmarks.slice(1)],
+      },
+    ]);
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    const items = new Map(
+      result.current.quality!.items.map(i => [i.name, i] as const)
+    );
+    // 检测到了一张脸,但映射不出有效坐标:数量照实报告,位置类按「未检测到」。
+    expect(items.get('faceCount')!.value).toBe('1');
+    for (const name of [
+      'faceCentered',
+      'faceRatio',
+      'eyeTilt',
+      'headroom',
+    ] as const) {
+      expect(items.get(name)!.value).toBe('—');
+      expect(items.get(name)!.passed).toBe(false);
+      expect(items.get(name)!.hint).toBe('faceNotDetected');
+    }
+  });
+
   it('produces a quality report after compositing', async () => {
     faceDetectMock.mockResolvedValue([face]);
     const { result } = renderHook(() => useLocalIdPhoto());

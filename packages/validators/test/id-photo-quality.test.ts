@@ -256,6 +256,22 @@ describe('inspectIdPhoto', () => {
     }
   });
 
+  it('fails eyeTilt with faceNotDetected when the eye tilt is undefined', () => {
+    const face = centeredFace(1000, 1000, 0.35);
+    const rest = face.landmarks.slice(2);
+    for (const landmarks of [
+      // 两眼重合:atan2(0, 0)=0 曾让它显示为 +0.0° 并通过。
+      [[500, 300], [500, 300], ...rest],
+      [[Number.NaN, 300], face.landmarks[1]!, ...rest],
+      [face.landmarks[0]!, [600, Number.POSITIVE_INFINITY], ...rest],
+    ] as Array<Array<readonly [number, number]>>) {
+      const eyeTilt = item(reportFor({ ...face, landmarks }), 'eyeTilt');
+      expect(eyeTilt.value).toBe('—');
+      expect(eyeTilt.passed).toBe(false);
+      expect(eyeTilt.hint).toBe('faceNotDetected');
+    }
+  });
+
   it('flags a face that is too small', () => {
     const report = reportFor(centeredFace(1000, 1000, 0.15));
 

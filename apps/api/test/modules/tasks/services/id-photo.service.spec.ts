@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import sharp from 'sharp';
 import {
   estimateSourceBackgroundColors,
@@ -8,6 +8,7 @@ import {
   suggestBrightnessAdjustment,
   suggestIdPhotoLayout,
 } from '@utils-plane/validators';
+import * as validators from '@utils-plane/validators';
 import { decontaminateIdPhotoForeground } from '@utils-plane/utils';
 import { IdPhotoService } from '../../../../src/modules/tasks/services/id-photo.service';
 
@@ -524,7 +525,7 @@ describe('mapFaceToOutput', () => {
       score: 0.9,
     };
 
-    const mapped = mapFaceToOutput(face, baseBox, preset, 0);
+    const mapped = mapFaceToOutput(face, baseBox, preset, 0)!;
 
     expect(mapped.box.x + mapped.box.width / 2).toBeCloseTo(147.5, 6);
     expect(mapped.box.y + mapped.box.height / 2).toBeCloseTo(206.5, 6);
@@ -537,7 +538,7 @@ describe('mapFaceToOutput', () => {
       score: 0.9,
     };
 
-    const mapped = mapFaceToOutput(face, baseBox, preset, 0);
+    const mapped = mapFaceToOutput(face, baseBox, preset, 0)!;
 
     // 缩放比 = 295 / 400 = 413 / 560 = 0.7375
     expect(mapped.box.x).toBeCloseTo(0, 6);
@@ -556,8 +557,8 @@ describe('mapFaceToOutput', () => {
       score: 0.9,
     };
 
-    const corrected = mapFaceToOutput(face, baseBox, preset, 5);
-    const doubled = mapFaceToOutput(face, baseBox, preset, -5);
+    const corrected = mapFaceToOutput(face, baseBox, preset, 5)!;
+    const doubled = mapFaceToOutput(face, baseBox, preset, -5)!;
     const correctedCenterX = corrected.box.x + corrected.box.width / 2;
     const doubledCenterX = doubled.box.x + doubled.box.width / 2;
 
@@ -659,13 +660,13 @@ describe('IdPhotoService layout direction', () => {
       baseBox,
       { widthPx: 295, heightPx: 413 },
       layout.rotation
-    );
+    )!;
     const doubled = mapFaceToOutput(
       markerFace,
       baseBox,
       { widthPx: 295, heightPx: 413 },
       -layout.rotation
-    );
+    )!;
 
     const service = new IdPhotoService(
       {
@@ -1065,5 +1066,112 @@ describe('IdPhotoService brightness ordering', () => {
     const opaqueX = OPAQUE.left + Math.floor(OPAQUE.width / 2);
     const opaque = data[sampleIndex(opaqueX, ringY, info.channels)] ?? 0;
     expect(actual).toBeLessThanOrEqual(opaque + 1);
+  });
+});
+
+describe('IdPhotoService non-finite guards', () => {
+  const WIDTH = 600;
+  const HEIGHT = 800;
+
+  async function makeService(face: unknown) {
+    const mask = await sharp(Buffer.alloc(WIDTH * HEIGHT, 255), {
+      raw: { width: WIDTH, height: HEIGHT, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+    return new IdPhotoService(
+      {
+        segment: async () => ({
+          mask,
+          bounds: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
+          faceCount: 1,
+        }),
+      } as any,
+      { detect: async () => [face] } as never
+    );
+  }
+
+  async function makeInput() {
+    return sharp({
+      create: {
+        width: WIDTH,
+        height: HEIGHT,
+        channels: 3,
+        background: '#888888',
+      },
+    })
+      .png()
+      .toBuffer();
+  }
+
+  const config = {
+    preset: 'one_inch',
+    backgroundColor: '#ffffff',
+    outputType: 'image/png',
+    dpi: 300,
+    segmentationMode: 'local',
+  } as const;
+
+  const finiteFace = {
+    box: { x: 220, y: 200, width: 160, height: 160 },
+    landmarks: [
+      [250, 260],
+      [350, 260],
+      [300, 300],
+      [270, 330],
+      [330, 330],
+    ] as Array<[number, number]>,
+    score: 0.95,
+  };
+
+  it('renders with zero rotation when the layout rotation is not finite', async () => {
+    const original = validators.suggestIdPhotoLayout;
+    const spy = spyOn(validators, 'suggestIdPhotoLayout').mockImplementation(
+      (...args) => {
+        const layout = original(...args);
+        return layout ? { ...layout, rotation: Number.NaN } : layout;
+      }
+    );
+    try {
+      const service = await makeService(finiteFace);
+      const result = await service.render(await makeInput(), config);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const metadata = await sharp(result.buffer).metadata();
+      expect(metadata.width).toBe(295);
+      expect(metadata.height).toBe(413);
+      // 旋转被当成 0 后人脸仍能映射到成片坐标，居中项给出真实数值。
+      const centred = result.quality!.items.find(
+        i => i.name === 'faceCentered'
+      )!;
+      expect(centred.value).toMatch(/^\d+%$/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('treats a face with non-finite landmarks as no face in the quality report', async () => {
+    const face = {
+      ...finiteFace,
+      landmarks: [[Number.NaN, 260], ...finiteFace.landmarks.slice(1)] as Array<
+        [number, number]
+      >,
+    };
+    const service = await makeService(face);
+    const result = await service.render(await makeInput(), config);
+
+    const items = new Map(result.quality!.items.map(i => [i.name, i]));
+    // 检测到了一张脸，但映射不出有效坐标：数量照实报告，位置类按「未检测到」。
+    expect(items.get('faceCount')!.value).toBe('1');
+    for (const name of [
+      'faceCentered',
+      'faceRatio',
+      'eyeTilt',
+      'headroom',
+    ] as const) {
+      expect(items.get(name)!.value).toBe('—');
+      expect(items.get(name)!.passed).toBe(false);
+      expect(items.get(name)!.hint).toBe('faceNotDetected');
+    }
   });
 });

@@ -110,6 +110,8 @@ export async function compositeIdPhoto(
   onOutput?: (pixels: CompositeOutputPixels) => void
 ): Promise<Blob> {
   const { r, g, b } = hexToRgb(backgroundColor);
+  // 防御:非有限角度(NaN/±Infinity)按不旋转处理,不交给 canvas。
+  const angle = Number.isFinite(rotation) ? rotation : 0;
   const box = resolveIdPhotoCropBox(
     cutout.width,
     cutout.height,
@@ -235,10 +237,10 @@ export async function compositeIdPhoto(
   octx.fillStyle = `rgb(${r},${g},${b})`;
   octx.fillRect(0, 0, presetW, presetH);
 
-  if (rotation) {
+  if (angle) {
     octx.translate(presetW / 2, presetH / 2);
     // 与 sharp.rotate(-rotation) 对齐：canvas 正角为顺时针。
-    octx.rotate((-rotation * Math.PI) / 180);
+    octx.rotate((-angle * Math.PI) / 180);
     octx.translate(-presetW / 2, -presetH / 2);
   }
 
@@ -252,9 +254,9 @@ export async function compositeIdPhoto(
     const foreground = new OffscreenCanvas(presetW, presetH);
     const fgctx = foreground.getContext('2d');
     if (!fgctx) throw new Error('2D canvas context unavailable');
-    if (rotation) {
+    if (angle) {
       fgctx.translate(presetW / 2, presetH / 2);
-      fgctx.rotate((-rotation * Math.PI) / 180);
+      fgctx.rotate((-angle * Math.PI) / 180);
       fgctx.translate(-presetW / 2, -presetH / 2);
     }
     fgctx.drawImage(fgCanvas, 0, 0, presetW, presetH);

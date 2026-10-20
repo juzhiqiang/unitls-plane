@@ -252,21 +252,23 @@ export function inspectIdPhoto(input: {
       hint: 'faceRatioRange',
     });
 
-    if (face.landmarks.length >= 2) {
-      const tilt = eyeTiltDegrees(face.landmarks);
-      items.push({
-        name: 'eyeTilt',
-        value: `${tilt >= 0 ? '+' : ''}${tilt.toFixed(1)}°`,
-        passed: Math.abs(tilt) <= MAX_EYE_TILT,
-        hint: 'levelEyes',
-      });
-    } else {
-      // 少于两个点无法算眼线，不能把 eyeTiltDegrees 的兜底 0 当成「水平」。
+    // 眼线无从定义（少于两个点、两眼重合、坐标非有限）时按「未检测到」判失败，
+    // 不能把 eyeTiltDegrees 的兜底值当成「水平」。
+    const tilt =
+      face.landmarks.length >= 2 ? eyeTiltDegrees(face.landmarks) : Number.NaN;
+    if (Number.isNaN(tilt)) {
       items.push({
         name: 'eyeTilt',
         value: '—',
         passed: false,
         hint: 'faceNotDetected',
+      });
+    } else {
+      items.push({
+        name: 'eyeTilt',
+        value: `${tilt >= 0 ? '+' : ''}${tilt.toFixed(1)}°`,
+        passed: Math.abs(tilt) <= MAX_EYE_TILT,
+        hint: 'levelEyes',
       });
     }
 

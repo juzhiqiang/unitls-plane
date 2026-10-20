@@ -677,6 +677,35 @@ describe('compositeIdPhoto rotation', () => {
       12
     );
   });
+
+  it('does not rotate for a non-finite rotation', async () => {
+    for (const rotation of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      const { contexts } = stubOffscreenCanvas();
+
+      await compositeIdPhoto(
+        fakeCutout(100, 140),
+        '#ffffff',
+        PRESET_W,
+        PRESET_H,
+        'image/jpeg',
+        undefined,
+        rotation,
+        null,
+        0,
+        () => {}
+      );
+
+      // 成品画布与质量检查用的前景画布都不能拿非有限角度旋转。
+      for (const ctx of contexts) {
+        expect(ctx.rotate).not.toHaveBeenCalled();
+        expect(ctx.translate).not.toHaveBeenCalled();
+      }
+    }
+  });
 });
 
 describe('compositeIdPhoto brightness', () => {

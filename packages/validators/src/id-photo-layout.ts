@@ -98,14 +98,44 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** 两眼连线相对水平线的夹角（度）。右眼低于左眼时为正。 */
+/**
+ * 两眼连线相对水平线的夹角（度）。右眼低于左眼时为正。
+ *
+ * 眼线无从定义时返回 `NaN`，由调用方决定如何处理：
+ * - 任一眼的坐标非有限（检测器输出异常）；
+ * - 两眼重合 —— `atan2(0, 0)` 恰好为 0，若不拦截会被当成「眼线水平」而假通过。
+ *
+ * 少于两个关键点时仍返回 0（历史行为），质量检查对该情形另有判定。
+ */
 export function eyeTiltDegrees(
   landmarks: ReadonlyArray<readonly [number, number]>
 ): number {
   const left = landmarks[0];
   const right = landmarks[1];
   if (!left || !right) return 0;
-  return (Math.atan2(right[1] - left[1], right[0] - left[0]) * 180) / Math.PI;
+  if (
+    !Number.isFinite(left[0]) ||
+    !Number.isFinite(left[1]) ||
+    !Number.isFinite(right[0]) ||
+    !Number.isFinite(right[1])
+  ) {
+    return Number.NaN;
+  }
+  const dx = right[0] - left[0];
+  const dy = right[1] - left[1];
+  if (dx === 0 && dy === 0) return Number.NaN;
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+
+function isFiniteLayout(layout: IdPhotoLayout): boolean {
+  return (
+    Number.isFinite(layout.zoom) &&
+    Number.isFinite(layout.offsetX) &&
+    Number.isFinite(layout.offsetY) &&
+    Number.isFinite(layout.rotation) &&
+    Number.isFinite(layout.faceRatio) &&
+    Number.isFinite(layout.faceTopMargin)
+  );
 }
 
 /**
@@ -198,12 +228,13 @@ export function suggestIdPhotoLayout(
   );
 
   const tilt = eyeTiltDegrees(face.landmarks);
+  // 眼线无从定义（NaN）时不做旋转修正：缩放与偏移仍由人脸框决定。
   const rotation =
-    Math.abs(tilt) < ROTATION_THRESHOLD
+    Number.isNaN(tilt) || Math.abs(tilt) < ROTATION_THRESHOLD
       ? 0
       : clamp(tilt * ROTATION_GAIN, -MAX_ROTATION, MAX_ROTATION);
 
-  return {
+  const layout: IdPhotoLayout = {
     zoom,
     offsetX,
     offsetY,
@@ -214,6 +245,10 @@ export function suggestIdPhotoLayout(
     // 「蒙版真实头顶」与「人脸框估算」两种输入。
     faceTopMargin: Math.max(0, (y - top) / Math.max(1, cropHeight)),
   };
+  // 防御：任何字段非有限都整体放弃，调用方会回退到居中/传入的 crop。
+  // 输入已逐项校验，正常不会走到这里；NaN 一旦进入 canvas.rotate /
+  // sharp.rotate 会直接让出图失败，宁可不自动构图。
+  return isFiniteLayout(layout) ? layout : null;
 }
 
 /**
@@ -296,13 +331,29 @@ export function idPhotoCropFromLayout(
  * 也会被判失败 —— 所以质量检查前必须先做这次映射。
  *
  * 本地 canvas 路与服务端 sharp 路共用这一个函数，保证两端质量结论一致。
+ *
+ * 人脸框或任一关键点含非有限值时返回 `null`：映射结果同样会是 NaN，
+ * 调用方应按「无人脸」交给质量检查，而不是让 NaN 混进比例与留白的计算。
  */
 export function mapFaceToOutput(
   face: FaceDetection,
   baseBox: IdPhotoCropBox,
   preset: { widthPx: number; heightPx: number },
   rotation: number
-): FaceDetection {
+): FaceDetection | null {
+  const { box } = face;
+  if (
+    !Number.isFinite(box.x) ||
+    !Number.isFinite(box.y) ||
+    !Number.isFinite(box.width) ||
+    !Number.isFinite(box.height) ||
+    face.landmarks.some(
+      ([px, py]) => !Number.isFinite(px) || !Number.isFinite(py)
+    )
+  ) {
+    return null;
+  }
+
   const scaleX = preset.widthPx / Math.max(1, baseBox.width);
   const scaleY = preset.heightPx / Math.max(1, baseBox.height);
   const centerX = preset.widthPx / 2;

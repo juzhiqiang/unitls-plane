@@ -214,7 +214,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             );
             if (layout) {
               crop = idPhotoCropFromLayout(layout, sourceSize, targetAspect);
-              rotation = layout.rotation;
+              // 防御:非有限角度会让 canvas 旋转与 mapFaceToOutput 失真,按 0 处理。
+              rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
             }
           }
 
@@ -248,6 +249,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           // 4) 质量检查必须在成片坐标上做:人脸框/关键点先从源图映射到
           //    成片(裁剪 + 缩放 + 旋转),rgb/alpha 也用成片尺寸的像素。
           //    否则自动构图已经居中的照片仍会因按源图尺寸计算而判失败。
+          //    映射失败(坐标非有限)时为 null,按「无人脸」交给质量检查,
+          //    faceCount 仍照实际检测数报告。
           const baseBox = resolveIdPhotoCropBox(
             sourceSize.width,
             sourceSize.height,

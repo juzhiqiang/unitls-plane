@@ -127,7 +127,9 @@ export class IdPhotoService {
           { width: sourceWidth, height: sourceHeight },
           preset.widthPx / preset.heightPx
         );
-        rotation = layout.rotation;
+        // 防御：非有限角度进 sharp.rotate 会直接抛错，进 mapFaceToOutput 会
+        // 让质量检查的人脸坐标全变 NaN。按「不旋转」处理。
+        rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
       }
     }
 
@@ -290,6 +292,8 @@ export class IdPhotoService {
 
     // 质量检查在最终成片上做。人脸框/关键点是源图坐标，必须先映射到成片坐标，
     // 否则 faceRatio、faceCentered、headroom 会按源图尺寸计算而失真。
+    // 映射失败（坐标非有限）时返回 null，按「无人脸」交给质量检查；
+    // faceCount 仍照实际检测数报告。
     const quality = inspectIdPhoto({
       rgb: composed.data,
       width: preset.widthPx,

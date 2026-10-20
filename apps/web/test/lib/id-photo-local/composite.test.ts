@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { decode as decodeJpeg } from 'jpeg-js';
 import { resolveIdPhotoCropBox } from '@utils-plane/validators';
 
 type Decontaminate = (
@@ -23,7 +24,26 @@ const mocks = vi.hoisted(() => ({
     | ((rgba: Uint8ClampedArray, width: number, height: number) => number)
     | null,
   writeDpi: vi.fn(async (blob: Blob, _dpi?: number) => blob),
+  // jpeg-js 编码器：包装真实实现，既保留可解码的真实 JPEG，又能断言 quality。
+  jpegEncode: vi.fn(),
+  realJpegEncode: null as
+    | ((
+        img: { data: unknown; width: number; height: number },
+        quality?: number
+      ) => unknown)
+    | null,
 }));
+
+vi.mock('jpeg-js', async importOriginal => {
+  const actual = await importOriginal<typeof import('jpeg-js')>();
+  mocks.realJpegEncode =
+    actual.encode as unknown as typeof mocks.realJpegEncode;
+  const mocked = {
+    ...actual,
+    encode: mocks.jpegEncode,
+  };
+  return mocked;
+});
 
 // composite.ts 只从 utils 取去污染与亮度均值；保留其余真实导出，按需委托。
 vi.mock('@utils-plane/utils', async importOriginal => {
@@ -58,6 +78,63 @@ const { compositeIdPhoto, hexToRgb } =
 
 const PRESET_W = 295;
 const PRESET_H = 413;
+
+interface SofComponent {
+  id: number;
+  /** 低 4 位水平采样因子，高 4 位垂直采样因子；0x11 表示无下采样。 */
+  sampling: number;
+}
+
+/**
+ * 从 JPEG 字节里解析 SOF0（baseline，标记 0xFFC0）。
+ *
+ * canvas 的编码器/封装库不暴露采样参数，只能回到码流本身：SOF0 分量表的
+ * 采样因子是唯一权威来源。4:4:4 要求三个分量都为 0x11。
+ */
+function parseSof0(bytes: Uint8Array): {
+  width: number;
+  height: number;
+  components: SofComponent[];
+} {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error('not a JPEG');
+  }
+  let pos = 2;
+  while (pos + 4 <= bytes.length) {
+    if (bytes[pos] !== 0xff) {
+      pos += 1;
+      continue;
+    }
+    const marker = bytes[pos + 1]!;
+    // 0xFF 填充字节
+    if (marker === 0xff) {
+      pos += 1;
+      continue;
+    }
+    // 无长度字段的独立标记
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      pos += 2;
+      continue;
+    }
+    // 扫描开始/图像结束之后不会再有 SOF0
+    if (marker === 0xda || marker === 0xd9) break;
+
+    const length = (bytes[pos + 2]! << 8) | bytes[pos + 3]!;
+    if (marker === 0xc0) {
+      const height = (bytes[pos + 5]! << 8) | bytes[pos + 6]!;
+      const width = (bytes[pos + 7]! << 8) | bytes[pos + 8]!;
+      const count = bytes[pos + 9]!;
+      const components: SofComponent[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const base = pos + 10 + i * 3;
+        components.push({ id: bytes[base]!, sampling: bytes[base + 1]! });
+      }
+      return { width, height, components };
+    }
+    pos += 2 + length;
+  }
+  throw new Error('SOF0 segment not found');
+}
 
 interface FakeContext {
   fillStyle: string;
@@ -192,6 +269,11 @@ beforeEach(() => {
   );
   mocks.writeDpi.mockClear();
   mocks.writeDpi.mockImplementation(async (blob: Blob) => blob);
+  mocks.jpegEncode.mockReset();
+  mocks.jpegEncode.mockImplementation(
+    (img: { data: unknown; width: number; height: number }, quality?: number) =>
+      mocks.realJpegEncode!(img, quality)
+  );
 });
 
 describe('hexToRgb', () => {
@@ -301,8 +383,8 @@ describe('compositeIdPhoto pipeline', () => {
     expect((top as number) + (height as number) / 2).toBeCloseTo(750, -1);
   });
 
-  it('encodes JPEG at quality 0.95 and writes 300 dpi', async () => {
-    const { blobs } = stubOffscreenCanvas();
+  it('encodes JPEG at quality 95 and writes 300 dpi', async () => {
+    const { blobs, contexts } = stubOffscreenCanvas();
     const sentinel = new Blob(['tagged'], { type: 'image/jpeg' });
     mocks.writeDpi.mockResolvedValueOnce(sentinel);
 
@@ -314,12 +396,19 @@ describe('compositeIdPhoto pipeline', () => {
       'image/jpeg'
     );
 
-    expect(blobs).toHaveLength(1);
-    expect(blobs[0]!.opts).toEqual({
-      type: 'image/jpeg',
-      quality: 0.95,
-    });
+    // JPEG 必须由 jpeg-js 编码：canvas 无法指定色度采样。
+    expect(blobs).toHaveLength(0);
+    expect(contexts[1]!.getImageData).toHaveBeenCalledWith(
+      0,
+      0,
+      PRESET_W,
+      PRESET_H
+    );
+    expect(mocks.jpegEncode).toHaveBeenCalledTimes(1);
+    expect(mocks.jpegEncode.mock.calls[0]![1]).toBe(95);
     expect(mocks.writeDpi).toHaveBeenCalledTimes(1);
+    const encoded = mocks.writeDpi.mock.calls[0]![0] as Blob;
+    expect(encoded.type).toBe('image/jpeg');
     expect(mocks.writeDpi.mock.calls[0]![1]).toBe(300);
     expect(result).toBe(sentinel);
   });
@@ -337,6 +426,80 @@ describe('compositeIdPhoto pipeline', () => {
 
     expect(blobs[0]!.opts).toEqual({ type: 'image/png' });
     expect(mocks.writeDpi.mock.calls[0]![1]).toBe(300);
+  });
+});
+
+describe('compositeIdPhoto JPEG chroma sampling', () => {
+  it('encodes with 4:4:4 chroma sampling (all three components 0x11)', async () => {
+    stubOffscreenCanvas();
+
+    const blob = await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#438edb',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg'
+    );
+
+    const sof = parseSof0(new Uint8Array(await blob.arrayBuffer()));
+    expect(sof.components).toHaveLength(3);
+    expect(sof.components.map(component => component.sampling)).toEqual([
+      0x11, 0x11, 0x11,
+    ]);
+  });
+
+  it('writes a JPEG whose decoded size equals the preset size', async () => {
+    stubOffscreenCanvas();
+
+    const blob = await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#438edb',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg'
+    );
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const decoded = decodeJpeg(bytes, { useTArray: true });
+    expect(decoded.width).toBe(PRESET_W);
+    expect(decoded.height).toBe(PRESET_H);
+
+    // SOF0 与解码结果必须一致，避免只依赖解码器的宽松解析。
+    const sof = parseSof0(bytes);
+    expect(sof.width).toBe(PRESET_W);
+    expect(sof.height).toBe(PRESET_H);
+  });
+
+  it('passes quality 95 and the output-canvas pixels to the encoder', async () => {
+    const { contexts } = stubOffscreenCanvas({
+      pixel: { r: 12, g: 200, b: 90, a: 255 },
+    });
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg'
+    );
+
+    expect(mocks.jpegEncode).toHaveBeenCalledTimes(1);
+    const [image, quality] = mocks.jpegEncode.mock.calls[0] as [
+      { data: Uint8ClampedArray; width: number; height: number },
+      number,
+    ];
+    expect(quality).toBe(95);
+    expect(image.width).toBe(PRESET_W);
+    expect(image.height).toBe(PRESET_H);
+    expect(image.data).toHaveLength(PRESET_W * PRESET_H * 4);
+    // 编码输入必须来自最终成品画布（含底色），不是前景画布。
+    expect(contexts[1]!.getImageData).toHaveBeenCalledWith(
+      0,
+      0,
+      PRESET_W,
+      PRESET_H
+    );
+    expect(Array.from(image.data.subarray(0, 4))).toEqual([12, 200, 90, 255]);
   });
 });
 

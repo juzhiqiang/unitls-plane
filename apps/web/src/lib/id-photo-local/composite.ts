@@ -8,6 +8,7 @@ import {
   computeForegroundMeanBrightness,
   decontaminateIdPhotoForeground,
 } from '@utils-plane/utils';
+import { encode as encodeJpeg } from 'jpeg-js';
 import { writeDpi } from './dpi-metadata';
 
 export interface Rgb {
@@ -265,11 +266,44 @@ export async function compositeIdPhoto(
     onOutput({ rgba, alpha, width: presetW, height: presetH });
   }
 
-  const blob = await out.convertToBlob({
-    type: outputType,
-    quality: outputType === 'image/jpeg' ? 0.95 : undefined,
-  });
+  // 7) 编码。
+  //
+  // JPEG 不能交给 canvas：`convertToBlob` 不暴露色度采样，Chrome/Skia 默认
+  // 4:2:0 —— 纯色证件照底色会在色度通道上被下采样，边缘出现色噪。服务端
+  // sharp 固定 `chromaSubsampling: '4:4:4'`，本地必须对齐；jpeg-js 对每个
+  // 分量都写 0x11 采样因子，天然 4:4:4。
+  //
+  // PNG 不需要这层控制，继续走 canvas 编码。
+  const blob =
+    outputType === 'image/jpeg'
+      ? encodeJpegBlob(
+          octx.getImageData(0, 0, presetW, presetH),
+          presetW,
+          presetH
+        )
+      : await out.convertToBlob({ type: outputType });
 
-  // 7) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释
+  // 8) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释
   return writeDpi(blob, 300);
+}
+
+/**
+ * 用 jpeg-js 把 RGBA 像素编码成 JPEG。
+ *
+ * jpeg-js 在 CJS/Node 环境返回 Buffer（Uint8Array 子类）；这里只按
+ * Uint8Array 读取并复制到独立缓冲区，不调用 `Buffer.from`。浏览器端由
+ * Next 的客户端 polyfill 满足 jpeg-js 内部的 Buffer 引用。
+ *
+ * 质量参数是 0–100 的整数，95 与服务端 sharp 配置一致。
+ */
+function encodeJpegBlob(
+  image: { data: Uint8ClampedArray },
+  width: number,
+  height: number
+): Blob {
+  const encoded = encodeJpeg({ data: image.data, width, height }, 95);
+  const bytes = encoded.data as unknown as Uint8Array;
+  const payload = new Uint8Array(bytes.length);
+  payload.set(bytes);
+  return new Blob([payload], { type: 'image/jpeg' });
 }

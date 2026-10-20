@@ -67,7 +67,11 @@ vi.mock('@/lib/id-photo-local/composite', async importOriginal => {
   };
 });
 
-import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
+import { idPhotoCropSchema, idPhotoPresetSpecs } from '@utils-plane/validators';
+import {
+  ID_PHOTO_LOCAL_MAX_SOURCE_EDGE,
+  useLocalIdPhoto,
+} from '@/lib/id-photo-local/use-local-id-photo';
 
 let lastCutout: {
   width: number;
@@ -91,7 +95,7 @@ beforeEach(() => {
   segmentMock.mockReset();
   segmentMock.mockImplementation(async () => ({
     bitmap: lastCutout,
-    sourceBackground: { r: 240, g: 240, b: 240 },
+    source: lastSource,
   }));
   faceDetectMock.mockReset();
   faceDetectMock.mockResolvedValue([]);
@@ -153,10 +157,7 @@ beforeEach(() => {
     writable: true,
   });
   Object.defineProperty(globalThis, 'createImageBitmap', {
-    value: vi.fn(async () => {
-      lastSource = { width: 10, height: 10, close: vi.fn() };
-      return lastSource;
-    }),
+    value: vi.fn(async () => ({ width: 10, height: 10, close: vi.fn() })),
     configurable: true,
     writable: true,
   });
@@ -243,7 +244,7 @@ describe('useLocalIdPhoto', () => {
         options.onDownloadProgress?.(0.5);
         return {
           bitmap: lastCutout,
-          sourceBackground: { r: 240, g: 240, b: 240 },
+          source: lastSource,
         };
       }
     );
@@ -267,7 +268,7 @@ describe('useLocalIdPhoto', () => {
           gate = () =>
             resolve({
               bitmap: lastCutout,
-              sourceBackground: { r: 240, g: 240, b: 240 },
+              source: lastSource,
             });
         })
     );
@@ -298,7 +299,7 @@ describe('useLocalIdPhoto', () => {
           resolveProcess = () =>
             resolve({
               bitmap: lastCutout,
-              sourceBackground: { r: 240, g: 240, b: 240 },
+              source: lastSource,
             });
         })
     );
@@ -348,6 +349,70 @@ describe('useLocalIdPhoto', () => {
     // 底色必须从原图在成片尺寸上估计,不能从背景 RGB 已被归零的 cutout 反推。
     expect(compositeMock.mock.calls[0]![7]).toBe(lastSource);
     expect(lastSource.close).toHaveBeenCalled();
+  });
+
+  it('reuses the segmentation source instead of decoding the file again', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
+    });
+    await waitFor(() => expect(result.current.status).toBe('done'));
+
+    // 分割已经解码过原图(并按上限缩放),hook 不能再解码第二次。
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+    expect(compositeMock.mock.calls[0]![7]).toBe(lastSource);
+  });
+
+  it('asks segmentation to cap the source long edge at 2048', async () => {
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
+    });
+
+    expect(ID_PHOTO_LOCAL_MAX_SOURCE_EDGE).toBe(2048);
+    expect(lastSegmentCall().options).toMatchObject({ maxSourceEdge: 2048 });
+  });
+
+  it('closes both bitmaps when the session goes stale right after segmentation', async () => {
+    let release: () => void = () => {};
+    segmentMock.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          release = () => resolve({ bitmap: lastCutout, source: lastSource });
+        })
+    );
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      result.current.process(makeFile('a.jpg'), 'balanced', defaultOpts);
+      await Promise.resolve();
+    });
+    act(() => result.current.resetAll());
+    await act(async () => {
+      release();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(lastCutout.close).toHaveBeenCalled();
+    expect(lastSource.close).toHaveBeenCalled();
+  });
+});
+
+describe('ID_PHOTO_LOCAL_MAX_SOURCE_EDGE', () => {
+  it('leaves enough pixels for the largest preset at the maximum crop scale', () => {
+    // 依据:IdPhotoCrop.scale 上限 3;最大规格二寸 413×626,626×3=1878 < 2048。
+    expect(
+      idPhotoCropSchema.safeParse({ x: 0.5, y: 0.5, scale: 3 }).success
+    ).toBe(true);
+    expect(
+      idPhotoCropSchema.safeParse({ x: 0.5, y: 0.5, scale: 3.01 }).success
+    ).toBe(false);
+    for (const spec of Object.values(idPhotoPresetSpecs)) {
+      expect(Math.max(spec.widthPx, spec.heightPx) * 3).toBeLessThanOrEqual(
+        ID_PHOTO_LOCAL_MAX_SOURCE_EDGE
+      );
+    }
   });
 });
 
@@ -579,6 +644,27 @@ describe('useLocalIdPhoto auto framing', () => {
       expect(items.get(name)!.passed).toBe(false);
       expect(items.get(name)!.hint).toBe('faceNotDetected');
     }
+  });
+
+  it('runs face detection on the segmentation source so coordinates share one space', async () => {
+    faceDetectMock.mockResolvedValue([face]);
+    lastCutout = { width: 1365, height: 2048, close: vi.fn() };
+    lastSource = { width: 1365, height: 2048, close: vi.fn() };
+    const { result } = renderHook(() => useLocalIdPhoto());
+
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    // 人脸检测、crownY、suggestIdPhotoLayout 都必须用缩放后的源图尺寸。
+    expect(faceDetectMock).toHaveBeenCalledWith(lastSource);
+    expect(suggestLayoutMock.mock.calls[0]![1]).toEqual({
+      width: 1365,
+      height: 2048,
+    });
   });
 
   it('produces a quality report after compositing', async () => {

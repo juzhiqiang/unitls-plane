@@ -246,4 +246,20 @@ describe('detectFaces (本地 YuNet)', () => {
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(runMock).toHaveBeenCalledTimes(2);
   });
+
+  it('直接复用调用方传入的位图:不再解码,不关闭,坐标按该位图尺寸映射', async () => {
+    // 证件照本地路把分割阶段缩放后的源图传进来,人脸坐标必须落在同一坐标系。
+    const provided = { width: 1280, height: 1920, close: vi.fn() };
+
+    const faces = await detectFaces(provided as unknown as ImageBitmap);
+
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+    expect(provided.close).not.toHaveBeenCalled();
+    // 模型输入 640×640 → 位图 1280×1920:scaleX=2, scaleY=3
+    expect(faces).toHaveLength(1);
+    expect(faces[0]!.box.x).toBeCloseTo(632, 5);
+    expect(faces[0]!.box.y).toBeCloseTo(316 * 3, 5);
+    expect(faces[0]!.box.width).toBeCloseTo(32, 5);
+    expect(faces[0]!.box.height).toBeCloseTo(48, 5);
+  });
 });

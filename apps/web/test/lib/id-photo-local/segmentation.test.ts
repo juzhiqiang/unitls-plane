@@ -39,6 +39,7 @@ vi.mock('onnxruntime-web', () => ({
 import { ORT_VERSION, tierFor } from '@/lib/id-photo-local/model-registry';
 import {
   StaleSegmentationError,
+  fitWithinLongEdge,
   resetSegmentationCacheForTests,
   segmentToCutout,
 } from '@/lib/id-photo-local/segmentation';
@@ -224,7 +225,10 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     expect(outCanvas?.ctx.globalCompositeOperation).toBe('source-over');
 
     expect(result.bitmap).toBe(cutoutBitmap);
-    expect(sourceBitmap.close).toHaveBeenCalled();
+    // 源图交还给调用方复用(底色估计/人脸检测),由调用方负责 close,
+    // 分割阶段不能提前关掉它。
+    expect(result.source).toBe(sourceBitmap);
+    expect(sourceBitmap.close).not.toHaveBeenCalled();
   });
 
   it('只返回 cutout,不再附带已无消费者的底色估计', async () => {
@@ -311,6 +315,17 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     await expect(
       segmentToCutout(makeFile(), 'balanced', 'wasm', { isStale })
     ).rejects.toBeInstanceOf(StaleSegmentationError);
+    // 结果被丢弃时源图没有交出去,必须在分割内部释放。
+    expect(sourceBitmap.close).toHaveBeenCalled();
+  });
+
+  it('推理失败时释放已解码的源图', async () => {
+    runMock.mockRejectedValueOnce(new Error('ort run failed'));
+
+    await expect(
+      segmentToCutout(makeFile(), 'balanced', 'wasm')
+    ).rejects.toThrow('ort run failed');
+    expect(sourceBitmap.close).toHaveBeenCalled();
   });
 
   it('high 档在任何后端都落到 balanced(photographic 单档)', async () => {
@@ -325,5 +340,127 @@ describe('segmentToCutout (本地 MODNet photographic)', () => {
     });
     expect(tierFor(false, 'high')).toBe('balanced');
     expect(tierFor(true, 'high')).toBe('balanced');
+  });
+});
+
+describe('fitWithinLongEdge', () => {
+  it('scales the long edge down to the limit and keeps the aspect ratio', () => {
+    expect(fitWithinLongEdge(4000, 6000, 2048)).toEqual({
+      width: 1365,
+      height: 2048,
+    });
+    expect(fitWithinLongEdge(6000, 4000, 2048)).toEqual({
+      width: 2048,
+      height: 1365,
+    });
+  });
+
+  it('never upscales an image already within the limit', () => {
+    expect(fitWithinLongEdge(1000, 1500, 2048)).toEqual({
+      width: 1000,
+      height: 1500,
+    });
+    expect(fitWithinLongEdge(2048, 1000, 2048)).toEqual({
+      width: 2048,
+      height: 1000,
+    });
+  });
+
+  it('keeps at least one pixel on the short edge', () => {
+    expect(fitWithinLongEdge(10000, 3, 2048)).toEqual({
+      width: 2048,
+      height: 1,
+    });
+  });
+});
+
+describe('segmentToCutout source long-edge cap', () => {
+  /**
+   * createImageBitmap 桩:传入 Blob 时返回指定尺寸的「解码结果」;
+   * 传入画布时返回与画布同尺寸的位图,用来跟踪缩放后的源图与 cutout。
+   */
+  function stubDecode(width: number, height: number) {
+    const decoded = { width, height, close: vi.fn() };
+    const fromCanvas: Array<{
+      width: number;
+      height: number;
+      close: ReturnType<typeof vi.fn>;
+    }> = [];
+    const mock = vi.fn(async (source: unknown) => {
+      if (source instanceof Blob) return decoded;
+      const canvas = source as { width: number; height: number };
+      const bitmap = {
+        width: canvas.width,
+        height: canvas.height,
+        close: vi.fn(),
+      };
+      fromCanvas.push(bitmap);
+      return bitmap;
+    });
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      value: mock,
+      configurable: true,
+      writable: true,
+    });
+    // 蒙版尺寸跟随实际输入张量。
+    runMock.mockImplementation(
+      async (feeds: Record<string, { dims: number[] }>) => {
+        const dims = feeds.input!.dims;
+        return {
+          output: { data: new Float32Array(dims[2]! * dims[3]!).fill(0.5) },
+        };
+      }
+    );
+    return { decoded, fromCanvas, mock };
+  }
+
+  it('downscales a 4000×6000 source to a 2048 long edge before any other work', async () => {
+    const { decoded, fromCanvas, mock } = stubDecode(4000, 6000);
+
+    const result = await segmentToCutout(makeFile(), 'balanced', 'wasm', {
+      maxSourceEdge: 2048,
+    });
+
+    // 只解码一次;全分辨率位图缩放后立即释放。
+    expect(mock.mock.calls.filter(([src]) => src instanceof Blob)).toHaveLength(
+      1
+    );
+    expect(decoded.close).toHaveBeenCalled();
+    // 所有画布(缩放、模型输入、蒙版、cutout)都不超过 2048 长边。
+    for (const canvas of canvases) {
+      expect(Math.max(canvas.width, canvas.height)).toBeLessThanOrEqual(2048);
+    }
+    expect(canvases[0]).toMatchObject({ width: 1365, height: 2048 });
+    expect(canvases.at(-1)).toMatchObject({ width: 1365, height: 2048 });
+    // 交给调用方的源图与 cutout 同尺寸,且尚未释放。
+    expect(result.source).toBe(fromCanvas[0]);
+    expect(result.source).toMatchObject({ width: 1365, height: 2048 });
+    expect(result.source.close).not.toHaveBeenCalled();
+    expect(result.bitmap).toMatchObject({ width: 1365, height: 2048 });
+  });
+
+  it('does not upscale or re-encode a source already within the cap', async () => {
+    const { decoded, mock } = stubDecode(1000, 1500);
+
+    const result = await segmentToCutout(makeFile(), 'balanced', 'wasm', {
+      maxSourceEdge: 2048,
+    });
+
+    // 不需要缩放:没有额外的缩放画布,源图就是解码结果本身。
+    expect(result.source).toBe(decoded);
+    expect(decoded.close).not.toHaveBeenCalled();
+    expect(canvases).toHaveLength(3);
+    expect(canvases.at(-1)).toMatchObject({ width: 1000, height: 1500 });
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the original size when no cap is requested', async () => {
+    // 通用抠图(/image/cutout)保持原尺寸输出,不受证件照上限影响。
+    stubDecode(4000, 6000);
+
+    const result = await segmentToCutout(makeFile(), 'balanced', 'wasm');
+
+    expect(canvases.at(-1)).toMatchObject({ width: 4000, height: 6000 });
+    expect(result.source).toMatchObject({ width: 4000, height: 6000 });
   });
 });

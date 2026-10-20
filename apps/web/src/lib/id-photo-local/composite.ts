@@ -246,11 +246,18 @@ export async function compositeIdPhoto(
 
   octx.drawImage(fgCanvas, 0, 0, presetW, presetH);
 
+  // 成品画布的像素只读一次:质量检查(onOutput)与 JPEG 编码共用这一份,
+  // 避免为同一画布重复分配 presetW × presetH × 4 的缓冲。PNG 且无回调时不读。
+  const outputImage =
+    onOutput || outputType === 'image/jpeg'
+      ? octx.getImageData(0, 0, presetW, presetH)
+      : null;
+
   // 6) 质量检查需要成片尺寸的像素。rgba 直接取最终画布（含底色）；
   //    alpha 必须在「只画前景」的透明画布上取——最终画布已被底色铺满，
   //    其 alpha 恒为 255，用它算 matteEdge 会永远通过。
-  if (onOutput) {
-    const rgba = octx.getImageData(0, 0, presetW, presetH).data;
+  if (onOutput && outputImage) {
+    const rgba = outputImage.data;
     const foreground = new OffscreenCanvas(presetW, presetH);
     const fgctx = foreground.getContext('2d');
     if (!fgctx) throw new Error('2D canvas context unavailable');
@@ -277,12 +284,8 @@ export async function compositeIdPhoto(
   //
   // PNG 不需要这层控制，继续走 canvas 编码。
   const blob =
-    outputType === 'image/jpeg'
-      ? encodeJpegBlob(
-          octx.getImageData(0, 0, presetW, presetH),
-          presetW,
-          presetH
-        )
+    outputType === 'image/jpeg' && outputImage
+      ? encodeJpegBlob(outputImage, presetW, presetH)
       : await out.convertToBlob({ type: outputType });
 
   // 8) 写回 300dpi：canvas 不写密度，打印会按 72dpi 解释

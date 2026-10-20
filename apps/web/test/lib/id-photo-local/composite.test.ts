@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { decode as decodeJpeg } from 'jpeg-js';
 import { resolveIdPhotoCropBox } from '@utils-plane/validators';
+import { parseSof0 } from './jpeg-sof0';
 
 type Decontaminate = (
   rgba: Uint8ClampedArray,
@@ -78,63 +79,6 @@ const { compositeIdPhoto, hexToRgb } =
 
 const PRESET_W = 295;
 const PRESET_H = 413;
-
-interface SofComponent {
-  id: number;
-  /** 低 4 位水平采样因子，高 4 位垂直采样因子；0x11 表示无下采样。 */
-  sampling: number;
-}
-
-/**
- * 从 JPEG 字节里解析 SOF0（baseline，标记 0xFFC0）。
- *
- * canvas 的编码器/封装库不暴露采样参数，只能回到码流本身：SOF0 分量表的
- * 采样因子是唯一权威来源。4:4:4 要求三个分量都为 0x11。
- */
-function parseSof0(bytes: Uint8Array): {
-  width: number;
-  height: number;
-  components: SofComponent[];
-} {
-  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
-    throw new Error('not a JPEG');
-  }
-  let pos = 2;
-  while (pos + 4 <= bytes.length) {
-    if (bytes[pos] !== 0xff) {
-      pos += 1;
-      continue;
-    }
-    const marker = bytes[pos + 1]!;
-    // 0xFF 填充字节
-    if (marker === 0xff) {
-      pos += 1;
-      continue;
-    }
-    // 无长度字段的独立标记
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
-      pos += 2;
-      continue;
-    }
-    // 扫描开始/图像结束之后不会再有 SOF0
-    if (marker === 0xda || marker === 0xd9) break;
-
-    const length = (bytes[pos + 2]! << 8) | bytes[pos + 3]!;
-    if (marker === 0xc0) {
-      const height = (bytes[pos + 5]! << 8) | bytes[pos + 6]!;
-      const width = (bytes[pos + 7]! << 8) | bytes[pos + 8]!;
-      const count = bytes[pos + 9]!;
-      const components: SofComponent[] = [];
-      for (let i = 0; i < count; i += 1) {
-        const base = pos + 10 + i * 3;
-        components.push({ id: bytes[base]!, sampling: bytes[base + 1]! });
-      }
-      return { width, height, components };
-    }
-    pos += 2 + length;
-  }
-  throw new Error('SOF0 segment not found');
-}
 
 interface FakeContext {
   fillStyle: string;
@@ -500,6 +444,34 @@ describe('compositeIdPhoto JPEG chroma sampling', () => {
       PRESET_H
     );
     expect(Array.from(image.data.subarray(0, 4))).toEqual([12, 200, 90, 255]);
+  });
+
+  it('reads the output canvas once and shares it between quality check and JPEG encoding', async () => {
+    const { contexts } = stubOffscreenCanvas();
+    let qualityRgba: Uint8ClampedArray | null = null;
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/jpeg',
+      undefined,
+      0,
+      null,
+      0,
+      pixels => {
+        qualityRgba = pixels.rgba;
+      }
+    );
+
+    // 成品画布(contexts[1])只读一次像素;质量检查与编码器拿到同一份缓冲。
+    expect(contexts[1]!.getImageData).toHaveBeenCalledTimes(1);
+    const [image] = mocks.jpegEncode.mock.calls[0] as [
+      { data: Uint8ClampedArray },
+    ];
+    expect(qualityRgba).not.toBeNull();
+    expect(image.data).toBe(qualityRgba);
   });
 });
 

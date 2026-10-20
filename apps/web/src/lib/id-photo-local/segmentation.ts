@@ -76,6 +76,58 @@ export interface SegmentationOptions {
   onDownloadProgress?: (ratio: number) => void;
   /** 返回 true 时中止:用于丢弃过期会话的结果。 */
   isStale?: () => boolean;
+  /**
+   * 源图长边上限(像素)。超过时在管线入口按比例缩小,不放大;省略则保持原尺寸。
+   *
+   * 证件照传入上限以控制大图内存(48MP 照片全分辨率 cutout + getImageData
+   * 会占数百 MB);通用抠图要保持原尺寸输出,不传。
+   */
+  maxSourceEdge?: number;
+}
+
+/**
+ * 把尺寸按比例缩到长边不超过 `maxEdge`;已在上限内时原样返回(不放大)。
+ * 短边至少保留 1 像素。
+ */
+export function fitWithinLongEdge(
+  width: number,
+  height: number,
+  maxEdge: number
+): { width: number; height: number } {
+  const longest = Math.max(width, height);
+  if (longest <= maxEdge) return { width, height };
+  const scale = maxEdge / longest;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+/**
+ * 解码源图;给了上限且超出时缩放到上限内。
+ *
+ * 全分辨率解码只是瞬时的:缩放完成后立即 close,管线后续只持有缩放后的位图。
+ */
+async function decodeSource(
+  file: Blob,
+  maxEdge: number | undefined
+): Promise<ImageBitmap> {
+  const decoded = await createImageBitmap(file);
+  if (!maxEdge) return decoded;
+  const target = fitWithinLongEdge(decoded.width, decoded.height, maxEdge);
+  if (target.width === decoded.width && target.height === decoded.height) {
+    return decoded;
+  }
+  try {
+    const canvas = new OffscreenCanvas(target.width, target.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2D canvas context unavailable');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(decoded, 0, 0, target.width, target.height);
+    return await createImageBitmap(canvas);
+  } finally {
+    decoded.close?.();
+  }
 }
 
 /**
@@ -151,13 +203,22 @@ async function getSession(
  * 与服务端同一口径。分割阶段只负责产出带 alpha 的 cutout。
  */
 export interface SegmentationResult {
+  /** 带 alpha 的抠图,与 `source` 同尺寸。 */
   bitmap: ImageBitmap;
+  /**
+   * 分割所用的源图(给了 `maxSourceEdge` 时为缩放后的版本)。
+   *
+   * 交给调用方复用(底色估计、人脸检测),避免再解码一次原图;坐标与
+   * `bitmap` 一致。
+   */
+  source: ImageBitmap;
 }
 
 /**
- * 跑一次分割,产出带 alpha 的抠图位图(与输入同尺寸)。
+ * 跑一次分割,产出带 alpha 的抠图位图(与源图同尺寸)。
  *
- * 调用方负责 close() 返回的 bitmap。
+ * 调用方负责 close() 返回的 `bitmap` 与 `source`;失败或过期时两者都已在
+ * 内部释放。
  */
 export async function segmentToCutout(
   file: Blob,
@@ -165,7 +226,7 @@ export async function segmentToCutout(
   ep: LocalEp,
   options: SegmentationOptions = {}
 ): Promise<SegmentationResult> {
-  const { onDownloadProgress, isStale } = options;
+  const { onDownloadProgress, isStale, maxSourceEdge } = options;
 
   const effectiveTier = tierFor(ep === 'webgpu', requestedTier);
   const meta = ID_PHOTO_MODELS[effectiveTier];
@@ -188,7 +249,9 @@ export async function segmentToCutout(
     onDownloadProgress?.(1);
   }
 
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await decodeSource(file, maxSourceEdge);
+  // 成功时源图交给调用方;其余任何退出路径都在这里释放。
+  let handedOff = false;
   try {
     // 动态尺寸:长边 512、保持长宽比、32 对齐、不补边。
     const box = modnetInputSize({
@@ -263,9 +326,11 @@ export async function segmentToCutout(
     );
     octx.globalCompositeOperation = 'source-over';
 
-    return { bitmap: await createImageBitmap(out) };
+    const cutout = await createImageBitmap(out);
+    handedOff = true;
+    return { bitmap: cutout, source: bitmap };
   } finally {
-    bitmap.close?.();
+    if (!handedOff) bitmap.close?.();
   }
 }
 

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { decode as decodeJpeg, encode as encodeJpeg } from 'jpeg-js';
 import {
   injectJpegDpi,
   injectPngDpi,
   writeDpi,
 } from '@/lib/id-photo-local/dpi-metadata';
+import { parseSof0 } from './jpeg-sof0';
 
 /** 最小的合法 JPEG 结构：SOI + EOI。足以验证段插入逻辑。 */
 function minimalJpeg(): Uint8Array<ArrayBuffer> {
@@ -196,6 +198,38 @@ describe('injectJpegDpi', () => {
   it('returns non-JPEG input unchanged', () => {
     const input = new Uint8Array([1, 2, 3]);
     expect(injectJpegDpi(input, 300)).toBe(input);
+  });
+
+  it('keeps 4:4:4 chroma sampling on a jpeg-js encoded image after injection', () => {
+    // 往返:jpeg-js 产出 → 注入 APP1 → SOF0 三分量采样因子仍为 0x11,
+    // 尺寸不变,且仍可解码。注入只能在 SOI 后插段,不能动码流其余部分。
+    const width = 33;
+    const height = 21;
+    const rgba = new Uint8Array(width * height * 4);
+    for (let i = 0; i < width * height; i += 1) {
+      rgba[i * 4] = (i * 7) % 256;
+      rgba[i * 4 + 1] = (i * 13) % 256;
+      rgba[i * 4 + 2] = (i * 29) % 256;
+      rgba[i * 4 + 3] = 255;
+    }
+    const encoded = new Uint8Array(
+      encodeJpeg({ data: rgba, width, height }, 95).data
+    );
+    expect(parseSof0(encoded).components.map(c => c.sampling)).toEqual([
+      0x11, 0x11, 0x11,
+    ]);
+
+    const out = injectJpegDpi(encoded, 300);
+
+    expect(latin1(out.subarray(0, 12))).toContain('Exif');
+    const sof = parseSof0(out);
+    expect(sof.components).toHaveLength(3);
+    expect(sof.components.map(c => c.sampling)).toEqual([0x11, 0x11, 0x11]);
+    expect(sof.width).toBe(width);
+    expect(sof.height).toBe(height);
+    const decoded = decodeJpeg(out, { useTArray: true });
+    expect(decoded.width).toBe(width);
+    expect(decoded.height).toBe(height);
   });
 });
 

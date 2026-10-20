@@ -28,6 +28,18 @@ export type { LocalEp };
 // 在模块作用域取值:hook 内的 `process` 回调会遮蔽全局 process,不能在其中写 process.env。
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
+/**
+ * 本地证件照管线的源图长边上限(像素)。
+ *
+ * 依据:最大规格二寸为 413×626,`IdPhotoCrop.scale` 上限为 3,
+ * 626 × 3 = 1878 < 2048 —— 在纵向源图上,即使放大到最大倍数,裁剪框
+ * 也仍有不少于成片的像素,缩放不会让成片像素不足。小于上限的图不放大。
+ *
+ * 不设上限时 48MP 照片会以全分辨率解码、生成 cutout 并 getImageData,
+ * 占用数百 MB,移动端会直接崩溃。
+ */
+export const ID_PHOTO_LOCAL_MAX_SOURCE_EDGE = 2048;
+
 export type LocalStage =
   | 'idle'
   | 'loading-model'
@@ -136,28 +148,25 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
       setQuality(null);
       const isStale = () => sid !== sessionIdRef.current;
       try {
-        const { bitmap: cutoutBitmap } = await segmentToCutout(
-          file,
-          tier,
-          ep ?? 'wasm',
-          {
+        // 源图在分割入口就按长边上限缩放;返回的 source 与 cutout 同尺寸,
+        // 后续人脸检测、crownY、构图与底色估计都在这一个坐标系里进行,
+        // 不再解码第二次原图。
+        const { bitmap: cutoutBitmap, source: sourceBitmap } =
+          await segmentToCutout(file, tier, ep ?? 'wasm', {
             onDownloadProgress: ratio => {
               if (isStale()) return;
               setProgress(ratio);
               setStatus('loading-model');
             },
             isStale,
-          }
-        );
-        if (isStale()) return;
+            maxSourceEdge: ID_PHOTO_LOCAL_MAX_SOURCE_EDGE,
+          });
 
-        // 原图用于在「裁剪后的成片尺寸」上估计底色，与服务端同一语义。
-        // 解码失败不阻断出图：composite 会退回 cutout 估计。
-        let sourceBitmap: ImageBitmap | null = null;
-
-        // 人脸检测与构图属于「处理中」(running),不是合成阶段。
-        setStatus('running');
         try {
+          if (isStale()) return;
+
+          // 人脸检测与构图属于「处理中」(running),不是合成阶段。
+          setStatus('running');
           const spec = idPhotoPresetSpecs[opts.preset];
           if (!spec) throw new Error(`unknown preset: ${opts.preset}`);
           const targetAspect = spec.widthPx / spec.heightPx;
@@ -166,23 +175,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             height: cutoutBitmap.height,
           };
 
-          // 1) 先把抠图读成像素:质量检查和 crownY 估算共用这一份。
-          //    必须在合成前读,finally 会 close 掉 bitmap。
-          const srcCanvas = new OffscreenCanvas(
-            cutoutBitmap.width,
-            cutoutBitmap.height
-          );
-          const sctx = srcCanvas.getContext('2d');
-          if (!sctx) throw new Error('2D canvas context unavailable');
-          sctx.drawImage(cutoutBitmap, 0, 0);
-          const srcData = sctx.getImageData(
-            0,
-            0,
-            cutoutBitmap.width,
-            cutoutBitmap.height
-          );
-
-          // 2) 只在「用户没手动改过裁剪框」时才自动构图。
+          // 1) 只在「用户没手动改过裁剪框」时才自动构图。
           //    守卫读 ref:同一事件里先 markUserOverride() 再 process() 时,
           //    state 尚未重渲染,不能依赖闭包里的 userOverride。
           //    亮度自动校正也只在自动模式下生效:用户手动构图时不自动调色。
@@ -195,10 +188,25 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           let faces: Awaited<ReturnType<typeof detectFaces>> = [];
 
           if (autoFraming) {
-            faces = await detectFaces(file);
+            faces = await detectFaces(sourceBitmap);
             if (isStale()) return;
 
             // 抠图的 alpha 就是蒙版:第一条合格的不透明行即真实头顶。
+            // 只有自动构图需要它,因此只在这里把 cutout 读成像素;必须在
+            // 合成前读,finally 会 close 掉 bitmap。
+            const srcCanvas = new OffscreenCanvas(
+              cutoutBitmap.width,
+              cutoutBitmap.height
+            );
+            const sctx = srcCanvas.getContext('2d');
+            if (!sctx) throw new Error('2D canvas context unavailable');
+            sctx.drawImage(cutoutBitmap, 0, 0);
+            const srcData = sctx.getImageData(
+              0,
+              0,
+              cutoutBitmap.width,
+              cutoutBitmap.height
+            );
             // 行门槛与服务端共用 packages/utils 的 findCrownY(RGBA 步长 4)。
             const crownY = findCrownY(
               srcData.data,
@@ -219,15 +227,14 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             }
           }
 
-          // 2.5) 亮度自动校正不再在整幅 cutout 上预算，而是交给 composite
+          // 1.5) 亮度自动校正不再在整幅 cutout 上预算，而是交给 composite
           //      在裁剪后的成片尺寸上、只对 alpha > 0 的前景求均值，与服务端
           //      同一口径。手动构图（userOverride）时不启用。
 
-          // 3) 合成(去污染 + 旋转 + DPI 都在 composite 内完成),同时拿回
-          //    成片尺寸的像素供质量检查。
+          // 2) 合成(去污染 + 旋转 + DPI 都在 composite 内完成),同时拿回
+          //    成片尺寸的像素供质量检查。源图用于在「裁剪后的成片尺寸」上
+          //    估计底色，与服务端同一语义。
           setStatus('compositing');
-          sourceBitmap = await createImageBitmap(file).catch(() => null);
-          if (isStale()) return;
           let pixelsFromComposite: CompositeOutputPixels | null = null;
           const blob = await compositeIdPhoto(
             cutoutBitmap,
@@ -282,7 +289,8 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
           setResultBlob(blob);
           setStatus('done');
         } finally {
-          sourceBitmap?.close?.();
+          // 两个位图都归 hook 所有(分割阶段已移交),任何退出路径都要释放。
+          sourceBitmap.close?.();
           cutoutBitmap.close?.();
         }
       } catch (err) {

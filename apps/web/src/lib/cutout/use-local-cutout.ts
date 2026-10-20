@@ -61,7 +61,8 @@ export function useLocalCutout(): UseLocalCutout {
       const isStale = () => sid !== sessionIdRef.current;
 
       try {
-        const { bitmap: cutout } = await segmentToCutout(
+        // 通用抠图保持原尺寸输出,不传 maxSourceEdge。
+        const { bitmap: cutout, source } = await segmentToCutout(
           file,
           tier,
           ep ?? 'wasm',
@@ -74,10 +75,12 @@ export function useLocalCutout(): UseLocalCutout {
             isStale,
           }
         );
-        if (isStale()) return;
+        // 合成只需要 cutout;源图立即释放,不在合成期间多占一份全尺寸内存。
+        source.close?.();
 
-        setStatus('compositing');
         try {
+          if (isStale()) return;
+          setStatus('compositing');
           const blob = await compositeCutout(cutout, options);
           if (isStale()) return;
           setResultBlob(blob);

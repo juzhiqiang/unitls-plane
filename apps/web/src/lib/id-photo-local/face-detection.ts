@@ -85,7 +85,13 @@ export function resetFaceDetectionCacheForTests(): void {
   sessionPromise = null;
 }
 
-export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
+/**
+ * @param input 原始文件,或调用方已解码的位图。传位图时直接复用、不再解码,
+ *   也不 close(所有权仍在调用方);返回的坐标落在该位图的像素坐标系里。
+ */
+export async function detectFaces(
+  input: Blob | ImageBitmap
+): Promise<DetectedFace[]> {
   try {
     const ort = await getOrt();
     const session = await getSession();
@@ -94,7 +100,8 @@ export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
     // 暴露 inputMetadata,因此以已知常量为准,不静默回落 320。
     const size = YUNET_INPUT_SIZE;
 
-    const bitmap = await createImageBitmap(file);
+    const owned = input instanceof Blob;
+    const bitmap = owned ? await createImageBitmap(input) : input;
     const srcWidth = bitmap.width;
     const srcHeight = bitmap.height;
 
@@ -147,7 +154,7 @@ export async function detectFaces(file: Blob): Promise<DetectedFace[]> {
         scaleY: srcHeight / size,
       });
     } finally {
-      bitmap.close?.();
+      if (owned) bitmap.close?.();
     }
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {

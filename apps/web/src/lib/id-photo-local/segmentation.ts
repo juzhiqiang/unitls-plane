@@ -16,7 +16,12 @@
  * docs/id-photo-model-comparison.md。
  */
 
-import { modnetInputSize, refinePortraitAlphaBytes } from '@utils-plane/utils';
+import {
+  createModNetInputTensor,
+  modnetInputSize,
+  normalizeModNetMatteValues,
+  refinePortraitAlphaBytes,
+} from '@utils-plane/utils';
 import {
   ID_PHOTO_MODELS,
   modnetModelUrl,
@@ -199,15 +204,10 @@ export async function segmentToCutout(
     ctx.drawImage(bitmap, 0, 0, inputW, inputH);
     const pixels = ctx.getImageData(0, 0, inputW, inputH).data;
 
+    // canvas 给的是 RGBA(步长 4);张量构造与服务端共用 packages/utils 的
+    // 同一实现,按 channels=4 跳过 A 通道,产出紧密的 CHW RGB。
     const plane = inputW * inputH;
-    const tensor = new Float32Array(3 * plane);
-    // canvas 给的是 RGBA(步长 4);tensor 是紧密的 CHW RGB。
-    // 步长写错不会报错,只会让整张图错位。
-    for (let i = 0; i < plane; i += 1) {
-      for (let c = 0; c < 3; c += 1) {
-        tensor[c * plane + i] = ((pixels[i * 4 + c] ?? 0) / 255 - 0.5) / 0.5;
-      }
-    }
+    const tensor = createModNetInputTensor(pixels, inputW, inputH, 4);
 
     const inputName = session.inputNames[0];
     const outputName = session.outputNames[0];
@@ -233,16 +233,10 @@ export async function segmentToCutout(
     const mctx = matteCanvas.getContext('2d');
     if (!mctx) throw new Error('2D canvas context unavailable');
     const imageData = mctx.createImageData(inputW, inputH);
-    // 与服务端 sharp 路径共用同一份 alpha 收敛:0..1 matte → 0..255 → 黑白点 + gamma。
+    // 与服务端 sharp 路径共用同一份 matte 归一化与 alpha 收敛:
+    // 0..1 matte → 0..255 → 黑白点 + gamma。
     // 不收敛会让本地路残留背景/光晕,同一张图在两端出现明显不同的边缘。
-    const rawAlpha = new Uint8Array(plane);
-    for (let i = 0; i < plane; i += 1) {
-      rawAlpha[i] = Math.max(
-        0,
-        Math.min(255, Math.round((matte[i] ?? 0) * 255))
-      );
-    }
-    const alpha = refinePortraitAlphaBytes(rawAlpha);
+    const alpha = refinePortraitAlphaBytes(normalizeModNetMatteValues(matte));
     for (let i = 0; i < plane; i += 1) {
       imageData.data[i * 4] = 255;
       imageData.data[i * 4 + 1] = 255;

@@ -16,6 +16,7 @@ import {
 import {
   computeForegroundMeanBrightness,
   decontaminateIdPhotoForeground,
+  findCrownY,
 } from '@utils-plane/utils';
 import { FaceDetectionService } from './face-detection.service';
 import { PortraitSegmentationService } from './portrait-segmentation.service';
@@ -331,20 +332,14 @@ export class IdPhotoService {
    */
   private async detectCrownY(maskPng: Buffer): Promise<number | undefined> {
     try {
+      // extractChannel(0) 保证单通道：行扫描按 channels=1 的步长读取。
       const { data, info } = await sharp(maskPng)
         .greyscale()
+        .extractChannel(0)
         .raw()
         .toBuffer({ resolveWithObject: true });
-      // 只认「像一条头顶边缘」的行：至少 3 个像素且不少于宽度的 2%。
-      // 否则顶部零星噪点会把构图整体上移。
-      const minForeground = Math.max(3, info.width * 0.02);
-      for (let y = 0; y < info.height; y += 1) {
-        let foreground = 0;
-        for (let x = 0; x < info.width; x += 1) {
-          if ((data[y * info.width + x] ?? 0) > 96) foreground += 1;
-        }
-        if (foreground >= minForeground) return y;
-      }
+      // 行门槛（噪点过滤）与本地路共用 packages/utils 的同一份实现。
+      return findCrownY(data, info.width, info.height, 1);
     } catch {
       // 蒙版读不出来不影响出图
     }

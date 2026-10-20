@@ -5,7 +5,9 @@ import sharp from 'sharp';
 import * as ort from 'onnxruntime-node';
 import {
   MODNET_LONG_EDGE,
+  createModNetInputTensor,
   modnetInputSize,
+  normalizeModNetMatteValues,
   refinePortraitAlphaBytes,
 } from '@utils-plane/utils';
 import {
@@ -13,7 +15,14 @@ import {
   normalizeOpenAiCompatibleImageEditUrl,
 } from './openai-compatible-image';
 
-export { modnetInputSize, refinePortraitAlphaBytes };
+// 张量构造与 matte 归一化与浏览器本地路共用 packages/utils 的实现；
+// 在此 re-export 以保持既有 import 路径可用。
+export {
+  createModNetInputTensor,
+  modnetInputSize,
+  normalizeModNetMatteValues,
+  refinePortraitAlphaBytes,
+};
 export const MODNET_INPUT_SIZE = MODNET_LONG_EDGE;
 
 const MODNET_PHOTOGRAPHIC_NAME = 'modnet_photographic.onnx';
@@ -114,40 +123,6 @@ function resolveGenericModNetModelPath(
     path.resolve(cwd, `models/${MODNET_GENERIC_NAME}`),
   ];
   return candidates.find(candidate => exists(candidate)) ?? candidates[1]!;
-}
-
-export function createModNetInputTensor(
-  rawRgb: Buffer,
-  width: number,
-  height: number
-): Float32Array {
-  const plane = width * height;
-  const tensorData = new Float32Array(3 * plane);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const pixel = (y * width + x) * 3;
-      const target = y * width + x;
-      const r = ((rawRgb[pixel] ?? 0) / 255 - 0.5) / 0.5;
-      const g = ((rawRgb[pixel + 1] ?? 0) / 255 - 0.5) / 0.5;
-      const b = ((rawRgb[pixel + 2] ?? 0) / 255 - 0.5) / 0.5;
-
-      tensorData[target] = r;
-      tensorData[plane + target] = g;
-      tensorData[2 * plane + target] = b;
-    }
-  }
-  return tensorData;
-}
-
-export function normalizeModNetMatteValues(
-  matteValues: ArrayLike<number>
-): Buffer {
-  const maskBytes = Buffer.alloc(matteValues.length);
-  for (let i = 0; i < maskBytes.length; i += 1) {
-    const normalized = matteValues[i] ?? 0;
-    maskBytes[i] = Math.max(0, Math.min(255, Math.round(normalized * 255)));
-  }
-  return maskBytes;
 }
 
 function normalizeOpenAiCompatibleBaseUrl(baseUrl: string): string {
@@ -466,7 +441,7 @@ export class PortraitSegmentationService {
     session: ort.InferenceSession,
     input: Buffer,
     sourceSize: { width: number; height: number }
-  ): Promise<Buffer> {
+  ): Promise<Uint8Array> {
     const box = modnetInputSize(sourceSize, MODNET_INPUT_SIZE);
     // 宽高比已保持，fit:'fill' 不会产生形变；这里不 extend 补边
     const raw = await sharp(input)
@@ -474,11 +449,11 @@ export class PortraitSegmentationService {
       .removeAlpha()
       .raw()
       .toBuffer();
-    const tensorData = createModNetInputTensor(raw, box.width, box.height);
+    const tensorData = createModNetInputTensor(raw, box.width, box.height, 3);
     const inputName = session.inputNames[0];
     const outputName = session.outputNames[0];
     if (!inputName || !outputName) {
-      return Buffer.alloc(0);
+      return new Uint8Array(0);
     }
 
     const result = await session.run({
@@ -491,7 +466,7 @@ export class PortraitSegmentationService {
     });
     const output = result[outputName];
     if (!output) {
-      return Buffer.alloc(0);
+      return new Uint8Array(0);
     }
 
     return normalizeModNetMatteValues(output.data as Float32Array);

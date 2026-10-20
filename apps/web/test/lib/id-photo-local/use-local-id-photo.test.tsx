@@ -3,15 +3,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 推理层已在 segmentation.test.ts 单独覆盖;这里只验证 hook 的编排
 // (重入守卫、进度接线、过期丢弃、合成与资源释放)。
-const { segmentMock, faceDetectMock, compositeMock, actualComposite } =
-  vi.hoisted(() => ({
-    segmentMock: vi.fn(),
-    faceDetectMock: vi.fn(),
-    compositeMock: vi.fn(),
-    // composite 的真实实现由模块工厂在导入时填进来;既有用例继续走真实合成,
-    // 自动构图用例再把它替换成 spy 以便断言传入的 crop。
-    actualComposite: {} as { impl?: (...args: unknown[]) => unknown },
-  }));
+const {
+  segmentMock,
+  faceDetectMock,
+  compositeMock,
+  actualComposite,
+  suggestLayoutMock,
+  actualValidators,
+} = vi.hoisted(() => ({
+  segmentMock: vi.fn(),
+  faceDetectMock: vi.fn(),
+  compositeMock: vi.fn(),
+  // composite 的真实实现由模块工厂在导入时填进来;既有用例继续走真实合成,
+  // 自动构图用例再把它替换成 spy 以便断言传入的 crop。
+  actualComposite: {} as { impl?: (...args: unknown[]) => unknown },
+  // 自动构图默认走真实实现;个别用例用它观察入参或注入异常输出。
+  suggestLayoutMock: vi.fn(),
+  actualValidators: {} as {
+    suggestIdPhotoLayout?: (...args: unknown[]) => unknown;
+  },
+}));
+
+vi.mock('@utils-plane/validators', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('@utils-plane/validators')>();
+  actualValidators.suggestIdPhotoLayout =
+    actual.suggestIdPhotoLayout as unknown as (...args: unknown[]) => unknown;
+  return {
+    ...actual,
+    suggestIdPhotoLayout: (...args: unknown[]) => suggestLayoutMock(...args),
+  };
+});
 
 vi.mock('@/lib/id-photo-local/segmentation', async importOriginal => {
   const actual =
@@ -45,10 +67,7 @@ vi.mock('@/lib/id-photo-local/composite', async importOriginal => {
   };
 });
 
-import {
-  findCrownY,
-  useLocalIdPhoto,
-} from '@/lib/id-photo-local/use-local-id-photo';
+import { useLocalIdPhoto } from '@/lib/id-photo-local/use-local-id-photo';
 
 let lastCutout: {
   width: number;
@@ -79,6 +98,10 @@ beforeEach(() => {
   compositeMock.mockReset();
   compositeMock.mockImplementation((...args: unknown[]) =>
     actualComposite.impl!(...args)
+  );
+  suggestLayoutMock.mockReset();
+  suggestLayoutMock.mockImplementation((...args: unknown[]) =>
+    actualValidators.suggestIdPhotoLayout!(...args)
   );
 
   // compositeIdPhoto 在 jsdom 下需要 2D 上下文与 convertToBlob;最小可用桩。
@@ -455,6 +478,49 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(compositeMock.mock.calls[0]![5]).toEqual(manual);
   });
 
+  it('passes the crown row scanned from the cutout RGBA to the layout', async () => {
+    faceDetectMock.mockResolvedValue([face]);
+    // cutout 10×10:第 1 行只有 2 个噪点像素(门槛 max(3, 0.2)=3),
+    // 第 4 行起整行不透明 → crownY=4。RGB 全填 255:若误按单通道步长读,
+    // 会把 RGB 当成 alpha 而得到 0。
+    const OriginalCanvas = globalThis.OffscreenCanvas;
+    class CrownCanvas extends (OriginalCanvas as unknown as new (
+      w: number,
+      h: number
+    ) => { getContext(): { getImageData: unknown } }) {
+      constructor(width: number, height: number) {
+        super(width, height);
+        const ctx = this.getContext();
+        ctx.getImageData = (_x: number, _y: number, w: number, h: number) => {
+          const data = new Uint8ClampedArray(w * h * 4).fill(255);
+          for (let y = 0; y < h; y += 1) {
+            for (let x = 0; x < w; x += 1) {
+              const alpha = y >= 4 || (y === 1 && x < 2) ? 255 : 0;
+              data[(y * w + x) * 4 + 3] = alpha;
+            }
+          }
+          return { data };
+        };
+      }
+    }
+    Object.defineProperty(globalThis, 'OffscreenCanvas', {
+      value: CrownCanvas,
+      configurable: true,
+      writable: true,
+    });
+
+    const { result } = renderHook(() => useLocalIdPhoto());
+    await act(async () => {
+      await result.current.process(makeFile('a.jpg'), 'balanced', {
+        ...defaultOpts,
+        autoFrame: true,
+      });
+    });
+
+    expect(suggestLayoutMock).toHaveBeenCalledTimes(1);
+    expect(suggestLayoutMock.mock.calls[0]![3]).toBe(4);
+  });
+
   it('produces a quality report after compositing', async () => {
     faceDetectMock.mockResolvedValue([face]);
     const { result } = renderHook(() => useLocalIdPhoto());
@@ -501,60 +567,5 @@ describe('useLocalIdPhoto auto framing', () => {
     expect(result.current.resultBlob).toBeNull();
     expect(result.current.autoLayout).toBeNull();
     expect(result.current.quality).toBeNull();
-  });
-});
-
-describe('findCrownY', () => {
-  function alphaMask(
-    width: number,
-    height: number,
-    alphaAt: (x: number, y: number) => number
-  ): Uint8ClampedArray {
-    const data = new Uint8ClampedArray(width * height * 4);
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        data[(y * width + x) * 4 + 3] = alphaAt(x, y);
-      }
-    }
-    return data;
-  }
-
-  it('ignores sparse noise rows below the minimum foreground count', () => {
-    // width=10 → 门槛 max(3, 0.2)=3。第 0 行只有 1 个像素、第 1 行只有
-    // 2 个像素,都属于零星噪点,不能把头顶推到 y=0。
-    const data = alphaMask(10, 4, (x, y) => {
-      if (y === 0) return x === 0 ? 200 : 0;
-      if (y === 1) return x < 2 ? 200 : 0;
-      if (y === 2) return x < 3 ? 200 : 0;
-      return 0;
-    });
-
-    expect(findCrownY(data, 10, 4)).toBe(2);
-  });
-
-  it('scales the minimum foreground count with the mask width', () => {
-    // width=1000 → 门槛 max(3, 20)=20。19 个像素的行仍算噪点,20 个才算头顶。
-    const data = alphaMask(1000, 3, (x, y) => {
-      if (y === 0) return x < 19 ? 200 : 0;
-      if (y === 1) return x < 20 ? 200 : 0;
-      return 0;
-    });
-
-    expect(findCrownY(data, 1000, 3)).toBe(1);
-  });
-
-  it('counts only alpha above 96 as foreground', () => {
-    // 半透明边缘(<=96)不是前景;第 0 行即使整行都是 96 也不通过。
-    const data = alphaMask(10, 2, (x, y) => {
-      if (y === 0) return 96;
-      return x < 3 ? 97 : 0;
-    });
-
-    expect(findCrownY(data, 10, 2)).toBe(1);
-  });
-
-  it('returns undefined when no row reaches the threshold', () => {
-    const data = alphaMask(10, 4, () => 0);
-    expect(findCrownY(data, 10, 4)).toBeUndefined();
   });
 });

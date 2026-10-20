@@ -12,6 +12,7 @@ import {
   type IdPhotoPreset,
   type QualityReport,
 } from '@utils-plane/validators';
+import { findCrownY } from '@utils-plane/utils';
 import { compositeIdPhoto, type CompositeOutputPixels } from './composite';
 import { detectFaces } from './face-detection';
 import { type ModelTier } from './model-registry';
@@ -72,35 +73,6 @@ export interface UseLocalIdPhoto {
    * 清结果并清掉 `userOverride`。换图时使用:新图不应继承上一张图的手动构图。
    */
   resetAll: () => void;
-}
-
-/**
- * 蒙版 alpha 中第一个「像一条头顶边缘」的像素行，作为真实头顶的 y。
- *
- * YuNet 人脸框上沿在发际线附近，不是头顶;suggestIdPhotoLayout 在有真实头顶
- * 时会据此上移裁剪框。本地路的抠图自带 alpha,不必额外再跑一次分割,直接扫描
- * alpha 通道即可。
- *
- * 但不能「单个像素命中就返回」:抠图顶部常有零星半透明噪点,哪怕只有一两个
- * 像素,也足以把裁剪框整体上移导致构图失真。因此每行要求前景像素数不少于
- * `max(3, 2% * width)` —— 与服务端 detectCrownY 的门槛保持一致。
- * 阈值 96 用于跳过边缘的半透明像素。
- */
-export function findCrownY(
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number
-): number | undefined {
-  const minForeground = Math.max(3, width * 0.02);
-  for (let y = 0; y < height; y += 1) {
-    const rowStart = y * width * 4;
-    let foreground = 0;
-    for (let x = 0; x < width; x += 1) {
-      if ((rgba[rowStart + x * 4 + 3] ?? 0) > 96) foreground += 1;
-    }
-    if (foreground >= minForeground) return y;
-  }
-  return undefined;
 }
 
 /**
@@ -226,11 +198,13 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             faces = await detectFaces(file);
             if (isStale()) return;
 
-            // 抠图的 alpha 就是蒙版:第一行不透明像素即真实头顶。
+            // 抠图的 alpha 就是蒙版:第一条合格的不透明行即真实头顶。
+            // 行门槛与服务端共用 packages/utils 的 findCrownY(RGBA 步长 4)。
             const crownY = findCrownY(
               srcData.data,
               cutoutBitmap.width,
-              cutoutBitmap.height
+              cutoutBitmap.height,
+              4
             );
             layout = suggestIdPhotoLayout(
               faces[0] ?? null,

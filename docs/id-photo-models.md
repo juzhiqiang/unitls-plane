@@ -66,7 +66,7 @@ photographic 是**单档**模型:只有一个 fp32 权重,`balanced` 与 `high`
 | ------------------- | ----------------------------------------------------- | ------------------------ | ---------- | ---------------------------------------- |
 | MODNet photographic | `models/modnet/modnet_photographic.onnx`              | 25,969,398 B             | Apache-2.0 | 两端主分割(长边 512、保持长宽比、不补边) |
 | YuNet 人脸检测      | `models/face/yunet/face_detection_yunet_2023mar.onnx` | 232,589 B                | MIT        | 两端人脸检测与自动构图                   |
-| BRIA RMBG-1.4(历史) | `models/rmbg/1.4/...`                                 | ~84MB fp16 / ~168MB fp32 | BRIA 专有  | 非默认;仅为历史资产与紧急排查保留        |
+| BRIA RMBG-1.4(历史) | `models/rmbg/1.4/...`                                 | ~84MB fp16 / ~168MB fp32 | BRIA 专有  | 当前运行时**不再加载**,仅为历史资产保留   |
 
 `prepare-id-photo-models.sh` 会一并准备；`sync-id-photo-models.ts` 的 `ASSET_PREFIXES` 已包含
 `rmbg/`、`ort/`、`modnet/` 与

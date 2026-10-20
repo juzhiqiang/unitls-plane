@@ -66,7 +66,7 @@ photographic 是**单档**模型:只有一个 fp32 权重,`balanced` 与 `high`
 | ------------------- | ----------------------------------------------------- | ------------------------ | ---------- | ---------------------------------------- |
 | MODNet photographic | `models/modnet/modnet_photographic.onnx`              | 25,969,398 B             | Apache-2.0 | 两端主分割(长边 512、保持长宽比、不补边) |
 | YuNet 人脸检测      | `models/face/yunet/face_detection_yunet_2023mar.onnx` | 232,589 B                | MIT        | 两端人脸检测与自动构图                   |
-| BRIA RMBG-1.4(历史) | `models/rmbg/1.4/...`                                 | ~84MB fp16 / ~168MB fp32 | BRIA 专有  | 当前运行时**不再加载**,仅为历史资产保留   |
+| BRIA RMBG-1.4(历史) | `models/rmbg/1.4/...`                                 | ~84MB fp16 / ~168MB fp32 | BRIA 专有  | 当前运行时**不再加载**,仅为历史资产保留  |
 
 `prepare-id-photo-models.sh` 会一并准备；`sync-id-photo-models.ts` 的 `ASSET_PREFIXES` 已包含
 `rmbg/`、`ort/`、`modnet/` 与
@@ -181,3 +181,50 @@ ort 的 JS glue 与 `.wasm` 是**配对**的，版本错配会让 wasm 缺少 JS
 - 同步脚本失败不阻塞启动（返回 0，打印 skip 日志），便于 MinIO 未就绪时下次重启重试。
 - 资产不进 Git（大），构建前先跑 `scripts/prepare-id-photo-models.sh` 或
   `node scripts/download-rmbg-assets.cjs all`。
+
+## 参考对齐核对记录（2026-10-20 自动化核验）
+
+> 由 Task 17 自动化核验生成。样张人工视觉确认与物理打印尺量为手工环节，已单独标注待办。
+
+### 全仓回归
+
+| 套件                  | 结果                                | 说明                                                                                                                                                                                                                                  |
+| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/utils`      | ✅ 88 pass / 0 fail                 | 含去污染距离场、底色聚类、MODNet 动态尺寸/JPEG 4:4:4、YuNet 解码与 DPI 等                                                                                                                                                             |
+| `packages/validators` | ✅ 117 pass / 0 fail                | 含自动构图(35%脸宽+8%头顶留白+眼线旋转)、质量 8 项、亮度校正、crop 几何等                                                                                                                                                             |
+| `apps/api`            | ✅ 716 pass / 1 fail(已知) / 2 skip | 证件照子集(`id-photo.service`/`portrait-segmentation`/`face-detection`) 0 fail，唯一失败为 `Tesseract integration > recognizes Latin and Chinese text from MuPDF-rendered pages`（mupdf Buffer detached，边缘集成用例，与证件照无关） |
+| `apps/web`            | ✅ 713 pass / 0 fail (102 files)    | 含 $lib/id-photo-local 14 文件、质量面板、裁剪辅助线与 DPI                                                                                                                                                                            |
+
+> 全量 `bun test` 中仅 1 个与证件照无关的预存失败，其余用例全部通过。
+
+### 参考对齐 7 缺口闭合检查
+
+| 缺口                                                      | 结论 | 自动化证据                                                                                                                                                                                                                                                                                       | 人工待办                                                                                             |
+| --------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 1. 分割模型(两端换 photographic,长边 512 保长宽比,不补边) | ✅   | `packages/utils/test/id-photo-modnet-size.test.ts` 13 项；`packages/utils/src/id-photo-modnet-size.ts` + `portrait-segmentation.service.ts` 已改长边 512 动态尺寸；letterbox(512×512 补边)已被文档标注为唯一复现破洞的路径                                                                       | 抽一张黑帽/暗背景样张目视衣服/帽子无破洞                                                             |
+| 2. 人脸检测+自动构图                                      | ✅   | 共享解码 `packages/utils/src/id-photo-yunet.ts`(640×640, 0..255 BGR, 12 输出)；两端人脸服务与 `face-detection.ts` 共用解码；`packages/validators/src/id-photo-layout.ts` + `packages/validators/test/id-photo-layout.test.ts` 覆盖 35% 脸宽、8%留白、过小/过大、不合理 crown、±3°阈值与 ±5° 限幅 | 用真人样张确认首次处理后人脸自动回填到标准位，拖框后不被覆盖                                         |
+| 3. 边缘去污染(反预乘+距离场+溢色替换)                     | ✅   | `packages/utils/src/id-photo-decontaminate.ts` 与测试；`packages/utils/test/id-photo-decontaminate.test.ts` 9 项；服务端/本地路均已调用共享 `decontaminateIdPhotoForeground`                                                                                                                     | 目视发丝/耳廓/肩线无原底色光晕                                                                       |
+| 4. 亮度/旋转校正                                          | ✅   | `packages/validators/test/id-photo-layout.test.ts` 中亮度阈值与限幅(`suggestBrightnessAdjustment`)；服务端 `id-photo.service.ts` 与本地 `composite.ts` 已接入；旋转由 `eyeTiltDegrees` + layout 的 rotation(3°阈值, 增益 1.4, ±5°封顶)驱动                                                       | 暗片/过曝光样张各一张确认不过度提亮/压暗                                                             |
+| 5. 质量检查 8 项                                          | ✅   | `packages/validators/src/id-photo-quality.ts` + `packages/validators/test/id-photo-quality.test.ts` 覆盖 faceCount/faceCentered/faceRatio/eyeTilt/headroom/sharpness/exposure/matteEdge；`id-photo-quality-panel.tsx` 与页面已接入                                                               | 确认面板随 8 项实测值与 hint 正常展示                                                                |
+| 6. 构图辅助线                                             | ✅   | `apps/web/test/components/tools/image-crop-field-guides.test.tsx` 3 项；`image-crop-field.tsx` 中 4 条线(中心/头顶 8%/眼部 40-50%/肩线 75%)，开关存于 `id-photo-options.tsx` 的 `guides`                                                                                                         | 开关辅助线拖拽不受遮挡                                                                               |
+| 7. 输出质量与 DPI 300                                     | ✅   | 服务端 `id-photo.service.ts` 设 density 300 且测试断言 `metadata.density`；本地 `dpi-metadata.ts` + `dpi-metadata.test.ts` 15 项 (JPEG Exif 300 / PNG pHYs 11811 ppm, 幂等)；本地合成经 `jpeg-js` 4:4:4 编码后走 `writeDpi`                                                                      | 下载 JPEG/PNG 后用 `exiftool` / `sharp metadata` 确认 density 300，6 寸拼版打印后尺量 25×35mm ±0.5mm |
+
+### 关键实现口径
+
+- 分割输入：`modnetInputSize({w,h}, 512)` 长边 512、保持长宽比、32 对齐、**不补边**，两端共用
+  `packages/utils/src/id-photo-modnet-size.ts`。
+- 资产：photographic 单档(fp32, `modnet/modnet_photographic.onnx`)，`balanced`/`high`
+  同权重；YuNet 为 `face_detection_yunet_2023mar.onnx` 640×640。
+- 去污染顺序：`estimateSourceBackgroundColors` (原图上边缘采样) →
+  `decontaminateIdPhotoForeground`(反预乘+溢色) → 再调亮度；服务端与本地一致。
+- 成片几何：`resolveIdPhotoCropBox`/`idPhotoCropFromBox`/`idPhotoCropFromLayout`
+  三者同源，container 与 extract 用同一函数解算。
+- 纠错记录：已知限制与实测修订已回填 `docs/id-photo-model-comparison.md` 与本文件正文。
+
+### 待人工确认事项
+
+- [ ] 黑帽子+暗背景样张：帽子实心无染色、发丝无蓝边、脸部无红雾（本地与服务端各一次）。
+- [ ] 标准白底照换蓝底后边缘无白边；户外复杂背景肩线干净无残留。
+- [ ] 质量面板 8 项数值合理，hint 仅在失败项出现。
+- [ ] 下载文件用 `sharp metadata` /`exiftool` 核验 `density: 300`。
+- [ ] 一寸照 6 寸拼版按 300dpi 打印，尺量单张 25×35mm ±0.5mm（唯一无法自动化的物理量测）。

@@ -42,6 +42,8 @@ const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   segmentationMode: 'local',
   crop: { x: 0.5, y: 0.5, scale: 1 },
   guides: false,
+  autoStraighten: true,
+  rotation: 0,
 };
 
 export default function IdPhotoPage() {
@@ -119,7 +121,11 @@ export default function IdPhotoPage() {
       { width: natural.width, height: natural.height },
       preset.widthPx / preset.heightPx
     );
-    setOptions(prev => ({ ...prev, crop }));
+    setOptions(prev => ({
+      ...prev,
+      crop,
+      rotation: prev.autoStraighten ? autoLayout.rotation : prev.rotation,
+    }));
   }, [
     autoLayout,
     natural,
@@ -170,7 +176,9 @@ export default function IdPhotoPage() {
           backgroundColor: options.backgroundColor,
           outputType: options.outputType,
           crop: options.crop,
+          rotation: options.rotation,
           autoFrame: !local.userOverride,
+          autoStraighten: options.autoStraighten,
         });
       } catch (err) {
         setError((err as Error).message);
@@ -197,6 +205,9 @@ export default function IdPhotoPage() {
         segmentationMode: options.segmentationMode,
         dpi: 300,
         ...(local.userOverride ? { crop: options.crop } : {}),
+        ...(options.rotation !== 0 || !options.autoStraighten
+          ? { rotation: options.rotation }
+          : {}),
       };
       const task = await createTask.mutateAsync({
         type: 'image_id_photo',
@@ -318,7 +329,15 @@ export default function IdPhotoPage() {
 
           <IdPhotoOptions
             value={options}
-            onChange={setOptions}
+            onChange={newOpts => {
+              if (
+                newOpts.rotation !== options.rotation ||
+                newOpts.autoStraighten !== options.autoStraighten
+              ) {
+                local.markUserOverride();
+              }
+              setOptions(newOpts);
+            }}
             disabled={isProcessing}
             t={t}
             mode={processingMode}

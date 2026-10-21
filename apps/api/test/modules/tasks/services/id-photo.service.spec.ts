@@ -631,7 +631,7 @@ describe('IdPhotoService layout direction', () => {
       box: { x: 200, y: 150, width: 180, height: 180 },
       landmarks: [
         [230, 230],
-        [350, 240],
+        [350, 242],
         [290, 260],
         [265, 290],
         [315, 290],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  estimateHeadTiltDegrees,
   eyeTiltDegrees,
   idPhotoCropFromLayout,
   mapFaceToOutput,
@@ -102,6 +103,29 @@ describe('eyeTiltDegrees', () => {
     ] as Array<Array<[number, number]>>) {
       expect(eyeTiltDegrees(landmarks)).toBeNaN();
     }
+  });
+});
+
+describe('estimateHeadTiltDegrees', () => {
+  it('falls back to eye tilt when fewer than 5 landmarks', () => {
+    const tilt = estimateHeadTiltDegrees([
+      [0, 0],
+      [20, 5],
+    ]);
+    expect(tilt).toBeCloseTo(eyeTiltDegrees([[0, 0], [20, 5]]), 1);
+  });
+
+  it('combines eye tilt and facial midline tilt when consistent', () => {
+    // 眼睛倾斜约 2.86°，嘴角中线也向右偏移约 2.86°
+    const tilt = estimateHeadTiltDegrees([
+      [100, 100],
+      [200, 105],
+      [150, 140],
+      [115, 180],
+      [185, 183.5],
+    ]);
+    expect(tilt).toBeGreaterThan(2);
+    expect(tilt).toBeLessThan(3.5);
   });
 });
 
@@ -221,13 +245,22 @@ describe('suggestIdPhotoLayout', () => {
     expect(layout.rotation).toBe(-5);
   });
 
-  it('does not rotate when the eye line is within 3 degrees', () => {
+  it('does not rotate when the tilt is within 1 degree', () => {
     const layout = suggestIdPhotoLayout(
-      faceAt(500, 400, 240, 2),
+      faceAt(500, 400, 240, 0.5),
       SOURCE,
       ASPECT
     )!;
     expect(layout.rotation).toBe(0);
+  });
+
+  it('corrects rotation smoothly without over-gain when tilt is above 1 degree', () => {
+    const layout = suggestIdPhotoLayout(
+      faceAt(500, 400, 240, 2.1),
+      SOURCE,
+      ASPECT
+    )!;
+    expect(layout.rotation).toBe(2.1);
   });
 
   it('uses zero rotation when the eye tilt is undefined', () => {

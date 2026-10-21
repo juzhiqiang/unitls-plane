@@ -34,6 +34,7 @@ export const idPhotoTaskConfigSchema = z.object({
   segmentationMode: idPhotoSegmentationModeEnum.default('local'),
   dpi: z.literal(300).default(300),
   crop: idPhotoCropSchema.optional(),
+  rotation: z.number().min(-45).max(45).optional(),
 });
 
 export const idPhotoPresetSpecs = {

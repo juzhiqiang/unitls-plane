@@ -113,7 +113,7 @@ export class IdPhotoService {
     const detected = (await this.faces?.detect(oriented)) ?? [];
     const face = detected[0] ?? null;
     let crop = config.crop;
-    let rotation = 0;
+    let rotation = config.rotation ?? 0;
     if (!crop && face) {
       const layout = suggestIdPhotoLayout(
         face,
@@ -128,8 +128,10 @@ export class IdPhotoService {
           preset.widthPx / preset.heightPx
         );
         // 防御：非有限角度进 sharp.rotate 会直接抛错，进 mapFaceToOutput 会
-        // 让质量检查的人脸坐标全变 NaN。按「不旋转」处理。
-        rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
+        // 让质量检查的人脸坐标全变 NaN。若外部未显式指定 rotation 则用构图结果。
+        if (config.rotation === undefined) {
+          rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
+        }
       }
     }
 

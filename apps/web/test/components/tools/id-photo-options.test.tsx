@@ -120,4 +120,31 @@ describe('IdPhotoOptions', () => {
       screen.getByText(t('localHighPrecisionLockedHint'))
     ).toBeInTheDocument();
   });
+
+  it('renders rotation controls and allows manual adjustment and reset', () => {
+    const onChange = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={en as never}>
+        <IdPhotoOptions
+          value={{ ...baseValue, rotation: 2.5, autoStraighten: true }}
+          onChange={onChange}
+          t={t}
+        />
+      </NextIntlClientProvider>
+    );
+
+    expect(screen.getByText('+2.5°')).toBeInTheDocument();
+    const resetButton = screen.getByText(t('resetRotation'));
+    expect(resetButton).toBeInTheDocument();
+    fireEvent.click(resetButton);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ rotation: 0 })
+    );
+
+    const slider = screen.getByRole('slider');
+    fireEvent.change(slider, { target: { value: '-3' } });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ rotation: -3 })
+    );
+  });
 });

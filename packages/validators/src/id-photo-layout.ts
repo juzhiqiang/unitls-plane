@@ -67,8 +67,8 @@ const MAX_ZOOM = 145;
 const MAX_OFFSET = 20;
 const CROWN_FACE_GAP = 0.28;
 const CROWN_PLAUSIBLE_SLACK = 0.12;
-const ROTATION_THRESHOLD = 3;
-const ROTATION_GAIN = 1.4;
+const ROTATION_THRESHOLD = 1.0;
+const ROTATION_GAIN = 1.0;
 const MAX_ROTATION = 5;
 const UNDEREXPOSED_MEAN = 75;
 const OVEREXPOSED_MEAN = 205;
@@ -125,6 +125,51 @@ export function eyeTiltDegrees(
   const dy = right[1] - left[1];
   if (dx === 0 && dy === 0) return Number.NaN;
   return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+
+/**
+ * 估算人像头部的综合倾斜角（度）。右倾（顺时针倾斜，右眼低于左眼）为正。
+ *
+ * 结合眼线水平角与面部中线（双眼中心至双嘴角中心）的偏角：
+ * - 仅有两个眼点时回退到眼线夹角；
+ * - 5 点关键点齐全时，结合两者的均值，避免单靠双眼高低差因眨眼、挑眉或自然不对称产生误判。
+ */
+export function estimateHeadTiltDegrees(
+  landmarks: ReadonlyArray<readonly [number, number]>
+): number {
+  const leftEye = landmarks[0];
+  const rightEye = landmarks[1];
+  if (!leftEye || !rightEye) return 0;
+  const eyeTilt = eyeTiltDegrees(landmarks);
+  if (Number.isNaN(eyeTilt)) return Number.NaN;
+
+  const leftMouth = landmarks[3];
+  const rightMouth = landmarks[4];
+  if (
+    leftMouth &&
+    rightMouth &&
+    Number.isFinite(leftMouth[0]) &&
+    Number.isFinite(leftMouth[1]) &&
+    Number.isFinite(rightMouth[0]) &&
+    Number.isFinite(rightMouth[1])
+  ) {
+    const eyeMidX = (leftEye[0] + rightEye[0]) / 2;
+    const eyeMidY = (leftEye[1] + rightEye[1]) / 2;
+    const mouthMidX = (leftMouth[0] + rightMouth[0]) / 2;
+    const mouthMidY = (leftMouth[1] + rightMouth[1]) / 2;
+    const dx = eyeMidX - mouthMidX;
+    const dy = mouthMidY - eyeMidY;
+    if (dy > 0) {
+      const midlineTilt = (Math.atan2(dx, dy) * 180) / Math.PI;
+      if (
+        Math.sign(eyeTilt) === Math.sign(midlineTilt) ||
+        Math.abs(eyeTilt) < 0.5
+      ) {
+        return Number((eyeTilt * 0.6 + midlineTilt * 0.4).toFixed(2));
+      }
+    }
+  }
+  return Number(eyeTilt.toFixed(2));
 }
 
 function isFiniteLayout(layout: IdPhotoLayout): boolean {
@@ -227,12 +272,14 @@ export function suggestIdPhotoLayout(
     )
   );
 
-  const tilt = eyeTiltDegrees(face.landmarks);
-  // 眼线无从定义（NaN）时不做旋转修正：缩放与偏移仍由人脸框决定。
+  const tilt = estimateHeadTiltDegrees(face.landmarks);
+  // 眼线/中线无从定义（NaN）时不做旋转修正：缩放与偏移仍由人脸框决定。
   const rotation =
     Number.isNaN(tilt) || Math.abs(tilt) < ROTATION_THRESHOLD
       ? 0
-      : clamp(tilt * ROTATION_GAIN, -MAX_ROTATION, MAX_ROTATION);
+      : Number(
+          clamp(tilt * ROTATION_GAIN, -MAX_ROTATION, MAX_ROTATION).toFixed(1)
+        );
 
   const layout: IdPhotoLayout = {
     zoom,

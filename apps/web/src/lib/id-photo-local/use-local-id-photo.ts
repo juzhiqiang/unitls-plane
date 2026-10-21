@@ -70,8 +70,12 @@ export interface UseLocalIdPhoto {
       outputType: IdPhotoOutputType;
       /** 归一化裁剪参数;省略即居中不放大。 */
       crop?: IdPhotoCrop;
+      /** 旋转角度（度，逆时针为正）；省略时在 autoStraighten 下自动计算，否则为 0。 */
+      rotation?: number;
       /** 用户没手动改过裁剪框时传 true,才会跑人脸自动构图。 */
       autoFrame?: boolean;
+      /** 是否自动矫正倾斜；传 false 时即使 autoFrame 为 true 也不自动应用旋转。 */
+      autoStraighten?: boolean;
     }
   ) => Promise<void>;
   markUserOverride: () => void;
@@ -183,7 +187,7 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             opts.autoFrame && !userOverrideRef.current
           );
           let crop = opts.crop;
-          let rotation = 0;
+          let rotation = opts.rotation ?? 0;
           let layout: IdPhotoLayout | null = null;
           let faces: Awaited<ReturnType<typeof detectFaces>> = [];
 
@@ -222,8 +226,10 @@ export function useLocalIdPhoto(): UseLocalIdPhoto {
             );
             if (layout) {
               crop = idPhotoCropFromLayout(layout, sourceSize, targetAspect);
-              // 防御:非有限角度会让 canvas 旋转与 mapFaceToOutput 失真,按 0 处理。
-              rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
+              // 若外部未显式指定 rotation 且启用了自动回正，则应用自动构图建议的旋转角
+              if (opts.rotation === undefined && opts.autoStraighten !== false) {
+                rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
+              }
             }
           }
 

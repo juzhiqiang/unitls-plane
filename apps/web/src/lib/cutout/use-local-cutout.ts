@@ -36,7 +36,7 @@ export interface UseLocalCutout {
 /**
  * 通用本地抠图。
  *
- * 与 useLocalIdPhoto 共用 segmentation 模块(同一份模型、同一份模块级 pipeline 缓存),
+ * 与 useLocalIdPhoto 共用 segmentation 模块(同一份模型、同一份模块级 session 缓存),
  * 差别只在合成:这里保持原尺寸,输出透明或纯色底。
  */
 export function useLocalCutout(): UseLocalCutout {
@@ -61,18 +61,26 @@ export function useLocalCutout(): UseLocalCutout {
       const isStale = () => sid !== sessionIdRef.current;
 
       try {
-        const cutout = await segmentToCutout(file, tier, ep ?? 'wasm', {
-          onDownloadProgress: ratio => {
-            if (isStale()) return;
-            setProgress(ratio);
-            setStatus('loading-model');
-          },
-          isStale,
-        });
-        if (isStale()) return;
+        // 通用抠图保持原尺寸输出,不传 maxSourceEdge。
+        const { bitmap: cutout, source } = await segmentToCutout(
+          file,
+          tier,
+          ep ?? 'wasm',
+          {
+            onDownloadProgress: ratio => {
+              if (isStale()) return;
+              setProgress(ratio);
+              setStatus('loading-model');
+            },
+            isStale,
+          }
+        );
+        // 合成只需要 cutout;源图立即释放,不在合成期间多占一份全尺寸内存。
+        source.close?.();
 
-        setStatus('compositing');
         try {
+          if (isStale()) return;
+          setStatus('compositing');
           const blob = await compositeCutout(cutout, options);
           if (isStale()) return;
           setResultBlob(blob);

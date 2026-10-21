@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import sharp from 'sharp';
+import {
+  estimateSourceBackgroundColors,
+  idPhotoCropFromLayout,
+  mapFaceToOutput,
+  resolveIdPhotoCropBox,
+  suggestBrightnessAdjustment,
+  suggestIdPhotoLayout,
+} from '@utils-plane/validators';
+import * as validators from '@utils-plane/validators';
+import { decontaminateIdPhotoForeground } from '@utils-plane/utils';
 import { IdPhotoService } from '../../../../src/modules/tasks/services/id-photo.service';
 
 describe('IdPhotoService', () => {
@@ -204,318 +214,6 @@ describe('IdPhotoService', () => {
     ).rejects.toThrow('upstream image edit failed');
     expect(localSegmentationRan).toBe(false);
   });
-
-  it('hardens the final alpha mask to prevent background tint and white halos', async () => {
-    const width = 295;
-    const height = 413;
-    const edge = width + 1;
-    const center = Math.floor(height / 2) * width + Math.floor(width / 2);
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-    imageRaw[edge * 3] = 180;
-    imageRaw[edge * 3 + 1] = 180;
-    imageRaw[edge * 3 + 2] = 180;
-    imageRaw[center * 3] = 0;
-    imageRaw[center * 3 + 1] = 0;
-    imageRaw[center * 3 + 2] = 0;
-
-    const maskRaw = Buffer.alloc(width * height, 0);
-    maskRaw[0] = 128;
-    maskRaw[edge] = 128;
-    maskRaw[center] = 128;
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-
-    const service = new IdPhotoService({
-      segment: async () => ({
-        mask,
-        faceCount: 1,
-      }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const haloPixel = outputRaw.subarray(0, 3);
-    const grayFringePixel = outputRaw.subarray(edge * 3, edge * 3 + 3);
-    const clothingPixel = outputRaw.subarray(center * 3, center * 3 + 3);
-
-    expect([...haloPixel]).toEqual([255, 0, 0]);
-    expect(grayFringePixel[1]).toBeLessThan(130);
-    expect(grayFringePixel[2]).toBeLessThan(130);
-    expect(clothingPixel[0]).toBeLessThan(40);
-  });
-
-  it('preserves light foreground details that are close to the original background color', async () => {
-    const width = 295;
-    const height = 413;
-    const hat = Math.floor(height / 3) * width + Math.floor(width / 2);
-    const solidHat = hat + 1;
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-    imageRaw[hat * 3] = 248;
-    imageRaw[hat * 3 + 1] = 248;
-    imageRaw[hat * 3 + 2] = 248;
-    imageRaw[solidHat * 3] = 248;
-    imageRaw[solidHat * 3 + 1] = 248;
-    imageRaw[solidHat * 3 + 2] = 248;
-
-    const maskRaw = Buffer.alloc(width * height, 0);
-    maskRaw[hat] = 128;
-    maskRaw[solidHat] = 255;
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    const service = new IdPhotoService({
-      segment: async () => ({ mask, faceCount: 1 }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const hatPixel = outputRaw.subarray(hat * 3, hat * 3 + 3);
-
-    expect(hatPixel[1]).toBeGreaterThan(170);
-    expect(hatPixel[2]).toBeGreaterThan(170);
-  });
-
-  it('replaces white background contamination on portrait edges with nearby foreground color', async () => {
-    const width = 295;
-    const height = 413;
-    const edge = Math.floor(height / 2) * width + Math.floor(width / 2);
-    const solid = edge + 1;
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-    imageRaw[solid * 3] = 0;
-    imageRaw[solid * 3 + 1] = 0;
-    imageRaw[solid * 3 + 2] = 0;
-
-    const maskRaw = Buffer.alloc(width * height, 0);
-    maskRaw[edge] = 128;
-    maskRaw[solid] = 255;
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    const service = new IdPhotoService({
-      segment: async () => ({ mask, faceCount: 1 }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const edgePixel = outputRaw.subarray(edge * 3, edge * 3 + 3);
-
-    expect(edgePixel[0]).toBeLessThan(90);
-    expect(edgePixel[1]).toBeLessThan(90);
-    expect(edgePixel[2]).toBeLessThan(90);
-  });
-
-  it('removes opaque white halo pixels on the portrait boundary', async () => {
-    const width = 295;
-    const height = 413;
-    const halo = Math.floor(height / 2) * width + Math.floor(width / 2);
-    const solid = halo + 1;
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-    imageRaw[solid * 3] = 0;
-    imageRaw[solid * 3 + 1] = 0;
-    imageRaw[solid * 3 + 2] = 0;
-
-    const maskRaw = Buffer.alloc(width * height, 0);
-    maskRaw[halo] = 255;
-    maskRaw[solid] = 255;
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    const service = new IdPhotoService({
-      segment: async () => ({ mask, faceCount: 1 }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const haloPixel = outputRaw.subarray(halo * 3, halo * 3 + 3);
-
-    expect(haloPixel[0]).toBeLessThan(90);
-    expect(haloPixel[1]).toBeLessThan(90);
-    expect(haloPixel[2]).toBeLessThan(90);
-  });
-
-  it('removes multi-pixel opaque white halos near the portrait boundary', async () => {
-    const width = 295;
-    const height = 413;
-    const outerHalo = Math.floor(height / 2) * width + Math.floor(width / 2);
-    const middleHalo = outerHalo + 1;
-    const innerHalo = outerHalo + 2;
-    const solid = outerHalo + 3;
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-    imageRaw[solid * 3] = 0;
-    imageRaw[solid * 3 + 1] = 0;
-    imageRaw[solid * 3 + 2] = 0;
-
-    const maskRaw = Buffer.alloc(width * height, 0);
-    maskRaw[outerHalo] = 255;
-    maskRaw[middleHalo] = 255;
-    maskRaw[innerHalo] = 255;
-    maskRaw[solid] = 255;
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    const service = new IdPhotoService({
-      segment: async () => ({ mask, faceCount: 1 }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const innerHaloPixel = outputRaw.subarray(innerHalo * 3, innerHalo * 3 + 3);
-
-    expect(innerHaloPixel[0]).toBeLessThan(90);
-    expect(innerHaloPixel[1]).toBeLessThan(90);
-    expect(innerHaloPixel[2]).toBeLessThan(90);
-  });
-
-  it('removes thick opaque white halo bands around the portrait', async () => {
-    const width = 295;
-    const height = 413;
-    const bandX = Math.floor(width / 2);
-    const bandTop = Math.floor(height / 2) - 4;
-    const bandBottom = bandTop + 9;
-    const sampleY = bandTop + 4;
-    const sample = sampleY * width + bandX + 5;
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-
-    const maskRaw = Buffer.alloc(width * height, 0);
-    for (let y = bandTop; y < bandBottom; y += 1) {
-      for (let offset = 0; offset <= 6; offset += 1) {
-        maskRaw[y * width + bandX + offset] = 255;
-      }
-      const solid = y * width + bandX + 7;
-      maskRaw[solid] = 255;
-      imageRaw[solid * 3] = 0;
-      imageRaw[solid * 3 + 1] = 0;
-      imageRaw[solid * 3 + 2] = 0;
-    }
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    const service = new IdPhotoService({
-      segment: async () => ({ mask, faceCount: 1 }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const innerHaloPixel = outputRaw.subarray(sample * 3, sample * 3 + 3);
-
-    expect(innerHaloPixel[0]).toBeLessThan(90);
-    expect(innerHaloPixel[1]).toBeLessThan(90);
-    expect(innerHaloPixel[2]).toBeLessThan(90);
-  });
-
-  it('falls back to the target background when a white boundary halo has no reliable foreground color', async () => {
-    const width = 295;
-    const height = 413;
-    const halo = Math.floor(height / 2) * width + Math.floor(width / 2);
-    const imageRaw = Buffer.alloc(width * height * 3, 255);
-    const maskRaw = Buffer.alloc(width * height, 0);
-    maskRaw[halo] = 255;
-
-    const input = await sharp(imageRaw, {
-      raw: { width, height, channels: 3 },
-    })
-      .png()
-      .toBuffer();
-    const mask = await sharp(maskRaw, {
-      raw: { width, height, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    const service = new IdPhotoService({
-      segment: async () => ({ mask, faceCount: 1 }),
-    } as any);
-
-    const output = await service.render(input, {
-      preset: 'one_inch',
-      backgroundColor: '#ff0000',
-      outputType: 'image/png',
-      dpi: 300,
-    });
-    const outputRaw = await sharp(output.buffer).removeAlpha().raw().toBuffer();
-    const haloPixel = outputRaw.subarray(halo * 3, halo * 3 + 3);
-
-    expect([...haloPixel]).toEqual([255, 0, 0]);
-  });
 });
 
 /**
@@ -561,6 +259,197 @@ async function averageRed(buffer: Buffer): Promise<number> {
   for (let i = 0; i < data.length; i += info.channels) sum += data[i] ?? 0;
   return sum / (data.length / info.channels);
 }
+
+describe('IdPhotoService reference parity', () => {
+  async function makeInput() {
+    // 纯色源图测不出裁剪位置：自动构图与居中裁剪会产出完全相同的像素。
+    // 用二维渐变让裁剪框的缩放/偏移体现在输出字节上。
+    const width = 600;
+    const height = 800;
+    const pixels = Buffer.alloc(width * height * 3);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = (y * width + x) * 3;
+        pixels[i] = Math.round((x / (width - 1)) * 255);
+        pixels[i + 1] = Math.round((y / (height - 1)) * 255);
+        pixels[i + 2] = 128;
+      }
+    }
+    return sharp(pixels, { raw: { width, height, channels: 3 } })
+      .jpeg({ quality: 95 })
+      .toBuffer();
+  }
+
+  function fullSegmentation() {
+    return {
+      segment: async () => ({
+        mask: await sharp(Buffer.alloc(600 * 800, 255), {
+          raw: { width: 600, height: 800, channels: 1 },
+        })
+          .png()
+          .toBuffer(),
+        bounds: { x: 0, y: 0, width: 600, height: 800 },
+        faceCount: 1,
+      }),
+    } as any;
+  }
+
+  const detectedFace = {
+    box: { x: 200, y: 150, width: 180, height: 180 },
+    landmarks: [
+      [230, 230],
+      [350, 230],
+      [290, 260],
+      [265, 290],
+      [315, 290],
+    ] as Array<[number, number]>,
+    score: 0.95,
+  };
+
+  it('writes 300 dpi into the JPEG output', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation());
+
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+    });
+
+    const meta = await sharp(result.buffer).metadata();
+    expect(meta.width).toBe(295);
+    expect(meta.height).toBe(413);
+    expect(meta.density).toBe(300);
+  });
+
+  it('writes 300 dpi into the PNG output', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation());
+
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/png',
+      dpi: 300,
+    });
+
+    const meta = await sharp(result.buffer).metadata();
+    expect(meta.density).toBe(300);
+  });
+
+  it('uses the detected face to auto-frame when no crop is supplied', async () => {
+    const input = await makeInput();
+    const withFace = new IdPhotoService(fullSegmentation(), {
+      detect: async () => [detectedFace],
+    } as never);
+    const withoutFace = new IdPhotoService(fullSegmentation());
+
+    const config = {
+      preset: 'one_inch' as const,
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg' as const,
+      dpi: 300 as const,
+    };
+
+    const a = await withFace.render(input, config);
+    const b = await withoutFace.render(input, config);
+    // 自动构图会缩放/偏移，两次产出的字节不应相同
+    expect(Buffer.compare(a.buffer, b.buffer)).not.toBe(0);
+  });
+
+  it('honours an explicit crop over the detected face', async () => {
+    const input = await makeInput();
+    const detect = async () => [detectedFace];
+    const segmentation = fullSegmentation();
+
+    const withExplicitCrop = new IdPhotoService(segmentation, {
+      detect,
+    } as never);
+    const withoutCrop = new IdPhotoService(segmentation, { detect } as never);
+
+    const base = {
+      preset: 'one_inch' as const,
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg' as const,
+      dpi: 300 as const,
+    };
+
+    const a = await withExplicitCrop.render(input, {
+      ...base,
+      crop: { x: 0.5, y: 0.5, scale: 1 },
+    });
+    const b = await withoutCrop.render(input, base);
+    expect(Buffer.compare(a.buffer, b.buffer)).not.toBe(0);
+  });
+
+  it('returns a quality report with eight items', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation());
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+    });
+    expect(result.quality!.items.length).toBe(8);
+  });
+
+  it('reports zero faces when YuNet is unavailable instead of trusting the segmentation count', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation());
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+    });
+    const faceCount = result.quality!.items.find(i => i.name === 'faceCount')!;
+    // 分割服务的 faceCount 恒为 1，不能当作「检测到一张脸」的证明。
+    expect(faceCount.value).toBe('0');
+    expect(faceCount.passed).toBe(false);
+  });
+
+  it('reports zero faces when YuNet detects an empty result', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation(), {
+      detect: async () => [],
+    } as never);
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+    });
+    const faceCount = result.quality!.items.find(i => i.name === 'faceCount')!;
+    expect(faceCount.value).toBe('0');
+    expect(faceCount.passed).toBe(false);
+  });
+
+  it('reports face metrics in output coordinates for an auto-framed face', async () => {
+    const input = await makeInput();
+    const service = new IdPhotoService(fullSegmentation(), {
+      detect: async () => [detectedFace],
+    } as never);
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#438edb',
+      outputType: 'image/jpeg',
+      dpi: 300,
+    });
+
+    const items = Object.fromEntries(
+      result.quality!.items.map(item => [item.name, item])
+    );
+    // 源图坐标下 180/600 = 30%，映射到成片后应约为 35%；
+    // 若直接传源图坐标则会是 180/295 = 61% 并判失败。
+    expect(items.faceRatio!.value).toBe('35%');
+    expect(items.faceRatio!.passed).toBe(true);
+    expect(items.faceCentered!.passed).toBe(true);
+    expect(items.headroom!.passed).toBe(true);
+    expect(items.eyeTilt!.passed).toBe(true);
+  });
+});
 
 describe('IdPhotoService crop', () => {
   const base = {
@@ -619,5 +508,670 @@ describe('IdPhotoService crop', () => {
       await averageRed(withDefaultCrop.buffer),
       0
     );
+  });
+});
+
+describe('mapFaceToOutput', () => {
+  const preset = { widthPx: 295, heightPx: 413 };
+  const baseBox = { left: 100, top: 50, width: 400, height: 560 };
+
+  it('maps a face centred in the crop box to the output centre', () => {
+    const face = {
+      box: { x: 280, y: 310, width: 40, height: 40 },
+      landmarks: [
+        [290, 320],
+        [310, 320],
+      ] as Array<[number, number]>,
+      score: 0.9,
+    };
+
+    const mapped = mapFaceToOutput(face, baseBox, preset, 0)!;
+
+    expect(mapped.box.x + mapped.box.width / 2).toBeCloseTo(147.5, 6);
+    expect(mapped.box.y + mapped.box.height / 2).toBeCloseTo(206.5, 6);
+  });
+
+  it('maps a face in the crop box top-left corner to the output top-left', () => {
+    const face = {
+      box: { x: 100, y: 50, width: 40, height: 40 },
+      landmarks: [] as Array<[number, number]>,
+      score: 0.9,
+    };
+
+    const mapped = mapFaceToOutput(face, baseBox, preset, 0)!;
+
+    // 缩放比 = 295 / 400 = 413 / 560 = 0.7375
+    expect(mapped.box.x).toBeCloseTo(0, 6);
+    expect(mapped.box.y).toBeCloseTo(0, 6);
+    expect(mapped.box.width).toBeCloseTo(29.5, 6);
+    expect(mapped.box.height).toBeCloseTo(29.5, 6);
+  });
+
+  it('rotates the mapped face in the same direction as sharp rotate(-rotation)', () => {
+    // 脸位于裁剪框中心正上方。layout.rotation 为正表示右眼更低；
+    // 渲染用 sharp 的 rotate(-rotation)（负值 = 逆时针），因此上方的人脸
+    // 应当向左移动。
+    const face = {
+      box: { x: 280, y: 110, width: 40, height: 40 },
+      landmarks: [] as Array<[number, number]>,
+      score: 0.9,
+    };
+
+    const corrected = mapFaceToOutput(face, baseBox, preset, 5)!;
+    const doubled = mapFaceToOutput(face, baseBox, preset, -5)!;
+    const correctedCenterX = corrected.box.x + corrected.box.width / 2;
+    const doubledCenterX = doubled.box.x + doubled.box.width / 2;
+
+    expect(correctedCenterX).toBeLessThan(147.5 - 10);
+    expect(corrected.box.y).toBeCloseTo(doubled.box.y, 6);
+    // 反方向（与渲染方向一致）落在右侧，说明两者可以用符号区分。
+    expect(doubledCenterX).toBeGreaterThan(147.5 + 10);
+  });
+});
+
+describe('IdPhotoService layout direction', () => {
+  function fullMask(width: number, height: number) {
+    return sharp(Buffer.alloc(width * height, 255), {
+      raw: { width, height, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+  }
+
+  async function makeMarkerInput(): Promise<Buffer> {
+    const width = 600;
+    const height = 800;
+    const pixels = Buffer.alloc(width * height * 3);
+    // 黑色背景 + 位于裁剪框中心正上方 210px 的白色方块。
+    for (let y = 136; y < 166; y += 1) {
+      for (let x = 274; x < 304; x += 1) {
+        const i = (y * width + x) * 3;
+        pixels[i] = 255;
+        pixels[i + 1] = 255;
+        pixels[i + 2] = 255;
+      }
+    }
+    return sharp(pixels, { raw: { width, height, channels: 3 } })
+      .png()
+      .toBuffer();
+  }
+
+  async function brightCentroid(buffer: Buffer) {
+    const { data, info } = await sharp(buffer)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    for (let y = 0; y < info.height; y += 1) {
+      for (let x = 0; x < info.width; x += 1) {
+        const i = (y * info.width + x) * info.channels;
+        const luminance =
+          (data[i] ?? 0) + (data[i + 1] ?? 0) + (data[i + 2] ?? 0);
+        if (luminance > 384) {
+          sumX += x;
+          sumY += y;
+          count += 1;
+        }
+      }
+    }
+    return {
+      x: count ? sumX / count : Number.NaN,
+      y: count ? sumY / count : Number.NaN,
+      count,
+    };
+  }
+
+  it('renders the layout rotation as a correction, not a doubled tilt', async () => {
+    const width = 600;
+    const height = 800;
+    // 右眼比左眼低 10px → tilt ≈ 4.76°，layout.rotation 被夹到 +5°。
+    const tiltedFace = {
+      box: { x: 200, y: 150, width: 180, height: 180 },
+      landmarks: [
+        [230, 230],
+        [350, 242],
+        [290, 260],
+        [265, 290],
+        [315, 290],
+      ] as Array<[number, number]>,
+      score: 0.95,
+    };
+    const targetAspect = 295 / 413;
+    const layout = suggestIdPhotoLayout(
+      tiltedFace,
+      { width, height },
+      targetAspect,
+      0
+    )!;
+    expect(layout.rotation).toBe(5);
+
+    const crop = idPhotoCropFromLayout(layout, { width, height }, targetAspect);
+    const baseBox = resolveIdPhotoCropBox(width, height, 295, 413, crop);
+
+    const markerFace = {
+      box: { x: 274, y: 136, width: 30, height: 30 },
+      landmarks: [] as Array<[number, number]>,
+      score: 1,
+    };
+    const corrected = mapFaceToOutput(
+      markerFace,
+      baseBox,
+      { widthPx: 295, heightPx: 413 },
+      layout.rotation
+    )!;
+    const doubled = mapFaceToOutput(
+      markerFace,
+      baseBox,
+      { widthPx: 295, heightPx: 413 },
+      -layout.rotation
+    )!;
+
+    const service = new IdPhotoService(
+      {
+        segment: async () => ({
+          mask: await fullMask(width, height),
+          bounds: { x: 0, y: 0, width, height },
+          faceCount: 1,
+        }),
+      } as any,
+      { detect: async () => [tiltedFace] } as never
+    );
+
+    const result = await service.render(await makeMarkerInput(), {
+      preset: 'one_inch',
+      backgroundColor: '#000000',
+      outputType: 'image/jpeg',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+    const centroid = await brightCentroid(result.buffer);
+
+    const correctedX = corrected.box.x + corrected.box.width / 2;
+    const doubledX = doubled.box.x + doubled.box.width / 2;
+
+    expect(centroid.count).toBeGreaterThan(0);
+    // 成片中心在 x=147.5；正确的逆时针回正应把上方标记带到左侧，
+    // 若服务端误用 rotate(+rotation) 则会跑到右侧。
+    expect(centroid.x).toBeLessThan(147.5 - 5);
+    expect(Math.abs(centroid.x - correctedX)).toBeLessThan(
+      Math.abs(centroid.x - doubledX)
+    );
+  });
+});
+
+describe('IdPhotoService crown detection', () => {
+  it('ignores sparse noise rows above the real crown', async () => {
+    const width = 600;
+    const height = 100;
+    const mask = Buffer.alloc(width * height, 0);
+    // 顶部噪点：只有 2 个像素
+    mask[3 * width + 10] = 255;
+    mask[3 * width + 11] = 255;
+    // 真实头顶：20 个像素（>= max(3, 600 * 0.02) = 12）
+    for (let x = 100; x < 120; x += 1) mask[40 * width + x] = 255;
+    const maskPng = await sharp(mask, {
+      raw: { width, height, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+
+    const service = new IdPhotoService({
+      segment: async () => {
+        throw new Error('not used');
+      },
+    } as any);
+
+    expect(await (service as any).detectCrownY(maskPng)).toBe(40);
+  });
+
+  it('returns undefined for an empty mask', async () => {
+    const maskPng = await sharp(Buffer.alloc(600 * 100, 0), {
+      raw: { width: 600, height: 100, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+    const service = new IdPhotoService({
+      segment: async () => {
+        throw new Error('not used');
+      },
+    } as any);
+
+    expect(await (service as any).detectCrownY(maskPng)).toBeUndefined();
+  });
+});
+
+describe('IdPhotoService RGBA assembly', () => {
+  async function samplePixel(buffer: Buffer, x: number, y: number) {
+    const { data, info } = await sharp(buffer)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const i = (y * info.width + x) * info.channels;
+    return {
+      r: data[i] ?? 0,
+      g: data[i + 1] ?? 0,
+      b: data[i + 2] ?? 0,
+    };
+  }
+
+  it('combines base RGB with mask alpha before compositing the background', async () => {
+    const width = 600;
+    const height = 800;
+    const basePixels = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < width * height; i += 1) {
+      basePixels[i * 3] = 255; // 纯红
+    }
+    const input = await sharp(basePixels, {
+      raw: { width, height, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    const alphaPixels = Buffer.alloc(width * height, 255);
+    // 右半透明，左半不透明
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 300; x < width; x += 1) {
+        alphaPixels[y * width + x] = 0;
+      }
+    }
+    const mask = await sharp(alphaPixels, {
+      raw: { width, height, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask,
+        bounds: { x: 0, y: 0, width, height },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      // 右半应完全显示这个底色
+      backgroundColor: '#0000ff',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+
+    const left = await samplePixel(result.buffer, 30, 206);
+    const right = await samplePixel(result.buffer, 264, 206);
+
+    expect(left.r).toBeGreaterThan(200);
+    expect(left.b).toBeLessThan(40);
+    expect(right.b).toBeGreaterThan(200);
+    expect(right.r).toBeLessThan(40);
+  });
+});
+
+describe('IdPhotoService quality input', () => {
+  it('inspects the final composite so transparent pixels carry the new background', async () => {
+    const width = 295;
+    const height = 413;
+    // 全透明蒙版：成片完全由新底色组成。若质量检查仍用去污染后的前景 RGB，
+    // alpha=0 处会保留原图黑色，曝光结论会完全不同。
+    const mask = await sharp(Buffer.alloc(width * height, 0), {
+      raw: { width, height, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+    const input = await sharp(Buffer.alloc(width * height * 3, 0), {
+      raw: { width, height, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask,
+        bounds: { x: 0, y: 0, width, height },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const result = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#aaaaaa',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+
+    const exposure = result.quality!.items.find(i => i.name === 'exposure')!;
+    // #aaaaaa = 170；成片每个像素（包括 alpha=0 对应的位置）都应是 170。
+    expect(exposure.value).toBe('170/255');
+    expect(exposure.passed).toBe(true);
+  });
+});
+
+describe('IdPhotoService brightness correction', () => {
+  async function meanOutput(buffer: Buffer): Promise<number> {
+    const { data, info } = await sharp(buffer)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let sum = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+      sum += ((data[i] ?? 0) + (data[i + 1] ?? 0) + (data[i + 2] ?? 0)) / 3;
+    }
+    return sum / (data.length / info.channels);
+  }
+
+  async function renderFlatGray(
+    value: number,
+    crop?: { x: number; y: number; scale: number }
+  ): Promise<number> {
+    const width = 300;
+    const height = 400;
+    const pixels = Buffer.alloc(width * height * 3, value);
+    const input = await sharp(pixels, {
+      raw: { width, height, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask: await sharp(Buffer.alloc(width * height, 255), {
+          raw: { width, height, channels: 1 },
+        })
+          .png()
+          .toBuffer(),
+        bounds: { x: 0, y: 0, width, height },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const output = await service.render(input, {
+      preset: 'one_inch',
+      backgroundColor: '#ffffff',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+      ...(crop ? { crop } : {}),
+    });
+    return meanOutput(output.buffer);
+  }
+
+  it('brightens an underexposed photo toward mid-grey', async () => {
+    const mean = await renderFlatGray(40);
+    // 40 → 建议 +18;透明区外的整幅前景都应抬亮。
+    expect(mean).toBeCloseTo(58, 0);
+    expect(Math.abs(mean - 128)).toBeLessThan(Math.abs(40 - 128));
+  });
+
+  it('darkens an overexposed photo toward mid-grey', async () => {
+    const mean = await renderFlatGray(240);
+    // 240 → 建议 -12。
+    expect(mean).toBeCloseTo(228, 0);
+    expect(Math.abs(mean - 128)).toBeLessThan(Math.abs(240 - 128));
+  });
+
+  it('does not apply auto brightness when the user supplied an explicit crop', async () => {
+    // 用户手动构图时尊重原画面，不做自动调色 —— 与本地路的 autoFrame 守卫一致。
+    const mean = await renderFlatGray(40, { x: 0.5, y: 0.5, scale: 1 });
+    expect(mean).toBeCloseTo(40, 0);
+  });
+});
+
+describe('IdPhotoService brightness ordering', () => {
+  // one_inch 成片 295×413。源图做成同尺寸，裁剪框正好是整幅、缩放也是恒等变换，
+  // 输出像素与输入像素一一对应，便于精确取样。
+  const WIDTH = 295;
+  const HEIGHT = 413;
+  const DARK = 40;
+  const RING_ALPHA = 128;
+  const RING = 20;
+
+  // 不透明主体 + 一圈 alpha=128 的边缘；边缘 RGB 与整幅暗图一样是 40，
+  // 即物理上的存储值 C = F·a + B·(1−a) = 40。
+  const OPAQUE = { left: 100, top: 100, width: 95, height: 213 };
+
+  function alphaAt(x: number, y: number): number {
+    const inOpaque =
+      x >= OPAQUE.left &&
+      x < OPAQUE.left + OPAQUE.width &&
+      y >= OPAQUE.top &&
+      y < OPAQUE.top + OPAQUE.height;
+    if (inOpaque) return 255;
+    const inRing =
+      x >= OPAQUE.left - RING &&
+      x < OPAQUE.left + OPAQUE.width + RING &&
+      y >= OPAQUE.top - RING &&
+      y < OPAQUE.top + OPAQUE.height + RING;
+    return inRing ? RING_ALPHA : 0;
+  }
+
+  function sampleIndex(x: number, y: number, channels: number): number {
+    return (y * WIDTH + x) * channels;
+  }
+
+  async function renderWithRing(): Promise<Buffer> {
+    const rgb = Buffer.alloc(WIDTH * HEIGHT * 3, DARK);
+    const input = await sharp(rgb, {
+      raw: { width: WIDTH, height: HEIGHT, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    const mask = Buffer.alloc(WIDTH * HEIGHT);
+    for (let y = 0; y < HEIGHT; y += 1) {
+      for (let x = 0; x < WIDTH; x += 1) {
+        mask[y * WIDTH + x] = alphaAt(x, y);
+      }
+    }
+    const maskPng = await sharp(mask, {
+      raw: { width: WIDTH, height: HEIGHT, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+
+    const service = new IdPhotoService({
+      segment: async () => ({
+        mask: maskPng,
+        bounds: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
+        faceCount: 1,
+      }),
+    } as any);
+
+    const output = await service.render(input, {
+      preset: 'one_inch',
+      // 黑色底：半透明边缘的成片值只由前景 × alpha 决定，便于和两条预期比较。
+      backgroundColor: '#000000',
+      outputType: 'image/png',
+      dpi: 300,
+      segmentationMode: 'local',
+    });
+    return output.buffer;
+  }
+
+  it('decontaminates before applying brightness so edges are not amplified by 1/alpha', async () => {
+    const buffer = await renderWithRing();
+    const { data, info } = await sharp(buffer)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const alpha = new Uint8Array(WIDTH * HEIGHT);
+    const rgba = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
+    for (let y = 0; y < HEIGHT; y += 1) {
+      for (let x = 0; x < WIDTH; x += 1) {
+        const i = y * WIDTH + x;
+        alpha[i] = alphaAt(x, y);
+        rgba[i * 4] = DARK;
+        rgba[i * 4 + 1] = DARK;
+        rgba[i * 4 + 2] = DARK;
+        rgba[i * 4 + 3] = alpha[i]!;
+      }
+    }
+
+    // 服务端底色聚类用未调色的原图，这里同样用原图估计并复用共享去污染。
+    const sourceBackground = estimateSourceBackgroundColors(
+      Buffer.alloc(WIDTH * HEIGHT * 3, DARK),
+      WIDTH,
+      HEIGHT
+    )[0]!;
+    const offset = suggestBrightnessAdjustment(DARK);
+
+    const cleaned = decontaminateIdPhotoForeground(
+      rgba,
+      WIDTH,
+      HEIGHT,
+      sourceBackground
+    );
+    // 正确顺序的预期：去污染 → 调色。
+    const correctForeground = (i: number) =>
+      Math.min(255, (cleaned[i * 4] ?? 0) + offset);
+
+    // 错误顺序的预期：先调色 → 去污染（反预乘把偏移放大成 offset/a）。
+    const preAdjusted = new Uint8ClampedArray(rgba);
+    for (let i = 0; i < WIDTH * HEIGHT; i += 1) {
+      if (alpha[i] === 0) continue;
+      for (let c = 0; c < 3; c += 1) {
+        preAdjusted[i * 4 + c] = Math.min(
+          255,
+          (preAdjusted[i * 4 + c] ?? 0) + offset
+        );
+      }
+    }
+    const oldCleaned = decontaminateIdPhotoForeground(
+      preAdjusted,
+      WIDTH,
+      HEIGHT,
+      sourceBackground
+    );
+
+    // 取外圈像素：距离不透明主体 15px，超过去污染的内边缘阈值 3.5px，
+    // alpha 不会被压制；同时远离透明边界，不受重采样污染（此处无缩放）。
+    const ringX = OPAQUE.left - 15;
+    const ringY = OPAQUE.top + Math.floor(OPAQUE.height / 2);
+    const ringI = ringY * WIDTH + ringX;
+    const actual = data[sampleIndex(ringX, ringY, info.channels)] ?? 0;
+    const correct = Math.round(
+      ((correctForeground(ringI) ?? 0) * RING_ALPHA) / 255
+    );
+    const old = Math.round(((oldCleaned[ringI * 4] ?? 0) * RING_ALPHA) / 255);
+
+    // 旧实现把 k/a ≈ 2k 的反预乘结果叠加到边缘，旧预期明显高于正确预期。
+    expect(old - correct).toBeGreaterThan(2);
+    // 实际输出应落在「先去污染后调色」的预期附近，而不是旧实现。
+    expect(Math.abs(actual - correct)).toBeLessThanOrEqual(1);
+    expect(Math.abs(actual - old)).toBeGreaterThanOrEqual(2);
+
+    // 半透明边缘不得比不透明前景更亮（旧实现的 k/a 放大正是亮晕来源）。
+    const opaqueX = OPAQUE.left + Math.floor(OPAQUE.width / 2);
+    const opaque = data[sampleIndex(opaqueX, ringY, info.channels)] ?? 0;
+    expect(actual).toBeLessThanOrEqual(opaque + 1);
+  });
+});
+
+describe('IdPhotoService non-finite guards', () => {
+  const WIDTH = 600;
+  const HEIGHT = 800;
+
+  async function makeService(face: unknown) {
+    const mask = await sharp(Buffer.alloc(WIDTH * HEIGHT, 255), {
+      raw: { width: WIDTH, height: HEIGHT, channels: 1 },
+    })
+      .png()
+      .toBuffer();
+    return new IdPhotoService(
+      {
+        segment: async () => ({
+          mask,
+          bounds: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
+          faceCount: 1,
+        }),
+      } as any,
+      { detect: async () => [face] } as never
+    );
+  }
+
+  async function makeInput() {
+    return sharp({
+      create: {
+        width: WIDTH,
+        height: HEIGHT,
+        channels: 3,
+        background: '#888888',
+      },
+    })
+      .png()
+      .toBuffer();
+  }
+
+  const config = {
+    preset: 'one_inch',
+    backgroundColor: '#ffffff',
+    outputType: 'image/png',
+    dpi: 300,
+    segmentationMode: 'local',
+  } as const;
+
+  const finiteFace = {
+    box: { x: 220, y: 200, width: 160, height: 160 },
+    landmarks: [
+      [250, 260],
+      [350, 260],
+      [300, 300],
+      [270, 330],
+      [330, 330],
+    ] as Array<[number, number]>,
+    score: 0.95,
+  };
+
+  it('renders with zero rotation when the layout rotation is not finite', async () => {
+    const original = validators.suggestIdPhotoLayout;
+    const spy = spyOn(validators, 'suggestIdPhotoLayout').mockImplementation(
+      (...args) => {
+        const layout = original(...args);
+        return layout ? { ...layout, rotation: Number.NaN } : layout;
+      }
+    );
+    try {
+      const service = await makeService(finiteFace);
+      const result = await service.render(await makeInput(), config);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const metadata = await sharp(result.buffer).metadata();
+      expect(metadata.width).toBe(295);
+      expect(metadata.height).toBe(413);
+      // 旋转被当成 0 后人脸仍能映射到成片坐标，居中项给出真实数值。
+      const centred = result.quality!.items.find(
+        i => i.name === 'faceCentered'
+      )!;
+      expect(centred.value).toMatch(/^\d+%$/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('treats a face with non-finite landmarks as no face in the quality report', async () => {
+    const face = {
+      ...finiteFace,
+      landmarks: [[Number.NaN, 260], ...finiteFace.landmarks.slice(1)] as Array<
+        [number, number]
+      >,
+    };
+    const service = await makeService(face);
+    const result = await service.render(await makeInput(), config);
+
+    const items = new Map(result.quality!.items.map(i => [i.name, i]));
+    // 检测到了一张脸，但映射不出有效坐标：数量照实报告，位置类按「未检测到」。
+    expect(items.get('faceCount')!.value).toBe('1');
+    for (const name of [
+      'faceCentered',
+      'faceRatio',
+      'eyeTilt',
+      'headroom',
+    ] as const) {
+      expect(items.get(name)!.value).toBe('—');
+      expect(items.get(name)!.passed).toBe(false);
+      expect(items.get(name)!.hint).toBe('faceNotDetected');
+    }
   });
 });

@@ -17,6 +17,7 @@ import { PdfCadExtractorService } from './services/cad/pdf-cad-extractor.service
 import { PdfToCadService } from './services/cad/pdf-to-cad.service';
 import { FontService } from './services/font.service';
 import { PortraitSegmentationService } from './services/portrait-segmentation.service';
+import { FaceDetectionService } from './services/face-detection.service';
 import { ImageGenerationService } from './services/image-generation.service';
 import { ImageGeneratePresetsService } from './services/image-generate-presets.service';
 import { FilesModule } from '../files/files.module';
@@ -43,6 +44,7 @@ import { TaskJobStateRepository } from './task-job-state.repository';
     ImageService,
     IdPhotoService,
     PortraitSegmentationService,
+    FaceDetectionService,
     ImageGenerationService,
     ImageGeneratePresetsService,
     PdfService,
@@ -56,6 +58,6 @@ import { TaskJobStateRepository } from './task-job-state.repository';
     CleanupProcessor,
     CleanupScheduler,
   ],
-  exports: [TasksService, FontService],
+  exports: [TasksService, FontService, FaceDetectionService],
 })
 export class TasksModule {}

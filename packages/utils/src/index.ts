@@ -1,6 +1,13 @@
 export * from './entitlements';
 export * from './release';
 export * from './plan-display';
+export * from './id-photo-alpha';
+export * from './id-photo-brightness';
+export * from './id-photo-crown';
+export * from './id-photo-decontaminate';
+export * from './id-photo-modnet-size';
+export * from './id-photo-modnet-tensor';
+export * from './id-photo-yunet';
 
 export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0] || '';

@@ -1,15 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import sharp from 'sharp';
 import {
+  estimateSourceBackgroundColors,
   idPhotoPresetSpecs,
   idPhotoTaskConfigSchema,
+  inspectIdPhoto,
+  idPhotoCropFromLayout,
+  mapFaceToOutput,
   resolveIdPhotoCropBox,
+  suggestBrightnessAdjustment,
+  suggestIdPhotoLayout,
   type IdPhotoTaskConfig,
+  type QualityReport,
 } from '@utils-plane/validators';
 import {
-  PortraitSegmentationService,
-  refinePortraitAlphaBytes,
-} from './portrait-segmentation.service';
+  computeForegroundMeanBrightness,
+  decontaminateIdPhotoForeground,
+  findCrownY,
+} from '@utils-plane/utils';
+import { FaceDetectionService } from './face-detection.service';
+import { PortraitSegmentationService } from './portrait-segmentation.service';
 
 export class IdPhotoError extends Error {
   constructor(
@@ -24,6 +34,8 @@ export type IdPhotoRenderResult = {
   buffer: Buffer;
   mimeType: 'image/jpeg' | 'image/png';
   extension: 'jpg' | 'png';
+  /** 质量检查报告；前端结果页据此渲染面板。 */
+  quality?: QualityReport;
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -35,379 +47,12 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-type Rgb = { r: number; g: number; b: number };
-
-function colorDistance(a: Rgb, b: Rgb): number {
-  const dr = a.r - b.r;
-  const dg = a.g - b.g;
-  const db = a.b - b.b;
-  return Math.sqrt(dr * dr + dg * dg + db * db);
-}
-
-function readRgbAt(rgb: Buffer, index: number): Rgb {
-  const pixel = index * 3;
-  return {
-    r: rgb[pixel] ?? 0,
-    g: rgb[pixel + 1] ?? 0,
-    b: rgb[pixel + 2] ?? 0,
-  };
-}
-
-function estimateSourceBackgroundRgb(
-  rgb: Buffer,
-  width: number,
-  height: number
-): Rgb {
-  const patch = Math.max(
-    1,
-    Math.min(10, Math.floor(Math.min(width, height) / 8))
-  );
-  const corners = [
-    { x: 0, y: 0 },
-    { x: width - patch, y: 0 },
-    { x: 0, y: height - patch },
-    { x: width - patch, y: height - patch },
-  ];
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let count = 0;
-
-  for (const corner of corners) {
-    for (let y = corner.y; y < corner.y + patch; y += 1) {
-      for (let x = corner.x; x < corner.x + patch; x += 1) {
-        const index = (y * width + x) * 3;
-        r += rgb[index] ?? 0;
-        g += rgb[index + 1] ?? 0;
-        b += rgb[index + 2] ?? 0;
-        count += 1;
-      }
-    }
-  }
-
-  return {
-    r: Math.round(r / count),
-    g: Math.round(g / count),
-    b: Math.round(b / count),
-  };
-}
-
-function hasNearbySolidForeground(
-  alpha: Buffer,
-  width: number,
-  height: number,
-  index: number,
-  radius = 3
-): boolean {
-  const x = index % width;
-  const y = Math.floor(index / width);
-
-  for (let dy = -radius; dy <= radius; dy += 1) {
-    const ny = y + dy;
-    if (ny < 0 || ny >= height) {
-      continue;
-    }
-    for (let dx = -radius; dx <= radius; dx += 1) {
-      if (dx === 0 && dy === 0) {
-        continue;
-      }
-      const nx = x + dx;
-      if (nx < 0 || nx >= width) {
-        continue;
-      }
-      if ((alpha[ny * width + nx] ?? 0) >= 245) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function hasNearbyTransparentBackground(
-  alpha: Buffer,
-  width: number,
-  height: number,
-  index: number,
-  radius = 2
-): boolean {
-  const x = index % width;
-  const y = Math.floor(index / width);
-
-  for (let dy = -radius; dy <= radius; dy += 1) {
-    const ny = y + dy;
-    if (ny < 0 || ny >= height) {
-      continue;
-    }
-    for (let dx = -radius; dx <= radius; dx += 1) {
-      if (dx === 0 && dy === 0) {
-        continue;
-      }
-      const nx = x + dx;
-      if (nx < 0 || nx >= width) {
-        continue;
-      }
-      if ((alpha[ny * width + nx] ?? 0) <= 8) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function sampleNearbySolidForegroundRgb(
-  rgb: Buffer,
-  alpha: Buffer,
-  width: number,
-  height: number,
-  index: number,
-  radius = 3,
-  sourceBackground?: Rgb,
-  backgroundLikeThreshold = 80
-): Rgb | null {
-  const x = index % width;
-  const y = Math.floor(index / width);
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let totalWeight = 0;
-
-  for (let dy = -radius; dy <= radius; dy += 1) {
-    const ny = y + dy;
-    if (ny < 0 || ny >= height) {
-      continue;
-    }
-    for (let dx = -radius; dx <= radius; dx += 1) {
-      if (dx === 0 && dy === 0) {
-        continue;
-      }
-      const nx = x + dx;
-      if (nx < 0 || nx >= width) {
-        continue;
-      }
-
-      const neighbor = ny * width + nx;
-      if ((alpha[neighbor] ?? 0) < 245) {
-        continue;
-      }
-
-      const color = readRgbAt(rgb, neighbor);
-      if (
-        sourceBackground &&
-        colorDistance(color, sourceBackground) < backgroundLikeThreshold
-      ) {
-        continue;
-      }
-
-      const weight = 1 / (dx * dx + dy * dy + 1);
-      r += color.r * weight;
-      g += color.g * weight;
-      b += color.b * weight;
-      totalWeight += weight;
-    }
-  }
-
-  if (totalWeight === 0) {
-    return null;
-  }
-
-  return {
-    r: Math.round(r / totalWeight),
-    g: Math.round(g / totalWeight),
-    b: Math.round(b / totalWeight),
-  };
-}
-
-function suppressSourceBackgroundFringe(
-  alpha: Buffer,
-  rgb: Buffer,
-  width: number,
-  height: number,
-  sourceBackground = estimateSourceBackgroundRgb(rgb, width, height)
-): Buffer {
-  const cleaned = Buffer.from(alpha);
-  const colorThreshold = 150;
-  const transitionAlpha = 245;
-
-  for (let i = 0; i < cleaned.length; i += 1) {
-    const currentAlpha = cleaned[i] ?? 0;
-    if (currentAlpha === 0 || currentAlpha > transitionAlpha) {
-      continue;
-    }
-    if (hasNearbySolidForeground(alpha, width, height, i)) {
-      continue;
-    }
-
-    const distance = colorDistance(readRgbAt(rgb, i), sourceBackground);
-    if (distance >= colorThreshold) {
-      continue;
-    }
-
-    cleaned[i] = Math.round(currentAlpha * (distance / colorThreshold));
-  }
-
-  return cleaned;
-}
-
-function replaceBackgroundContaminatedEdgeRgb(
-  rgb: Buffer,
-  alpha: Buffer,
-  width: number,
-  height: number,
-  sourceBackground: Rgb
-): Buffer {
-  const cleaned = Buffer.from(rgb);
-  const backgroundLikeThreshold = 140;
-  const boundaryBandRadius = 8;
-  const foregroundSampleRadius = 8;
-  const replacementMustDifferFromBackground = 80;
-
-  for (let i = 0; i < alpha.length; i += 1) {
-    const currentAlpha = alpha[i] ?? 0;
-    if (currentAlpha <= 8) {
-      continue;
-    }
-    if (
-      !hasNearbyTransparentBackground(
-        alpha,
-        width,
-        height,
-        i,
-        boundaryBandRadius
-      )
-    ) {
-      continue;
-    }
-
-    const color = readRgbAt(rgb, i);
-    if (colorDistance(color, sourceBackground) >= backgroundLikeThreshold) {
-      continue;
-    }
-
-    const replacement = sampleNearbySolidForegroundRgb(
-      rgb,
-      alpha,
-      width,
-      height,
-      i,
-      foregroundSampleRadius,
-      sourceBackground
-    );
-    if (!replacement) {
-      continue;
-    }
-    if (
-      colorDistance(replacement, sourceBackground) <
-      replacementMustDifferFromBackground
-    ) {
-      continue;
-    }
-
-    const pixel = i * 3;
-    cleaned[pixel] = replacement.r;
-    cleaned[pixel + 1] = replacement.g;
-    cleaned[pixel + 2] = replacement.b;
-  }
-
-  return cleaned;
-}
-
-function removeUnresolvedBackgroundEdgeAlpha(
-  alpha: Buffer,
-  sourceAlpha: Buffer,
-  rgb: Buffer,
-  width: number,
-  height: number,
-  sourceBackground: Rgb
-): Buffer {
-  const cleaned = Buffer.from(alpha);
-  const backgroundLikeThreshold = 140;
-  const boundaryBandRadius = 8;
-
-  for (let i = 0; i < cleaned.length; i += 1) {
-    const currentAlpha = cleaned[i] ?? 0;
-    if (currentAlpha <= 8) {
-      continue;
-    }
-    const originalAlpha = sourceAlpha[i] ?? currentAlpha;
-    if (originalAlpha > 8 && originalAlpha < 245) {
-      continue;
-    }
-    if (
-      !hasNearbyTransparentBackground(
-        cleaned,
-        width,
-        height,
-        i,
-        boundaryBandRadius
-      )
-    ) {
-      continue;
-    }
-
-    if (
-      colorDistance(readRgbAt(rgb, i), sourceBackground) >=
-      backgroundLikeThreshold
-    ) {
-      continue;
-    }
-
-    cleaned[i] = 0;
-  }
-
-  return cleaned;
-}
-
-function decontaminateForegroundRgb(
-  rgb: Buffer,
-  alpha: Buffer,
-  sourceBackground: Rgb
-): Buffer {
-  const cleaned = Buffer.from(rgb);
-  for (let i = 0; i < alpha.length; i += 1) {
-    const currentAlpha = alpha[i] ?? 0;
-    if (currentAlpha <= 8 || currentAlpha >= 245) {
-      continue;
-    }
-
-    const opacity = currentAlpha / 255;
-    const pixel = i * 3;
-    cleaned[pixel] = Math.max(
-      0,
-      Math.min(
-        255,
-        Math.round(
-          ((rgb[pixel] ?? 0) - (1 - opacity) * sourceBackground.r) / opacity
-        )
-      )
-    );
-    cleaned[pixel + 1] = Math.max(
-      0,
-      Math.min(
-        255,
-        Math.round(
-          ((rgb[pixel + 1] ?? 0) - (1 - opacity) * sourceBackground.g) / opacity
-        )
-      )
-    );
-    cleaned[pixel + 2] = Math.max(
-      0,
-      Math.min(
-        255,
-        Math.round(
-          ((rgb[pixel + 2] ?? 0) - (1 - opacity) * sourceBackground.b) / opacity
-        )
-      )
-    );
-  }
-
-  return cleaned;
-}
-
 @Injectable()
 export class IdPhotoService {
-  constructor(private readonly segmentation: PortraitSegmentationService) {}
+  constructor(
+    private readonly segmentation: PortraitSegmentationService,
+    @Optional() private readonly faces?: FaceDetectionService
+  ) {}
 
   async render(
     input: Buffer,
@@ -461,16 +106,52 @@ export class IdPhotoService {
     // 尺寸,mask 已被 segment() resize 回输入尺寸,两者一致。
     const oriented = await sharp(input).rotate().toBuffer();
     const orientedMeta = await sharp(oriented).metadata();
+    const sourceWidth = orientedMeta.width ?? metadata.width;
+    const sourceHeight = orientedMeta.height ?? metadata.height;
+
+    // 裁剪优先级：显式 crop > 人脸自动构图 > 居中
+    const detected = (await this.faces?.detect(oriented)) ?? [];
+    const face = detected[0] ?? null;
+    let crop = config.crop;
+    let rotation = config.rotation ?? 0;
+    if (!crop && face) {
+      const layout = suggestIdPhotoLayout(
+        face,
+        { width: sourceWidth, height: sourceHeight },
+        preset.widthPx / preset.heightPx,
+        await this.detectCrownY(mask.mask)
+      );
+      if (layout) {
+        crop = idPhotoCropFromLayout(
+          layout,
+          { width: sourceWidth, height: sourceHeight },
+          preset.widthPx / preset.heightPx
+        );
+        // 防御：非有限角度进 sharp.rotate 会直接抛错，进 mapFaceToOutput 会
+        // 让质量检查的人脸坐标全变 NaN。若外部未显式指定 rotation 则用构图结果。
+        if (config.rotation === undefined) {
+          rotation = Number.isFinite(layout.rotation) ? layout.rotation : 0;
+        }
+      }
+    }
+
     const baseBox = resolveIdPhotoCropBox(
-      orientedMeta.width ?? metadata.width,
-      orientedMeta.height ?? metadata.height,
+      sourceWidth,
+      sourceHeight,
       preset.widthPx,
       preset.heightPx,
-      config.crop
+      crop
     );
 
-    const base = await sharp(oriented)
-      .extract(baseBox)
+    // 注意：sharp 在同一 pipeline 内按固定顺序执行 rotate → extract → resize，
+    // 与调用顺序无关。这里必须先单独 extract，再对新 buffer 旋转，才能得到
+    // 「先裁剪、再绕裁剪框中心回正」的几何 —— 与本地 canvas 的
+    // `ctx.rotate(-rotation)` 一致，且与 mapFaceToOutput 的映射公式一致。
+    const baseCropped = await sharp(oriented).extract(baseBox).toBuffer();
+    const base = await sharp(baseCropped)
+      // sharp 的 rotate 正值是顺时针；layout.rotation 正值表示右眼更低，
+      // 需要逆时针回正，因此取负。
+      .rotate(-rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .resize({
         width: preset.widthPx,
         height: preset.heightPx,
@@ -481,53 +162,100 @@ export class IdPhotoService {
 
     const maskMeta = await sharp(mask.mask).metadata();
     const maskBox = resolveIdPhotoCropBox(
-      maskMeta.width ?? metadata.width,
-      maskMeta.height ?? metadata.height,
+      maskMeta.width ?? sourceWidth,
+      maskMeta.height ?? sourceHeight,
       preset.widthPx,
       preset.heightPx,
-      config.crop
+      crop
     );
 
-    const resizedAlpha = await sharp(mask.mask)
-      .extract(maskBox)
+    const alphaCropped = await sharp(mask.mask).extract(maskBox).toBuffer();
+    const resizedAlpha = await sharp(alphaCropped)
+      .rotate(-rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .resize(preset.widthPx, preset.heightPx, { fit: 'cover' })
       .greyscale()
       .raw()
       .toBuffer();
-    const baseRgb = await sharp(base).removeAlpha().raw().toBuffer();
-    const refinedAlpha = refinePortraitAlphaBytes(resizedAlpha);
-    const sourceBackground = estimateSourceBackgroundRgb(
-      baseRgb,
+
+    const baseRgbRaw = await sharp(base).removeAlpha().raw().toBuffer();
+    const pixelCount = preset.widthPx * preset.heightPx;
+
+    // 底色聚类必须用**未调色、未旋转**的原图裁剪：
+    // - 未调色：亮度是前景校正，若先把偏移加到全幅再聚类，会把估计出的底色
+    //   整体推亮/推暗，进而影响去污染的反预乘结果；
+    // - 未旋转：`rotate(-rotation)` 会为四角补透明像素，边缘取样会把补出的
+    //   黑角算进底色。本地路是从未旋转原图按同一裁剪框取样的，服务端保持
+    //   同一语义，旋转照片的边缘底色才不会出现两端不一致。
+    const baseUnrotatedRgbRaw = await sharp(baseCropped)
+      .resize({
+        width: preset.widthPx,
+        height: preset.heightPx,
+        fit: 'cover',
+        position: 'centre',
+      })
+      .removeAlpha()
+      .raw()
+      .toBuffer();
+    const candidates = estimateSourceBackgroundColors(
+      baseUnrotatedRgbRaw,
       preset.widthPx,
       preset.heightPx
     );
-    const cleanedAlpha = suppressSourceBackgroundFringe(
-      refinedAlpha,
-      baseRgb,
+    const sourceBackground = candidates[0] ?? { r: 0, g: 0, b: 0 };
+
+    // 共享纯函数做去污染，返回 RGBA。
+    //
+    // 必须先把**未调色**的前景 + alpha 交给去污染，再对结果调色：反预乘
+    // `(C - bg(1-a))/a` 会把任何人工偏移放大成 `k/a`。若先调色，a≈0.5 的边缘
+    // 偏移会翻倍，暗片出现亮晕、过曝片出现暗边，且与本地 canvas 路
+    // （先去污染后调色）结果不一致。
+    const rgba = new Uint8ClampedArray(pixelCount * 4);
+    for (let i = 0; i < pixelCount; i += 1) {
+      rgba[i * 4] = baseRgbRaw[i * 3] ?? 0;
+      rgba[i * 4 + 1] = baseRgbRaw[i * 3 + 1] ?? 0;
+      rgba[i * 4 + 2] = baseRgbRaw[i * 3 + 2] ?? 0;
+      rgba[i * 4 + 3] = resizedAlpha[i] ?? 0;
+    }
+
+    // 亮度自动校正与本地路同一口径：在裁剪并缩放到成片尺寸的 RGBA 上、
+    // 只统计 alpha > 0 的前景像素，使用共享的均值函数与偏移算法。
+    // 用户显式指定 crop 时不做自动调色（尊重用户构图），对应本地的
+    // `autoFrame && !userOverride`。
+    const brightnessOffset = config.crop
+      ? 0
+      : suggestBrightnessAdjustment(
+          computeForegroundMeanBrightness(rgba, preset.widthPx, preset.heightPx)
+        );
+
+    const cleaned = decontaminateIdPhotoForeground(
+      rgba,
       preset.widthPx,
       preset.heightPx,
       sourceBackground
     );
-    const decontaminatedRgb = decontaminateForegroundRgb(
-      baseRgb,
-      cleanedAlpha,
-      sourceBackground
-    );
-    const foregroundRgb = replaceBackgroundContaminatedEdgeRgb(
-      decontaminatedRgb,
-      cleanedAlpha,
-      preset.widthPx,
-      preset.heightPx,
-      sourceBackground
-    );
-    const finalAlpha = removeUnresolvedBackgroundEdgeAlpha(
-      cleanedAlpha,
-      resizedAlpha,
-      foregroundRgb,
-      preset.widthPx,
-      preset.heightPx,
-      sourceBackground
-    );
+
+    // 从去污染结果提取前景 RGB 与 alpha，然后才应用亮度：加法偏移只作用于
+    // alpha > 0 的像素；去污染把内边缘 alpha 压到 0 的像素也不再调色。
+    const foregroundRgb = Buffer.alloc(preset.widthPx * preset.heightPx * 3);
+    const finalAlpha = Buffer.alloc(preset.widthPx * preset.heightPx);
+    for (let i = 0; i < preset.widthPx * preset.heightPx; i += 1) {
+      foregroundRgb[i * 3] = cleaned[i * 4] ?? 0;
+      foregroundRgb[i * 3 + 1] = cleaned[i * 4 + 1] ?? 0;
+      foregroundRgb[i * 3 + 2] = cleaned[i * 4 + 2] ?? 0;
+      finalAlpha[i] = cleaned[i * 4 + 3] ?? 0;
+    }
+    if (brightnessOffset !== 0) {
+      for (let i = 0; i < pixelCount; i += 1) {
+        if ((finalAlpha[i] ?? 0) === 0) continue;
+        for (let c = 0; c < 3; c += 1) {
+          foregroundRgb[i * 3 + c] = Math.max(
+            0,
+            Math.min(255, (foregroundRgb[i * 3 + c] ?? 0) + brightnessOffset)
+          );
+        }
+      }
+    }
+
     const alpha = await sharp(finalAlpha, {
       raw: { width: preset.widthPx, height: preset.heightPx, channels: 1 },
     })
@@ -555,19 +283,73 @@ export class IdPhotoService {
       .png()
       .composite([{ input: foreground, blend: 'over' }]);
 
+    // 质量检查必须基于**最终成片**的像素：去污染 + 调色后的前景已经叠到
+    // 新底色上，alpha=0 的区域此时是新背景色，而不是原图底色。只传去污染后
+    // 的前景 RGB 会让曝光/清晰度按「透明区仍是原背景」判定，与本地路不一致。
+    const composed = await background
+      .clone()
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // 质量检查在最终成片上做。人脸框/关键点是源图坐标，必须先映射到成片坐标，
+    // 否则 faceRatio、faceCentered、headroom 会按源图尺寸计算而失真。
+    // 映射失败（坐标非有限）时返回 null，按「无人脸」交给质量检查；
+    // faceCount 仍照实际检测数报告。
+    const quality = inspectIdPhoto({
+      rgb: composed.data,
+      width: preset.widthPx,
+      height: preset.heightPx,
+      face: face ? mapFaceToOutput(face, baseBox, preset, rotation) : null,
+      // YuNet 不可用时不能回退 mask.faceCount：分割服务的该值恒为 1，
+      // 会让「检测不可用」被误判为「恰好一张脸」。与本地路一致按 0 处理。
+      faceCount: detected.length,
+      alpha: finalAlpha,
+    });
+
     if (config.outputType === 'image/png') {
       return {
-        buffer: await background.png({ compressionLevel: 9 }).toBuffer(),
+        buffer: await background
+          .png({ compressionLevel: 9 })
+          .withMetadata({ density: 300 })
+          .toBuffer(),
         mimeType: 'image/png',
         extension: 'png',
+        quality,
       };
     }
 
     return {
-      buffer: await background.jpeg({ quality: 92, mozjpeg: true }).toBuffer(),
+      buffer: await background
+        .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
+        .withMetadata({ density: 300 })
+        .toBuffer(),
       mimeType: 'image/jpeg',
       extension: 'jpg',
+      quality,
     };
+  }
+
+  /**
+   * 从分割蒙版取真实头顶（前景最高行）。
+   *
+   * YuNet 的人脸框起点在发际线附近，不是头顶；用它算头顶留白会偏小。
+   * 蒙版不可用时返回 undefined，`suggestIdPhotoLayout` 会自动退回估算。
+   */
+  private async detectCrownY(maskPng: Buffer): Promise<number | undefined> {
+    try {
+      // extractChannel(0) 保证单通道：行扫描按 channels=1 的步长读取。
+      const { data, info } = await sharp(maskPng)
+        .greyscale()
+        .extractChannel(0)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      // 行门槛（噪点过滤）与本地路共用 packages/utils 的同一份实现。
+      return findCrownY(data, info.width, info.height, 1);
+    } catch {
+      // 蒙版读不出来不影响出图
+    }
+    return undefined;
   }
 
   private async encodeFinalResult(
@@ -587,7 +369,10 @@ export class IdPhotoService {
 
     if (config.outputType === 'image/png') {
       return {
-        buffer: await image.png({ compressionLevel: 9 }).toBuffer(),
+        buffer: await image
+          .png({ compressionLevel: 9 })
+          .withMetadata({ density: 300 })
+          .toBuffer(),
         mimeType: 'image/png',
         extension: 'png',
       };
@@ -596,7 +381,8 @@ export class IdPhotoService {
     return {
       buffer: await image
         .flatten({ background: hexToRgb(config.backgroundColor) })
-        .jpeg({ quality: 92, mozjpeg: true })
+        .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
+        .withMetadata({ density: 300 })
         .toBuffer(),
       mimeType: 'image/jpeg',
       extension: 'jpg',

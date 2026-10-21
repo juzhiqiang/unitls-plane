@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatBytes } from '@/lib/format';
 import { FileDropzone } from '@/components/tools/file-dropzone';
@@ -11,8 +11,10 @@ import {
 } from '@/components/tools/id-photo-options';
 import { ImageCropField } from '@/components/tools/image-crop-field';
 import { IdPhotoSheetPanel } from '@/components/tools/id-photo-sheet-panel';
+import { IdPhotoQualityPanel } from '@/components/tools/id-photo-quality-panel';
 import {
   idPhotoCropFromBox,
+  idPhotoCropFromLayout,
   idPhotoPresetSpecs,
   resolveIdPhotoCropBox,
 } from '@utils-plane/validators';
@@ -39,6 +41,9 @@ const DEFAULT_OPTIONS: IdPhotoOptionsState = {
   outputType: 'image/jpeg',
   segmentationMode: 'local',
   crop: { x: 0.5, y: 0.5, scale: 1 },
+  guides: false,
+  autoStraighten: true,
+  rotation: 0,
 };
 
 export default function IdPhotoPage() {
@@ -95,6 +100,39 @@ export default function IdPhotoPage() {
   const resultUrl = useObjectUrl(resultFile);
   const local = useLocalIdPhoto();
   const localResultUrl = useObjectUrl(local.resultBlob);
+  const autoLayout = local.autoLayout;
+
+  // 自动构图算出结果后回填裁剪框。用户手动改过框后不再覆盖,
+  // 否则刚拖好的框会被下一次处理结果冲掉。
+  useEffect(() => {
+    // 解码失败的图片可能以 0 尺寸触发 onLoad;idPhotoCropFromLayout 会抛
+    // RangeError,放进 effect 会直接把页面打崩,这里先挡掉。
+    if (
+      !autoLayout ||
+      !natural ||
+      natural.width <= 0 ||
+      natural.height <= 0 ||
+      local.userOverride
+    ) {
+      return;
+    }
+    const crop = idPhotoCropFromLayout(
+      autoLayout,
+      { width: natural.width, height: natural.height },
+      preset.widthPx / preset.heightPx
+    );
+    setOptions(prev => ({
+      ...prev,
+      crop,
+      rotation: prev.autoStraighten ? autoLayout.rotation : prev.rotation,
+    }));
+  }, [
+    autoLayout,
+    natural,
+    local.userOverride,
+    preset.widthPx,
+    preset.heightPx,
+  ]);
 
   const taskQuery = useTaskProgress(taskId, {
     onCompleted: async outputFileId => {
@@ -117,6 +155,10 @@ export default function IdPhotoPage() {
   const handleDrop = (files: File[]) => {
     if (!files[0]) return;
     setFile(files[0]);
+    // 换图必须清掉上一张的本地状态(autoLayout/quality/resultBlob/userOverride)。
+    // 否则 effect 会把 A 图的自动构图灌给 B 图;若用户此前拖过框,B 图还会因为
+    // userOverride=true 永远拿不到自动构图。
+    local.resetAll();
     setNatural(null);
     resetOutput();
     setError(null);
@@ -134,6 +176,9 @@ export default function IdPhotoPage() {
           backgroundColor: options.backgroundColor,
           outputType: options.outputType,
           crop: options.crop,
+          rotation: options.rotation,
+          autoFrame: !local.userOverride,
+          autoStraighten: options.autoStraighten,
         });
       } catch (err) {
         setError((err as Error).message);
@@ -150,17 +195,24 @@ export default function IdPhotoPage() {
 
     try {
       const uploaded = await uploadFile.mutateAsync(file);
+      // 只有用户手动调整过裁剪框才把 crop 发给服务端。未调整时省略该字段,
+      // 服务端才会跑 YuNet 自动构图并连带应用旋转修正;无条件发送默认居中框
+      // 会让自动构图与旋转在服务端路完全不生效。
+      const inputConfig = {
+        preset: options.preset,
+        backgroundColor: options.backgroundColor,
+        outputType: options.outputType,
+        segmentationMode: options.segmentationMode,
+        dpi: 300,
+        ...(local.userOverride ? { crop: options.crop } : {}),
+        ...(options.rotation !== 0 || !options.autoStraighten
+          ? { rotation: options.rotation }
+          : {}),
+      };
       const task = await createTask.mutateAsync({
         type: 'image_id_photo',
         inputFileIds: [(uploaded as any).id],
-        inputConfig: {
-          preset: options.preset,
-          backgroundColor: options.backgroundColor,
-          outputType: options.outputType,
-          segmentationMode: options.segmentationMode,
-          dpi: 300,
-          crop: options.crop,
-        },
+        inputConfig,
       });
       setTaskId(task.id);
     } catch (err) {
@@ -242,6 +294,9 @@ export default function IdPhotoPage() {
               value={cropRect}
               onChange={box => {
                 if (!natural) return;
+                // 先标记 override 再改 crop:同一事件里 hook 的 process 守卫
+                // 读 ref,顺序反了会用旧值重跑自动构图。
+                local.markUserOverride();
                 setOptions(o => ({
                   ...o,
                   crop: idPhotoCropFromBox(
@@ -259,6 +314,7 @@ export default function IdPhotoPage() {
                 }));
               }}
               aspect={preset.widthPx / preset.heightPx}
+              guides={options.guides}
               disabled={isProcessing}
               t={t}
             />
@@ -273,7 +329,15 @@ export default function IdPhotoPage() {
 
           <IdPhotoOptions
             value={options}
-            onChange={setOptions}
+            onChange={newOpts => {
+              if (
+                newOpts.rotation !== options.rotation ||
+                newOpts.autoStraighten !== options.autoStraighten
+              ) {
+                local.markUserOverride();
+              }
+              setOptions(newOpts);
+            }}
             disabled={isProcessing}
             t={t}
             mode={processingMode}
@@ -286,7 +350,10 @@ export default function IdPhotoPage() {
             value={processingMode}
             onChange={m => {
               setProcessingMode(m);
-              local.reset();
+              // 只清结果,保留 userOverride:裁剪框状态(options.crop)在两条路
+              // 之间是共享的,清掉 override 会导致「框还显示手动结果,服务端却
+              // 不发送 crop」,自动构图把它覆盖掉。
+              local.resetResult();
               resetOutput();
               setError(null);
             }}
@@ -329,28 +396,35 @@ export default function IdPhotoPage() {
           onRetry={handleProcess}
           onReset={() => {
             setFile(null);
-            local.reset();
+            local.resetAll();
           }}
         />
       )}
 
       {processingMode === 'local' && localResultFile && (
-        <ResultPanel
-          title={t('resultTitle')}
-          description={`id-photo.${ext}`}
-          preview={
-            localResultUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={localResultUrl}
-                alt={t('previewAlt')}
-                className="mx-auto max-h-80 w-auto object-contain rounded-md border border-border"
-              />
-            ) : null
-          }
-          meta={[]}
-          action={<DownloadButton file={localResultFile} />}
-        />
+        <>
+          <ResultPanel
+            title={t('resultTitle')}
+            description={`id-photo.${ext}`}
+            preview={
+              localResultUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={localResultUrl}
+                  alt={t('previewAlt')}
+                  className="mx-auto max-h-80 w-auto object-contain rounded-md border border-border"
+                />
+              ) : null
+            }
+            meta={[]}
+            action={<DownloadButton file={localResultFile} />}
+          />
+          {/*
+            服务端路目前没有质量报告(resultFile 上不带 quality 字段),
+            因此只在本地路渲染,避免「检查不可用」被误解为照片本身有问题。
+          */}
+          <IdPhotoQualityPanel report={local.quality} t={t} />
+        </>
       )}
 
       {processingMode === 'server' && resultFile && (

@@ -418,3 +418,51 @@ return {
 5. **本地路**：face-detection + segmentation 升级 + composite 增强 + dpi-metadata + 测试
 6. **UI**：质量面板 + 辅助线 + 自动构图回填 + i18n
 7. **手动核对**：样张对比 + 拼版量测
+
+---
+
+## 实施后修订（2026-10-20）
+
+实施过程中有三项设计假设被实测推翻，另有多处细节在审查中收敛。以下为最终落地状态，**与上文冲突时以本节为准**。
+
+### 1. YuNet 的真实规格与假设不符
+
+设计假设 320×320 输入、单个 `[N,15]` 输出、0..1 归一化。实测 OpenCV 官方 `face_detection_yunet_2023mar.onnx`：
+
+- 输入固定 **640×640**
+- 输出 **12 个张量**（`cls` / `obj` / `bbox` / `kps` × stride 8/16/32，共 8400 个 anchor）
+- 预处理必须 **0..255 BGR**；用 0..1 时 `obj` 恒为 0，**静默检测不到任何人脸**
+
+因此共享模块是 `packages/utils/src/id-photo-yunet.ts`（`createYunetInputTensor` / `decodeYunetRawOutputs` / `usesRawYunetLayout` / `resolveYunetInputSize` / `scaleDetectedFaces`），`parseYunetOutput` 与 `YUNET_INPUT_SIZE=320` 已删除。默认参数即生产参数（0..255 + BGR）。
+
+### 2. MODNet 不能补边
+
+设计假设 `letterboxResize` 等比缩放后居中补边到 512×512。实测证明**补边是「衣服破洞」的唯一触发条件**：同一权重在补边口径下产生 1524 px 洞（含人脸 1176 px），不补边时 0 洞。
+
+最终实现是 `packages/utils/src/id-photo-modnet-size.ts` 的 `modnetInputSize`：长边 512、保持长宽比、宽高 32 对齐、**不补边**，并带 2MP 上限防止极端长宽比 OOM。两端共用。
+
+另：`apps/api/models/modnet.onnx` 与 photographic 权重**逐像素等价**（max abs diff = 0），回落到通用 modnet 只为文件缺失兜底，不带来画质差异。
+
+### 3. 自动构图的 zoom 下界收紧到 100
+
+`IdPhotoCrop.scale` 契约是 `[1,3]`（只放大不缩小），`zoom < 100` 无法表达 —— 它只会改变上报数字而不改变裁剪框，且让 `faceRatio` 报出虚拟值。最终 `MIN_ZOOM = 100`，参考实现「缩小画面补画布」的能力**未实现**，文件头已注明。
+
+### 4. 字段与流程修订
+
+- `IdPhotoLayout.headroom` 改名为 **`faceTopMargin`**（与质量检查的 `headroom` 项口径不同）。
+- 去污染与底色估计**两端统一在裁剪后的成片尺寸**上做；本地先缩放到成片尺寸（此时背景仍是原图）再估底色、去污染，最后才叠新底色。
+- 亮度校正：两端统一用「裁剪成片 + alpha > 0 前景」算均值，共享 `packages/utils/src/id-photo-brightness.ts`；仅在自动构图生效时应用。
+- 质量检查：两端都基于**最终成片**像素；服务端 face landmark/box 通过共享 `mapFaceToOutput` 映射到成片坐标。
+- 服务端亮度必须在去污染**之后**应用（先调色会让反预乘把偏移放大为 `k/a`）。
+- 页面在用户未手动改框时**不发送 `crop`**，服务端才会进入自动构图分支。
+- 模式切换用 `resetResult()`（保留 `userOverride`），换图用 `resetAll()`。
+
+### 5. 已知限制
+
+| 限制 | 影响 | 处理 |
+| --- | --- | --- |
+| 服务端质量报告未随任务结果返回 | 服务端模式不渲染质量面板（设计原为「显示检查不可用」） | 后续可把 `quality` 写入任务结果 metadata |
+| 本地 DPI 注入写 APP1 Exif | canvas 自带的 APP0 JFIF density 仍为 1/unit=0，少数打印软件优先读 JFIF | 后续可改为同时改写 APP0 |
+| 旋转后服务端 `extract → rotate → resize(cover)` | 内容比本地 canvas 小约 5.5%（5°） | 已知差异 |
+| `@huggingface/transformers` 仍为 web 依赖 | 运行时不使用，仅历史遗留 | 后续移除 |
+| RMBG-1.4 仍随 prepare 脚本下载/同步 | 约 252MB 无用资产 | 后续改为可选 |

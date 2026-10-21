@@ -1,12 +1,14 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import {
   ID_PHOTO_MODELS,
+  MODNET_MODEL_FILE,
   ORT_VERSION,
-  RMBG_MODEL_ID,
-  RMBG_VERSION,
-  modelsBaseUrl,
+  YUNET_INPUT_SIZE,
+  YUNET_MODEL_FILE,
+  modnetModelUrl,
   ortWasmPath,
   tierFor,
+  yunetModelUrl,
 } from '@/lib/id-photo-local/model-registry';
 
 describe('model-registry', () => {
@@ -14,25 +16,34 @@ describe('model-registry', () => {
     delete process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
   });
 
-  it('exposes fp16 (balanced) and fp32 (high) tiers', () => {
-    expect(ID_PHOTO_MODELS.balanced.dtype).toBe('fp16');
-    expect(ID_PHOTO_MODELS.balanced.requiresWebGpu).toBe(false);
-    expect(ID_PHOTO_MODELS.balanced.sizeBytes).toBeGreaterThan(
-      80 * 1024 * 1024
-    );
-    expect(ID_PHOTO_MODELS.high.dtype).toBe('fp32');
-    expect(ID_PHOTO_MODELS.high.requiresWebGpu).toBe(true);
-    expect(ID_PHOTO_MODELS.high.sizeBytes).toBeGreaterThan(160 * 1024 * 1024);
+  it('两档共用同一份 photographic fp32 权重与真实体积', () => {
+    // photographic 单档:high 不再是 RMBG fp32 退路,元数据与 balanced 一致。
+    expect(ID_PHOTO_MODELS.balanced).toEqual({
+      dtype: 'fp32',
+      requiresWebGpu: false,
+      sizeBytes: 25_969_398,
+    });
+    expect(ID_PHOTO_MODELS.high).toEqual(ID_PHOTO_MODELS.balanced);
   });
 
-  it('model id 与版本对齐(与 MinIO 上 models/ 下的相对路径一致)', () => {
-    expect(RMBG_MODEL_ID).toBe(`rmbg/${RMBG_VERSION}`);
-  });
-
-  it('builds remoteHost pointing at the MinIO models bucket', () => {
+  it('主分割指向自托管的 MODNet photographic 权重', () => {
     process.env.NEXT_PUBLIC_S3_PUBLIC_URL = 'http://localhost:9000';
-    // 必须以 / 结尾:transformers.js 直接拼 remotePathTemplate
-    expect(modelsBaseUrl()).toBe('http://localhost:9000/models/');
+    expect(MODNET_MODEL_FILE).toBe('modnet_photographic.onnx');
+    expect(modnetModelUrl()).toBe(
+      'http://localhost:9000/models/modnet/modnet_photographic.onnx'
+    );
+  });
+
+  it('人脸检测指向自托管的 YuNet 2023mar 权重', () => {
+    process.env.NEXT_PUBLIC_S3_PUBLIC_URL = 'http://localhost:9000';
+    expect(YUNET_MODEL_FILE).toBe('face_detection_yunet_2023mar.onnx');
+    expect(yunetModelUrl()).toBe(
+      'http://localhost:9000/models/face/yunet/face_detection_yunet_2023mar.onnx'
+    );
+  });
+
+  it('YuNet 输入尺寸与 2023mar 权重一致(固定 640)', () => {
+    expect(YUNET_INPUT_SIZE).toBe(640);
   });
 
   it('builds the ort wasm path (自托管,避免离线镜像回落到 jsDelivr)', () => {
@@ -47,13 +58,15 @@ describe('model-registry', () => {
 
   it('throws when NEXT_PUBLIC_S3_PUBLIC_URL is unset', () => {
     delete process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
-    expect(() => modelsBaseUrl()).toThrow();
+    expect(() => modnetModelUrl()).toThrow();
+    expect(() => yunetModelUrl()).toThrow();
     expect(() => ortWasmPath()).toThrow();
   });
 
-  it('tierFor locks balanced when webgpu unavailable, honors request when available', () => {
+  it('tierFor 恒定落到 balanced(photographic 单档,兼容既有 tier 参数)', () => {
     expect(tierFor(false, 'high')).toBe('balanced');
-    expect(tierFor(true, 'high')).toBe('high');
+    expect(tierFor(true, 'high')).toBe('balanced');
     expect(tierFor(true, 'balanced')).toBe('balanced');
+    expect(tierFor(false, 'balanced')).toBe('balanced');
   });
 });

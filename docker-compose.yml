@@ -64,6 +64,8 @@ services:
       mc anonymous set download local/uploads;
       mc mb local/presets --ignore-existing;
       mc anonymous set download local/presets;
+      mc mb local/models --ignore-existing;
+      mc anonymous set download local/models;
       exit 0;
       "
 

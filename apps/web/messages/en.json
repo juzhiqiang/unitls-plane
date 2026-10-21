@@ -702,6 +702,10 @@
     "background": "Background",
     "segmentationMode": "Cutout mode",
     "outputType": "Output format",
+    "rotation": "Tilt angle",
+    "autoStraighten": "Auto straighten",
+    "resetRotation": "Reset",
+    "guides": "Composition guides",
     "start": "Generate ID photo",
     "processing": "Generating ID photo",
     "failed": "Generation failed",
@@ -768,6 +772,35 @@
       "sw": "Bottom left corner",
       "w": "Left edge",
       "move": "Move crop area"
+    },
+    "quality": {
+      "title": "Quality check",
+      "score": "Score {score}",
+      "passed": "All checks passed",
+      "needsAttention": "Needs attention: {items}",
+      "listSeparator": ", ",
+      "unavailable": "Check unavailable",
+      "items": {
+        "faceCount": "Face count",
+        "faceCentered": "Face position",
+        "faceRatio": "Face size",
+        "eyeTilt": "Eye level",
+        "headroom": "Headroom",
+        "sharpness": "Sharpness",
+        "exposure": "Exposure",
+        "matteEdge": "Cutout edge"
+      },
+      "hints": {
+        "singleFrontalPortrait": "Use a single frontal portrait",
+        "adjustHorizontalPosition": "Drag the crop box horizontally to adjust",
+        "faceRatioRange": "Face width should cover 26%-42% of the photo",
+        "levelEyes": "Retake the photo or adjust the rotation",
+        "headroomTooSmall": "Leave some space above the head",
+        "faceNotDetected": "No clear face detected",
+        "avoidBlurrySource": "Blurry sources hurt cutout and print quality",
+        "avoidUnderexposedOrBlown": "Avoid severely dark or blown-out photos",
+        "checkHairAndShoulder": "Check hair, ears and shoulder line"
+      }
     }
   },
   "ImageCutout": {

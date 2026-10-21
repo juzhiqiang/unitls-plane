@@ -11,6 +11,12 @@ export type IdPhotoOptionsState = {
   outputType: 'image/jpeg' | 'image/png';
   segmentationMode: 'local' | 'ai';
   crop: { x: number; y: number; scale: number };
+  /** 是否显示构图辅助线；不影响导出。 */
+  guides: boolean;
+  /** 是否自动矫正倾斜；默认开启。 */
+  autoStraighten: boolean;
+  /** 手动微调旋转角度（-10° ~ +10°）。 */
+  rotation: number;
 };
 
 type Props = {
@@ -38,6 +44,9 @@ export function IdPhotoOptions({
   highPrecisionDisabled = false,
   onHighPrecisionChange,
 }: Props) {
+  const rotation = typeof value.rotation === 'number' ? value.rotation : 0;
+  const autoStraighten = value.autoStraighten ?? true;
+
   return (
     <div className="space-y-5 rounded-md border border-border p-4">
       <div className="space-y-2">
@@ -133,6 +142,7 @@ export function IdPhotoOptions({
           <label className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm">
             <input
               type="checkbox"
+              data-testid="id-photo-high-precision-toggle"
               checked={highPrecision}
               disabled={disabled || highPrecisionDisabled}
               onChange={e => onHighPrecisionChange?.(e.target.checked)}
@@ -167,6 +177,74 @@ export function IdPhotoOptions({
           <option value="image/png">PNG</option>
         </select>
       </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-mono text-muted-foreground">
+            {t('rotation')}
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-foreground">
+              {rotation > 0
+                ? `+${rotation.toFixed(1)}°`
+                : `${rotation.toFixed(1)}°`}
+            </span>
+            {rotation !== 0 && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange({ ...value, rotation: 0 })}
+                className="text-xs font-mono text-muted-foreground underline hover:text-foreground"
+              >
+                {t('resetRotation')}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={-10}
+            max={10}
+            step={0.5}
+            value={rotation}
+            disabled={disabled}
+            onChange={e =>
+              onChange({
+                ...value,
+                rotation: parseFloat(e.target.value) || 0,
+              })
+            }
+            className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted"
+          />
+        </div>
+        <label className="flex h-8 items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={autoStraighten}
+            disabled={disabled}
+            onChange={e =>
+              onChange({
+                ...value,
+                autoStraighten: e.target.checked,
+                rotation: e.target.checked ? rotation : 0,
+              })
+            }
+          />
+          <span>{t('autoStraighten')}</span>
+        </label>
+      </div>
+
+      <label className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm">
+        <input
+          type="checkbox"
+          data-testid="id-photo-guides-toggle"
+          checked={value.guides}
+          disabled={disabled}
+          onChange={e => onChange({ ...value, guides: e.target.checked })}
+        />
+        <span>{t('guides')}</span>
+      </label>
     </div>
   );
 }

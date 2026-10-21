@@ -88,6 +88,7 @@ interface FakeContext {
   putImageData: ReturnType<typeof vi.fn>;
   translate: ReturnType<typeof vi.fn>;
   rotate: ReturnType<typeof vi.fn>;
+  scale: ReturnType<typeof vi.fn>;
 }
 
 interface StubPixel {
@@ -165,6 +166,7 @@ function stubOffscreenCanvas(options: StubOptions = {}) {
         putImageData: vi.fn(),
         translate: vi.fn(),
         rotate: vi.fn(),
+        scale: vi.fn(),
       };
       contexts.push(this.ctx);
     }
@@ -872,4 +874,30 @@ describe('compositeIdPhoto brightness', () => {
       112, 112, 112, 255,
     ]);
   });
+
+  it('applies rotation and coverScale when rotation angle is non-zero', async () => {
+    const { contexts } = stubOffscreenCanvas();
+
+    await compositeIdPhoto(
+      fakeCutout(100, 140),
+      '#ffffff',
+      PRESET_W,
+      PRESET_H,
+      'image/png',
+      undefined,
+      5
+    );
+
+    // contexts[0] 是 fgCanvas，contexts[1] 是原图取样(如有)或输出 out
+    // out 画布在有 rotation 时会调用 rotate 与 scale
+    const outCtx = contexts.find(c => c.rotate.mock.calls.length > 0);
+    expect(outCtx).toBeDefined();
+    expect(outCtx!.rotate).toHaveBeenCalledWith((-5 * Math.PI) / 180);
+    expect(outCtx!.scale).toHaveBeenCalledTimes(1);
+    const [scaleX, scaleY] = outCtx!.scale.mock.calls[0] as [number, number];
+    expect(scaleX).toBeGreaterThan(1);
+    expect(scaleY).toBeGreaterThan(1);
+    expect(scaleX).toBe(scaleY);
+  });
 });
+

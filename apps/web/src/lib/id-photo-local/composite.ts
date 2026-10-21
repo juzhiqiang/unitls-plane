@@ -238,9 +238,16 @@ export async function compositeIdPhoto(
   octx.fillRect(0, 0, presetW, presetH);
 
   if (angle) {
+    const rad = (Math.abs(angle) * Math.PI) / 180;
+    // 覆盖旋转后四角所需的外接放大系数（与服务端 sharp 的 fit: 'cover' 对齐），
+    // 避免成片四角（尤其是底边的衣服与肩线）因旋转被拉进画布露出底色三角缺口。
+    const coverScale =
+      Math.cos(rad) +
+      Math.sin(rad) * Math.max(presetW / presetH, presetH / presetW);
     octx.translate(presetW / 2, presetH / 2);
     // 与 sharp.rotate(-rotation) 对齐：canvas 正角为顺时针。
     octx.rotate((-angle * Math.PI) / 180);
+    octx.scale(coverScale, coverScale);
     octx.translate(-presetW / 2, -presetH / 2);
   }
 
@@ -262,8 +269,13 @@ export async function compositeIdPhoto(
     const fgctx = foreground.getContext('2d');
     if (!fgctx) throw new Error('2D canvas context unavailable');
     if (angle) {
+      const rad = (Math.abs(angle) * Math.PI) / 180;
+      const coverScale =
+        Math.cos(rad) +
+        Math.sin(rad) * Math.max(presetW / presetH, presetH / presetW);
       fgctx.translate(presetW / 2, presetH / 2);
       fgctx.rotate((-angle * Math.PI) / 180);
+      fgctx.scale(coverScale, coverScale);
       fgctx.translate(-presetW / 2, -presetH / 2);
     }
     fgctx.drawImage(fgCanvas, 0, 0, presetW, presetH);

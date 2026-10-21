@@ -1,3 +1,6 @@
+// 必须是第一个 import:加载仓库根目录 .env.local(详见 env-loader 注释)。
+import '../env-loader';
+
 import { Logger } from '@nestjs/common';
 import {
   S3Client,
@@ -6,8 +9,9 @@ import {
   PutBucketPolicyCommand,
   PutObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 const logger = new Logger('SyncIdPhotoModels');
@@ -30,7 +34,7 @@ const logger = new Logger('SyncIdPhotoModels');
  * 环境变量(与 MinioService 同约定):
  *   S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / S3_REGION / S3_FORCE_PATH_STYLE
  *   S3_MODELS_BUCKET(默认 models)
- *   ID_PHOTO_MODELS_DIR(默认 /app/models/id-photo,镜像内资产目录)
+ *   ID_PHOTO_MODELS_DIR(默认探测 /app/models/id-photo 或 docker/models,镜像内/本地资产目录)
  */
 const ASSET_PREFIXES = ['rmbg/', 'ort/', 'modnet/', 'face/'];
 const CACHE_CONTROL = 'public, max-age=31536000, immutable';
@@ -58,16 +62,48 @@ async function walk(dir: string, base: string): Promise<string[]> {
   return out;
 }
 
+/**
+ * 资产目录。显式配了就用配的；否则按候选顺序探测，
+ * 让「仓库根跑」「apps/api 下跑」「容器内跑」三种情形都能命中。
+ */
+async function resolveModelsDir(): Promise<string | null> {
+  const configured = process.env.ID_PHOTO_MODELS_DIR;
+  const candidates = configured
+    ? [configured]
+    : [
+        '/app/models/id-photo',
+        path.resolve(process.cwd(), 'docker/models'),
+        path.resolve(process.cwd(), '../../docker/models'),
+        path.resolve(__dirname, '../../../../docker/models'),
+        path.resolve(__dirname, '../../../docker/models'),
+      ];
+
+  for (const candidate of candidates) {
+    try {
+      const info = await stat(candidate);
+      if (info.isDirectory()) return candidate;
+    } catch {
+      // 继续试下一个候选
+    }
+  }
+  return null;
+}
+
 async function main(): Promise<number> {
   const endpoint = process.env.S3_ENDPOINT;
   const accessKey = process.env.S3_ACCESS_KEY;
   const secretKey = process.env.S3_SECRET_KEY;
   const region = process.env.S3_REGION ?? 'us-east-1';
   const bucket = process.env.S3_MODELS_BUCKET ?? 'models';
-  const modelsDir = process.env.ID_PHOTO_MODELS_DIR ?? '/app/models/id-photo';
+  const modelsDir = await resolveModelsDir();
 
   if (!endpoint) {
     logger.warn('S3_ENDPOINT not set, skipping model sync');
+    return 0;
+  }
+
+  if (!modelsDir) {
+    logger.warn('Models directory not found, skipping model sync');
     return 0;
   }
 
@@ -168,6 +204,24 @@ async function main(): Promise<number> {
     // 4. 逐文件上传(S3 key 即相对路径,与前端 remoteHost/wasmPaths 对齐)
     for (const rel of files) {
       const localPath = path.join(modelsDir, ...rel.split('/'));
+      const fileStat = await stat(localPath);
+
+      // 如果 S3 上已存在且大小一致，跳过上传以提升同步速度
+      try {
+        const head = await client.send(
+          new HeadObjectCommand({
+            Bucket: bucket,
+            Key: rel,
+          })
+        );
+        if (head.ContentLength === fileStat.size) {
+          logger.log(`Skipped ${rel} (already up-to-date)`);
+          continue;
+        }
+      } catch {
+        // 对象不存在或获取元数据失败，执行上传
+      }
+
       const body = await readFile(localPath);
       const name = rel.split('/').pop() ?? '';
       await client.send(

@@ -29,7 +29,10 @@ type OrtTensor = unknown;
 type OrtLike = {
   env: { wasm: { wasmPaths: string } };
   InferenceSession: {
-    create: (url: string) => Promise<{
+    create: (
+      url: string,
+      options?: { executionProviders?: string[] }
+    ) => Promise<{
       inputNames: string[];
       outputNames: string[];
       run: (
@@ -68,9 +71,13 @@ async function getOrt(): Promise<OrtLike> {
 async function getSession(): Promise<CachedSession> {
   if (!sessionPromise) {
     // 先把 promise 赋给模块缓存再 await:并发调用共享同一次加载。
+    // YuNet 仅 232KB,必须指定 wasm 执行提供者(CPU wasm),避免在前序
+    // MODNet 开启 WebGPU 时错误继承 WebGPU EP 导致 Shader 编译或多输出失败。
     sessionPromise = (async () => {
       const ort = await getOrt();
-      return ort.InferenceSession.create(yunetModelUrl());
+      return ort.InferenceSession.create(yunetModelUrl(), {
+        executionProviders: ['wasm'],
+      });
     })().catch(err => {
       // 加载失败不能缓存 rejected promise,否则下一次调用永远拿不到重试机会。
       sessionPromise = null;

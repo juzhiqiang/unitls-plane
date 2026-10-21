@@ -184,7 +184,8 @@ describe('detectFaces (本地 YuNet)', () => {
     await detectFaces(makeFile());
 
     expect(createMock).toHaveBeenCalledWith(
-      'http://localhost:9000/models/face/yunet/face_detection_yunet_2023mar.onnx'
+      'http://localhost:9000/models/face/yunet/face_detection_yunet_2023mar.onnx',
+      { executionProviders: ['wasm'] }
     );
     expect(envStub.wasm.wasmPaths).toBe(
       `http://localhost:9000/models/ort/${ORT_VERSION}/`

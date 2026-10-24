@@ -25,16 +25,21 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const { error: authError } = await signIn.email({
-      email,
-      password,
-    });
+    try {
+      const { error: authError } = await signIn.email({
+        email,
+        password,
+      });
 
-    setLoading(false);
-
-    if (authError) {
-      setError(t(getAuthErrorKey(authError)));
+      if (authError) {
+        setError(t(getAuthErrorKey(authError)));
+        return;
+      }
+    } catch {
+      setError(t('errors.generic'));
       return;
+    } finally {
+      setLoading(false);
     }
 
     const target = next && next.startsWith('/') ? next : '/dashboard';

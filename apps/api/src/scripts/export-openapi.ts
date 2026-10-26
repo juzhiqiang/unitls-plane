@@ -2,28 +2,27 @@
 import '../env-loader';
 
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from '../app.module';
+import { SwaggerModule } from '@nestjs/swagger';
+import { ApiAppModule } from '../api-app.module';
+import { buildSwaggerConfig } from '../config/swagger';
 
 async function exportOpenAPI() {
-  const app = await NestFactory.create(AppModule, { logger: false });
+  const app = await NestFactory.create(ApiAppModule, { logger: false });
 
-  const config = new DocumentBuilder()
-    .setTitle('Utils-Plane API')
-    .setDescription('工具平台 API 文档')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
+  try {
+    const document = SwaggerModule.createDocument(app, buildSwaggerConfig());
 
-  const document = SwaggerModule.createDocument(app, config);
+    const fs = await import('node:fs');
+    fs.writeFileSync('./openapi.json', JSON.stringify(document, null, 2));
 
-  const fs = await import('fs');
-  fs.writeFileSync('./openapi.json', JSON.stringify(document, null, 2));
-
-  console.log('OpenAPI spec exported to openapi.json');
-
-  await app.close();
+    console.log('OpenAPI spec exported to openapi.json');
+  } finally {
+    await app.close();
+  }
   process.exit(0);
 }
 
-exportOpenAPI();
+exportOpenAPI().catch(error => {
+  console.error('[openapi] 导出失败', error);
+  process.exit(1);
+});

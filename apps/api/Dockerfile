@@ -34,6 +34,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV PROCESS_ROLE=api
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -64,4 +65,4 @@ RUN node -e "const fs=require('node:fs'); const patch=(path, fields)=>{const dat
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "node apps/api/dist/scripts/migrate.js && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "node apps/api/dist/scripts/migrate.js && exec node apps/api/dist/main.js"]

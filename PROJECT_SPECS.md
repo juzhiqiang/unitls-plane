@@ -43,9 +43,36 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
   可指定目录，留空时使用系统临时目录下的
   `utils-plane-uploads`。`UPLOAD_MAX_CONCURRENT`（默认 2，1–32）在 Multer 写入临时文件前限制每进程并发，超限返回 503；`PERFORMANCE_MEMORY_LOG=true`
   可记录上传完成时的内存指标。四类 Worker 并发通过 `.env.example` 中 `*_WORKER_CONCURRENCY`
-  配置，默认值保持不变。这些限制不是集群级字节配额。API 启动时创建临时目录并回收超过 24 小时的孤儿文件；请求完成、失败或中断后都会尝试删除对应文件。
+  配置，默认值保持不变，且按每个 Worker 进程计算：Image 2、PDF 2、Font 2、AI
+  8。这些限制不是集群级字节配额。API 启动时创建临时目录并回收超过 24 小时的孤儿文件；请求完成、失败或中断后都会尝试删除对应文件。
 - 拼图在 Worker 内使用 64
   MiB 有界解码缓存，超预算输入逐张处理；结果 PDF 缩略图按滚动窗口挂载最多 15–30 项，离窗释放画布。源文件、输出画布和 PDF.js 内部缓存仍有额外内存成本。
+
+### API 与任务进程拆分（2026-10-26）
+
+- `PROCESS_ROLE` 支持 `all`、`api`、`worker`，未设置时默认为 `all`，非法值启动失败。`all`
+  保持旧部署的单进程行为；`api` 只提供 HTTP；`worker` 只创建 Nest 应用上下文并消费任务，不监听端口。
+- API-only 根模块不注册 5 个任务 Processor 和
+  `CleanupScheduler`；Worker 根模块不注册 Controller、Swagger、BullBoard、全局 HTTP
+  Guard、Throttler 或 HealthController。
+- `openapi:export` 使用 API-only 根模块，不依赖运行时 Swagger 开关，也不会启动 Worker。
+  `SWAGGER_ENABLED` 只接受 `true`/`false`；未设置时 production 关闭 `/docs`，其它环境开启。
+- 生产 Compose 由同镜像的 `api` 与 `worker` 两个服务组成：API 执行 migration、模型同步和 preset
+  seed，并通过 `/health/ready` 后才启动 Worker；Worker 不映射端口，也不使用 HTTP healthcheck。
+- Compose 通过 `WORKER_API_READY_URL`
+  启用 Worker 的 API 依赖检查：启动时确认就绪，此后每 5 秒检查一次（请求超时 3 秒）。API 不可用时发送 SIGTERM，沿用 Nest/BullMQ 的关闭流程等待在途任务；重启期间 API 未就绪会阻止消费者注册。独立部署和
+  `all` 通常留空。
+- 离线单容器由 `docker/start-all.sh`
+  启动 API、Worker、Web 三个子进程；migration、模型同步和 seed 只执行一次，Worker 同样在 API
+  readiness 通过后启动。任一子进程退出都会清理其余进程并以非零状态结束。
+- API 与 Worker 的 `stop_grace_period` 起始值为 60 秒，应按实际最长任务调整。滚动发布时先切到 `api`
+  角色确认不再消费任务，再启动 Worker，避免短时双重消费。
+- Compose API/Worker 使用 `init: true`；直接 `docker run` 时使用
+  `--init --stop-timeout 60`，由 init 转发信号和回收子进程，避免 Node 作为 Linux PID
+  1 在关闭钩子完成后无法退出。
+- `packages/db` 每个进程连接池 `max: 20`；API +
+  Worker 默认最多约 40 个连接，扩 Worker 副本前必须核对 PostgreSQL
+  `max_connections`。本批未改变任务并发默认值，也没有完成前后性能收益对比。
 
 - `GET /tasks/status?ids=<uuid>,...` 最多接受 100 个去重 UUID，返回轻量状态数组，缺失任务返回
   `not_found`。单任务和批量状态接口分别按用户/IP 限流，每分钟 120 次，保留匿名访问。
@@ -432,7 +459,9 @@ cd packages/api-client && bun run generate
 
 - `auth` - Better-Auth handler 和认证集成。
 - `files` - 上传、下载、缩略图、签名 URL、文件列表、回收站、恢复、永久删除、批量操作。
-- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler、PDF 转 CAD。
+- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler、PDF 转 CAD。任务核心能力在
+  `TasksCoreModule`，HTTP Controller 在 `TasksApiModule`，Processor 和 `CleanupScheduler` 只进入
+  `TasksWorkerModule`。
 - `health` - 健康检查。
 
 全局能力：
@@ -449,7 +478,8 @@ cd packages/api-client && bun run generate
   相同；只支持 png/jpeg/webp/avif/gif，且原图不超过 32 MB。
 - `/admin/queues` 使用 Basic Auth 保护。
 - 生产 Docker compose 默认暴露 Web `5005`、API `5006`、PostgreSQL `5007`、Redis `5008`、MinIO API
-  `5009`、MinIO Console `5010`。
+  `5009`、MinIO Console `5010`；Worker 不暴露端口。生产 `/docs` 默认关闭，需要临时排查时显式设置
+  `SWAGGER_ENABLED=true`。
 
 ## Web 页面与工具
 

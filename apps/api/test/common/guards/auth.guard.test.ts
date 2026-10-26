@@ -237,3 +237,80 @@ it('writes no cookie headers when verifySession returns no set-cookie', async ()
 
   expect(response.setHeader).not.toHaveBeenCalled();
 });
+
+it('allows public requests without credentials before building Headers', async () => {
+  const request: Record<string, unknown> = {};
+  Object.defineProperty(request, 'headers', {
+    get: () => ({}),
+  });
+  const reflector = {
+    getAllAndOverride: vi.fn((key: string) => key === IS_PUBLIC_KEY),
+  };
+  const guard = new AuthGuard(reflector as never);
+
+  await expect(
+    guard.canActivate(createContext(request) as never)
+  ).resolves.toBe(true);
+
+  expect(verifySession).not.toHaveBeenCalled();
+});
+
+it('rejects protected requests without credentials without verifying a session', async () => {
+  const request: Record<string, unknown> = { headers: {} };
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(createContext(request) as never)
+  ).rejects.toBeInstanceOf(UnauthorizedException);
+
+  expect(verifySession).not.toHaveBeenCalled();
+});
+
+it('does not treat an unrelated cookie as an authenticated session', async () => {
+  const request: Record<string, unknown> = {
+    headers: { cookie: 'theme=dark; locale=zh' },
+  };
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(createContext(request) as never)
+  ).rejects.toBeInstanceOf(UnauthorizedException);
+
+  expect(verifySession).not.toHaveBeenCalled();
+});
+
+it('verifies a sharded Better-Auth session cookie', async () => {
+  const request: Record<string, unknown> = {
+    headers: {
+      cookie: 'theme=dark; better-auth.session_token.0=active-session',
+    },
+  };
+  const session = {
+    user: { id: 'user-1', email: 'owner@example.com' },
+    session: { id: 'session-1', userId: 'user-1' },
+  };
+  verifySession.mockResolvedValue({ session, headers: undefined });
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(createContext(request) as never)
+  ).resolves.toBe(true);
+
+  expect(verifySession).toHaveBeenCalledTimes(1);
+  expect(request.user).toBe(session.user);
+  expect(request.session).toBe(session.session);
+});
+
+it('verifies requests that carry an Authorization header', async () => {
+  const request: Record<string, unknown> = {
+    headers: { authorization: 'Bearer token' },
+  };
+  verifySession.mockResolvedValue({ session: null, headers: undefined });
+  const guard = new AuthGuard(new Reflector());
+
+  await expect(
+    guard.canActivate(createContext(request) as never)
+  ).rejects.toBeInstanceOf(UnauthorizedException);
+
+  expect(verifySession).toHaveBeenCalledTimes(1);
+});

@@ -419,7 +419,7 @@ docker load -i utils-plane-offline-all.tar
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
-生产 compose 默认使用以下对外端口：
+生产 compose 由 `api` 与 `worker` 两个同镜像服务组成，默认使用以下对外端口：
 
 - Web：`http://202.104.149.204:5005`
 - API：`http://202.104.149.204:5006`
@@ -427,19 +427,29 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 - Redis：`202.104.149.204:5008`
 - MinIO API：`http://202.104.149.204:5009`
 - MinIO Console：`http://202.104.149.204:5010`
+- Worker：无对外端口，不使用 HTTP healthcheck
+
+API 会先完成 migration、模型同步和 preset seed，readiness 通过后才启动 Worker。生产环境 `/docs`
+默认关闭，临时排查时可设置 `SWAGGER_ENABLED=true`。Compose Worker 还会通过 `WORKER_API_READY_URL`
+每 5 秒检查 API；失联或未就绪时沿用 Nest/BullMQ 的 SIGTERM 关闭流程，等待在途任务结束，恢复后由容器重启策略重新启动。
 
 查看服务状态和日志：
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worker web
 ```
 
 ### 运行 Web + API 组合镜像
 
+组合镜像默认通过 `docker/start-all.sh` 启动 API、Worker、Web 三个子进程。直接运行 API 入口且未设置
+`PROCESS_ROLE` 时仍默认为 `all`，兼容旧单进程部署。
+
 ```bash
 docker run -d \
   --name utils-plane-all \
+  --init \
+  --stop-timeout 60 \
   --restart unless-stopped \
   -p 5005:3000 \
   -p 5006:3001 \
@@ -447,16 +457,38 @@ docker run -d \
   utils-plane:all
 ```
 
-### 运行 API-only 镜像
+### 运行 API-only 镜像并拆分 Worker
+
+API-only 镜像也支持按角色拆成两个容器。先启动 API（镜像启动命令仍负责 migration）：
 
 ```bash
 docker run -d \
   --name utils-plane-api \
+  --init \
+  --stop-timeout 60 \
   --restart unless-stopped \
   -p 5006:3001 \
   --env-file .env.prod \
+  -e PROCESS_ROLE=api \
   utils-plane-api:latest
 ```
+
+等待 `http://127.0.0.1:5006/health/ready` 返回 200 后，再启动无端口的 Worker：
+
+```bash
+docker run -d \
+  --name utils-plane-worker \
+  --init \
+  --stop-timeout 60 \
+  --restart unless-stopped \
+  --env-file .env.prod \
+  -e PROCESS_ROLE=worker \
+  utils-plane-api:latest \
+  node apps/api/dist/main.js
+```
+
+Worker 不执行 migration/seed，也不提供 HTTP 服务。需要回滚到单进程时，给 API 容器改用
+`PROCESS_ROLE=all`，并停止 Worker 容器。
 
 ### 常用服务器命令
 
@@ -464,8 +496,9 @@ docker run -d \
 docker ps
 docker logs -f utils-plane-all
 docker logs -f utils-plane-api
+docker logs -f utils-plane-worker
 docker stop utils-plane-all
-docker stop utils-plane-api
+docker stop utils-plane-api utils-plane-worker
 ```
 
 API 仍然需要能访问 PostgreSQL、Redis 和 MinIO。请在 `.env.prod` 中配置
@@ -516,14 +549,16 @@ Next.js Web
   └─ @utils-plane/api-client
            |
            v
-NestJS API
+NestJS API (PROCESS_ROLE=api)
   ├─ AuthModule  -> Better-Auth
   ├─ FilesModule -> MinIO + PostgreSQL
-  ├─ TasksModule -> BullMQ processors / PDF 文档转换
+  ├─ TasksApiModule -> 任务创建/查询
   └─ HealthModule
            |
-           v
-PostgreSQL + Redis + MinIO
+           +----------------------+
+           v                      v
+BullMQ Worker (PROCESS_ROLE=worker)  PostgreSQL + Redis + MinIO
+  └─ TasksWorkerModule -> processors / PDF 文档转换
 ```
 
 ## 处理策略

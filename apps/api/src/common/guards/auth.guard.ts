@@ -10,6 +10,7 @@ import {
   IS_PUBLIC_KEY,
   SKIP_SESSION_KEY,
 } from '../decorators/public.decorator';
+import { hasSessionCredentials } from '../auth/session-credentials';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -28,6 +29,13 @@ export class AuthGuard implements CanActivate {
     ]);
 
     const request = context.switchToHttp().getRequest();
+
+    // 无 Authorization、无 Better-Auth 会话 cookie 的请求不可能建立会话。
+    // 这里直接完成公开路由放行或受保护路由拒绝，避免无意义的会话查询。
+    if (!hasSessionCredentials(request.headers)) {
+      if (isPublic) return true;
+      throw new UnauthorizedException('Not authenticated');
+    }
 
     // Convert express headers to Headers object
     const headers = new Headers();

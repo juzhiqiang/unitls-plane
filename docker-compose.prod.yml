@@ -1,6 +1,60 @@
 # 生产环境 Docker Compose
 # 使用方式: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
+# API 与 Worker 共用运行配置，避免数据库、Redis、MinIO、认证和 AI 配置漂移。
+x-api-environment: &api-environment
+  DATABASE_URL: postgresql://utils:utils@postgres:5432/utils_plane
+  REDIS_URL: redis://redis:6379
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: us-east-1
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+  S3_BUCKET: uploads
+  S3_FORCE_PATH_STYLE: 'true'
+  S3_MODELS_BUCKET: ${S3_MODELS_BUCKET:-models}
+  S3_PRESETS_BUCKET: ${S3_PRESETS_BUCKET:-presets}
+  IMAGE_GENERATE_PRESETS_DIR: /app/public/presets
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+  EMAIL_VERIFICATION_CALLBACK_URL: ${EMAIL_VERIFICATION_CALLBACK_URL:-}
+  SMTP_HOST: ${SMTP_HOST}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER}
+  SMTP_PASSWORD: ${SMTP_PASSWORD}
+  SMTP_FROM: ${SMTP_FROM}
+  CORS_ORIGIN: ${CORS_ORIGIN:-http://202.104.149.204:5005}
+  NODE_ENV: production
+  PORT: 3001
+  RELEASE: ${RELEASE:-prod}
+  BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+  BUILD_TIME: ${BUILD_TIME:-}
+  # 证件照 AI 精修（可选）。默认值必须与 portrait-segmentation.service.ts 的
+  # 代码默认一致：这里透传空串会覆盖掉 `?? 默认值`。
+  ID_PHOTO_AI_SEGMENTATION_BASE_URL: ${ID_PHOTO_AI_SEGMENTATION_BASE_URL:-}
+  ID_PHOTO_AI_SEGMENTATION_API_KEY: ${ID_PHOTO_AI_SEGMENTATION_API_KEY:-}
+  ID_PHOTO_AI_SEGMENTATION_MODEL: ${ID_PHOTO_AI_SEGMENTATION_MODEL:-gpt-4o-mini}
+  ID_PHOTO_AI_SEGMENTATION_PROVIDER: ${ID_PHOTO_AI_SEGMENTATION_PROVIDER:-chat_mask}
+  ID_PHOTO_AI_IMAGE_SIZE: ${ID_PHOTO_AI_IMAGE_SIZE:-1024x1024}
+  ID_PHOTO_AI_IMAGE_QUALITY: ${ID_PHOTO_AI_IMAGE_QUALITY:-high}
+  ID_PHOTO_AI_IMAGE_BACKGROUND: ${ID_PHOTO_AI_IMAGE_BACKGROUND:-opaque}
+  ID_PHOTO_AI_RESPONSE_FORMAT: ${ID_PHOTO_AI_RESPONSE_FORMAT:-url}
+  # AI 生图（可选）。AI_IMAGE_PROVIDERS 与 AI_IMAGE_BASE_URL 都没配时，
+  # 生图任务以 AI_IMAGE_NOT_CONFIGURED 失败，页面提示未配置。
+  #
+  # AI_IMAGE_PROVIDERS 是多来源 JSON 数组（第一项为默认来源，每来源 models[]
+  # 声明模型），配了它就忽略下面的单来源变量；页面的「模型」选择器只在
+  # 模型数 >= 2 时出现，所以不透传这一项时线上只会看到单模型、选择器不显示。
+  # 值里有 apiKey，放 .env.prod 并用单引号包住整段 JSON。
+  AI_IMAGE_PROVIDERS: ${AI_IMAGE_PROVIDERS:-}
+  AI_IMAGE_BASE_URL: ${AI_IMAGE_BASE_URL:-}
+  AI_IMAGE_API_KEY: ${AI_IMAGE_API_KEY:-}
+  AI_IMAGE_MODEL: ${AI_IMAGE_MODEL:-gpt-image-1}
+  AI_IMAGE_RESPONSE_FORMAT: ${AI_IMAGE_RESPONSE_FORMAT:-b64_json}
+  AI_IMAGE_LABEL: ${AI_IMAGE_LABEL:-}
+  AI_IMAGE_REQUEST_TIMEOUT_MS: ${AI_IMAGE_REQUEST_TIMEOUT_MS:-}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -74,11 +128,12 @@ services:
 
   api:
     image: utils-plane:all
+    init: true
     command:
       [
         'sh',
         '-c',
-        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/scripts/sync-id-photo-models.js && node apps/api/dist/scripts/seed-image-generate-presets.js && node apps/api/dist/main.js',
+        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/scripts/sync-id-photo-models.js && node apps/api/dist/scripts/seed-image-generate-presets.js && exec node apps/api/dist/main.js',
       ]
     ports:
       - '5006:3001'
@@ -90,57 +145,47 @@ services:
       minio:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://utils:utils@postgres:5432/utils_plane
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_REGION: us-east-1
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
-      S3_BUCKET: uploads
-      S3_FORCE_PATH_STYLE: 'true'
-      S3_MODELS_BUCKET: ${S3_MODELS_BUCKET:-models}
-      S3_PRESETS_BUCKET: ${S3_PRESETS_BUCKET:-presets}
-      IMAGE_GENERATE_PRESETS_DIR: /app/public/presets
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
-      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
-      EMAIL_VERIFICATION_CALLBACK_URL: ${EMAIL_VERIFICATION_CALLBACK_URL:-}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_FROM: ${SMTP_FROM}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://202.104.149.204:5005}
-      NODE_ENV: production
-      PORT: 3001
-      RELEASE: ${RELEASE:-prod}
-      BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
-      BUILD_TIME: ${BUILD_TIME:-}
-      # 证件照 AI 精修（可选）。默认值必须与 portrait-segmentation.service.ts 的
-      # 代码默认一致：这里透传空串会覆盖掉 `?? 默认值`。
-      ID_PHOTO_AI_SEGMENTATION_BASE_URL: ${ID_PHOTO_AI_SEGMENTATION_BASE_URL:-}
-      ID_PHOTO_AI_SEGMENTATION_API_KEY: ${ID_PHOTO_AI_SEGMENTATION_API_KEY:-}
-      ID_PHOTO_AI_SEGMENTATION_MODEL: ${ID_PHOTO_AI_SEGMENTATION_MODEL:-gpt-4o-mini}
-      ID_PHOTO_AI_SEGMENTATION_PROVIDER: ${ID_PHOTO_AI_SEGMENTATION_PROVIDER:-chat_mask}
-      ID_PHOTO_AI_IMAGE_SIZE: ${ID_PHOTO_AI_IMAGE_SIZE:-1024x1024}
-      ID_PHOTO_AI_IMAGE_QUALITY: ${ID_PHOTO_AI_IMAGE_QUALITY:-high}
-      ID_PHOTO_AI_IMAGE_BACKGROUND: ${ID_PHOTO_AI_IMAGE_BACKGROUND:-opaque}
-      ID_PHOTO_AI_RESPONSE_FORMAT: ${ID_PHOTO_AI_RESPONSE_FORMAT:-url}
-      # AI 生图（可选）。AI_IMAGE_PROVIDERS 与 AI_IMAGE_BASE_URL 都没配时，
-      # 生图任务以 AI_IMAGE_NOT_CONFIGURED 失败，页面提示未配置。
-      #
-      # AI_IMAGE_PROVIDERS 是多来源 JSON 数组（第一项为默认来源，每来源 models[]
-      # 声明模型），配了它就忽略下面的单来源变量；页面的「模型」选择器只在
-      # 模型数 >= 2 时出现，所以不透传这一项时线上只会看到单模型、选择器不显示。
-      # 值里有 apiKey，放 .env.prod 并用单引号包住整段 JSON。
-      AI_IMAGE_PROVIDERS: ${AI_IMAGE_PROVIDERS:-}
-      AI_IMAGE_BASE_URL: ${AI_IMAGE_BASE_URL:-}
-      AI_IMAGE_API_KEY: ${AI_IMAGE_API_KEY:-}
-      AI_IMAGE_MODEL: ${AI_IMAGE_MODEL:-gpt-image-1}
-      AI_IMAGE_RESPONSE_FORMAT: ${AI_IMAGE_RESPONSE_FORMAT:-b64_json}
-      AI_IMAGE_LABEL: ${AI_IMAGE_LABEL:-}
-      AI_IMAGE_REQUEST_TIMEOUT_MS: ${AI_IMAGE_REQUEST_TIMEOUT_MS:-}
+      <<: *api-environment
+      PROCESS_ROLE: api
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+  worker:
+    image: utils-plane:all
+    init: true
+    command: ['node', 'apps/api/dist/main.js']
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *api-environment
+      PROCESS_ROLE: worker
+      WORKER_API_READY_URL: http://api:3001/health/ready
+      SWAGGER_ENABLED: 'false'
+      IMAGE_WORKER_CONCURRENCY: ${IMAGE_WORKER_CONCURRENCY:-2}
+      PDF_WORKER_CONCURRENCY: ${PDF_WORKER_CONCURRENCY:-2}
+      FONT_WORKER_CONCURRENCY: ${FONT_WORKER_CONCURRENCY:-2}
+      AI_WORKER_CONCURRENCY: ${AI_WORKER_CONCURRENCY:-8}
+    stop_grace_period: 60s
     restart: unless-stopped
 
   web:
@@ -150,7 +195,7 @@ services:
       - '5005:3000'
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://202.104.149.204:5006}
       NEXT_PUBLIC_S3_PUBLIC_URL: ${NEXT_PUBLIC_S3_PUBLIC_URL:-http://202.104.149.204:5009}
@@ -159,6 +204,7 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       NODE_ENV: production
       PORT: 3000
+    stop_grace_period: 60s
     restart: unless-stopped
 
 volumes:

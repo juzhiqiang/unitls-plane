@@ -27,7 +27,7 @@ import {
   SERVER_CONVERT_FORMATS,
   type ImageOutputType,
 } from '@/lib/processing/image-convert-client';
-import { shouldProcessLocally } from '@/lib/processing/image-client';
+import { shouldProcessLocally } from '@/lib/processing/image-processing-policy';
 import { runImageTask } from '@/lib/processing/run-image-task';
 import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';

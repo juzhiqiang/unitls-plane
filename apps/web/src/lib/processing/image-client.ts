@@ -1,4 +1,3 @@
-import imageCompression from 'browser-image-compression';
 import {
   transformImage,
   type ImageTransformOptions,
@@ -8,6 +7,11 @@ import {
   type EncodableImageType,
 } from './image-encoding-support';
 import { withDecodedImage } from './image-bitmap';
+
+export {
+  LOCAL_PROCESSING_MAX_BYTES,
+  shouldProcessLocally,
+} from './image-processing-policy';
 
 export interface CompressOptions {
   /**
@@ -57,6 +61,8 @@ export async function compressImage(
     options.maxWidth || options.maxHeight
       ? Math.max(options.maxWidth ?? 0, options.maxHeight ?? 0)
       : undefined;
+  const { default: imageCompression } =
+    await import('browser-image-compression');
 
   return imageCompression(preparedFile, {
     ...(options.maxSizeMB !== undefined && { maxSizeMB: options.maxSizeMB }),
@@ -67,10 +73,6 @@ export async function compressImage(
     useWebWorker: true,
     onProgress: options.onProgress,
   });
-}
-
-export function shouldProcessLocally(file: File): boolean {
-  return file.size < 5 * 1024 * 1024;
 }
 
 export interface ImageMeta {

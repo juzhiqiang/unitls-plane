@@ -26,10 +26,8 @@ import {
   DEFAULT_IMAGE_TRANSFORM,
   ImageTransformOptions,
 } from '@/components/tools/image-transform-options';
-import {
-  compressImage,
-  shouldProcessLocally,
-} from '@/lib/processing/image-client';
+import { compressImage } from '@/lib/processing/image-client';
+import { shouldProcessLocally } from '@/lib/processing/image-processing-policy';
 import { runImageTask } from '@/lib/processing/run-image-task';
 import { toServerTransformConfig } from '@/lib/processing/image-transform-client';
 import { getToolByHref } from '@/lib/tools/tool-metadata';

@@ -3,6 +3,8 @@
 > 返回
 > [三人并行总控](./README.md)。本批负责 API 运行时、任务 Worker 进程、Swagger 开关和公开接口认证快路径。分支：`codex/perf-api-worker`，预估 4–6 天。
 
+> 执行进度与验收边界见 [执行记录](./03-api-worker-validation.md)。实现已提交，性能与最长任务验收仍待完成。
+
 ## 一、目标与边界
 
 | 目标                  | 当前事实                                               | 本批结果                                           |

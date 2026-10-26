@@ -34,7 +34,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3001
-ENV PROCESS_ROLE=api
+ENV PROCESS_ROLE=all
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

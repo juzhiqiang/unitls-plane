@@ -53,7 +53,8 @@ describe('Dockerfile runtime assets', () => {
     expect(apiDockerfile).toContain(
       'CMD ["sh", "-c", "node apps/api/dist/scripts/migrate.js && exec node apps/api/dist/main.js"]'
     );
-    expect(apiDockerfile).toContain('ENV PROCESS_ROLE=api');
+    // 旧部署未显式配置角色时，API 镜像仍需同时处理 HTTP 和队列任务。
+    expect(apiDockerfile).toContain('ENV PROCESS_ROLE=all');
     expect(combinedEntrypoint).toContain(
       'node apps/api/dist/scripts/migrate.js'
     );

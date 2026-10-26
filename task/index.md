@@ -2,8 +2,8 @@
 
 > Monorepo + React 19 + NestJS + Bun + 全本地化
 
-> **🎨 UI 设计风格**：**未来感 · 暗黑 · 极简 · 拒绝 AI 通货审美 · 日夜切换**。
-> 所有 UI 任务必须遵循 [`design-system.md`](./design-system.md) 并调用 **`frontend-design`** skill 完成视觉方案。
+> **🎨 UI 设计风格**：**未来感 · 暗黑 · 极简 · 拒绝 AI 通货审美 · 日夜切换**。所有 UI 任务必须遵循
+> [`design-system.md`](./design-system.md) 并调用 **`frontend-design`** skill 完成视觉方案。
 
 ---
 
@@ -387,6 +387,7 @@ docker compose down -v         # 停止并清除数据
 
 - [ ] Sentry 错误追踪
 - [ ] 性能优化（懒加载、代码分割）
+- [ ] [性能优化并行实施计划](./performance-optimization/README.md)
 - [ ] 生产 Docker Compose（含反向代理）
 
 ### Phase 8: PDF 模块全面扩展 (3-4天)

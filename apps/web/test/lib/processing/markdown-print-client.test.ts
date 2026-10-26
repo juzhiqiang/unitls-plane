@@ -5,6 +5,22 @@ import {
 } from '@/lib/processing/markdown-print-client';
 
 describe('markdown print client', () => {
+  it('does not print the lazy renderer placeholder before Markdown is ready', () => {
+    const source = document.createElement('div');
+    source.innerHTML =
+      '<div class="markdown-body"><div data-markdown-loading aria-hidden="true"></div></div>';
+    const createPrintFrame = vi.fn(() => document.createElement('iframe'));
+
+    expect(
+      printMarkdownPreviewPdf({
+        title: 'loading.pdf',
+        sourceElement: source,
+        createPrintFrame,
+      })
+    ).toBe(false);
+    expect(createPrintFrame).not.toHaveBeenCalled();
+  });
+
   it('builds a printable PDF document from rendered markdown HTML', () => {
     const html = buildMarkdownPrintHtml({
       title: 'Report <Draft>',

@@ -36,6 +36,28 @@ export function excludeLargeStaticJsChunk(entry) {
   );
 }
 
+export function excludeOnnxPrecache(entry) {
+  const asset = entry?.asset ?? entry;
+  const name =
+    typeof asset?.url === 'string'
+      ? asset.url
+      : typeof asset?.name === 'string'
+        ? asset.name
+        : '';
+  const normalizedName = name.replaceAll('\\', '/');
+
+  return /(?:^|\/)onnx\//i.test(normalizedName);
+}
+
+export function excludePwaPrecache(entry) {
+  // workbox-webpack-plugin treats each function condition as terminal: the first
+  // function that returns false prevents later function conditions from running.
+  // Keep a single entry point so ONNX and oversized-chunk rules both stay active.
+  return excludeOnnxPrecache(entry) || excludeLargeStaticJsChunk(entry);
+}
+
+export const pwaPublicExcludes = ['!noprecache/**/*', '!onnx/**/*'];
+
 function getWebpackAssetSize(asset) {
   if (typeof asset?.size === 'number') return asset.size;
   if (typeof asset?.source?.size !== 'function') return 0;
@@ -59,7 +81,7 @@ export const staticChunkRuntimeCaching = {
 };
 
 export const pwaWorkboxOptions = {
-  exclude: [excludeLargeStaticJsChunk],
+  exclude: [excludePwaPrecache],
   runtimeCaching: [staticChunkRuntimeCaching],
 };
 
@@ -86,6 +108,7 @@ const withPwa = withPWA({
   disable:
     process.env.NODE_ENV === 'development' ||
     process.env.DISABLE_PWA === 'true',
+  publicExcludes: pwaPublicExcludes,
   fallbacks: {
     document: '/_offline',
   },
@@ -128,6 +151,15 @@ export default {
     // 故按 server/client 取用不同层级的配置,只把 PWA 挡在 server 之外。
     const source = options.isServer ? intlConfig : pwaConfig;
     const resolvedConfig = source.webpack?.(config, options) ?? config;
+
+    // 缩短客户端异步 chunk 的 content hash，避免 App Router 运行时因新增按需
+    // chunk 记录把共享 First Load JS 推高到预算之外。
+    if (!options.isServer) {
+      resolvedConfig.output = {
+        ...resolvedConfig.output,
+        chunkFilename: 'static/chunks/[name].[contenthash:12].js',
+      };
+    }
 
     // @huggingface/transformers 只在浏览器用(useLocalIdPhoto 里的 `await import(...)`,
     // SSR 期间不会执行)。server bundle 里 stub 成空模块:它会把 onnxruntime-node 拖进

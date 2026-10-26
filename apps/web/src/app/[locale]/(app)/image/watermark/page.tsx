@@ -17,7 +17,7 @@ import {
 } from '@/components/tools/image-transform-options';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
-import { shouldProcessLocally } from '@/lib/processing/image-client';
+import { shouldProcessLocally } from '@/lib/processing/image-processing-policy';
 import { runImageTask } from '@/lib/processing/run-image-task';
 import {
   toServerTransformConfig,

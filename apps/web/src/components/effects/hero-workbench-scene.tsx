@@ -27,12 +27,14 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
     if (!mount) return;
 
     const matchesMedia = (query: string) =>
-      typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(query).matches;
     const smallViewport = matchesMedia('(max-width: 767px)');
     if (smallViewport) return;
 
     let disposed = false;
     let animationFrame = 0;
+    let intersectionObserver: IntersectionObserver | null = null;
     let renderer: import('three').WebGLRenderer | null = null;
     const disposables: Disposable[] = [];
 
@@ -92,9 +94,9 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
 
         const resizeScene = (width: number, height: number) => {
           if (!renderer) return;
-        camera.aspect = width / Math.max(height, 1);
-        camera.updateProjectionMatrix();
-        renderer.setSize(width, height);
+          camera.aspect = width / Math.max(height, 1);
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height);
         };
         const handleWindowResize = () => {
           const rect = mount.getBoundingClientRect();
@@ -123,27 +125,46 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
         });
 
         const clock = createHeroWorkbenchClock();
-        const scheduleNextFrame = () => {
-          if (!reducedMotion && !animationFrame) {
+        let isInViewport = typeof IntersectionObserver === 'undefined';
+
+        const isActive = () =>
+          isInViewport && document.visibilityState === 'visible';
+
+        const stopFrames = () => {
+          if (animationFrame) {
+            cancelAnimationFrame(animationFrame);
+            animationFrame = 0;
+          }
+          clock.reset(performance.now());
+        };
+
+        function scheduleNextFrame() {
+          if (!reducedMotion && !animationFrame && isActive()) {
             animationFrame = requestAnimationFrame(render);
           }
-        };
-        const handleVisibilityChange = () => {
-          clock.reset(performance.now());
+        }
+
+        function handleVisibilityChange() {
           if (document.visibilityState === 'visible') {
-            scheduleNextFrame();
+            clock.reset(performance.now());
+            if (reducedMotion) {
+              render();
+            } else {
+              scheduleNextFrame();
+            }
+          } else {
+            stopFrames();
           }
-        };
-        const render = () => {
+        }
+
+        function render() {
           animationFrame = 0;
-          const now = performance.now();
-          if (document.visibilityState !== 'visible') {
-            clock.reset(now);
-            scheduleNextFrame();
+          if (!isActive()) {
+            clock.reset(performance.now());
             return;
           }
 
-          const elapsed = clock.tick(now);
+          const elapsed = clock.tick(performance.now());
           const pointer = pointerRef.current;
 
           rig.rotation.y +=
@@ -179,11 +200,45 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
 
           renderer?.render(scene, camera);
           scheduleNextFrame();
-        };
+        }
+
+        if (typeof IntersectionObserver !== 'undefined') {
+          intersectionObserver = new IntersectionObserver(
+            entries => {
+              const entry = entries[0];
+              if (!entry) return;
+
+              const nextInViewport = entry.isIntersecting;
+              if (nextInViewport === isInViewport) {
+                scheduleNextFrame();
+                return;
+              }
+
+              isInViewport = nextInViewport;
+              if (isInViewport) {
+                clock.reset(performance.now());
+                if (reducedMotion) {
+                  render();
+                } else {
+                  scheduleNextFrame();
+                }
+              } else {
+                stopFrames();
+              }
+            },
+            // Three.js 已在 start() 中预加载；动画只在真实视口内运行。
+            { rootMargin: '0px' }
+          );
+          intersectionObserver.observe(mount);
+        }
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
         render();
 
         return () => {
+          stopFrames();
+          intersectionObserver?.disconnect();
+          intersectionObserver = null;
           resizeObserver?.disconnect();
           window.removeEventListener('resize', handleWindowResize);
           mount.removeEventListener('pointermove', handlePointerMove);
@@ -191,14 +246,30 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
             'visibilitychange',
             handleVisibilityChange
           );
+          if (renderer?.domElement.parentElement) {
+            renderer.domElement.parentElement.removeChild(renderer.domElement);
+          }
+          renderer?.dispose();
+          renderer = null;
+          disposables.forEach(item => item.dispose());
+          disposables.length = 0;
+          setIsReady(false);
         };
       } catch (error) {
         void error;
+        if (animationFrame) {
+          cancelAnimationFrame(animationFrame);
+          animationFrame = 0;
+        }
+        intersectionObserver?.disconnect();
+        intersectionObserver = null;
         if (renderer?.domElement.parentElement) {
           renderer.domElement.parentElement.removeChild(renderer.domElement);
         }
         renderer?.dispose();
+        renderer = null;
         disposables.forEach(item => item.dispose());
+        disposables.length = 0;
         setIsReady(false);
         return undefined;
       }
@@ -206,19 +277,17 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
 
     let stopScene: (() => void) | undefined;
     start().then(cleanup => {
+      if (!cleanup) return;
+      if (disposed) {
+        cleanup();
+        return;
+      }
       stopScene = cleanup;
     });
 
     return () => {
       disposed = true;
-      if (animationFrame) cancelAnimationFrame(animationFrame);
       stopScene?.();
-      if (renderer?.domElement.parentElement) {
-        renderer.domElement.parentElement.removeChild(renderer.domElement);
-      }
-      renderer?.dispose();
-      disposables.forEach(item => item.dispose());
-      setIsReady(false);
     };
   }, [layers]);
 

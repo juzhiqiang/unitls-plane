@@ -148,7 +148,13 @@ export function printMarkdownPreviewPdf({
   printDelay = 80,
 }: PrintMarkdownPreviewOptions): boolean {
   const contentElement = sourceElement?.querySelector('.markdown-body');
-  if (!contentElement) return false;
+  // 动态渲染器尚未就绪时保留现有重试提示，不能把空占位复制到打印页。
+  if (
+    !contentElement ||
+    contentElement.querySelector('[data-markdown-loading]')
+  ) {
+    return false;
+  }
 
   const html = buildMarkdownPrintHtml({
     title,

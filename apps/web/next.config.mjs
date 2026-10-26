@@ -152,6 +152,15 @@ export default {
     const source = options.isServer ? intlConfig : pwaConfig;
     const resolvedConfig = source.webpack?.(config, options) ?? config;
 
+    // 缩短客户端异步 chunk 的 content hash，避免 App Router 运行时因新增按需
+    // chunk 记录把共享 First Load JS 推高到预算之外。
+    if (!options.isServer) {
+      resolvedConfig.output = {
+        ...resolvedConfig.output,
+        chunkFilename: 'static/chunks/[name].[contenthash:12].js',
+      };
+    }
+
     // @huggingface/transformers 只在浏览器用(useLocalIdPhoto 里的 `await import(...)`,
     // SSR 期间不会执行)。server bundle 里 stub 成空模块:它会把 onnxruntime-node 拖进
     // server 图(含 .node 原生扩展),且这些 dist 是给浏览器打的包,会让 Next 的

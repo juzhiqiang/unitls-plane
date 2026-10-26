@@ -226,7 +226,8 @@ export function HeroWorkbenchScene({ className }: HeroWorkbenchSceneProps) {
                 stopFrames();
               }
             },
-            { rootMargin: '200px 0px' }
+            // Three.js 已在 start() 中预加载；动画只在真实视口内运行。
+            { rootMargin: '0px' }
           );
           intersectionObserver.observe(mount);
         }

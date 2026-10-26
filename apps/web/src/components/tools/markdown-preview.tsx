@@ -8,7 +8,13 @@ const MarkdownRenderer = dynamic(
   () => import('./markdown-renderer').then(module => module.MarkdownRenderer),
   {
     ssr: false,
-    loading: () => <div aria-hidden className="min-h-[7rem] px-6 py-5" />,
+    loading: () => (
+      <div
+        data-markdown-loading
+        aria-hidden
+        className="min-h-[7rem] px-6 py-5"
+      />
+    ),
   }
 );
 

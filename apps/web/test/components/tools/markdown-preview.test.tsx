@@ -102,7 +102,7 @@ beforeEach(() => {
 });
 
 describe('MarkdownPreview', () => {
-  it('accepts layout classes for roomy document workbenches', () => {
+  it('accepts layout classes for roomy document workbenches', async () => {
     render(
       <MarkdownPreview
         content="# Title"
@@ -112,12 +112,9 @@ describe('MarkdownPreview', () => {
       />
     );
 
-    expect(screen.getByText('Title').closest('.min-h-\\[604px\\]')).not.toBe(
-      null
-    );
-    expect(screen.getByText('Title').closest('.min-h-\\[560px\\]')).not.toBe(
-      null
-    );
+    const title = await screen.findByText('Title');
+    expect(title.closest('.min-h-\\[604px\\]')).not.toBe(null);
+    expect(title.closest('.min-h-\\[560px\\]')).not.toBe(null);
   });
 });
 

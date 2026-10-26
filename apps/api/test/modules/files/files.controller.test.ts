@@ -414,50 +414,133 @@ describe('FilesController stream lifecycle', () => {
 });
 
 describe('FilesController thumbnail', () => {
+  const etag = '"thumb-file-1-320-1"';
+
   function createController(file: {
     id: string;
     mimeType: string;
     originalSize: number;
   }) {
-    const service = {
-      getById: async () => ({ ...file, storageKey: 'user-1/f/x.png' }),
-      thumbnail: async () => Buffer.from('webp-bytes'),
-    } as unknown as FilesService;
+    const getById = vi.fn(async () => ({
+      ...file,
+      storageKey: 'user-1/f/x.png',
+    }));
+    const thumbnail = vi.fn(async () => Buffer.from('webp-bytes'));
+    const service = { getById, thumbnail } as unknown as FilesService;
 
-    return new FilesController(service);
+    return {
+      controller: new FilesController(service),
+      getById,
+      thumbnail,
+    };
   }
 
   function createResponse() {
     const headers = new Map<string, string>();
+    const state: { statusCode: number; body: unknown } = {
+      statusCode: 200,
+      body: undefined,
+    };
     const res = {
       setHeader: (name: string, value: string) => {
         headers.set(name, value);
         return res;
       },
-      end: (body: unknown) => body,
+      status: (code: number) => {
+        state.statusCode = code;
+        return res;
+      },
+      end: (body?: unknown) => {
+        state.body = body;
+        return res;
+      },
     };
 
-    return { res: res as unknown as Response, headers };
+    return { res: res as unknown as Response, headers, state };
   }
 
   it('serves a cacheable webp thumbnail for images', async () => {
-    const controller = createController({
+    const { controller, thumbnail } = createController({
       id: 'file-1',
       mimeType: 'image/png',
       // 生图产物的量级:以前网格按体积退化成图标,现在服务端缩完再发。
       originalSize: 3 * 1024 * 1024,
     });
-    const { res, headers } = createResponse();
+    const { res, headers, state } = createResponse();
 
-    await controller.thumbnail('file-1', undefined, res);
+    await controller.thumbnail('file-1', undefined, undefined, res);
 
     expect(headers.get('Content-Type')).toBe('image/webp');
     expect(headers.get('Cache-Control')).toBe('private, max-age=86400');
-    expect(headers.get('ETag')).toContain('file-1');
+    expect(headers.get('ETag')).toBe(etag);
+    expect(state.statusCode).toBe(200);
+    expect(thumbnail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'file-1',
+        storageKey: 'user-1/f/x.png',
+      })
+    );
+  });
+
+  it('returns an empty 304 before loading or rendering the thumbnail', async () => {
+    const { controller, getById, thumbnail } = createController({
+      id: 'file-1',
+      mimeType: 'image/png',
+      originalSize: 3 * 1024 * 1024,
+    });
+    const { res, headers, state } = createResponse();
+
+    await controller.thumbnail(
+      'file-1',
+      'W/"thumb-file-1-320-1", "other"',
+      undefined,
+      res
+    );
+
+    expect(getById).toHaveBeenCalledTimes(1);
+    expect(thumbnail).not.toHaveBeenCalled();
+    expect(state.statusCode).toBe(304);
+    expect(state.body).toBeUndefined();
+    expect(headers.get('ETag')).toBe(etag);
+    expect(headers.get('Cache-Control')).toBe('private, max-age=86400');
+    expect(headers.has('Content-Type')).toBe(false);
+    expect(headers.has('Content-Length')).toBe(false);
+  });
+
+  it('passes the current user through access control before a 304', async () => {
+    const { controller, getById, thumbnail } = createController({
+      id: 'file-1',
+      mimeType: 'image/png',
+      originalSize: 1024,
+    });
+    const { res, state } = createResponse();
+    const user = { id: 'user-1' } as never;
+
+    await controller.thumbnail('file-1', etag, user, res);
+
+    expect(getById).toHaveBeenCalledWith('file-1', 'user-1');
+    expect(thumbnail).not.toHaveBeenCalled();
+    expect(state.statusCode).toBe(304);
+  });
+
+  it('does not bypass access control when the thumbnail ETag matches', async () => {
+    const denied = new Error('not found');
+    const thumbnail = vi.fn();
+    const service = {
+      getById: vi.fn().mockRejectedValue(denied),
+      thumbnail,
+    } as unknown as FilesService;
+    const controller = new FilesController(service);
+    const { res } = createResponse();
+
+    await expect(
+      controller.thumbnail('file-1', etag, undefined, res)
+    ).rejects.toBe(denied);
+    expect(thumbnail).not.toHaveBeenCalled();
   });
 
   it('refuses types it cannot rasterise', async () => {
-    const controller = createController({
+    const { controller, thumbnail } = createController({
       id: 'file-2',
       mimeType: 'application/pdf',
       originalSize: 1024,
@@ -465,12 +548,13 @@ describe('FilesController thumbnail', () => {
     const { res } = createResponse();
 
     await expect(
-      controller.thumbnail('file-2', undefined, res)
+      controller.thumbnail('file-2', undefined, undefined, res)
     ).rejects.toThrow();
+    expect(thumbnail).not.toHaveBeenCalled();
   });
 
   it('refuses originals too large to decode', async () => {
-    const controller = createController({
+    const { controller, thumbnail } = createController({
       id: 'file-3',
       mimeType: 'image/png',
       originalSize: 64 * 1024 * 1024,
@@ -478,7 +562,8 @@ describe('FilesController thumbnail', () => {
     const { res } = createResponse();
 
     await expect(
-      controller.thumbnail('file-3', undefined, res)
+      controller.thumbnail('file-3', undefined, undefined, res)
     ).rejects.toThrow();
+    expect(thumbnail).not.toHaveBeenCalled();
   });
 });

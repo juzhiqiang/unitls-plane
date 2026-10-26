@@ -39,7 +39,11 @@ import {
 import { constants as fsConstants } from 'node:fs';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
 import { normalizeUploadedFilename } from './filename.util';
-import { renderThumbnail } from './thumbnail.util';
+import {
+  THUMBNAIL_CONTENT_TYPE,
+  getThumbnailObjectKey,
+  renderThumbnail,
+} from './thumbnail.util';
 import { CleanupObligationService } from './cleanup-obligation.service';
 import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
 import { isUploadTempPath, removeUploadTempFile } from './upload-temp-file';
@@ -145,6 +149,7 @@ async function openVerifiedTempUpload(
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
+  private readonly thumbnailFlights = new Map<string, Promise<Buffer>>();
 
   constructor(
     private readonly minioService: MinioService,
@@ -357,12 +362,54 @@ export class FilesService {
   }
 
   /**
-   * 列表缩略图。原图从 MinIO 取回后就地缩,不落盘也不入库:
-   * 文件内容不会变,缓存交给 HTTP(见 controller 的 Cache-Control/ETag)。
+   * 列表缩略图。生成结果按 file.id 持久化到 MinIO，版本化对象键由
+   * thumbnail.util.ts 统一维护；同一进程内用 single-flight 避免并发冷请求重复解码。
+   *
+   * 注意：软删除/永久删除暂不清理 thumbnails/ 前缀，后续统一通过对象生命周期
+   * 或批处理清理，本批不扩大删除链路范围。
    */
-  async thumbnail(storageKey: string): Promise<Buffer> {
-    const source = await this.minioService.downloadStream(storageKey);
-    return renderThumbnail(source);
+  async thumbnail(file: Pick<File, 'id' | 'storageKey'>): Promise<Buffer> {
+    const existing = this.thumbnailFlights.get(file.id);
+    if (existing) return existing;
+
+    const flight = this.loadThumbnail(file);
+    this.thumbnailFlights.set(file.id, flight);
+
+    try {
+      return await flight;
+    } finally {
+      if (this.thumbnailFlights.get(file.id) === flight) {
+        this.thumbnailFlights.delete(file.id);
+      }
+    }
+  }
+
+  private async loadThumbnail(
+    file: Pick<File, 'id' | 'storageKey'>
+  ): Promise<Buffer> {
+    const thumbnailKey = getThumbnailObjectKey(file.id);
+    if (await this.minioService.probeObjectExists(thumbnailKey)) {
+      return this.minioService.download(thumbnailKey);
+    }
+
+    const source = await this.minioService.downloadStream(file.storageKey);
+    const buffer = await renderThumbnail(source);
+
+    try {
+      await this.minioService.upload(
+        thumbnailKey,
+        buffer,
+        THUMBNAIL_CONTENT_TYPE
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to cache thumbnail file=${file.id}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`
+      );
+    }
+
+    return buffer;
   }
 
   async getSignedUrl(id: string, userId?: string): Promise<string> {

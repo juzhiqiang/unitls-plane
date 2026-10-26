@@ -18,6 +18,42 @@ export const THUMBNAIL_SOURCE_MAX_BYTES = 32 * 1024 * 1024;
 
 export const THUMBNAIL_CONTENT_TYPE = 'image/webp';
 
+/** 缩略图缓存布局版本；只有像素、格式或质量参数变化时才递增。 */
+export const THUMBNAIL_VERSION = 1;
+
+export const THUMBNAIL_CACHE_CONTROL = 'private, max-age=86400';
+
+export function getThumbnailObjectKey(fileId: string): string {
+  return `thumbnails/${fileId}/${THUMBNAIL_VERSION}-${THUMBNAIL_MAX_EDGE}.webp`;
+}
+
+/** 强 ETag。版本变化后旧客户端缓存会自然失效。 */
+export function getThumbnailETag(fileId: string): string {
+  return `"thumb-${fileId}-${THUMBNAIL_MAX_EDGE}-${THUMBNAIL_VERSION}"`;
+}
+
+function normalizeETag(tag: string): string {
+  return tag.trim().replace(/^W\//i, '');
+}
+
+/**
+ * If-None-Match 弱比较。浏览器可能把服务端强 ETag 回传为弱标签，
+ * 同时还要兼容逗号分隔列表和通配符。
+ */
+export function matchesIfNoneMatch(
+  header: string | undefined,
+  etag: string
+): boolean {
+  if (!header) return false;
+  const normalizedEtag = normalizeETag(etag);
+  return header.split(',').some(candidate => {
+    const trimmed = candidate.trim();
+    if (!trimmed) return false;
+    if (trimmed === '*') return true;
+    return normalizeETag(trimmed) === normalizedEtag;
+  });
+}
+
 /**
  * 支持缩略的原图类型。
  *

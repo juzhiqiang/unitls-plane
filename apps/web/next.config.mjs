@@ -36,6 +36,28 @@ export function excludeLargeStaticJsChunk(entry) {
   );
 }
 
+export function excludeOnnxPrecache(entry) {
+  const asset = entry?.asset ?? entry;
+  const name =
+    typeof asset?.url === 'string'
+      ? asset.url
+      : typeof asset?.name === 'string'
+        ? asset.name
+        : '';
+  const normalizedName = name.replaceAll('\\', '/');
+
+  return /(?:^|\/)onnx\//i.test(normalizedName);
+}
+
+export function excludePwaPrecache(entry) {
+  // workbox-webpack-plugin treats each function condition as terminal: the first
+  // function that returns false prevents later function conditions from running.
+  // Keep a single entry point so ONNX and oversized-chunk rules both stay active.
+  return excludeOnnxPrecache(entry) || excludeLargeStaticJsChunk(entry);
+}
+
+export const pwaPublicExcludes = ['!noprecache/**/*', '!onnx/**/*'];
+
 function getWebpackAssetSize(asset) {
   if (typeof asset?.size === 'number') return asset.size;
   if (typeof asset?.source?.size !== 'function') return 0;
@@ -59,7 +81,7 @@ export const staticChunkRuntimeCaching = {
 };
 
 export const pwaWorkboxOptions = {
-  exclude: [excludeLargeStaticJsChunk],
+  exclude: [excludePwaPrecache],
   runtimeCaching: [staticChunkRuntimeCaching],
 };
 
@@ -86,6 +108,7 @@ const withPwa = withPWA({
   disable:
     process.env.NODE_ENV === 'development' ||
     process.env.DISABLE_PWA === 'true',
+  publicExcludes: pwaPublicExcludes,
   fallbacks: {
     document: '/_offline',
   },

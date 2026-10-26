@@ -2,6 +2,13 @@ import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import {
+  excludeLargeStaticJsChunk,
+  excludeOnnxPrecache,
+  excludePwaPrecache,
+  pwaPublicExcludes,
+  pwaWorkboxOptions,
+} from '../../next.config.mjs';
 
 const appRoot = join(process.cwd());
 const publicDir = join(appRoot, 'public');
@@ -203,5 +210,43 @@ describe('PWA assets', () => {
     expect(nextConfig).toContain(
       'Critical dependency: require function is used in a way in which dependencies cannot be statically extracted'
     );
+  });
+});
+
+describe('PWA ONNX precache exclusion', () => {
+  it('excludes ONNX runtime assets from precache', () => {
+    expect(excludeOnnxPrecache({ url: '/onnx/ort-wasm-simd.jsep.wasm' })).toBe(
+      true
+    );
+    expect(
+      excludeOnnxPrecache({
+        asset: { name: 'onnx/ort-wasm-simd-threaded.wasm' },
+      })
+    ).toBe(true);
+  });
+
+  it('does not exclude regular Next static assets', () => {
+    expect(
+      excludeOnnxPrecache({ url: '/_next/static/chunks/onnxruntime-web.js' })
+    ).toBe(false);
+    expect(
+      excludeOnnxPrecache({ url: '/_next/static/chunks/main-app.js' })
+    ).toBe(false);
+  });
+
+  it('keeps the existing oversized static chunk exclusion active', () => {
+    const oversizedChunk = {
+      name: '_next/static/chunks/heavy-123.js',
+      size: 3 * 1024 * 1024,
+    };
+
+    expect(excludeLargeStaticJsChunk(oversizedChunk)).toBe(true);
+    expect(excludePwaPrecache(oversizedChunk)).toBe(true);
+    expect(pwaWorkboxOptions.exclude).toContain(excludePwaPrecache);
+  });
+
+  it('excludes public ONNX assets from the precache glob', () => {
+    expect(pwaPublicExcludes).toContain('!onnx/**/*');
+    expect(pwaPublicExcludes).toContain('!noprecache/**/*');
   });
 });

@@ -4,7 +4,8 @@
 部署 Utils-Plane 后，后续更新镜像、配置字段和数据库结构时使用。
 
 核心原则：**更新镜像和配置，不删除 volume，不重建数据库卷**。PostgreSQL、Redis、MinIO 的历史数据都在 Docker
-volume 中，正常 `docker load`、`docker compose up -d`、`--force-recreate api web` 不会清空历史数据。
+volume 中，正常 `docker load`、`docker compose up -d`、`--force-recreate api worker web`
+不会清空历史数据。
 
 ## HTTP 受限公测边界
 
@@ -66,6 +67,21 @@ BUILD_TIME=<UTC ISO 8601 timestamp>
 | MinIO API     | 5009     | 9000     |
 | MinIO Console | 5010     | 9001     |
 
+Worker 是 Compose 内的独立进程服务，不映射端口、不提供 HTTP
+healthcheck，也不执行 migration、模型同步或 preset seed。API 服务负责这些启动步骤，并通过
+`/health/ready` 后才允许 Worker 启动；Web 也依赖 API healthy。API/Worker 的 `stop_grace_period` 由
+`TASK_STOP_GRACE_PERIOD` 配置，默认 `15m`，Web 保持 60 秒。API/Worker 同时启用
+`init: true`，直接运行 API/Worker 或离线单容器时应传入
+`--init --stop-timeout 900`。AI 单来源请求默认超时 180 秒、最多配置为 600 秒，退出还需等待上传和落库；多来源顺序回退、大型 PDF 应按最长任务实测提高宽限期。
+
+Compose 为 Worker 设置
+`WORKER_API_READY_URL=http://api:3001/health/ready`。Worker 启动时再次检查 API，并每 5 秒复查一次（请求超时 3 秒）；API 退出或 readiness 失败后，Worker 发出 SIGTERM，沿用 Nest/BullMQ 的关闭流程等待在途任务结束。容器重启时若 API 仍未恢复，就在注册消费者之前启动失败。这个检测存在最多约 8 秒的窗口，并非同步停止。独立运行或
+`all` 模式通常不设置该变量。
+
+API 与 Worker 共用 `docker-compose.prod.yml` 中的
+`x-api-environment`，避免数据库、Redis、MinIO、认证和 AI 配置漂移；仅进程角色和 Worker 并发变量分别覆盖。每个进程默认使用独立的数据库连接池（`max: 20`），API +
+Worker 合计最多约 40 个连接，扩 Worker 副本前要核对 PostgreSQL `max_connections`。
+
 ## 本地打包
 
 在本地项目根目录执行：
@@ -121,7 +137,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worker web
 ```
 
 首次启动会创建以下 volume：
@@ -141,17 +157,17 @@ cd /opt/utils-plane
 
 docker load -i utils-plane-offline-all.tar
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api worker web
 
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worker web
 ```
 
 说明：
 
 - `utils-plane:all` 使用固定 tag，`docker load` 后需要
-  `--force-recreate api web`，否则旧容器可能继续运行旧镜像。
-- 只重建 `api` 和 `web`，不会删除 PostgreSQL、Redis、MinIO 的 volume。
+  `--force-recreate api worker web`，否则旧容器可能继续运行旧镜像。
+- 只重建 `api`、`worker` 和 `web`，不会删除 PostgreSQL、Redis、MinIO 的 volume。
 - API 容器启动时会执行 `node apps/api/dist/scripts/migrate.js`，用于增量数据库迁移。
 - 如果使用已有 MinIO 实例，需要在 `.env.prod` 中设置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、
   `S3_SECRET_KEY` 指向该实例（内部网络可达地址或 `http://minio:9000`）。组合镜像 API 启动时会执行
@@ -170,16 +186,17 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
 - `NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION`
 - `SMTP_*`
 - `S3_*`
-- `AI_IMAGE_PROVIDERS`（多来源生图配置，改了才会出现或更新页面上的「模型」选择器；格式为每来源 `models[]` 数组，见 `.env.example`）
+- `AI_IMAGE_PROVIDERS`（多来源生图配置，改了才会出现或更新页面上的「模型」选择器；格式为每来源
+  `models[]` 数组，见 `.env.example`）
 
 上传新的 `.env.prod` 后执行：
 
 ```bash
 cd /opt/utils-plane
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api worker web
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worker web
 ```
 
 说明：
@@ -208,10 +225,10 @@ cd /opt/utils-plane
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
-如果变更影响 `api` 或 `web`，建议明确重建：
+如果变更影响 `api`、`worker` 或 `web`，建议明确重建：
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api worker web
 ```
 
 如果变更影响数据库、Redis、MinIO 的环境变量或 volume，请先备份数据，再评估是否需要停机维护。不要为了让配置生效而删除 volume。
@@ -227,7 +244,9 @@ node apps/api/dist/scripts/migrate.js \
   && node apps/api/dist/main.js
 ```
 
-因此更新 `api` 容器时会自动执行 migration。migration 应只做增量结构变更，不应清空历史数据。
+因此更新 `api`
+容器时会自动执行 migration。migration 应只做增量结构变更，不应清空历史数据。Worker 不执行上述启动脚本，只运行
+`node apps/api/dist/main.js` 并消费队列；API readiness 未通过时 Compose 不会启动 Worker。
 
 注意后两个脚本在 `command` 里是 `&&` 串联的：任一脚本失败，`main.js` 就不会启动。所以 `.env.prod`
 里的 `S3_*` 必须可用，`presets` 桶要能创建（compose 的 `minio-init` 会
@@ -256,7 +275,7 @@ docker exec utils-pg-prod pg_dump -U utils -d utils_plane > backup_$(date +%Y%m%
 也因为比的是时间戳水位线而不是逐个文件比对：新增 migration 必须是 journal 里 `when`
 最大的一项。手工往中间插一个时间戳更早的 migration，线上会被静默跳过。
 
-标准流程就是常规更新（备份 → `docker load` → `--force-recreate api web`）。前置条件只有两条：
+标准流程就是常规更新（备份 → `docker load` → `--force-recreate api worker web`）。前置条件只有两条：
 
 - 服务器上的 `docker-compose.prod.yml` 与本次镜像同版本（含 `minio-init` 的 `presets` 桶、api 的
   `S3_PRESETS_BUCKET` / `IMAGE_GENERATE_PRESETS_DIR` 和 seed 脚本）。
@@ -293,9 +312,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod \
 ```
 
 AI 生图页的「模型」选择器是另一回事，与数据库无关：它只在服务端返回的模型数 >= 2 时出现，需要在
-`.env.prod` 里配置多来源 JSON
-`AI_IMAGE_PROVIDERS`（单引号包住整段，第一项为默认来源，每来源 `models[]` 声明模型），并重建 api 容器。只配 `AI_IMAGE_BASE_URL`
-时线上只有一个 `default` 来源单模型，选择器不显示。
+`.env.prod` 里配置多来源 JSON `AI_IMAGE_PROVIDERS`（单引号包住整段，第一项为默认来源，每来源
+`models[]` 声明模型），并重建 api 与 worker 容器。只配 `AI_IMAGE_BASE_URL` 时线上只有一个 `default`
+来源单模型，选择器不显示。
 
 ## 保留历史数据的安全更新顺序
 
@@ -311,11 +330,11 @@ docker exec utils-pg-prod pg_dump -U utils -d utils_plane > backup_$(date +%Y%m%
 docker load -i utils-plane-offline-all.tar
 
 # 3. 重建应用容器
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api worker web
 
 # 4. 查看状态和日志
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worker web
 ```
 
 如果本次同时更新 `.env.prod` 和 `docker-compose.prod.yml`，先上传文件，再执行同一套命令。
@@ -348,7 +367,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod ps
 查看 Web/API 日志：
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api web
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worker web
 ```
 
 查看数据库日志：
@@ -382,7 +401,10 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec api sh
 1. 保留当前 volume，不执行 `down -v`。
 2. 重新 `docker load` 上一个可用的 `utils-plane-offline-all.tar`。
 3. 执行
-   `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api web`。
-4. 查看 `api web` 日志确认服务恢复。
+   `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate api worker web`。
+4. 查看 `api worker web` 日志确认服务恢复。
+
+如果进程拆分本身异常，可把 API 服务的 `PROCESS_ROLE` 改回
+`all`，停止 Worker 服务后重建 API；这不需要回滚数据库。只回滚应用布局时保留所有 volume 和 Redis 队列数据。
 
 数据库 migration 如果已经执行，回滚需要结合备份和 migration 内容判断。上线前备份数据库是最稳妥的保护。

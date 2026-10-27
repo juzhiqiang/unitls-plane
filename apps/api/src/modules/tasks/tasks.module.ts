@@ -1,63 +1,13 @@
 import { Module } from '@nestjs/common';
-import { AccountSummaryCacheModule } from '../../common/cache/account-summary-cache.module';
-import { BullModule } from '@nestjs/bullmq';
-import { TasksController } from './tasks.controller';
-import { FontsController } from './fonts.controller';
-import { TasksService } from './tasks.service';
-import { ImageProcessor } from './processors/image.processor';
-import { PdfProcessor } from './processors/pdf.processor';
-import { FontProcessor } from './processors/font.processor';
-import { AiImageProcessor } from './processors/ai-image.processor';
-import { CleanupProcessor } from './processors/cleanup.processor';
-import { CleanupScheduler } from './processors/cleanup.scheduler';
-import { ImageService } from './services/image.service';
-import { IdPhotoService } from './services/id-photo.service';
-import { PdfService } from './services/pdf.service';
-import { PdfCadExtractorService } from './services/cad/pdf-cad-extractor.service';
-import { PdfToCadService } from './services/cad/pdf-to-cad.service';
-import { FontService } from './services/font.service';
-import { PortraitSegmentationService } from './services/portrait-segmentation.service';
-import { FaceDetectionService } from './services/face-detection.service';
-import { ImageGenerationService } from './services/image-generation.service';
-import { ImageGeneratePresetsService } from './services/image-generate-presets.service';
-import { FilesModule } from '../files/files.module';
-import { TaskJobReconciler } from './task-job-reconciler.service';
-import { TaskJobStateRepository } from './task-job-state.repository';
+import { TasksCoreModule } from './tasks-core.module';
+import { TasksApiModule } from './tasks-api.module';
+import { TasksWorkerModule } from './tasks-worker.module';
 
+/**
+ * 兼容旧单进程部署的组合：同时启用 HTTP Controller 和任务处理器。
+ * 新进程角色使用 TasksApiModule / TasksWorkerModule。
+ */
 @Module({
-  imports: [
-    AccountSummaryCacheModule,
-    FilesModule,
-    BullModule.registerQueue(
-      { name: 'image-queue' },
-      { name: 'pdf-queue' },
-      { name: 'font-queue' },
-      { name: 'cleanup-queue' },
-      { name: 'ai-queue' }
-    ),
-  ],
-  controllers: [TasksController, FontsController],
-  providers: [
-    TasksService,
-    TaskJobReconciler,
-    TaskJobStateRepository,
-    ImageService,
-    IdPhotoService,
-    PortraitSegmentationService,
-    FaceDetectionService,
-    ImageGenerationService,
-    ImageGeneratePresetsService,
-    PdfService,
-    PdfCadExtractorService,
-    PdfToCadService,
-    FontService,
-    ImageProcessor,
-    PdfProcessor,
-    FontProcessor,
-    AiImageProcessor,
-    CleanupProcessor,
-    CleanupScheduler,
-  ],
-  exports: [TasksService, FontService, FaceDetectionService],
+  imports: [TasksCoreModule, TasksApiModule, TasksWorkerModule],
 })
 export class TasksModule {}

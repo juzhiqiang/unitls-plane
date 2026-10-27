@@ -3,6 +3,9 @@
 > 返回
 > [三人并行总控](./README.md)。本批负责 API 运行时、任务 Worker 进程、Swagger 开关和公开接口认证快路径。分支：`codex/perf-api-worker`，预估 4–6 天。
 
+> 执行进度、同条件性能对照、五队列、长任务与回滚验收见
+> [执行记录](./03-api-worker-validation.md)。结果仅覆盖本地隔离环境，分支尚未合并或推送。
+
 ## 一、目标与边界
 
 | 目标                  | 当前事实                                               | 本批结果                                           |
@@ -326,17 +329,18 @@ docker compose -f docker-compose.prod.yml config
 
 ## 九、PR 合并检查清单
 
-- [ ] 只修改 C 所有权内的文件，未改 `apps/api/src/modules/files/**` 和 `packages/auth` 缓存策略。
-- [ ] `PROCESS_ROLE=all/api/worker` 三种模式均实际启动验证。
-- [ ] API 不注册 Processor，Worker 不监听 HTTP，CleanupScheduler 只在 Worker。
-- [ ] 不设置 `PROCESS_ROLE` 时保持旧行为。
-- [ ] Swagger 的默认值、覆盖值和非法值测试通过。
-- [ ] `openapi:export` 在 production 且 Swagger 关闭时仍通过。
-- [ ] 公开接口无凭据 0 次 `verifySession()`，有凭据仍完整校验并续期。
-- [ ] Compose 使用 API readiness 门控 Worker，Worker 不暴露端口。
-- [ ] API/Worker/单容器都有正确的信号处理和宽限期。
-- [ ] `start-all.sh` 的 migration/seed 只执行一次，三个子进程都能被清理。
-- [ ] 数据库连接池、Redis 连接和 PostgreSQL `max_connections` 已记录并可支撑当前副本数。
-- [ ] 高负载前后 API P95、RSS、队列吞吐数据已写入 PR。
-- [ ] 回滚方式已验证，且不涉及数据库回滚。
-- [ ] 提交信息使用中文。
+- [x] 只修改 C 所有权内的文件，未改 `apps/api/src/modules/files/**` 和 `packages/auth` 缓存策略。
+- [x] `PROCESS_ROLE=all/api/worker` 三种模式均实际启动验证。
+- [x] API 不注册 Processor，Worker 不监听 HTTP，CleanupScheduler 只在 Worker。
+- [x] 不设置 `PROCESS_ROLE` 时保持旧行为。
+- [x] Swagger 的默认值、覆盖值和非法值测试通过。
+- [x] `openapi:export` 在 production 且 Swagger 关闭时仍通过。
+- [x] 公开接口无凭据 0 次 `verifySession()`，有凭据仍完整校验并续期。
+- [x] Compose 使用 API readiness 门控 Worker，Worker 不暴露端口。
+- [x] API/Worker/单容器信号与宽限期已验证；595 秒长请求样本在 SIGTERM 后等待约 596 秒正常退出，任意工作流仍按实测调整宽限期。
+- [x] `start-all.sh` 的 migration/seed 只执行一次，三个子进程都能被清理。
+- [x] 本地 1 API + 1 Worker 的数据库池、Redis 连接和 PostgreSQL `max_connections`
+      已记录；目标环境按副本数重新核验。
+- [ ] 高负载前后 API P95、RSS、队列吞吐数据已写入 PR（数据已写入执行记录，尚未创建 PR）。
+- [x] API-only 回滚默认 `all`、API 故障后的 Worker 退出/重启已验证，无数据库回滚。
+- [x] 提交信息使用中文。

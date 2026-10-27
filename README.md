@@ -449,7 +449,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api worke
 docker run -d \
   --name utils-plane-all \
   --init \
-  --stop-timeout 60 \
+  --stop-timeout 900 \
   --restart unless-stopped \
   -p 5005:3000 \
   -p 5006:3001 \
@@ -465,7 +465,7 @@ API-only 镜像也支持按角色拆成两个容器。先启动 API（镜像启�
 docker run -d \
   --name utils-plane-api \
   --init \
-  --stop-timeout 60 \
+  --stop-timeout 900 \
   --restart unless-stopped \
   -p 5006:3001 \
   --env-file .env.prod \
@@ -479,7 +479,7 @@ docker run -d \
 docker run -d \
   --name utils-plane-worker \
   --init \
-  --stop-timeout 60 \
+  --stop-timeout 900 \
   --restart unless-stopped \
   --env-file .env.prod \
   -e PROCESS_ROLE=worker \
@@ -489,6 +489,9 @@ docker run -d \
 
 Worker 不执行 migration/seed，也不提供 HTTP 服务。需要回滚到单进程时，给 API 容器改用
 `PROCESS_ROLE=all`，并停止 Worker 容器。
+
+Compose 的 API/Worker 退出宽限期由 `TASK_STOP_GRACE_PERIOD` 控制，默认 `15m`；直接运行容器时对应
+`--stop-timeout 900`。单来源 AI 请求最长可配置为 600 秒，退出还需等待产物上传和落库。多来源顺序回退或大型 PDF 可能耗时更长，应按最长任务实测提高宽限期；15 分钟不是所有任务的时长上限。
 
 ### 常用服务器命令
 

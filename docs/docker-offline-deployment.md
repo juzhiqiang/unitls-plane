@@ -69,9 +69,10 @@ BUILD_TIME=<UTC ISO 8601 timestamp>
 
 Worker 是 Compose 内的独立进程服务，不映射端口、不提供 HTTP
 healthcheck，也不执行 migration、模型同步或 preset seed。API 服务负责这些启动步骤，并通过
-`/health/ready` 后才允许 Worker 启动；Web 也依赖 API healthy。API、Worker、Web 的
-`stop_grace_period` 均为 60 秒，若实际任务可能超过该时长，需要按最长任务调整。API/Worker 同时启用
-`init: true`，直接 `docker run` 也应传入 `--init --stop-timeout 60`。
+`/health/ready` 后才允许 Worker 启动；Web 也依赖 API healthy。API/Worker 的 `stop_grace_period` 由
+`TASK_STOP_GRACE_PERIOD` 配置，默认 `15m`，Web 保持 60 秒。API/Worker 同时启用
+`init: true`，直接运行 API/Worker 或离线单容器时应传入
+`--init --stop-timeout 900`。AI 单来源请求默认超时 180 秒、最多配置为 600 秒，退出还需等待上传和落库；多来源顺序回退、大型 PDF 应按最长任务实测提高宽限期。
 
 Compose 为 Worker 设置
 `WORKER_API_READY_URL=http://api:3001/health/ready`。Worker 启动时再次检查 API，并每 5 秒复查一次（请求超时 3 秒）；API 退出或 readiness 失败后，Worker 发出 SIGTERM，沿用 Nest/BullMQ 的关闭流程等待在途任务结束。容器重启时若 API 仍未恢复，就在注册消费者之前启动失败。这个检测存在最多约 8 秒的窗口，并非同步停止。独立运行或

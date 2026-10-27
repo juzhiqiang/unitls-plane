@@ -85,7 +85,9 @@ describe('production process layout', () => {
     expect(compose).toMatch(/api:\s*\n(?:.*\n)*?\s+PROCESS_ROLE: api/);
     expect(compose).toMatch(/worker:\s*\n(?:.*\n)*?\s+PROCESS_ROLE: worker/);
     expect(compose).toContain('condition: service_healthy');
-    expect(compose).toContain('stop_grace_period: 60s');
+    expect(compose).toContain(
+      'stop_grace_period: ${TASK_STOP_GRACE_PERIOD:-15m}'
+    );
     expect(compose).toContain("fetch('http://127.0.0.1:3001/health/ready')");
     expect(compose).not.toMatch(
       /worker:\s*\n(?:.*\n)*?\s+node apps\/api\/dist\/scripts\/migrate\.js/
@@ -104,7 +106,9 @@ describe('production process layout', () => {
     );
     expect(workerSection).not.toContain('ports:');
     expect(workerSection).not.toContain('healthcheck:');
-    expect(workerSection).toContain('stop_grace_period: 60s');
+    expect(workerSection).toContain(
+      'stop_grace_period: ${TASK_STOP_GRACE_PERIOD:-15m}'
+    );
     expect(workerSection).toContain('init: true');
     expect(workerSection).toContain(
       'WORKER_API_READY_URL: http://api:3001/health/ready'

@@ -15,6 +15,10 @@ export const bullConfig = BullModule.forRootAsync({
     connection: {
       ...parseRedisUrl(process.env.REDIS_URL ?? 'redis://localhost:6379'),
       maxRetriesPerRequest: null,
+      // 连接重建期间，已离线的 BZPOPMIN 也必须有客户端时限。
+      // 否则 BullMQ close() 会一直等待该命令，无法完成标准优雅退出。
+      // 这只限制 Redis 阻塞命令，不限制 Processor 的任务执行时间。
+      blockingTimeout: 30_000,
     },
     defaultJobOptions: {
       attempts: 3,

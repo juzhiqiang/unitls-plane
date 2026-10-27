@@ -160,7 +160,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 120s
-    stop_grace_period: 60s
+    stop_grace_period: ${TASK_STOP_GRACE_PERIOD:-15m}
     restart: unless-stopped
 
   worker:
@@ -185,7 +185,7 @@ services:
       PDF_WORKER_CONCURRENCY: ${PDF_WORKER_CONCURRENCY:-2}
       FONT_WORKER_CONCURRENCY: ${FONT_WORKER_CONCURRENCY:-2}
       AI_WORKER_CONCURRENCY: ${AI_WORKER_CONCURRENCY:-8}
-    stop_grace_period: 60s
+    stop_grace_period: ${TASK_STOP_GRACE_PERIOD:-15m}
     restart: unless-stopped
 
   web:

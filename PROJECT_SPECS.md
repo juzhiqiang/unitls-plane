@@ -65,14 +65,19 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 - 离线单容器由 `docker/start-all.sh`
   启动 API、Worker、Web 三个子进程；migration、模型同步和 seed 只执行一次，Worker 同样在 API
   readiness 通过后启动。任一子进程退出都会清理其余进程并以非零状态结束。
-- API 与 Worker 的 `stop_grace_period` 起始值为 60 秒，应按实际最长任务调整。滚动发布时先切到 `api`
-  角色确认不再消费任务，再启动 Worker，避免短时双重消费。
+- API 与 Worker 的 `stop_grace_period` 由 `TASK_STOP_GRACE_PERIOD` 配置，默认
+  `15m`。单来源 AI 请求超时默认 180 秒、封顶 600 秒，另需预留产物处理时间；多来源顺序回退和大型 PDF 应按实测继续提高宽限期，默认值不是任务耗时上限。滚动发布时先切到
+  `api` 角色确认不再消费任务，再启动 Worker，避免短时双重消费。
 - Compose API/Worker 使用 `init: true`；直接 `docker run` 时使用
-  `--init --stop-timeout 60`，由 init 转发信号和回收子进程，避免 Node 作为 Linux PID
+  `--init --stop-timeout 900`，由 init 转发信号和回收子进程，避免 Node 作为 Linux PID
   1 在关闭钩子完成后无法退出。
 - `packages/db` 每个进程连接池 `max: 20`；API +
   Worker 默认最多约 40 个连接，扩 Worker 副本前必须核对 PostgreSQL
-  `max_connections`。本批未改变任务并发默认值，也没有完成前后性能收益对比。
+  `max_connections`。本批未改变任务并发默认值；本地同资源对照显示高负载 readiness
+  P95 从约 6.5 秒降至 12 毫秒，同时总进程内存增加，完整方法、数据与适用边界见
+  [API/Worker 执行记录](./task/performance-optimization/03-api-worker-validation.md)。
+- 队列 Redis 连接使用 ioredis 的
+  `blockingTimeout: 30_000`，使重连期间遗留的阻塞命令能结束，避免 BullMQ 标准关闭流程无限等待；该设置不限制任务执行时长。
 
 - `GET /tasks/status?ids=<uuid>,...` 最多接受 100 个去重 UUID，返回轻量状态数组，缺失任务返回
   `not_found`。单任务和批量状态接口分别按用户/IP 限流，每分钟 120 次，保留匿名访问。

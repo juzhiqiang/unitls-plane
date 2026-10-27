@@ -7,6 +7,10 @@ import {
   canThumbnailFile,
   isThumbnailableMimeType,
   renderThumbnail,
+  THUMBNAIL_VERSION,
+  getThumbnailObjectKey,
+  getThumbnailETag,
+  matchesIfNoneMatch,
 } from '../../../src/modules/files/thumbnail.util';
 
 describe('stream thumbnails', () => {
@@ -119,5 +123,49 @@ describe('renderThumbnail', () => {
 
     const meta = await sharp(await renderThumbnail(source)).metadata();
     expect(meta.width).toBe(64);
+  });
+});
+
+describe('thumbnail cache contract', () => {
+  it('builds a versioned object key for the fixed thumbnail size', () => {
+    expect(THUMBNAIL_VERSION).toBe(1);
+    expect(getThumbnailObjectKey('file-1')).toBe(
+      `thumbnails/file-1/${THUMBNAIL_VERSION}-320.webp`
+    );
+  });
+
+  it('builds the frozen strong ETag with the version', () => {
+    expect(getThumbnailETag('file-1')).toBe(
+      `"thumb-file-1-320-${THUMBNAIL_VERSION}"`
+    );
+  });
+});
+
+describe('matchesIfNoneMatch', () => {
+  const etag = '"thumb-file-1-320-1"';
+
+  it('matches a single strong ETag and tolerates surrounding whitespace', () => {
+    expect(matchesIfNoneMatch(` ${etag} `, etag)).toBe(true);
+  });
+
+  it('matches one value from a comma-separated list', () => {
+    expect(
+      matchesIfNoneMatch('"other", W/"weak-other", "thumb-file-1-320-1"', etag)
+    ).toBe(true);
+  });
+
+  it('matches a wildcard', () => {
+    expect(matchesIfNoneMatch('*', etag)).toBe(true);
+  });
+
+  it('uses weak comparison for weak and strong tags', () => {
+    expect(matchesIfNoneMatch(`W/${etag}`, etag)).toBe(true);
+    expect(matchesIfNoneMatch(etag, `W/${etag}`)).toBe(true);
+  });
+
+  it('does not match missing, empty, or different tags', () => {
+    expect(matchesIfNoneMatch(undefined, etag)).toBe(false);
+    expect(matchesIfNoneMatch('', etag)).toBe(false);
+    expect(matchesIfNoneMatch('"thumb-file-1-320-2"', etag)).toBe(false);
   });
 });

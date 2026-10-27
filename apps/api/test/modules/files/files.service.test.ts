@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock, vi } from 'bun:test';
 import {
   existsSync,
   mkdtempSync,
@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import type { File } from '@utils-plane/db';
 import { AccountSummaryCache } from '../../../src/common/cache/account-summary-cache.service';
@@ -213,6 +214,19 @@ mock.module('@utils-plane/db', () => ({
 mock.module('../../../src/common/database/active-user-transaction', () => ({
   withActiveUserTransaction,
   withProducerTransaction,
+}));
+
+const actualThumbnailUtil =
+  await import('../../../src/modules/files/thumbnail.util');
+const realRenderThumbnail = actualThumbnailUtil.renderThumbnail;
+const renderThumbnail = vi.fn(realRenderThumbnail);
+function restoreRenderThumbnail() {
+  renderThumbnail.mockReset();
+  renderThumbnail.mockImplementation(realRenderThumbnail);
+}
+mock.module('../../../src/modules/files/thumbnail.util', () => ({
+  ...actualThumbnailUtil,
+  renderThumbnail,
 }));
 
 const { FilesService } =
@@ -1710,4 +1724,173 @@ describe('FilesService retention cleanup', () => {
     expect(result.deletedFileIds).toEqual(['file-1']);
     expect(result.failedFileIds).toEqual([]);
   });
+});
+
+describe('FilesService thumbnail cache', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    restoreRenderThumbnail();
+  });
+
+  function createService() {
+    const minio = {
+      probeObjectExists: vi.fn(),
+      download: vi.fn(),
+      downloadStream: vi.fn(),
+      upload: vi.fn(),
+    };
+    const service = new FilesService(
+      minio as never,
+      cleanupQueue as never,
+      cleanupObligationService as never
+    );
+    return { minio, service };
+  }
+
+  it('returns a stored thumbnail without reading the original or calling Sharp', async () => {
+    const { minio, service } = createService();
+    const stored = Buffer.from('stored-thumbnail');
+    minio.probeObjectExists.mockResolvedValue(true);
+    minio.download.mockResolvedValue(stored);
+
+    const result = await service.thumbnail({
+      id: 'file-1',
+      storageKey: 'anonymous/file-1/photo.png',
+    });
+
+    expect(result).toBe(stored);
+    expect(minio.probeObjectExists).toHaveBeenCalledWith(
+      'thumbnails/file-1/1-320.webp'
+    );
+    expect(minio.download).toHaveBeenCalledWith('thumbnails/file-1/1-320.webp');
+    expect(minio.downloadStream).not.toHaveBeenCalled();
+    expect(minio.upload).not.toHaveBeenCalled();
+    expect(renderThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('generates once from the original and writes the thumbnail object on a cold miss', async () => {
+    const { minio, service } = createService();
+    const source = Readable.from(Buffer.from('original'));
+    const generated = Buffer.from('generated-thumbnail');
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockResolvedValue(source);
+    minio.upload.mockResolvedValue(undefined);
+    renderThumbnail.mockResolvedValue(generated);
+
+    const result = await service.thumbnail({
+      id: 'file-1',
+      storageKey: 'anonymous/file-1/photo.png',
+    });
+
+    expect(result).toBe(generated);
+    expect(minio.probeObjectExists).toHaveBeenCalledWith(
+      'thumbnails/file-1/1-320.webp'
+    );
+    expect(minio.downloadStream).toHaveBeenCalledWith(
+      'anonymous/file-1/photo.png'
+    );
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+    expect(renderThumbnail).toHaveBeenCalledWith(source);
+    expect(minio.upload).toHaveBeenCalledWith(
+      'thumbnails/file-1/1-320.webp',
+      generated,
+      'image/webp'
+    );
+    expect(minio.download).not.toHaveBeenCalled();
+  });
+
+  it('coalesces concurrent cold requests for the same file', async () => {
+    const { minio, service } = createService();
+    const generated = Buffer.from('generated-thumbnail');
+    let resolveRender: (buffer: Buffer) => void = () => {};
+    const renderGate = new Promise<Buffer>(resolve => {
+      resolveRender = resolve;
+    });
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockImplementation(async () =>
+      Readable.from(Buffer.from('original'))
+    );
+    minio.upload.mockResolvedValue(undefined);
+    renderThumbnail.mockReturnValueOnce(renderGate);
+    const file = {
+      id: 'file-1',
+      storageKey: 'anonymous/file-1/photo.png',
+    };
+
+    const requests = Array.from({ length: 10 }, () => service.thumbnail(file));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    resolveRender(generated);
+    const results = await Promise.all(requests);
+
+    expect(results).toEqual(Array.from({ length: 10 }, () => generated));
+    expect(minio.probeObjectExists).toHaveBeenCalledTimes(1);
+    expect(minio.downloadStream).toHaveBeenCalledTimes(1);
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+    expect(minio.upload).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows different files to render in parallel', async () => {
+    const { minio, service } = createService();
+    const resolvers: Array<(buffer: Buffer) => void> = [];
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockImplementation(async () =>
+      Readable.from(Buffer.from('original'))
+    );
+    minio.upload.mockResolvedValue(undefined);
+    renderThumbnail.mockImplementation(
+      () =>
+        new Promise<Buffer>(resolve => {
+          resolvers.push(resolve);
+        })
+    );
+
+    const first = service.thumbnail({
+      id: 'file-1',
+      storageKey: 'anonymous/file-1/photo.png',
+    });
+    const second = service.thumbnail({
+      id: 'file-2',
+      storageKey: 'anonymous/file-2/photo.png',
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(renderThumbnail).toHaveBeenCalledTimes(2);
+    resolvers[0](Buffer.from('first'));
+    resolvers[1](Buffer.from('second'));
+    await expect(first).resolves.toEqual(Buffer.from('first'));
+    await expect(second).resolves.toEqual(Buffer.from('second'));
+  });
+
+  it('returns a generated thumbnail when caching it fails and retries next time', async () => {
+    const { minio, service } = createService();
+    const generated = Buffer.from('generated-thumbnail');
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockImplementation(async () =>
+      Readable.from(Buffer.from('original'))
+    );
+    minio.upload.mockRejectedValue(new Error('storage unavailable'));
+    renderThumbnail.mockResolvedValue(generated);
+    const warn = vi
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn'
+      )
+      .mockImplementation(() => undefined);
+    const file = {
+      id: 'file-1',
+      storageKey: 'anonymous/file-1/photo.png',
+    };
+
+    await expect(service.thumbnail(file)).resolves.toBe(generated);
+    await expect(service.thumbnail(file)).resolves.toBe(generated);
+
+    expect(renderThumbnail).toHaveBeenCalledTimes(2);
+    expect(minio.upload).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+});
+
+afterAll(() => {
+  restoreRenderThumbnail();
+  mock.restore();
 });

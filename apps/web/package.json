@@ -1,6 +1,6 @@
 {
   "name": "@utils-plane/web",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "private": true,
   "scripts": {
     "build": "bun ../../scripts/clean-pwa-artifacts.ts && next build",

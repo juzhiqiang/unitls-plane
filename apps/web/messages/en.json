@@ -1698,6 +1698,36 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.11.0",
+          "date": "2026-10-27",
+          "title": "Smart ID-photo framing and faster first screen",
+          "summary": "ID photos gain auto framing, a quality check, and framing guides, with cleaner cutout edges and background; AI image generation supports custom aspect ratios; the homepage and image/Markdown tools load faster.",
+          "groups": [
+            {
+              "title": "New features",
+              "items": [
+                "ID-photo auto framing: faces are detected automatically, centered with proper headroom and tilt-corrected to the chosen spec; fine-tune manually before exporting.",
+                "ID-photo quality check panel: reports on face, composition, sharpness, exposure, and cutout edges, with framing guides shown while cropping.",
+                "AI image generation supports custom aspect ratios, and the prompt templates can be opened any time from the settings panel."
+              ]
+            },
+            {
+              "title": "Improvements",
+              "items": [
+                "Cleaner ID-photo cutout edges and more accurate background estimation, with consistent results between in-browser and server processing.",
+                "The homepage first screen, image compression, and Markdown/PDF previews now load on demand for faster page opens; off-screen animations pause automatically to save power."
+              ]
+            },
+            {
+              "title": "Fixes",
+              "items": [
+                "Edited AI-generated images now keep the original aspect ratio instead of being forced to 1:1.",
+                "Fixed the sign-in button getting stuck in a loading state when the login endpoint errors."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.10.1",
           "date": "2026-09-21",
           "title": "Instant history images and UI touch-ups",

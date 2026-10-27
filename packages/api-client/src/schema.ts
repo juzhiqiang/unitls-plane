@@ -1305,7 +1305,10 @@ export interface operations {
     FilesController_thumbnail: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional ETag for conditional thumbnail retrieval */
+                "if-none-match"?: string;
+            };
             path: {
                 id: string;
             };

@@ -26,6 +26,7 @@ import { getLimit } from '@utils-plane/utils';
 import {
   ApiTags,
   ApiOperation,
+  ApiHeader,
   ApiBearerAuth,
   ApiConsumes,
   ApiQuery,
@@ -334,6 +335,11 @@ export class FilesController {
   @Public()
   @Get(':id/thumbnail')
   @ApiOperation({ summary: 'Get a downscaled thumbnail for an image file' })
+  @ApiHeader({
+    name: 'if-none-match',
+    required: false,
+    description: 'Optional ETag for conditional thumbnail retrieval',
+  })
   async thumbnail(
     @Param('id') id: string,
     @Headers('if-none-match') ifNoneMatch?: string,

@@ -972,6 +972,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "if-none-match",
+            "required": false,
+            "in": "header",
+            "description": "Optional ETag for conditional thumbnail retrieval",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

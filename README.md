@@ -279,10 +279,10 @@ SMTP_FROM=Utils Plane <no-reply@example.com>
 EMAIL_VERIFICATION_CALLBACK_URL=http://localhost:3000/zh/login?verified=1
 ```
 
-生产环境还要保持以下地址一致：
+生产环境还要保持以下地址一致。下面的 `example.com` 是占位域名，部署时请替换为自己配置的域名：
 
-- `BETTER_AUTH_URL` 指向 API 外部访问地址，例如 `http://202.104.149.204:5006`。
-- `CORS_ORIGIN` 指向 Web 外部访问地址，例如 `http://202.104.149.204:5005`。
+- `BETTER_AUTH_URL` 指向 API 外部访问地址，例如 `http://api.example.com:5006`。
+- `CORS_ORIGIN` 指向 Web 外部访问地址，例如 `http://app.example.com:5005`。
 - `NEXT_PUBLIC_API_URL` 指向 API 外部访问地址。
 - `NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true`，让前端展示邮箱验证相关提示。
 - 密码重置复用 SMTP 配置，不需要额外的环境变量。
@@ -291,6 +291,9 @@ EMAIL_VERIFICATION_CALLBACK_URL=http://localhost:3000/zh/login?verified=1
 
 项目支持在本地构建 Docker 镜像，导出为 `.tar`
 镜像包后上传到自有服务器，再在服务器上直接加载运行，不需要在服务器上重新构建源码。
+
+本文档中的公网地址统一使用 `example.com`
+占位域名，仅用于说明配置关系；不要在 README 中记录真实生产环境的 IP、域名或其他部署入口。
 
 离线部署、更新镜像、更新 `.env.prod` / `docker-compose.prod.yml` 并保留历史数据的详细流程见
 [Docker 离线部署与保留数据更新指南](./docs/docker-offline-deployment.md)。
@@ -351,13 +354,13 @@ bun run docker:package:offline
 
 ```env
 BETTER_AUTH_SECRET=<openssl rand -base64 32>
-BETTER_AUTH_URL=http://202.104.149.204:5006
-CORS_ORIGIN=http://202.104.149.204:5005
-NEXT_PUBLIC_API_URL=http://202.104.149.204:5006
-NEXT_PUBLIC_S3_PUBLIC_URL=http://202.104.149.204:5009
+BETTER_AUTH_URL=http://api.example.com:5006
+CORS_ORIGIN=http://app.example.com:5005
+NEXT_PUBLIC_API_URL=http://api.example.com:5006
+NEXT_PUBLIC_S3_PUBLIC_URL=http://storage.example.com:5009
 REQUIRE_EMAIL_VERIFICATION=true
 NEXT_PUBLIC_REQUIRE_EMAIL_VERIFICATION=true
-EMAIL_VERIFICATION_CALLBACK_URL=http://202.104.149.204:5005/zh/login?verified=1
+EMAIL_VERIFICATION_CALLBACK_URL=http://app.example.com:5005/zh/login?verified=1
 SMTP_HOST=smtp.example.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -419,14 +422,15 @@ docker load -i utils-plane-offline-all.tar
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
-生产 compose 由 `api` 与 `worker` 两个同镜像服务组成，默认使用以下对外端口：
+生产 compose 由 `api` 与 `worker`
+两个同镜像服务组成，默认使用以下端口映射。Web、API 和 MinIO 的域名仅为示例，部署时请替换为自己配置的域名：
 
-- Web：`http://202.104.149.204:5005`
-- API：`http://202.104.149.204:5006`
-- PostgreSQL：`202.104.149.204:5007`
-- Redis：`202.104.149.204:5008`
-- MinIO API：`http://202.104.149.204:5009`
-- MinIO Console：`http://202.104.149.204:5010`
+- Web：`http://app.example.com:5005`（`5005 -> 3000`）
+- API：`http://api.example.com:5006`（`5006 -> 3001`）
+- PostgreSQL：主机端口 `5007` -> 容器端口 `5432`
+- Redis：主机端口 `5008` -> 容器端口 `6379`
+- MinIO API：`http://storage.example.com:5009`（`5009 -> 9000`）
+- MinIO Console：主机端口 `5010` -> 容器端口 `9001`
 - Worker：无对外端口，不使用 HTTP healthcheck
 
 API 会先完成 migration、模型同步和 preset seed，readiness 通过后才启动 Worker。生产环境 `/docs`

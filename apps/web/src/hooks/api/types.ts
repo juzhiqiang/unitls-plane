@@ -17,6 +17,7 @@ export type TaskTypeValue =
   | 'pdf_rearrange'
   | 'pdf_from_document'
   | 'image_generate'
+  | 'image_try_on'
   | 'pdf_to_cad';
 
 export interface CreateTaskDto {
@@ -82,4 +83,40 @@ export interface ImageGeneratePresetDto {
   prompt: string;
   imageStorageKey?: string;
   sortOrder: number;
+}
+
+export type AiTryOnMode = 'product' | 'inspiration';
+export type AiTryOnReferenceKind = 'person' | 'pose' | 'garment';
+export type AiTryOnReferenceRole = 'person' | 'garment' | 'pose' | 'style';
+
+export type AiTryOnReferenceBinding =
+  | { role: 'person'; source: 'upload'; inputIndex: number }
+  | { role: 'person'; source: 'library'; assetId: string }
+  | { role: 'garment'; source: 'upload'; inputIndex: number }
+  | { role: 'garment'; source: 'library'; assetId: string }
+  | { role: 'pose'; source: 'library'; assetId: string }
+  | { role: 'style'; source: 'library'; assetId: string };
+
+export interface AiTryOnTaskConfig {
+  [key: string]: unknown;
+  mode: AiTryOnMode;
+  references: AiTryOnReferenceBinding[];
+  promptAddition?: string;
+  size?: string;
+  quality?: 'auto' | 'standard' | 'high';
+  model?: string;
+}
+
+export interface AiTryOnReferenceAssetDto {
+  id: string;
+  kind: AiTryOnReferenceKind;
+  title: string;
+  description?: string | null;
+  tags: string[];
+  thumbnailUrl: string;
+  sourceUrl: string;
+  licenseName: string;
+  licenseUrl?: string | null;
+  attribution: string;
+  sortOrder?: number;
 }

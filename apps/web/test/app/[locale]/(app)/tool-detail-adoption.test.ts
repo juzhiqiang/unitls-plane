@@ -9,6 +9,7 @@ const detailPages = [
   ['/image/animation', 'src/app/[locale]/(app)/image/animation/page.tsx'],
   ['/image/watermark', 'src/app/[locale]/(app)/image/watermark/page.tsx'],
   ['/image/id-photo', 'src/app/[locale]/(app)/image/id-photo/page.tsx'],
+  ['/image/try-on', 'src/app/[locale]/(app)/image/try-on/page.tsx'],
   ['/font', 'src/app/[locale]/(app)/font/page.tsx'],
   ['/pdf/merge', 'src/app/[locale]/(app)/pdf/merge/page.tsx'],
   ['/pdf/split', 'src/app/[locale]/(app)/pdf/split/page.tsx'],

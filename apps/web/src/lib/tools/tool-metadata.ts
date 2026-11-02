@@ -196,6 +196,19 @@ export const imageTools: ToolMeta[] = [
     limitKeys: ['image.generate.dailyCount'],
     tags: ['ai', 'generate', 'prompt'],
   },
+  {
+    key: 'imageTryOn',
+    href: '/image/try-on',
+    icon: Sparkles,
+    titleKey: 'ToolCatalog.tools.imageTryOn.title',
+    descriptionKey: 'ToolCatalog.tools.imageTryOn.description',
+    categoryKey: 'ToolCatalog.categories.imageGenerate',
+    processing: 'server',
+    retention: 'account-files',
+    requiresLogin: true,
+    limitKeys: ['image.generate.dailyCount'],
+    tags: ['ai', 'try-on', 'ecommerce', 'fashion'],
+  },
 ];
 
 export const pdfTools: ToolMeta[] = [

@@ -36,6 +36,13 @@ describe('message catalogues', () => {
       expect(keys).toContain('ToolCatalog.categories.imageGenerateDescription');
       expect(keys).toContain('TasksTool.typeImageGenerate');
       expect(keys).toContain('Dashboard.taskTypes.image_generate');
+      expect(keys).toContain('ImageTryOn.title');
+      expect(keys).toContain('ImageTryOn.modes.product');
+      expect(keys).toContain('ImageTryOn.modes.inspiration');
+      expect(keys).toContain('ImageTryOn.quotaExhausted');
+      expect(keys).toContain('ToolCatalog.tools.imageTryOn.title');
+      expect(keys).toContain('TasksTool.typeImageTryOn');
+      expect(keys).toContain('Dashboard.taskTypes.image_try_on');
     }
   });
 });

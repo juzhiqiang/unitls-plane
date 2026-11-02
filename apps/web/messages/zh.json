@@ -248,6 +248,10 @@
       "imageGenerate": {
         "title": "AI 生图",
         "description": "输入提示词生成图片，需要登录，每日有张数上限。"
+      },
+      "imageTryOn": {
+        "title": "AI 电商试衣",
+        "description": "组合商品实拍或灵感服饰、模特人像与姿势参考，生成电商试穿展示图。"
       }
     }
   },
@@ -458,7 +462,8 @@
       "pdf_from_document": "文档转 PDF",
       "pdf_to_cad": "PDF 转 CAD",
       "font_convert": "字体转换",
-      "image_generate": "AI 生图"
+      "image_generate": "AI 生图",
+      "image_try_on": "AI 电商试衣"
     }
   },
   "ImageTool": {
@@ -1008,6 +1013,104 @@
     "emptyHint": "在下方输入提示词，或从灵感模板开始。",
     "quotaRemaining": "今日剩余 {remaining} / {limit} 张"
   },
+  "ImageTryOn": {
+    "title": "AI 电商试衣",
+    "description": "组合模特人像、真实商品实拍或灵感服饰与姿势参考，生成电商试穿展示图。",
+    "modeLabel": "试衣模式",
+    "modes": {
+      "product": "真实商品试穿",
+      "inspiration": "穿搭灵感",
+      "productDescription": "上传真实商品实拍作为目标服装，搭配模特图库或个人照片生成试穿展示图；商品款式、颜色与纹理以商品上传图为准。",
+      "inspirationDescription": "从经授权的服饰图库选择目标服装，快速搭配模特与姿势生成穿搭灵感图。"
+    },
+    "quotaBadge": "今日剩余 {remaining} / {limit} 张（与 AI 生图共用）",
+    "quotaExhausted": "今日生图与试衣共享额度已用完，请明天再试。",
+    "quotaLoadError": "无法获取今日生图额度，请刷新或稍后重试。",
+    "referenceCount": "已选参考图 {count} / {max}",
+    "referenceLimitHint": "最多可组合 4 张参考图（人像、目标服装、姿势、辅助风格各最多 1 张）。",
+    "referenceLimitExceeded": "参考图最多 {max} 张，每个角色最多选择 1 张。",
+    "personSectionTitle": "1. 人像参考（必选）",
+    "personSectionHint": "上传清晰的单人正面/全身照，或从授权模特图库中选择。",
+    "personSourceUpload": "上传个人照片",
+    "personSourceLibrary": "选择模特图库",
+    "personUploadAction": "上传人像照片",
+    "personDropzoneHint": "支持 JPG / PNG / WebP / AVIF，单文件最大 {size}",
+    "garmentProductSectionTitle": "2. 目标商品图（必选）",
+    "garmentProductSectionHint": "上传真实商品平铺或实拍图，作为款式、颜色与纹理的唯一服装目标来源。",
+    "garmentUploadAction": "上传商品实拍图",
+    "garmentInspirationSectionTitle": "2. 目标灵感服饰（必选）",
+    "garmentInspirationSectionHint": "从服饰图库选择一件服装作为本次穿搭的目标服饰。",
+    "poseSectionTitle": "3. 姿势参考（可选）",
+    "poseSectionHint": "可选一张姿势图库素材控制站姿或肢体动作。",
+    "styleSectionTitle": "4. 辅助穿搭风格（可选 · 弱优先级）",
+    "styleSectionHint": "可选一张服饰图库仅作造型氛围参考，弱优先级，不会覆盖目标商品的款式、颜色或纹理。",
+    "promptSectionTitle": "5. 场景与生成参数（可选）",
+    "promptLabel": "场景与背景补充说明",
+    "promptPlaceholder": "补充拍摄场景、光线或背景氛围（如：极简纯白影棚、柔和自然光、街拍外景），不会覆盖服装角色优先级…",
+    "promptCounter": "{count} / {max}",
+    "modelLabel": "生图模型",
+    "sizeLabel": "输出尺寸",
+    "qualityLabel": "输出质量",
+    "qualities": {
+      "auto": "自动",
+      "standard": "标准",
+      "high": "高清"
+    },
+    "sizes": {
+      "auto": "自动",
+      "square": "1:1 方图 (1024×1024)",
+      "portrait": "2:3 竖图 (1024×1536)",
+      "landscape": "3:2 横图 (1536×1024)"
+    },
+    "selectedFile": "已选文件：{filename} ({size})",
+    "removeFile": "移除文件",
+    "clearSelection": "清除选择",
+    "selectedAsset": "已选素材：{title}",
+    "libraryLoading": "正在加载参考图库…",
+    "libraryEmpty": "当前分类暂无可用授权素材。",
+    "libraryError": "参考图库加载失败，请重试。",
+    "libraryRetry": "重试加载图库",
+    "fallbackToUploadAction": "切换为上传真实商品与人像",
+    "fallbackToUploadHint": "图库为空或不可用时，仍可在「真实商品试穿」模式下直接上传个人照片与商品实拍完成生成。",
+    "licenseLabel": "许可：{license}",
+    "attributionLabel": "署名：{attribution}",
+    "sourceLink": "来源",
+    "submit": "开始生成试衣图",
+    "submitting": "正在提交…",
+    "queued": "排队等待中…",
+    "processing": "正在生成试衣图…",
+    "regenerate": "重新生成",
+    "download": "下载试衣图",
+    "reset": "重新配置",
+    "resultTitle": "试衣结果已生成",
+    "resultPreviewAlt": "AI 电商试衣生成结果预览",
+    "aiGeneratedBadge": "AI 生成展示图",
+    "resultModeProductBadge": "真实商品试穿",
+    "resultModeInspirationBadge": "穿搭灵感",
+    "resultProductDisclaimer": "本图为 AI 生成的电商试穿展示图，基于您上传的商品图合成，不承诺 100% 还原商品版型、色差、印花与细节，请在发布前人工复核。",
+    "resultInspirationDisclaimer": "本图为 AI 生成的穿搭灵感展示图，使用授权服饰图库生成，仅供造型与搭配参考。",
+    "errors": {
+      "missingPerson": "请先上传人像照片或从模特图库选择模特。",
+      "missingGarment": "请先提供目标服装参考图。",
+      "productRequiresUploadGarment": "真实商品试穿模式需要上传商品实拍图。",
+      "inspirationRequiresLibraryGarment": "穿搭灵感模式需要从服饰图库选择目标服装。",
+      "referenceLimitExceeded": "参考图最多支持 4 张，请移除多余参考项后重试。",
+      "duplicateRole": "同一参考角色最多只能绑定 1 张图片。",
+      "duplicateUploadFile": "人像与商品图不能重复绑定同一上传文件，请分别选择不同图片。",
+      "missingUploadFile": "上传文件无效，请重新选择图片。",
+      "invalidUploadFileId": "上传文件标识无效，请重新上传。",
+      "invalidLibraryAssetId": "图库素材标识无效，请重新选择。",
+      "promptTooLong": "场景补充说明不能超过 5000 个字符。",
+      "fileTooLarge": "图片超过当前账号的 {size} 单文件大小限制，请更换更小的图片。",
+      "uploadFailed": "参考图上传失败，请重试。",
+      "requiredLibraryFailed": "当前模式所需的参考图库加载失败，请重试或切换为上传模式。",
+      "quotaExceeded": "今日生图与试衣共享额度已用完，请明天再试。",
+      "contentRejected": "提示词或参考图未通过内容安全策略，请调整后重试。",
+      "notConfigured": "AI 生图服务尚未配置，请联系管理员。",
+      "providerUnavailable": "生图服务暂不可用，请稍后重试。",
+      "failed": "试衣生成失败，请重试。"
+    }
+  },
   "PdfTool": {
     "title": "PDF 工具",
     "description": "选择一个工具开始处理 PDF 文件",
@@ -1429,6 +1532,7 @@
     "typeImageWatermark": "水印",
     "typeImageIdPhoto": "证件照",
     "typeImageGenerate": "AI 生图",
+    "typeImageTryOn": "AI 电商试衣",
     "typePdfMerge": "PDF 合并",
     "typePdfSplit": "PDF 拆分",
     "typePdfToImage": "PDF 转图片",

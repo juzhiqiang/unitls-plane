@@ -44,7 +44,7 @@ describe('tool metadata', () => {
   });
 
   it('does not leave the image catalog under-explained', () => {
-    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(10);
+    expect(imageToolGroups.flatMap(group => group.tools)).toHaveLength(11);
   });
 
   it('registers the AI image generator as a login-gated server tool', () => {
@@ -54,6 +54,17 @@ describe('tool metadata', () => {
     expect(tool?.processing).toBe('server');
     expect(tool?.requiresLogin).toBe(true);
     expect(tool?.retention).toBe('account-files');
+  });
+
+  it('registers the AI e-commerce try-on workbench as a login-gated server tool sharing daily generation quota', () => {
+    const tool = getToolByHref('/image/try-on');
+
+    expect(tool?.key).toBe('imageTryOn');
+    expect(tool?.processing).toBe('server');
+    expect(tool?.requiresLogin).toBe(true);
+    expect(tool?.retention).toBe('account-files');
+    expect(tool?.categoryKey).toBe('ToolCatalog.categories.imageGenerate');
+    expect(tool?.limitKeys).toEqual(['image.generate.dailyCount']);
   });
 
   it('registers PDF to CAD as a login-gated server tool in the PDF convert group', () => {

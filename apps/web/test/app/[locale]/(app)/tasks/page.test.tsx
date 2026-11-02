@@ -117,3 +117,24 @@ it('passes the type filter as category and does not filter returned rows locally
   );
   expect(screen.getAllByText(en.TasksTool.typePdfMerge)).not.toHaveLength(0);
 });
+
+it('displays image_try_on tasks with their dedicated AI e-commerce try-on label', () => {
+  const tryOnTask = {
+    id: 'try-on-task',
+    userId: 'user-1',
+    type: 'image_try_on',
+    status: 'completed',
+    inputFileIds: ['file-1'],
+    progress: 100,
+    createdAt: '2026-11-02T00:00:00.000Z',
+    completedAt: '2026-11-02T00:01:00.000Z',
+  } as const;
+
+  mocks.query.mockReturnValue({
+    data: { tasks: [tryOnTask], total: null, nextCursor: null },
+    isLoading: false,
+  });
+  render(page());
+
+  expect(screen.getAllByText(en.TasksTool.typeImageTryOn)).not.toHaveLength(0);
+});

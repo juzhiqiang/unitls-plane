@@ -248,6 +248,10 @@
       "imageGenerate": {
         "title": "AI image generation",
         "description": "Generate images from a prompt. Sign-in required, with a daily image cap."
+      },
+      "imageTryOn": {
+        "title": "AI e-commerce try-on",
+        "description": "Combine product photos or inspiration garments with model portraits and pose references to generate e-commerce try-on visuals."
       }
     }
   },
@@ -458,7 +462,8 @@
       "pdf_from_document": "Document to PDF",
       "pdf_to_cad": "PDF to CAD",
       "font_convert": "Font conversion",
-      "image_generate": "AI image generation"
+      "image_generate": "AI image generation",
+      "image_try_on": "AI e-commerce try-on"
     }
   },
   "ImageTool": {
@@ -1008,6 +1013,104 @@
     "emptyHint": "Type a prompt below, or start from an idea template.",
     "quotaRemaining": "{remaining} / {limit} remaining today"
   },
+  "ImageTryOn": {
+    "title": "AI e-commerce try-on",
+    "description": "Combine model portraits, real product photos or inspiration garments, and pose references to generate e-commerce try-on visuals.",
+    "modeLabel": "Try-on mode",
+    "modes": {
+      "product": "Real product try-on",
+      "inspiration": "Styling inspiration",
+      "productDescription": "Upload a real product photo as the target garment and pair it with a library model or personal portrait; garment cut, color, and texture follow the uploaded product photo.",
+      "inspirationDescription": "Pick a target garment from the curated library and pair it with a model and pose to explore outfit styling ideas."
+    },
+    "quotaBadge": "{remaining} / {limit} remaining today (shared with AI image generation)",
+    "quotaExhausted": "You have used today's shared generation quota. Please try again tomorrow.",
+    "quotaLoadError": "Could not load today's generation quota. Refresh or try again shortly.",
+    "referenceCount": "Selected references: {count} / {max}",
+    "referenceLimitHint": "Combine up to 4 reference images (at most 1 each for person, target garment, pose, and auxiliary style).",
+    "referenceLimitExceeded": "At most {max} reference images are allowed, with at most 1 per role.",
+    "personSectionTitle": "1. Person reference (required)",
+    "personSectionHint": "Upload a clear single-person portrait/full-body photo, or choose from the licensed model library.",
+    "personSourceUpload": "Upload portrait",
+    "personSourceLibrary": "Select library model",
+    "personUploadAction": "Upload person photo",
+    "personDropzoneHint": "Supports JPG / PNG / WebP / AVIF, up to {size}",
+    "garmentProductSectionTitle": "2. Target product photo (required)",
+    "garmentProductSectionHint": "Upload a real flat-lay or product photo as the primary source for garment cut, color, and texture.",
+    "garmentUploadAction": "Upload product photo",
+    "garmentInspirationSectionTitle": "2. Target inspiration garment (required)",
+    "garmentInspirationSectionHint": "Choose a garment from the library as the target outfit for this styling generation.",
+    "poseSectionTitle": "3. Pose reference (optional)",
+    "poseSectionHint": "Optionally pick a pose reference from the library to guide stance and body posture.",
+    "styleSectionTitle": "4. Auxiliary styling reference (optional · low priority)",
+    "styleSectionHint": "Optionally pick a library garment for styling mood only; low priority and will not override the target garment's cut, color, or texture.",
+    "promptSectionTitle": "5. Scene & generation settings (optional)",
+    "promptLabel": "Scene & background notes",
+    "promptPlaceholder": "Add scene, lighting, or background details (e.g. minimalist white studio, soft natural daylight, street style); does not override garment priority…",
+    "promptCounter": "{count} / {max}",
+    "modelLabel": "Model",
+    "sizeLabel": "Output size",
+    "qualityLabel": "Output quality",
+    "qualities": {
+      "auto": "Auto",
+      "standard": "Standard",
+      "high": "High"
+    },
+    "sizes": {
+      "auto": "Auto",
+      "square": "1:1 Square (1024×1024)",
+      "portrait": "2:3 Portrait (1024×1536)",
+      "landscape": "3:2 Landscape (1536×1024)"
+    },
+    "selectedFile": "Selected file: {filename} ({size})",
+    "removeFile": "Remove file",
+    "clearSelection": "Clear selection",
+    "selectedAsset": "Selected asset: {title}",
+    "libraryLoading": "Loading reference library…",
+    "libraryEmpty": "No licensed reference assets are available in this category yet.",
+    "libraryError": "Could not load the reference library. Please try again.",
+    "libraryRetry": "Retry loading library",
+    "fallbackToUploadAction": "Switch to uploading product & portrait",
+    "fallbackToUploadHint": "When the library is empty or unavailable, you can still upload your own portrait and product photo in Real product try-on mode.",
+    "licenseLabel": "License: {license}",
+    "attributionLabel": "Attribution: {attribution}",
+    "sourceLink": "Source",
+    "submit": "Generate try-on image",
+    "submitting": "Submitting…",
+    "queued": "Queued…",
+    "processing": "Generating try-on image…",
+    "regenerate": "Regenerate",
+    "download": "Download image",
+    "reset": "Reset",
+    "resultTitle": "Try-on result ready",
+    "resultPreviewAlt": "AI e-commerce try-on result preview",
+    "aiGeneratedBadge": "AI-generated visual",
+    "resultModeProductBadge": "Real product try-on",
+    "resultModeInspirationBadge": "Styling inspiration",
+    "resultProductDisclaimer": "This is an AI-generated e-commerce try-on display image synthesized from your uploaded product photo. Exact reproduction of garment fit, color, print, and fine details is not guaranteed; review before publishing.",
+    "resultInspirationDisclaimer": "This is an AI-generated styling inspiration image created from licensed library garments for outfit and styling reference only.",
+    "errors": {
+      "missingPerson": "Please upload a portrait photo or select a model from the library first.",
+      "missingGarment": "Please provide a target garment reference first.",
+      "productRequiresUploadGarment": "Real product try-on mode requires an uploaded product photo.",
+      "inspirationRequiresLibraryGarment": "Styling inspiration mode requires selecting a target garment from the library.",
+      "referenceLimitExceeded": "At most 4 reference images are supported. Remove extra references and try again.",
+      "duplicateRole": "Each reference role can only bind at most 1 image.",
+      "duplicateUploadFile": "Person and product references cannot bind the same uploaded file. Please select separate images.",
+      "missingUploadFile": "The uploaded file is invalid. Please select the image again.",
+      "invalidUploadFileId": "Invalid uploaded file identifier. Please upload again.",
+      "invalidLibraryAssetId": "Invalid library asset identifier. Please select again.",
+      "promptTooLong": "Scene notes cannot exceed 5000 characters.",
+      "fileTooLarge": "The image exceeds your plan's {size} per-file limit. Please pick a smaller image.",
+      "uploadFailed": "Failed to upload reference image. Please try again.",
+      "requiredLibraryFailed": "The reference library required for the current selection failed to load. Retry or switch to upload mode.",
+      "quotaExceeded": "You have used today's shared generation quota. Please try again tomorrow.",
+      "contentRejected": "The prompt or reference images were rejected by the content policy. Adjust and try again.",
+      "notConfigured": "AI image generation is not configured. Contact the administrator.",
+      "providerUnavailable": "The generation service is temporarily unavailable. Please try again later.",
+      "failed": "Try-on generation failed. Please try again."
+    }
+  },
   "PdfTool": {
     "title": "PDF Tools",
     "description": "Pick a tool to start working with your PDFs",
@@ -1429,6 +1532,7 @@
     "typeImageWatermark": "Watermark",
     "typeImageIdPhoto": "ID photo",
     "typeImageGenerate": "AI image generation",
+    "typeImageTryOn": "AI e-commerce try-on",
     "typePdfMerge": "PDF Merge",
     "typePdfSplit": "PDF Split",
     "typePdfToImage": "PDF → Image",

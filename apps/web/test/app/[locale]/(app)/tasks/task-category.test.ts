@@ -17,4 +17,8 @@ describe('task category labels', () => {
   it('classifies AI image generation as an image task', () => {
     expect(getTaskTypeCategory('image_generate')).toBe('image');
   });
+
+  it('classifies AI e-commerce try-on as an image task', () => {
+    expect(getTaskTypeCategory('image_try_on')).toBe('image');
+  });
 });

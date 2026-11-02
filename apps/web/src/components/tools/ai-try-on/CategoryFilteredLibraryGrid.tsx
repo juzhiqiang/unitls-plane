@@ -20,8 +20,13 @@ interface CategoryFilteredLibraryGridProps {
   optional?: boolean;
 }
 
+type PoseCategory = {
+  label: string;
+  tags: string[];
+};
+
 // 姿势分类映射
-const POSE_CATEGORIES = {
+const POSE_CATEGORIES: Record<string, PoseCategory> = {
   all: { label: '全部姿势', tags: [] },
   standing: { label: '站姿', tags: ['站姿', 'a-pose', 't-pose', 'standing'] },
   sitting: { label: '坐姿', tags: ['坐姿', '侧坐・女孩坐', '背向坐位'] },
@@ -31,7 +36,7 @@ const POSE_CATEGORIES = {
   sexy: { label: '性感系', tags: ['性感・大胆系', '挤胸・强调事业线系', '前倾', '后仰・挺背'] },
   cute: { label: '可爱系', tags: ['可爱系'] },
   motion: { label: '动作', tags: ['motion', 'walking', '扭身', '立位'] },
-} as const;
+};
 
 export function CategoryFilteredLibraryGrid({
   role,
@@ -46,13 +51,13 @@ export function CategoryFilteredLibraryGrid({
   optional = false,
 }: CategoryFilteredLibraryGridProps) {
   const t = useTranslations('ImageTryOn');
-  const [activeCategory, setActiveCategory] = useState<keyof typeof POSE_CATEGORIES>('all');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
 
   // 按分类筛选图片
   const filteredItems = useMemo(() => {
     if (activeCategory === 'all') return items;
     
-    const categoryTags = POSE_CATEGORIES[activeCategory].tags;
+    const categoryTags = POSE_CATEGORIES[activeCategory]?.tags ?? [];
     return items.filter(item => 
       item.tags.some(tag => categoryTags.includes(tag))
     );
@@ -62,9 +67,9 @@ export function CategoryFilteredLibraryGrid({
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: items.length };
     
-    (Object.keys(POSE_CATEGORIES) as Array<keyof typeof POSE_CATEGORIES>).forEach(key => {
+    Object.keys(POSE_CATEGORIES).forEach(key => {
       if (key === 'all') return;
-      const categoryTags = POSE_CATEGORIES[key].tags;
+      const categoryTags = POSE_CATEGORIES[key]?.tags ?? [];
       counts[key] = items.filter(item =>
         item.tags.some(tag => categoryTags.includes(tag))
       ).length;
@@ -153,8 +158,8 @@ export function CategoryFilteredLibraryGrid({
       {/* 分类标签 */}
       {role === 'pose' && (
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(POSE_CATEGORIES) as Array<keyof typeof POSE_CATEGORIES>).map(key => {
-            const category = POSE_CATEGORIES[key];
+          {Object.keys(POSE_CATEGORIES).map(key => {
+            const category = (POSE_CATEGORIES[key] ?? { label: "", tags: [] });
             const count = categoryCounts[key] || 0;
             const isActive = activeCategory === key;
             

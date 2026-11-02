@@ -9,6 +9,7 @@
 - [AGENTS.md](./AGENTS.md) - Codex 与 Claude 共用的 AI 协作规则入口
 - [CLAUDE.md](./CLAUDE.md) - Claude Code 专属入口，通过 `@AGENTS.md` 导入本文档
 - [PROJECT_SPECS.md](./PROJECT_SPECS.md) - 项目技术规范和当前架构事实
+- [docs/](./docs/) - 项目设计、架构、方案、报告及功能说明文档
 - [task/](./task/) - phase1-phase9 任务文档
 
 ## 项目概述
@@ -191,6 +192,11 @@ Markdown / Word 转 PDF 的服务端导出优先使用 LibreOffice。生产组�
 ### 日志文件规范
 
 - 本地运行产生的 `.log` 和 `.err` 文件统一放在项目根目录 `log/` 下；`log/` 不提交到 Git。
+
+### 文档存放规范
+
+- **根目录严禁随意放置文档与文本文件**：项目根目录仅允许存在固定的入口与规范文件（`README.md`、`AGENTS.md`、`CLAUDE.md`、`PROJECT_SPECS.md`、`CHANGELOG.md`）。
+- **新增文档必须放入 `docs/`**：所有功能设计、执行计划、调研比对、总结报告、指南文档或文本说明（包括但不限于 `*.md`、`*.txt` 等），必须统一创建或放置在 `docs/` 及其对应子目录下（例如 `docs/superpowers/plans/`、`docs/superpowers/specs/` 或对应模块子目录 `docs/<feature-name>/`），严禁直接丢在项目根目录。
 
 ### 核对截图规范
 

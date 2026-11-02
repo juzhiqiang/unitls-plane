@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
-import { useSession } from '@/hooks/use-session';
+import { useRequireLogin } from '@/hooks/use-require-login';
 import { useTaskStatus, useImageGenerationQuota, useImageGenerateModels } from '@/hooks/api/use-tasks';
 import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';
 import { buildImageTryOnTaskPayload, type BuildImageTryOnPayloadInput } from '@/components/tools/ai-try-on';
@@ -47,7 +47,7 @@ export default function AiTryOnPage() {
   const t = useTranslations('ImageTryOn');
   const locale = useLocale();
   const router = useRouter();
-  const { data: session, isPending: sessionPending } = useSession();
+  useRequireLogin();
 
   // 基础状态
   const [mode, setMode] = useState<AiTryOnMode>('product');
@@ -117,7 +117,7 @@ export default function AiTryOnPage() {
 
   // 根据模式和人像来源类型判断是否可以提交
   const canSubmit = useMemo(() => {
-    if (isSubmitting || sessionPending || (quota?.remaining ?? 0) <= 0) {
+    if (isSubmitting || (quota?.remaining ?? 0) <= 0) {
       return false;
     }
 
@@ -134,7 +134,7 @@ export default function AiTryOnPage() {
     } else {
       return garmentAssetId !== null;
     }
-  }, [mode, personSourceType, personFile, personAssetId, garmentFile, garmentAssetId, isSubmitting, sessionPending, quota]);
+  }, [mode, personSourceType, personFile, personAssetId, garmentFile, garmentAssetId, isSubmitting, quota]);
 
   // 上传文件
   const uploadFile = useCallback(async (file: File): Promise<string> => {
@@ -596,3 +596,6 @@ export default function AiTryOnPage() {
     </div>
   );
 }
+
+
+

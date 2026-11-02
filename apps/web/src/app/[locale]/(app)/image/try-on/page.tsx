@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRequireLogin } from '@/hooks/use-require-login';
-import { useTaskStatus, useImageGenerationQuota, useImageGenerateModels } from '@/hooks/api/use-tasks';
+import { useTaskStatus, useImageGenerateQuota, useImageGenerateModels } from '@/hooks/api/use-tasks';
 import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';
 import { buildImageTryOnTaskPayload, type BuildImageTryOnPayloadInput } from '@/components/tools/ai-try-on';
 import { PoseLibraryWithFilters, UploadReferenceCard, CategoryFilteredLibraryGrid } from '@/components/tools/ai-try-on';
@@ -72,7 +72,7 @@ export default function AiTryOnPage() {
   const { data: garmentLibrary, isLoading: isGarmentLoading } = useAiTryOnReferences('garment');
   const { data: personLibrary, isLoading: isPersonLoading } = useAiTryOnReferences('person');
   const { data: taskStatus, refetch: refetchTaskStatus } = useTaskStatus(taskId ?? '');
-  const { data: quota, refetch: refetchQuota } = useImageGenerationQuota();
+  const { data: quota, refetch: refetchQuota } = useImageGenerateQuota();
   const { data: models } = useImageGenerateModels();
 
   // 轮询任务状态（优化点2：进度显示）
@@ -596,6 +596,7 @@ export default function AiTryOnPage() {
     </div>
   );
 }
+
 
 
 

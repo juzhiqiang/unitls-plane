@@ -28,9 +28,9 @@
 # 1. 下载姿势数据
 curl -o pose-zh.json https://raw.githubusercontent.com/anhao/ai-pose-gallery-zh/main/data/pose-zh.json
 
-# 2. 运行导入脚本（筛选 25 个适合试衣的姿势）
+# 2. 运行导入脚本（从 230+ 个正面姿势中按分类平衡选择 50 个）
 cd apps/api
-bun run src/scripts/import-pose-references.ts pose-zh.json
+bun run src/scripts/import-pose-references.ts ../../../pose-zh.json
 
 # 3. 下载对应图片（从 ai-pose-gallery-zh 仓库）
 # 脚本会输出需要下载的图片列表
@@ -108,3 +108,5 @@ bun run src/scripts/import-pose-references.ts pose-zh.json
 - 种子脚本：`apps/api/src/scripts/seed-ai-try-on-references.ts`
 - 图库 Service：`apps/api/src/modules/tasks/services/ai-try-on-references.service.ts`
 - 数据库 Schema：`packages/db/src/schema/ai-try-on-references.ts`
+
+

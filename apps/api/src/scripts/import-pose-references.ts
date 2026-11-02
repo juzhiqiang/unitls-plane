@@ -38,13 +38,17 @@ const SUITABLE_CATEGORIES = [
   '跪姿',
 ] as const;
 
-// 排除不适合试衣的体系
-const EXCLUDED_SYSTEMS = [
-  '性感系',
-  '泳装',
-  '内衣',
-  '躺卧',
-  '双人',
+// 排除明显成人内容，但保留合理的泳装/内衣/性感系展示姿势
+const EXCLUDED_CATEGORIES = [
+  '正常位',
+  '后入位',
+  '骑乘位',
+  '侧卧位',
+  '坐位贴身',
+  '立位贴身',
+  '贴身',
+  '贴脸系',
+  '面对面坐位',
 ] as const;
 
 // 图片基础 URL（需要根据实际部署调整）
@@ -54,11 +58,21 @@ function shouldIncludePose(pose: PoseData): boolean {
   // 只选择正面角度（试衣主要展示正面）
   if (pose.角度 !== '正面') return false;
   
-  // 检查分类
-  if (!SUITABLE_CATEGORIES.includes(pose.分类 as any)) return false;
+  // 排除成人内容分类
+  if (EXCLUDED_CATEGORIES.some(ex => pose.分类.includes(ex))) return false;
   
-  // 排除不适合的体系
-  if (EXCLUDED_SYSTEMS.some(ex => pose.体系.includes(ex))) return false;
+  // 排除明显的成人内容体系
+  if (pose.体系.includes('R18') || pose.体系.includes('成人')) return false;
+  
+  // 允许的分类：站姿、坐姿、跪姿、躺卧、蹲姿等合理展示姿势
+  const validCategories = [
+    '站姿', '行走', '坐姿', '跪立', '跪立・四肢着地',
+    '躺卧', '趴卧', '蹲姿', '侧坐・女孩坐', '背向坐位',
+    '性感・大胆系', '可爱系', '挤胸・强调事业线系',
+    '前倾', '后仰・挺背', '扭身', '立位'
+  ];
+  
+  if (!validCategories.includes(pose.分类)) return false;
   
   return true;
 }
@@ -103,8 +117,20 @@ async function main() {
   const suitable = poses.filter(shouldIncludePose);
   console.log(`[ImportPoseReferences] Found ${suitable.length} suitable poses`);
   
-  // 3. 限制数量（前 25 个，避免过多）
-  const selected = suitable.slice(0, 25);
+  // 3. 按分类平衡选择姿势（每个分类最多取一定数量，确保多样性）
+  const byCategory = new Map<string, PoseData[]>();
+  suitable.forEach(pose => {
+    const cat = pose.分类;
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(pose);
+  });
+  
+  const selected: PoseData[] = [];
+  const maxPerCategory = Math.ceil(50 / byCategory.size); // 目标50个姿势，平均分配
+  
+  for (const [category, poses] of byCategory.entries()) {
+    selected.push(...poses.slice(0, maxPerCategory));
+  }
   console.log(`[ImportPoseReferences] Selected ${selected.length} poses for import`);
   
   // 4. 生成插入数据
@@ -154,3 +180,5 @@ main()
     console.error('[ImportPoseReferences] Failed:', err);
     process.exit(1);
   });
+
+

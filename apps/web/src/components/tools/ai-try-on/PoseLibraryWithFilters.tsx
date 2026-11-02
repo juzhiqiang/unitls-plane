@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'use';
+import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { AiTryOnReferenceAssetDto } from '@/hooks/api/types';
 
@@ -222,3 +222,4 @@ export function PoseLibraryWithFilters({
     </div>
   );
 }
+

@@ -1109,7 +1109,13 @@
       "notConfigured": "AI 生图服务尚未配置，请联系管理员。",
       "providerUnavailable": "生图服务暂不可用，请稍后重试。",
       "failed": "试衣生成失败，请重试。"
-    }
+    },
+    "uploadTab": "上传",
+    "libraryTab": "图库",
+    "personLabel": "人像参考",
+    "garmentLabel": "服饰参考",
+    "poseLabel": "姿势参考",
+    "optionalLabel": "(可选)"
   },
   "PdfTool": {
     "title": "PDF 工具",
@@ -1732,7 +1738,9 @@
         {
           "id": "operator-support",
           "title": "7. 运营主体与支持",
-          "paragraphs": ["本服务由下方所列项目团队运营。对条款、账号限制或公测问题有疑问时，请通过下方支持邮箱联系。"]
+          "paragraphs": [
+            "本服务由下方所列项目团队运营。对条款、账号限制或公测问题有疑问时，请通过下方支持邮箱联系。"
+          ]
         }
       ]
     },

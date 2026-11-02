@@ -1,15 +1,16 @@
 ﻿'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
-import { toast } from 'sonner';
-import { useTaskStatus } from '@/hooks/api/use-tasks';
+import { useSession } from '@/hooks/use-session';
+import { useTaskStatus, useImageGenerationQuota, useImageGenerateModels } from '@/hooks/api/use-tasks';
 import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';
 import { buildImageTryOnTaskPayload, type BuildImageTryOnPayloadInput } from '@/components/tools/ai-try-on';
 import { PoseLibraryWithFilters, UploadReferenceCard } from '@/components/tools/ai-try-on';
 import { api } from '@/lib/api-client';
-import { formatBytes } from '@/lib/format';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +18,9 @@ type AiTryOnMode = 'product' | 'inspiration';
 
 export default function AiTryOnPage() {
   const t = useTranslations('ImageTryOn');
-  const tUnits = useTranslations('Common.units');
   const locale = useLocale();
   const router = useRouter();
+  const { data: session, isPending: sessionPending } = useSession();
 
   const [mode, setMode] = useState<AiTryOnMode>('product');
   const [personFile, setPersonFile] = useState<File | null>(null);
@@ -28,6 +29,7 @@ export default function AiTryOnPage() {
   const [prompt, setPrompt] = useState('');
   const [size, setSize] = useState('auto');
   const [quality, setQuality] = useState<'auto' | 'standard' | 'high'>('high');
+  const [model, setModel] = useState<string>('');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
@@ -36,6 +38,16 @@ export default function AiTryOnPage() {
     useAiTryOnReferences('pose');
 
   const { data: taskStatus } = useTaskStatus(taskId ?? '');
+  
+  const { data: quota } = useImageGenerationQuota();
+  const { data: models } = useImageGenerateModels();
+
+  const quotaText = useMemo(() => {
+    if (!quota) return '加载中...';
+    return `${quota.remaining} / ${quota.limit}`;
+  }, [quota]);
+
+  const canSubmit = personFile && garmentFile && !isSubmitting && !sessionPending && (quota?.remaining ?? 0) > 0;
 
   const uploadFile = useCallback(async (file: File): Promise<string> => {
     const formData = new FormData();
@@ -55,6 +67,11 @@ export default function AiTryOnPage() {
   const handleSubmit = useCallback(async () => {
     if (!personFile || !garmentFile) {
       toast.error(t('errors.missingPerson'));
+      return;
+    }
+
+    if ((quota?.remaining ?? 0) <= 0) {
+      toast.error(t('quotaExhausted'));
       return;
     }
 
@@ -85,6 +102,7 @@ export default function AiTryOnPage() {
         promptAddition: prompt || undefined,
         size: size === 'auto' ? undefined : size,
         quality,
+        model: model || undefined,
       };
 
       const payloadResult = buildImageTryOnTaskPayload(input);
@@ -109,25 +127,35 @@ export default function AiTryOnPage() {
       setIsSubmitting(false);
       setUploadProgress(null);
     }
-  }, [mode, personFile, garmentFile, poseAssetId, prompt, size, quality, uploadFile, t]);
-
-  const canSubmit = personFile && garmentFile && !isSubmitting;
+  }, [mode, personFile, garmentFile, poseAssetId, prompt, size, quality, model, quota?.remaining, uploadFile, t]);
 
   return (
     <div className="container mx-auto max-w-7xl space-y-8 px-4 py-8">
+      {/* 页头 */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
         <p className="text-muted-foreground">{t('description')}</p>
       </div>
 
-      {/* 试衣模式选择 */}
+      {/* 额度提示 */}
+      {quota && (
+        <div className={`rounded-lg border p-4 text-sm ${
+          quota.remaining > 0 
+            ? 'border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+            : 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300'
+        }`}>
+          <p className="font-semibold">{t('quotaBadge', { remaining: quota.remaining, limit: quota.limit })}</p>
+        </div>
+      )}
+
+      {/* 试衣模式切换 */}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">{t('modeLabel')}</h2>
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => setMode('product')}
-            disabled={isSubmitting}
+            disabled={isSubmitting || sessionPending}
             className={`rounded-lg border-2 p-4 text-left transition-all ${
               mode === 'product'
                 ? 'border-foreground bg-muted/30'
@@ -140,7 +168,7 @@ export default function AiTryOnPage() {
           <button
             type="button"
             onClick={() => setMode('inspiration')}
-            disabled={isSubmitting}
+            disabled={isSubmitting || sessionPending}
             className={`rounded-lg border-2 p-4 text-left transition-all ${
               mode === 'inspiration'
                 ? 'border-foreground bg-muted/30'
@@ -161,7 +189,7 @@ export default function AiTryOnPage() {
           file={personFile}
           actionLabel={t('personUploadAction') || '上传人像照片'}
           maxFileSize={10 * 1024 * 1024}
-          disabled={isSubmitting}
+          disabled={isSubmitting || sessionPending}
           onFileChange={setPersonFile}
           onOversizeError={(maxSizeFormatted) => {
             toast.error(t('errors.fileTooLarge', { size: maxSizeFormatted }));
@@ -177,7 +205,7 @@ export default function AiTryOnPage() {
           file={garmentFile}
           actionLabel={t('garmentUploadAction') || '上传商品实拍图'}
           maxFileSize={10 * 1024 * 1024}
-          disabled={isSubmitting}
+          disabled={isSubmitting || sessionPending}
           onFileChange={setGarmentFile}
           onOversizeError={(maxSizeFormatted) => {
             toast.error(t('errors.fileTooLarge', { size: maxSizeFormatted }));
@@ -199,7 +227,7 @@ export default function AiTryOnPage() {
           isLoading={isPoseLoading}
           isError={isPoseError}
           onRetry={refetchPose}
-          disabled={isSubmitting}
+          disabled={isSubmitting || sessionPending}
         />
       </div>
 
@@ -212,7 +240,7 @@ export default function AiTryOnPage() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            disabled={isSubmitting}
+            disabled={isSubmitting || sessionPending}
             placeholder={t('promptPlaceholder')}
             maxLength={5000}
             rows={3}
@@ -223,13 +251,13 @@ export default function AiTryOnPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{t('sizeLabel')}</label>
             <select
               value={size}
               onChange={(e) => setSize(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || sessionPending}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             >
               <option value="auto">{t('sizes.auto')}</option>
@@ -244,7 +272,7 @@ export default function AiTryOnPage() {
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value as any)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || sessionPending}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             >
               <option value="auto">{t('qualities.auto')}</option>
@@ -253,6 +281,26 @@ export default function AiTryOnPage() {
             </select>
           </div>
         </div>
+
+        {/* 模型选择 */}
+        {models && models.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('modelLabel')}</label>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isSubmitting || sessionPending}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+            >
+              <option value="">-- 默认模型 --</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 提交按钮 */}
@@ -261,8 +309,9 @@ export default function AiTryOnPage() {
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="rounded-lg bg-foreground px-8 py-3 font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-foreground px-8 py-3 font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
+          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
           {isSubmitting
             ? uploadProgress
               ? `上传中 (${uploadProgress.current}/${uploadProgress.total})`
@@ -274,13 +323,18 @@ export default function AiTryOnPage() {
       {/* 任务状态 */}
       {taskId && taskStatus && (
         <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="font-semibold">{t('resultTitle')}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {taskStatus.status === 'pending' && t('queued')}
-            {taskStatus.status === 'processing' && t('processing')}
-            {taskStatus.status === 'completed' && t('resultTitle')}
-            {taskStatus.status === 'failed' && '生成失败，请重试'}
-          </p>
+          <div className="flex items-center gap-2">
+            {taskStatus.status === 'pending' || taskStatus.status === 'processing' ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : null}
+            <h3 className="font-semibold">
+              {taskStatus.status === 'pending' && t('queued')}
+              {taskStatus.status === 'processing' && t('processing')}
+              {taskStatus.status === 'completed' && t('resultTitle')}
+              {taskStatus.status === 'failed' && '生成失败'}
+            </h3>
+          </div>
+
           {taskStatus.status === 'completed' && taskStatus.outputFileId && (
             <div className="mt-4">
               <button
@@ -294,16 +348,6 @@ export default function AiTryOnPage() {
           )}
         </div>
       )}
-
-      {/* 功能提示 */}
-      <div className="rounded-md border border-blue-500/50 bg-blue-500/10 p-4 text-sm">
-        <p className="font-semibold text-blue-700 dark:text-blue-300">✨ {t('title')} 已上线</p>
-        <ul className="mt-2 space-y-1 text-blue-600 dark:text-blue-400">
-          <li>· {poseLibrary?.length || 0} 个姿势可选，支持多视角筛选</li>
-          <li>· 支持上传模特人像与商品图片生成试衣展示</li>
-          <li>· 支持自定义场景与生成参数配置</li>
-        </ul>
-      </div>
     </div>
   );
 }

@@ -1,0 +1,43 @@
+ImageTryOn 需要新增的中文文案：
+
+{
+  "quotaLabel": "共享额度",
+  "quotaLoading": "加载中...",
+  "quotaRemaining": "今日剩余 {remaining} / {limit} 张",
+  "personReferenceLabel": "人像参考",
+  "garmentReferenceLabel": "服装参考",
+  "poseReferenceLabel": "姿势参考",
+  "configTitle": "生成配置",
+  "modelDefault": "-- 默认模型 --",
+  "uploadingProgress": "上传中 ({current}/{total})",
+  "status": {
+    "pending": "排队等待中",
+    "processing": "正在生成",
+    "completed": "生成完成",
+    "failed": "生成失败"
+  },
+  "progress": "{percent}%",
+  "estimatedTime": {
+    "pending": "预计等待时间：1-2 分钟",
+    "processing": "预计剩余时间：30-60 秒"
+  },
+  "resultAlt": "AI 试衣生成结果",
+  "viewInFiles": "查看文件管理器",
+  "failedMessage": "生成失败，请检查参考图和提示词后重试",
+  "personSource": {
+    "upload": "上传照片",
+    "library": "图库选择"
+  },
+  "personLibraryEmpty": "人像图库暂无可用素材，请使用上传方式",
+  "uploadPersonLabel": "上传人像照片",
+  "uploadGarmentLabel": "上传商品图片",
+  "garmentLibraryEmpty": "服装图库建设中",
+  "garmentLibraryEmptyHint": "服装图库素材正在准备中，请使用真实商品模式上传商品图",
+  "poseLibraryEmpty": "姿势图库暂无可用素材",
+  "modes": {
+    "productDesc": "上传真实商品图生成试穿效果",
+    "inspirationDesc": "从服装图库选择灵感服饰"
+  }
+}
+
+这些文案需要添加到 apps/web/messages/zh.json 的 ImageTryOn 部分

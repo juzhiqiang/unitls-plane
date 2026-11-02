@@ -1,0 +1,204 @@
+
+          "description": "在线编辑 Markdown 或上传 DOCX，生成可预览的 PDF。"
+        },
+        "pdfToImage": {
+          "title": "PDF 转图片",
+          "description": "将 PDF 页面导出为 PNG 或 JPEG。"
+        },
+        "pdfToText": {
+          "title": "PDF 转文本",
+          "description": "提取 Markdown 或纯文本内容。"
+        },
+        "pdfToCad": {
+          "title": "PDF 转 CAD",
+          "description": "把矢量 PDF 转为可编辑的 DXF 图纸，扫描件可选 OCR 与底图。"
+        },
+        "pdfMetadata": {
+          "title": "编辑元数据",
+          "description": "查看并修改标题、作者和关键词。"
+        },
+        "pdfEncrypt": {
+          "title": "加密 PDF",
+          "description": "设置打开密码与权限控制。"
+        },
+        "pdfWatermark": {
+          "title": "添加水印",
+          "description": "为文档添加可见归属文字。"
+        },
+        "pdfCompress": {
+          "title": "压缩 PDF",
+          "description": "用明确质量档位降低 PDF 大小。"
+        },
+        "fontConvert": {
+          "title": "字体转换",
+          "description": "登录后转换 TTF、OTF、WOFF 和 WOFF2。"
+        },
+        "imageCutout": {
+          "title": "AI 抠图",
+          "description": "本地去背景，导出透明 PNG 或换纯色底。"
+        },
+        "imageCrop": {
+          "title": "图片裁剪",
+          "description": "自由或定比例裁剪，并可调整输出尺寸。"
+        },
+        "imageMosaic": {
+          "title": "图片打码",
+          "description": "框选区域打码，遮住证件号与人脸。"
+        },
+        "imageGenerate": {
+          "title": "AI 生图",
+          "description": "输入提示词生成图片，需要登录，每日有张数上限。"
+        },
+>       "imageTryOn": {
+          "title": "AI 电商试衣",
+          "description": "组合商品实拍或灵感服饰、模特人像与姿势参考，生成电商试穿展示图。"
+        }
+      }
+    },
+    "Auth": {
+      "loginTitle": "登录",
+      "loginButton": "登录",
+      "signingIn": "登录中...",
+      "registerTitle": "注册",
+      "registerButton": "注册",
+      "signingUp": "注册中...",
+      "email": "邮箱",
+      "password": "密码",
+      "username": "用户名",
+      "noAccount": "还没有账号？",
+      "hasAccount": "已有账号？",
+      "registerLink": "注册",
+      "loginLink": "登录",
+      "forgotPasswordLink": "忘记密码？",
+      "forgotPasswordTitle": "找回密码",
+      "sendResetEmail": "发送重置邮件",
+      "sendingResetEmail": "发送中...",
+      "passwordResetSent": "如果该邮箱存在账号，我们会发送一封密码重置邮件。",
+      "resetPasswordTitle": "重置密码",
+      "resetPasswordButton": "重置密码",
+      "resettingPassword": "重置中...",
+      "passwordResetUpdated": "密码已重置，请使用新密码登录。",
+      "newPassword": "新密码",
+      "confirmPassword": "确认密码",
+      "verifyEmailTitle": "验证邮箱",
+      "verifyEmailBody": "我们已向您的邮箱发送了一封验证邮件。请查收并点击链接完成验证。",
+      "verifyEmailSpam": "如果没有收到邮件，请检查垃圾邮件文件夹。",
+      "backToLogin": "返回登录",
+      "loading": "加载中...",
+      "brandTagline": "本地优先的文件、PDF 与字体工具集。",
+      "feature1": "免费 · 无需信用卡",
+      "feature2": "静态加密存储",
+      "feature3": "支持自托管",
+      "statusLabel": "状态",
+      "systemStatus": "在线",
+      "buildLabel": "版本",
+      "sectionRegister": "01 / 注册",
+      "sectionLogin": "01 / 登录",
+      "sectionVerify": "02 / 验证",
+      "sectionForgotPassword": "02 / 找回",
+      "sectionResetPassword": "03 / 重置",
+      "passwordStrength": "强度",
+      "pwWeak": "弱",
+      "pwFair": "中",
+      "assistantAvatarAlt": "AI 生成",
+      "editImage": "编辑",
+      "compareEditedTitle": "修改前后对比",
+      "editorTitle": "编辑图片",
+      "editorClose": "关闭编辑器",
+      "editorBrush": "画笔",
+      "editorRect": "矩形",
+      "editorBrushSize": "笔刷大小",
+      "editorUndo": "撤销",
+      "editorClear": "清空",
+      "editorPromptPlaceholder": "描述要怎么修改这张图…",
+      "editorSubmit": "修改选中区域",
+      "editorSubmitDescribe": "按描述修改",
+      "editorHint": "用画笔或矩形圈出要重绘的区域，每一步都可撤销；提交后作为新消息生成。",
+      "editorHintOptional": "直接写描述即可整图修改；也可用画笔或矩形圈出局部重绘（可选，每一步可撤销）。提交后作为新消息生成。",
+      "editorHintDescribe": "写描述即可对整图修改；提交后作为新消息生成。",
+      "editorImageAlt": "待编辑原图",
+      "lightboxClose": "关闭预览",
+      "sidebarTitle": "对话历史",
+      "newChat": "新对话",
+      "searchSessions": "搜索对话",
+      "noSessions": "暂无历史对话",
+      "deleteSession": "删除对话",
+      "deleteSessionConfirm": "删除后对话、生成图片与参考图将被永久清除，不可恢复。",
+      "deleteSessionConfirmYes": "确认删除",
+      "deleteSessionConfirmNo": "取消",
+      "deletingSession": "删除中…",
+      "sessionHasActiveTasks": "对话中还有任务在生成，请等待完成后再删除。",
+      "sessionTaskCount": "{count} 张",
+      "settingsTitle": "生成设置",
+      "settingsPresetsLabel": "提示词模板",
+      "settingsPresetsTrigger": "选择提示词模板",
+      "modelLabel": "模型",
+      "ratioLabel": "画面比例",
+      "ratioAuto": "自动",
+      "ratioCustom": "自定义",
+      "ratioCustomTitle": "自定义画面比例",
+      "ratioCustomPlaceholder": "如 21:9 或 1920x824",
+      "ratioCustomApply": "应用",
+      "ratioCustomInvalid": "请输入 W:H 或 WxH（16–4096）",
+      "ratioCustomApplied": "实际提交：{size}",
+      "ratioCustomUnsupported": "当前模型不支持自定义比例",
+      "ratioCustomClear": "清除自定义比例",
+      "backgroundLabel": "背景",
+      "backgroundDefault": "默认",
+      "backgroundTransparent": "透明",
+      "emptyTitle": "开始你的创作",
+      "emptyHint": "在下方输入提示词，或从灵感模板开始。",
+      "quotaRemaining": "今日剩余 {remaining} / {limit} 张"
+    },
+>   "ImageTryOn": {
+      "title": "AI 电商试衣",
+      "description": "组合模特人像、真实商品实拍或灵感服饰与姿势参考，生成电商试穿展示图。",
+      "modeLabel": "试衣模式",
+      "modes": {
+        "product": "真实商品试穿",
+        "inspiration": "穿搭灵感",
+        "productDescription": "上传真实商品实拍作为目标服装，搭配模特图库或个人照片生成试穿展示图；商品款式、颜色与纹理以商品上传图为准。",
+        "inspirationDescription": "从经授权的服饰图库选择目标服装，快速搭配模特与姿势生成穿搭灵感图。"
+      },
+      "quotaBadge": "今日剩余 {remaining} / {limit} 张（与 AI 生图共用）",
+      "quotaExhausted": "今日生图与试衣共享额度已用完，请明天再试。",
+      "quotaLoadError": "无法获取今日生图额度，请刷新或稍后重试。",
+      "referenceCount": "已选参考图 {count} / {max}",
+      "referenceLimitHint": "最多可组合 4 张参考图（人像、目标服装、姿势、辅助风格各最多 1 张）。",
+      "referenceLimitExceeded": "参考图最多 {max} 张，每个角色最多选择 1 张。",
+      "personSectionTitle": "1. 人像参考（必选）",
+      "personSectionHint": "上传清晰的单人正面/全身照，或从授权模特图库中选择。",
+      "personSourceUpload": "上传个人照片",
+      "personSourceLibrary": "选择模特图库",
+      "personUploadAction": "上传人像照片",
+      "personDropzoneHint": "支持 JPG / PNG / WebP / AVIF，单文件最大 {size}",
+      "garmentProductSectionTitle": "2. 目标商品图（必选）",
+      "garmentProductSectionHint": "上传真实商品平铺或实拍图，作为款式、颜色与纹理的唯一服装目标来源。",
+      "garmentUploadAction": "上传商品实拍图",
+      "garmentInspirationSectionTitle": "2. 目标灵感服饰（必选）",
+      "garmentInspirationSectionHint": "从服饰图库选择一件服装作为本次穿搭的目标服饰。",
+      "poseSectionTitle": "3. 姿势参考（可选）",
+      "poseSectionHint": "可选一张姿势图库素材控制站姿或肢体动作。",
+      "styleSectionTitle": "4. 辅助穿搭风格（可选 · 弱优先级）",
+      "styleSectionHint": "可选一张服饰图库仅作造型氛围参考，弱优先级，不会覆盖目标商品的款式、颜色或纹理。",
+      "promptSectionTitle": "5. 场景与生成参数（可选）",
+      "promptLabel": "场景与背景补充说明",
+      "promptPlaceholder": "补充拍摄场景、光线或背景氛围（如：极简纯白影棚、柔和自然光、街拍外景），不会覆盖服装角色优先级…",
+      "promptCounter": "{count} / {max}",
+      "modelLabel": "生图模型",
+      "sizeLabel": "输出尺寸",
+      "qualityLabel": "输出质量",
+      "qualities": {
+        "auto": "自动",
+        "standard": "标准",
+        "high": "高清"
+      },
+      "sizes": {
+        "auto": "自动",
+        "square": "1:1 方图 (1024×1024)",
+        "portrait": "2:3 竖图 (1024×1536)",
+        "landscape": "3:2 横图 (1536×1024)"
+      },
+      "selectedFile": "已选文件：{filename} ({size})",
+      "removeFile": "移除文件",
+

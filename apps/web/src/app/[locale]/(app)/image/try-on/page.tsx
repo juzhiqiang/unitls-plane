@@ -1,603 +1,889 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useTranslations, useLocale } from 'next-intl';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { useQueryClient } from '@tanstack/react-query';
+import { Download, RotateCcw, Sparkles } from 'lucide-react';
+import { ToolPageShell } from '@/components/tools/tool-page-shell';
+import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
+import { ResultPanel } from '@/components/tools/result-panel';
+import { ProcessingProgress } from '@/components/tools/processing-progress';
+import type { ToolStage } from '@/components/tools/tool-step-rail';
+import {
+  buildImageTryOnTaskPayload,
+  MAX_TRY_ON_REFERENCES,
+  ReferenceLibraryGrid,
+  TRY_ON_PROMPT_MAX_LENGTH,
+  type TryOnPersonSource,
+  UploadReferenceCard,
+} from '@/components/tools/ai-try-on';
+import { getToolByHref } from '@/lib/tools/tool-metadata';
+import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
+import {
+  buildFileDownloadUrl,
+  downloadStoredFile,
+} from '@/lib/files/file-download';
 import { useRequireLogin } from '@/hooks/use-require-login';
-import { useTaskStatus, useImageGenerateQuota, useImageGenerateModels } from '@/hooks/api/use-tasks';
+import { useUploadFile } from '@/hooks/api/use-files';
+import {
+  useCreateTask,
+  useImageGenerateModels,
+  useImageGenerateQuota,
+  useRetryTask,
+} from '@/hooks/api/use-tasks';
 import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';
-import { buildImageTryOnTaskPayload, type BuildImageTryOnPayloadInput } from '@/components/tools/ai-try-on';
-import { PoseLibraryWithFilters, UploadReferenceCard, CategoryFilteredLibraryGrid } from '@/components/tools/ai-try-on';
-import { api } from '@/lib/api-client';
-import { toast } from 'sonner';
-import { Loader2, Download, RefreshCw, FileText, Image as ImageIcon } from 'lucide-react';
+import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { taskQueryKeys } from '@/hooks/api/query-keys';
+import type { AiTryOnMode } from '@/hooks/api/types';
 
-export const dynamic = 'force-dynamic';
+const TOOL_HREF = '/image/try-on';
 
-type AiTryOnMode = 'product' | 'inspiration';
-type PersonSourceType = 'upload' | 'library';
+const SUBMIT_ERROR_KEYS: Record<string, string> = {
+  AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
+  AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
+  AI_IMAGE_NOT_CONFIGURED: 'notConfigured',
+  AI_IMAGE_PROVIDER_UNAVAILABLE: 'providerUnavailable',
+};
 
-// 获取文件下载URL
-function getFileDownloadUrl(fileId: string): string {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  return `${apiBase}/files/${fileId}/download`;
+function extractErrorCode(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : undefined;
 }
 
-// 计算任务进度百分比
-function calculateProgress(status: string): number {
-  switch (status) {
-    case 'pending': return 10;
-    case 'processing': return 50;
-    case 'completed': return 100;
-    case 'failed': return 0;
-    default: return 0;
-  }
+interface ActiveTryOnTaskState {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  outputFileId?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  mode: AiTryOnMode;
 }
 
-// 获取预计剩余时间文本
-function getEstimatedTimeText(status: string, t: any): string {
-  switch (status) {
-    case 'pending': return t('estimatedTime.pending');
-    case 'processing': return t('estimatedTime.processing');
-    default: return '';
-  }
-}
-
-export default function AiTryOnPage() {
+export default function ImageTryOnPage() {
   const t = useTranslations('ImageTryOn');
-  const locale = useLocale();
-  const router = useRouter();
-  useRequireLogin();
+  const tShell = useTranslations('ToolShell');
+  const queryClient = useQueryClient();
+  const tool = getToolByHref('/image/try-on')!;
+  const { session, requireLogin } = useRequireLogin();
+  const maxFileSize = getImageUploadMaxFileSize(session);
 
-  // 基础状态
+  const uploadFile = useUploadFile();
+  const createTask = useCreateTask();
+  const retryTask = useRetryTask();
+  const quotaQuery = useImageGenerateQuota();
+  const modelsQuery = useImageGenerateModels();
+
+  const personLibraryQuery = useAiTryOnReferences('person');
+  const garmentLibraryQuery = useAiTryOnReferences('garment');
+  const poseLibraryQuery = useAiTryOnReferences('pose');
+
   const [mode, setMode] = useState<AiTryOnMode>('product');
-  const [personSourceType, setPersonSourceType] = useState<PersonSourceType>('upload');
+  const [personSource, setPersonSource] = useState<TryOnPersonSource>('upload');
   const [personFile, setPersonFile] = useState<File | null>(null);
   const [personAssetId, setPersonAssetId] = useState<string | null>(null);
   const [garmentFile, setGarmentFile] = useState<File | null>(null);
   const [garmentAssetId, setGarmentAssetId] = useState<string | null>(null);
   const [poseAssetId, setPoseAssetId] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState('');
+  const [styleAssetId, setStyleAssetId] = useState<string | null>(null);
+  const [promptAddition, setPromptAddition] = useState('');
   const [size, setSize] = useState('1024x1024');
   const [quality, setQuality] = useState<'auto' | 'standard' | 'high'>('high');
-  const [model, setModel] = useState<string>('');
-  
-  // 任务状态
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [model, setModel] = useState('');
 
-  // API hooks
-  const { data: poseLibrary, isLoading: isPoseLoading } = useAiTryOnReferences('pose');
-  const { data: garmentLibrary, isLoading: isGarmentLoading } = useAiTryOnReferences('garment');
-  const { data: personLibrary, isLoading: isPersonLoading } = useAiTryOnReferences('person');
-  const { data: taskStatus, refetch: refetchTaskStatus } = useTaskStatus(taskId ?? '');
-  const { data: quota, refetch: refetchQuota } = useImageGenerateQuota();
-  const { data: models } = useImageGenerateModels();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | undefined>(undefined);
+  const [activeTask, setActiveTask] = useState<ActiveTryOnTaskState | null>(
+    null
+  );
 
-  // 轮询任务状态（优化点2：进度显示）
+  const uploadedFileCacheRef = useRef<WeakMap<File, string>>(new WeakMap());
+  const failedQuotaInvalidatedRef = useRef<Set<string>>(new Set());
+
+  const taskProgressQuery = useTaskProgress(activeTask?.id ?? null);
+
+  const effectiveTask = useMemo<ActiveTryOnTaskState | null>(() => {
+    if (!activeTask) return null;
+    const polled = taskProgressQuery.data;
+    if (!polled) return activeTask;
+    return {
+      ...activeTask,
+      status: polled.status,
+      progress: polled.progress ?? activeTask.progress,
+      outputFileId: polled.outputFileId ?? activeTask.outputFileId,
+      errorCode: polled.errorCode ?? activeTask.errorCode,
+      errorMessage: polled.errorMessage ?? activeTask.errorMessage,
+    };
+  }, [activeTask, taskProgressQuery.data]);
+
+  // 任务失败不计入当日生图额度，检测到新失败时立即刷新共享额度快照。
   useEffect(() => {
-    if (!taskId || !taskStatus) return;
-    
-    if (taskStatus.status === 'pending' || taskStatus.status === 'processing') {
-      const timer = setInterval(() => {
-        refetchTaskStatus();
-      }, 3000); // 每3秒轮询一次
-      return () => clearInterval(timer);
+    if (
+      effectiveTask?.status === 'failed' &&
+      !failedQuotaInvalidatedRef.current.has(effectiveTask.id)
+    ) {
+      failedQuotaInvalidatedRef.current.add(effectiveTask.id);
+      void queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.imageGenerateQuota(),
+      });
     }
+  }, [effectiveTask, queryClient]);
 
-    // 任务完成后刷新额度
-    if (taskStatus.status === 'completed') {
-      refetchQuota();
+  const hasPerson =
+    personSource === 'upload' ? Boolean(personFile) : Boolean(personAssetId);
+  const hasGarment =
+    mode === 'product' ? Boolean(garmentFile) : Boolean(garmentAssetId);
+  const hasPose = Boolean(poseAssetId);
+  const hasStyle = Boolean(styleAssetId);
+
+  const activeReferenceCount =
+    Number(hasPerson) + Number(hasGarment) + Number(hasPose) + Number(hasStyle);
+
+  const personLibraryRequiredAndFailed =
+    personSource === 'library' && Boolean(personLibraryQuery.isError);
+  const garmentLibraryRequiredAndFailed =
+    mode === 'inspiration' && Boolean(garmentLibraryQuery.isError);
+  const quotaLoadFailed = Boolean(session && quotaQuery.isError);
+  const requiredApiFailed =
+    personLibraryRequiredAndFailed ||
+    garmentLibraryRequiredAndFailed ||
+    quotaLoadFailed;
+
+  const quotaExhausted = Boolean(
+    quotaQuery.data && quotaQuery.data.remaining <= 0
+  );
+  const promptTooLong = promptAddition.trim().length > TRY_ON_PROMPT_MAX_LENGTH;
+
+  const isTaskRunning = Boolean(
+    effectiveTask &&
+    (effectiveTask.status === 'pending' ||
+      effectiveTask.status === 'processing')
+  );
+  const isBusy = submitting || isTaskRunning;
+
+  const canSubmit =
+    !isBusy &&
+    hasPerson &&
+    hasGarment &&
+    !quotaExhausted &&
+    !requiredApiFailed &&
+    !promptTooLong;
+
+  const stage: ToolStage = useMemo(() => {
+    if (effectiveTask?.status === 'completed' && effectiveTask.outputFileId) {
+      return 'result';
     }
-  }, [taskId, taskStatus, refetchTaskStatus, refetchQuota]);
-
-  // 计算状态
-  const quotaText = useMemo(() => {
-    if (!quota) return t('quotaLoading');
-    return t('quotaRemaining', { remaining: quota.remaining, limit: quota.limit });
-  }, [quota, t]);
-
-  const taskProgress = useMemo(() => {
-    if (!taskStatus) return 0;
-    return calculateProgress(taskStatus.status);
-  }, [taskStatus]);
-
-  const estimatedTimeText = useMemo(() => {
-    if (!taskStatus) return '';
-    return getEstimatedTimeText(taskStatus.status, t);
-  }, [taskStatus, t]);
-
-  const resultImageUrl = useMemo(() => {
-    if (taskStatus?.status === 'completed' && taskStatus.outputFileId) {
-      return getFileDownloadUrl(taskStatus.outputFileId);
+    if (isBusy) {
+      return 'processing';
     }
-    return null;
-  }, [taskStatus]);
-
-  // 根据模式和人像来源类型判断是否可以提交
-  const canSubmit = useMemo(() => {
-    if (isSubmitting || (quota?.remaining ?? 0) <= 0) {
-      return false;
+    if (hasPerson || hasGarment) {
+      return 'configure';
     }
+    return 'upload';
+  }, [effectiveTask, hasGarment, hasPerson, isBusy]);
 
-    // 人像必须选择
-    const hasPersonReference = personSourceType === 'upload' 
-      ? personFile !== null 
-      : personAssetId !== null;
-    
-    if (!hasPersonReference) return false;
+  const handleFallbackToUpload = () => {
+    setMode('product');
+    setPersonSource('upload');
+    setError(null);
+    setErrorCode(undefined);
+  };
 
-    // 服装必须选择
-    if (mode === 'product') {
-      return garmentFile !== null;
-    } else {
-      return garmentAssetId !== null;
+  const resolveFileId = async (file: File): Promise<string> => {
+    const cached = uploadedFileCacheRef.current.get(file);
+    if (cached) return cached;
+    const uploaded = (await uploadFile.mutateAsync(file)) as unknown as {
+      id: string;
+    };
+    uploadedFileCacheRef.current.set(file, uploaded.id);
+    return uploaded.id;
+  };
+
+  const handleSubmit = async () => {
+    if (requireLogin(TOOL_HREF)) return;
+    if (quotaExhausted) {
+      setError(t('quotaExhausted'));
+      setErrorCode('AI_IMAGE_DAILY_LIMIT_EXCEEDED');
+      return;
     }
-  }, [mode, personSourceType, personFile, personAssetId, garmentFile, garmentAssetId, isSubmitting, quota]);
-
-  // 上传文件
-  const uploadFile = useCallback(async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const { data, error } = await api.POST('/files/upload', {
-      body: formData as any,
-    });
-
-    if (error || !data) {
-      throw new Error('File upload failed');
+    if (requiredApiFailed) {
+      setError(
+        quotaLoadFailed
+          ? t('quotaLoadError')
+          : t('errors.requiredLibraryFailed')
+      );
+      return;
     }
-
-    return (data as any).id;
-  }, []);
-
-  // 提交试衣任务
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
-
-    if ((quota?.remaining ?? 0) <= 0) {
-      toast.error(t('quotaExhausted'));
+    if (!hasPerson) {
+      setError(t('errors.missingPerson'));
+      return;
+    }
+    if (!hasGarment) {
+      setError(t('errors.missingGarment'));
+      return;
+    }
+    if (
+      personSource === 'upload' &&
+      mode === 'product' &&
+      personFile &&
+      garmentFile &&
+      personFile === garmentFile
+    ) {
+      setError(t('errors.duplicateUploadFile'));
       return;
     }
 
-    setIsSubmitting(true);
-    setUploadProgress(null);
+    setError(null);
+    setErrorCode(undefined);
+    setSubmitting(true);
 
     try {
-      // 准备上传文件列表
-      const filesToUpload: Array<{ file: File; role: 'person' | 'garment' }> = [];
-      
-      if (personSourceType === 'upload' && personFile) {
-        filesToUpload.push({ file: personFile, role: 'person' });
-      }
-      
-      if (mode === 'product' && garmentFile) {
-        filesToUpload.push({ file: garmentFile, role: 'garment' });
-      }
+      const personInput =
+        personSource === 'upload'
+          ? {
+              source: 'upload' as const,
+              fileId: await resolveFileId(personFile!),
+            }
+          : { source: 'library' as const, assetId: personAssetId ?? '' };
 
-      // 上传文件
-      setUploadProgress({ current: 0, total: filesToUpload.length });
-      const fileIds: Record<string, string> = {};
-      
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const { file, role } = filesToUpload[i];
-        const fileId = await uploadFile(file);
-        fileIds[role] = fileId;
-        setUploadProgress({ current: i + 1, total: filesToUpload.length });
-      }
+      const garmentInput =
+        mode === 'product'
+          ? {
+              source: 'upload' as const,
+              fileId: await resolveFileId(garmentFile!),
+            }
+          : { source: 'library' as const, assetId: garmentAssetId ?? '' };
 
-      // 构建任务配置
-      const input: BuildImageTryOnPayloadInput = {
+      const built = buildImageTryOnTaskPayload({
         mode,
-        person: personSourceType === 'upload'
-          ? { source: 'upload', fileId: fileIds.person }
-          : { source: 'library', assetId: personAssetId! },
-        garment: mode === 'product'
-          ? { source: 'upload', fileId: fileIds.garment }
-          : { source: 'library', assetId: garmentAssetId! },
-        poseAssetId: poseAssetId ?? undefined,
-        promptAddition: prompt.trim() || undefined,
+        person: personInput,
+        garment: garmentInput,
+        poseAssetId,
+        styleAssetId,
+        promptAddition,
         size,
         quality,
         model: model || undefined,
-      };
-
-      const payloadResult = buildImageTryOnTaskPayload(input);
-
-      if (!payloadResult.ok) {
-        throw new Error(t(`errors.${payloadResult.errorKey}` as any));
-      }
-
-      // 创建任务
-      const { data, error } = await api.POST('/tasks', {
-        body: payloadResult.payload as any,
       });
 
-      if (error || !data) {
-        throw new Error(t('errors.failed'));
+      if (!built.ok) {
+        setError(t(`errors.${built.errorKey}`));
+        setSubmitting(false);
+        return;
       }
 
-      setTaskId((data as any).id);
-      toast.success(t('queued'));
-    } catch (error) {
-      console.error('Submit error:', error);
-      toast.error((error as Error).message || t('errors.failed'));
+      try {
+        const created = await createTask.mutateAsync(built.payload);
+        setActiveTask({
+          id: created.id,
+          status: created.status ?? 'pending',
+          progress: created.progress ?? 0,
+          outputFileId: created.outputFileId,
+          errorCode: created.errorCode,
+          errorMessage: created.errorMessage,
+          mode,
+        });
+      } catch (submitErr) {
+        const code = extractErrorCode(submitErr);
+        const mappedKey = code ? SUBMIT_ERROR_KEYS[code] : undefined;
+        setErrorCode(code);
+        setError(mappedKey ? t(`errors.${mappedKey}`) : t('errors.failed'));
+      }
+    } catch {
+      setError(t('errors.uploadFailed'));
     } finally {
-      setIsSubmitting(false);
-      setUploadProgress(null);
+      setSubmitting(false);
     }
-  }, [
-    canSubmit, mode, personSourceType, personFile, personAssetId, garmentFile, garmentAssetId,
-    poseAssetId, prompt, size, quality, model, quota, uploadFile, t
-  ]);
+  };
 
-  // 重新生成（优化点1：结果展示）
-  const handleRegenerate = useCallback(() => {
-    setTaskId(null);
-    // 保留当前选择的参数，允许快速重新生成
-  }, []);
+  const handleRegenerate = () => {
+    if (!effectiveTask) return;
+    if (effectiveTask.status === 'failed') {
+      setError(null);
+      setErrorCode(undefined);
+      retryTask.mutate(effectiveTask.id, {
+        onSuccess: retried => {
+          if (retried && typeof retried === 'object' && 'id' in retried) {
+            setActiveTask({
+              id: retried.id,
+              status: retried.status ?? 'pending',
+              progress: retried.progress ?? 0,
+              outputFileId: retried.outputFileId,
+              errorCode: retried.errorCode,
+              errorMessage: retried.errorMessage,
+              mode: effectiveTask.mode,
+            });
+          } else {
+            setActiveTask(prev =>
+              prev
+                ? {
+                    ...prev,
+                    status: 'pending',
+                    progress: 0,
+                    errorCode: undefined,
+                    errorMessage: undefined,
+                  }
+                : null
+            );
+          }
+        },
+      });
+      return;
+    }
+    void handleSubmit();
+  };
 
-  // 下载结果（优化点1：结果展示）
-  const handleDownload = useCallback(() => {
-    if (!resultImageUrl) return;
-    window.open(resultImageUrl, '_blank');
-  }, [resultImageUrl]);
+  const handleReset = () => {
+    setPersonFile(null);
+    setPersonAssetId(null);
+    setGarmentFile(null);
+    setGarmentAssetId(null);
+    setPoseAssetId(null);
+    setStyleAssetId(null);
+    setPromptAddition('');
+    setActiveTask(null);
+    setError(null);
+    setErrorCode(undefined);
+  };
 
-  // 查看文件管理器
-  const handleViewFiles = useCallback(() => {
-    router.push(`/${locale}/files`);
-  }, [router, locale]);
+  const models = modelsQuery.data ?? [];
+
+  const taskFailureMessage = useMemo(() => {
+    if (effectiveTask?.status !== 'failed') return null;
+    const code = effectiveTask.errorCode;
+    const mapped = code ? SUBMIT_ERROR_KEYS[code] : undefined;
+    if (mapped) return t(`errors.${mapped}`);
+    return effectiveTask.errorMessage || t('errors.failed');
+  }, [effectiveTask, t]);
+
+  const progressLabel =
+    effectiveTask?.status === 'pending'
+      ? t('queued')
+      : submitting
+        ? t('submitting')
+        : t('processing');
 
   return (
-    <div className="container mx-auto max-w-7xl space-y-8 px-4 py-8">
-      {/* 页头 */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-        <p className="text-muted-foreground">{t('description')}</p>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted-foreground">{t('quotaLabel')}:</span>
-          <span className="font-medium">{quotaText}</span>
-        </div>
-      </div>
-
-      {/* 模式选择 */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <label className="mb-3 block text-sm font-medium">{t('modeLabel')}</label>
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            type="button"
-            onClick={() => setMode('product')}
-            disabled={isSubmitting}
-            className={`rounded-lg border-2 p-4 text-left transition-colors ${
-              mode === 'product'
-                ? 'border-foreground bg-foreground/5'
-                : 'border-border hover:border-foreground/50'
-            } disabled:opacity-50`}
-          >
-            <div className="font-semibold">{t('modes.product')}</div>
-            <div className="mt-1 text-sm text-muted-foreground">{t('modes.productDesc')}</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('inspiration')}
-            disabled={isSubmitting}
-            className={`rounded-lg border-2 p-4 text-left transition-colors ${
-              mode === 'inspiration'
-                ? 'border-foreground bg-foreground/5'
-                : 'border-border hover:border-foreground/50'
-            } disabled:opacity-50`}
-          >
-            <div className="font-semibold">{t('modes.inspiration')}</div>
-            <div className="mt-1 text-sm text-muted-foreground">{t('modes.inspirationDesc')}</div>
-          </button>
-        </div>
-      </div>
-
-      {/* 参考图选择 */}
-      <div className="space-y-6">
-        {/* 1. 人像参考（优化点4：人像图库） */}
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="mb-4 text-lg font-semibold">{t('personReferenceLabel')}</h3>
-          
-          {/* 人像来源选择 */}
-          <div className="mb-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPersonSourceType('upload')}
-              disabled={isSubmitting}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                personSourceType === 'upload'
-                  ? 'bg-foreground text-background'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              } disabled:opacity-50`}
+    <ToolPageShell
+      title={t('title')}
+      description={t('description')}
+      processing={tool.processing}
+      retention={tool.retention}
+      requiresLogin={tool.requiresLogin}
+      recovery={tShell('catalogRecovery')}
+      stage={stage}
+    >
+      {/* 顶部模式切换 + 共享额度快照 + 参考图计数 */}
+      <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+              {t('modeLabel')}
+            </span>
+            <div
+              role="group"
+              aria-label={t('modeLabel')}
+              className="flex rounded-md border border-border overflow-hidden"
             >
-              {t('personSource.upload')}
-            </button>
-            {personLibrary && personLibrary.length > 0 && (
               <button
                 type="button"
-                onClick={() => setPersonSourceType('library')}
-                disabled={isSubmitting}
-                className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                  personSourceType === 'library'
+                aria-pressed={mode === 'product'}
+                data-testid="mode-product"
+                disabled={isBusy}
+                onClick={() => {
+                  setMode('product');
+                  setError(null);
+                }}
+                className={`px-4 py-2 font-mono text-xs transition-colors ${
+                  mode === 'product'
                     ? 'bg-foreground text-background'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                } disabled:opacity-50`}
+                    : 'bg-background text-muted-foreground hover:text-foreground'
+                }`}
               >
-                {t('personSource.library')}
+                {t('modes.product')}
               </button>
-            )}
+              <button
+                type="button"
+                aria-pressed={mode === 'inspiration'}
+                data-testid="mode-inspiration"
+                disabled={isBusy}
+                onClick={() => {
+                  setMode('inspiration');
+                  setError(null);
+                }}
+                className={`px-4 py-2 font-mono text-xs transition-colors ${
+                  mode === 'inspiration'
+                    ? 'bg-foreground text-background'
+                    : 'bg-background text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('modes.inspiration')}
+              </button>
+            </div>
           </div>
 
-          {personSourceType === 'upload' ? (
-            <UploadReferenceCard
-              file={personFile}
-              onFileSelect={setPersonFile}
-              label={t('uploadPersonLabel')}
-              accept="image/*"
-              disabled={isSubmitting}
-            />
-          ) : (
-            <div>
-              {isPersonLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : personLibrary && personLibrary.length > 0 ? (
-                <CategoryFilteredLibraryGrid
-                  items={personLibrary}
-                  selectedId={personAssetId}
-                  onSelect={setPersonAssetId}
-                  kind="person"
-                />
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  {t('personLibraryEmpty')}
-                </div>
-              )}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {quotaQuery.data && (
+              <span
+                data-testid="try-on-quota-badge"
+                className="rounded-md border border-border bg-muted/30 px-2.5 py-1 font-mono text-xs text-foreground"
+              >
+                {t('quotaBadge', {
+                  remaining: quotaQuery.data.remaining,
+                  limit: quotaQuery.data.limit,
+                })}
+              </span>
+            )}
+            <span
+              data-testid="try-on-reference-count"
+              className="rounded-md border border-border bg-muted/20 px-2.5 py-1 font-mono text-xs text-muted-foreground"
+            >
+              {t('referenceCount', {
+                count: activeReferenceCount,
+                max: MAX_TRY_ON_REFERENCES,
+              })}
+            </span>
+          </div>
         </div>
 
-        {/* 2. 服装参考（优化点3：服装图库） */}
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="mb-4 text-lg font-semibold">{t('garmentReferenceLabel')}</h3>
-          
-          {mode === 'product' ? (
-            <UploadReferenceCard
-              file={garmentFile}
-              onFileSelect={setGarmentFile}
-              label={t('uploadGarmentLabel')}
-              accept="image/*"
-              disabled={isSubmitting}
-            />
-          ) : (
-            <div>
-              {isGarmentLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : garmentLibrary && garmentLibrary.length > 0 ? (
-                <CategoryFilteredLibraryGrid
-                  items={garmentLibrary}
-                  selectedId={garmentAssetId}
-                  onSelect={setGarmentAssetId}
-                  kind="garment"
-                />
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-8 text-center">
-                  <ImageIcon className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                  <p className="mt-4 text-sm font-medium">{t('garmentLibraryEmpty')}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{t('garmentLibraryEmptyHint')}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {mode === 'product'
+            ? t('modes.productDescription')
+            : t('modes.inspirationDescription')}
+        </p>
+        <p className="text-[11px] font-mono text-muted-foreground">
+          {t('referenceLimitHint')}
+        </p>
 
-        {/* 3. 姿势参考 */}
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="mb-4 text-lg font-semibold">{t('poseReferenceLabel')}</h3>
-          <p className="mb-4 text-sm text-muted-foreground">{t('poseReferenceHint')}</p>
-          
-          {isPoseLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : poseLibrary && poseLibrary.length > 0 ? (
-            <PoseLibraryWithFilters
-              poses={poseLibrary}
-              selectedPoseId={poseAssetId}
-              onSelectPose={setPoseAssetId}
-              disabled={isSubmitting}
-            />
-          ) : (
-            <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              {t('poseLibraryEmpty')}
-            </div>
-          )}
-        </div>
+        {quotaExhausted && (
+          <div
+            role="alert"
+            data-testid="try-on-quota-exhausted"
+            className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            {t('quotaExhausted')}
+          </div>
+        )}
+
+        {quotaLoadFailed && (
+          <div
+            role="alert"
+            data-testid="try-on-quota-error"
+            className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            {t('quotaLoadError')}
+          </div>
+        )}
       </div>
 
-      {/* 生成配置 */}
-      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-        <h3 className="text-lg font-semibold">{t('configTitle')}</h3>
-
-        {/* 提示词 */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">{t('promptLabel')}</label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={isSubmitting}
-            placeholder={t('promptPlaceholder')}
-            maxLength={5000}
-            rows={3}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
-          />
-          <div className="text-right text-xs text-muted-foreground">
-            {t('promptCounter', { count: prompt.length, max: 5000 })}
+      {/* 1. 人像参考（必选） */}
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium">{t('personSectionTitle')}</h2>
+            <p className="text-xs text-muted-foreground">
+              {t('personSectionHint')}
+            </p>
+          </div>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            <button
+              type="button"
+              aria-pressed={personSource === 'upload'}
+              data-testid="person-source-upload"
+              disabled={isBusy}
+              onClick={() => {
+                setPersonSource('upload');
+                setError(null);
+              }}
+              className={`px-3 py-1.5 font-mono text-xs transition-colors ${
+                personSource === 'upload'
+                  ? 'bg-foreground text-background'
+                  : 'bg-background text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t('personSourceUpload')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={personSource === 'library'}
+              data-testid="person-source-library"
+              disabled={isBusy}
+              onClick={() => {
+                setPersonSource('library');
+                setError(null);
+              }}
+              className={`px-3 py-1.5 font-mono text-xs transition-colors ${
+                personSource === 'library'
+                  ? 'bg-foreground text-background'
+                  : 'bg-background text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t('personSourceLibrary')}
+            </button>
           </div>
         </div>
 
-        {/* 尺寸和质量 */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('sizeLabel')}</label>
-            <select
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+        {personSource === 'upload' ? (
+          <UploadReferenceCard
+            role="person"
+            file={personFile}
+            actionLabel={t('personUploadAction')}
+            maxFileSize={maxFileSize}
+            disabled={isBusy}
+            onFileChange={file => {
+              setPersonFile(file);
+              setError(null);
+            }}
+            onOversizeError={maxSizeFormatted =>
+              setError(t('errors.fileTooLarge', { size: maxSizeFormatted }))
+            }
+          />
+        ) : (
+          <ReferenceLibraryGrid
+            role="person"
+            items={personLibraryQuery.data ?? []}
+            selectedId={personAssetId}
+            onSelect={id => {
+              setPersonAssetId(id);
+              setError(null);
+            }}
+            isLoading={personLibraryQuery.isLoading}
+            isError={personLibraryQuery.isError}
+            onRetry={() => void personLibraryQuery.refetch?.()}
+            onFallbackToUpload={handleFallbackToUpload}
+            disabled={isBusy}
+          />
+        )}
+      </section>
+
+      {/* 2. 目标服装参考（必选） */}
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div>
+          <h2 className="text-sm font-medium">
+            {mode === 'product'
+              ? t('garmentProductSectionTitle')
+              : t('garmentInspirationSectionTitle')}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {mode === 'product'
+              ? t('garmentProductSectionHint')
+              : t('garmentInspirationSectionHint')}
+          </p>
+        </div>
+
+        {mode === 'product' ? (
+          <UploadReferenceCard
+            role="garment"
+            file={garmentFile}
+            actionLabel={t('garmentUploadAction')}
+            maxFileSize={maxFileSize}
+            disabled={isBusy}
+            onFileChange={file => {
+              setGarmentFile(file);
+              setError(null);
+            }}
+            onOversizeError={maxSizeFormatted =>
+              setError(t('errors.fileTooLarge', { size: maxSizeFormatted }))
+            }
+          />
+        ) : (
+          <ReferenceLibraryGrid
+            role="garment"
+            items={garmentLibraryQuery.data ?? []}
+            selectedId={garmentAssetId}
+            onSelect={id => {
+              setGarmentAssetId(id);
+              setError(null);
+            }}
+            isLoading={garmentLibraryQuery.isLoading}
+            isError={garmentLibraryQuery.isError}
+            onRetry={() => void garmentLibraryQuery.refetch?.()}
+            onFallbackToUpload={handleFallbackToUpload}
+            disabled={isBusy}
+          />
+        )}
+      </section>
+
+      {/* 3. 姿势参考（可选） */}
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div>
+          <h2 className="text-sm font-medium">{t('poseSectionTitle')}</h2>
+          <p className="text-xs text-muted-foreground">
+            {t('poseSectionHint')}
+          </p>
+        </div>
+
+        <ReferenceLibraryGrid
+          role="pose"
+          items={poseLibraryQuery.data ?? []}
+          selectedId={poseAssetId}
+          onSelect={id => {
+            setPoseAssetId(id);
+            setError(null);
+          }}
+          isLoading={poseLibraryQuery.isLoading}
+          isError={poseLibraryQuery.isError}
+          onRetry={() => void poseLibraryQuery.refetch?.()}
+          disabled={isBusy}
+          optional
+        />
+      </section>
+
+      {/* 4. 辅助穿搭风格（可选 · 弱优先级） */}
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div>
+          <h2 className="text-sm font-medium">{t('styleSectionTitle')}</h2>
+          <p className="text-xs text-muted-foreground">
+            {t('styleSectionHint')}
+          </p>
+        </div>
+
+        <ReferenceLibraryGrid
+          role="style"
+          items={garmentLibraryQuery.data ?? []}
+          selectedId={styleAssetId}
+          onSelect={id => {
+            setStyleAssetId(id);
+            setError(null);
+          }}
+          isLoading={garmentLibraryQuery.isLoading}
+          isError={garmentLibraryQuery.isError}
+          onRetry={() => void garmentLibraryQuery.refetch?.()}
+          disabled={isBusy}
+          optional
+        />
+      </section>
+
+      {/* 5. 场景补充说明与生成参数（可选） */}
+      <section className="space-y-4 rounded-lg border border-border bg-card p-4">
+        <h2 className="text-sm font-medium">{t('promptSectionTitle')}</h2>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="try-on-prompt-addition"
+              className="text-xs text-muted-foreground"
             >
+              {t('promptLabel')}
+            </label>
+            <span
+              className={`font-mono text-[11px] tabular-nums ${
+                promptTooLong ? 'text-destructive' : 'text-muted-foreground'
+              }`}
+            >
+              {t('promptCounter', {
+                count: promptAddition.trim().length,
+                max: TRY_ON_PROMPT_MAX_LENGTH,
+              })}
+            </span>
+          </div>
+          <textarea
+            id="try-on-prompt-addition"
+            rows={2}
+            value={promptAddition}
+            disabled={isBusy}
+            placeholder={t('promptPlaceholder')}
+            onChange={event => {
+              setPromptAddition(event.target.value);
+              setError(null);
+            }}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none disabled:opacity-50"
+          />
+          {promptTooLong && (
+            <p role="alert" className="text-xs text-destructive">
+              {t('errors.promptTooLong')}
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-1">
+            <label
+              htmlFor="try-on-size"
+              className="text-xs text-muted-foreground"
+            >
+              {t('sizeLabel')}
+            </label>
+            <select
+              id="try-on-size"
+              value={size}
+              disabled={isBusy}
+              onChange={event => setSize(event.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground"
+            >
+              <option value="auto">{t('sizes.auto')}</option>
               <option value="1024x1024">{t('sizes.square')}</option>
               <option value="1024x1536">{t('sizes.portrait')}</option>
               <option value="1536x1024">{t('sizes.landscape')}</option>
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('qualityLabel')}</label>
-            <select
-              value={quality}
-              onChange={(e) => setQuality(e.target.value as any)}
-              disabled={isSubmitting}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+          <div className="space-y-1">
+            <label
+              htmlFor="try-on-quality"
+              className="text-xs text-muted-foreground"
             >
-              <option value="auto">{t('qualities.auto')}</option>
-              <option value="standard">{t('qualities.standard')}</option>
+              {t('qualityLabel')}
+            </label>
+            <select
+              id="try-on-quality"
+              value={quality}
+              disabled={isBusy}
+              onChange={event =>
+                setQuality(event.target.value as 'auto' | 'standard' | 'high')
+              }
+              className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground"
+            >
               <option value="high">{t('qualities.high')}</option>
+              <option value="standard">{t('qualities.standard')}</option>
+              <option value="auto">{t('qualities.auto')}</option>
             </select>
           </div>
+
+          {models.length > 1 && (
+            <div className="space-y-1">
+              <label
+                htmlFor="try-on-model"
+                className="text-xs text-muted-foreground"
+              >
+                {t('modelLabel')}
+              </label>
+              <select
+                id="try-on-model"
+                value={model || models[0]?.model || ''}
+                disabled={isBusy}
+                onChange={event => setModel(event.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground"
+              >
+                {models.map(item => (
+                  <option key={item.model} value={item.model}>
+                    {item.model}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
-        {/* 模型选择（优化点5：确保模型选择可用） */}
-        {models && models.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('modelLabel')}</label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
-            >
-              <option value="">{t('modelDefault')}</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+        {requiredApiFailed && !quotaLoadFailed && (
+          <div
+            role="alert"
+            data-testid="try-on-required-library-error"
+            className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            {t('errors.requiredLibraryFailed')}
           </div>
         )}
-      </div>
 
-      {/* 提交按钮 */}
-      <div className="flex justify-end">
         <button
           type="button"
-          onClick={handleSubmit}
+          data-testid="try-on-submit"
           disabled={!canSubmit}
-          className="inline-flex items-center gap-2 rounded-lg bg-foreground px-8 py-3 font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void handleSubmit()}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isSubmitting
-            ? uploadProgress
-              ? t('uploadingProgress', { current: uploadProgress.current, total: uploadProgress.total })
-              : t('submitting')
-            : t('submit')}
+          <Sparkles className="h-4 w-4" />
+          {isBusy ? progressLabel : t('submit')}
         </button>
-      </div>
+      </section>
 
-      {/* 任务状态和结果展示（优化点1和2：结果展示+进度条） */}
-      {taskId && taskStatus && (
-        <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-          {/* 状态标题 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {(taskStatus.status === 'pending' || taskStatus.status === 'processing') && (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              )}
-              <h3 className="font-semibold">
-                {taskStatus.status === 'pending' && t('status.pending')}
-                {taskStatus.status === 'processing' && t('status.processing')}
-                {taskStatus.status === 'completed' && t('status.completed')}
-                {taskStatus.status === 'failed' && t('status.failed')}
-              </h3>
+      {/* 排队 / 处理中状态 */}
+      {isBusy && (
+        <ProcessingProgress
+          progress={
+            effectiveTask?.status === 'processing'
+              ? Math.max(10, effectiveTask.progress)
+              : 5
+          }
+          label={progressLabel}
+        />
+      )}
+
+      {/* 失败恢复面板（表单级报错或任务执行失败） */}
+      {(error || taskFailureMessage) && (
+        <FailureRecoveryPanel
+          message={error ?? taskFailureMessage ?? t('errors.failed')}
+          errorCode={errorCode ?? effectiveTask?.errorCode}
+          onRetry={
+            effectiveTask?.status === 'failed'
+              ? handleRegenerate
+              : () => void handleSubmit()
+          }
+          onReset={handleReset}
+        />
+      )}
+
+      {/* 成功结果面板：标明 AI 生成及试衣模式 */}
+      {effectiveTask?.status === 'completed' && effectiveTask.outputFileId && (
+        <ResultPanel
+          title={t('resultTitle')}
+          description={
+            effectiveTask.mode === 'product'
+              ? t('resultProductDisclaimer')
+              : t('resultInspirationDisclaimer')
+          }
+          meta={[
+            {
+              label: t('aiGeneratedBadge'),
+              value:
+                effectiveTask.mode === 'product'
+                  ? t('resultModeProductBadge')
+                  : t('resultModeInspirationBadge'),
+            },
+          ]}
+          preview={
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  data-testid="result-ai-badge"
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {t('aiGeneratedBadge')}
+                </span>
+                <span
+                  data-testid="result-mode-badge"
+                  className="inline-flex items-center rounded border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                >
+                  {effectiveTask.mode === 'product'
+                    ? t('resultModeProductBadge')
+                    : t('resultModeInspirationBadge')}
+                </span>
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={buildFileDownloadUrl(effectiveTask.outputFileId)}
+                alt={t('resultPreviewAlt')}
+                className="mx-auto max-h-96 w-auto rounded-md border border-border object-contain"
+              />
             </div>
-            {taskStatus.status === 'completed' && (
+          }
+          action={
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={handleRegenerate}
-                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:border-foreground"
+                data-testid="try-on-download"
+                onClick={() => downloadStoredFile(effectiveTask.outputFileId!)}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-4 font-mono text-xs text-background transition-opacity hover:opacity-90"
               >
-                <RefreshCw className="h-4 w-4" />
+                <Download className="h-3.5 w-3.5" />
+                {t('download')}
+              </button>
+              <button
+                type="button"
+                data-testid="try-on-regenerate"
+                disabled={isBusy}
+                onClick={handleRegenerate}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 font-mono text-xs text-foreground transition-colors hover:border-foreground disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
                 {t('regenerate')}
               </button>
-            )}
-          </div>
-
-          {/* 进度条（优化点2） */}
-          {(taskStatus.status === 'pending' || taskStatus.status === 'processing') && (
-            <div className="space-y-2">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-foreground transition-all duration-300"
-                  style={{ width: `${taskProgress}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>{t('progress', { percent: taskProgress })}</span>
-                {estimatedTimeText && <span>{estimatedTimeText}</span>}
-              </div>
             </div>
-          )}
-
-          {/* 结果预览（优化点1：生成结果展示） */}
-          {taskStatus.status === 'completed' && resultImageUrl && (
-            <div className="space-y-4">
-              <div className="relative aspect-square w-full max-w-2xl mx-auto overflow-hidden rounded-lg border border-border">
-                <img
-                  src={resultImageUrl}
-                  alt={t('resultAlt')}
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 font-medium hover:border-foreground sm:flex-none"
-                >
-                  <Download className="h-4 w-4" />
-                  {t('download')}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleViewFiles}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 font-medium hover:border-foreground sm:flex-none"
-                >
-                  <FileText className="h-4 w-4" />
-                  {t('viewInFiles')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 失败信息 */}
-          {taskStatus.status === 'failed' && (
-            <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
-              {t('failedMessage')}
-            </div>
-          )}
-        </div>
+          }
+        />
       )}
-    </div>
+    </ToolPageShell>
   );
 }
-
-
-
-
-

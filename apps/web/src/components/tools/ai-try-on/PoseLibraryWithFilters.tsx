@@ -36,42 +36,41 @@ export function PoseLibraryWithFilters({
   const t = useTranslations('ImageTryOn');
   const [selectedView, setSelectedView] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // 提取可用的视角
   const availableViews = useMemo(() => {
     const views = new Set<string>();
     items.forEach(item => {
-      const viewMatch = item.tags.find(tag => 
+      const viewMatch = item.tags.find(tag =>
         ['front', 'side', 'back', 'high', 'low', 'diag'].includes(tag)
       );
       if (viewMatch) views.add(viewMatch);
     });
     return Array.from(views).sort();
   }, [items]);
-  
+
   // 筛选姿势
   const filteredItems = useMemo(() => {
     let filtered = items;
-    
+
     // 视角筛选
     if (selectedView !== 'all') {
-      filtered = filtered.filter(item => 
-        item.tags.includes(selectedView)
-      );
+      filtered = filtered.filter(item => item.tags.includes(selectedView));
     }
-    
+
     // 搜索筛选
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(item =>
-        item.title.toLowerCase().includes(query) ||
-        item.tags.some(tag => tag.toLowerCase().includes(query))
+      filtered = filtered.filter(
+        item =>
+          item.title.toLowerCase().includes(query) ||
+          item.tags.some(tag => tag.toLowerCase().includes(query))
       );
     }
-    
+
     return filtered;
   }, [items, selectedView, searchQuery]);
-  
+
   if (isLoading) {
     return (
       <div className="rounded-md border border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -79,7 +78,7 @@ export function PoseLibraryWithFilters({
       </div>
     );
   }
-  
+
   if (isError) {
     return (
       <div className="space-y-3 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm">
@@ -97,7 +96,7 @@ export function PoseLibraryWithFilters({
       </div>
     );
   }
-  
+
   if (items.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border bg-muted/10 p-6 text-sm text-muted-foreground">
@@ -105,9 +104,9 @@ export function PoseLibraryWithFilters({
       </div>
     );
   }
-  
+
   const selectedAsset = items.find(item => item.id === selectedId);
-  
+
   return (
     <div className="space-y-4">
       {/* 已选姿势提示 */}
@@ -126,7 +125,7 @@ export function PoseLibraryWithFilters({
           </button>
         </div>
       )}
-      
+
       {/* 筛选器 */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* 视角选择器 */}
@@ -162,18 +161,18 @@ export function PoseLibraryWithFilters({
             );
           })}
         </div>
-        
+
         {/* 搜索框 */}
         <input
           type="text"
           placeholder="搜索姿势..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           disabled={disabled}
           className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50 sm:w-64"
         />
       </div>
-      
+
       {/* 姿势网格 */}
       {filteredItems.length === 0 ? (
         <div className="rounded-md border border-dashed border-border bg-muted/10 p-6 text-center text-sm text-muted-foreground">
@@ -196,6 +195,7 @@ export function PoseLibraryWithFilters({
                 } disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {item.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={item.thumbnailUrl}
                     alt={item.title}
@@ -214,7 +214,7 @@ export function PoseLibraryWithFilters({
           })}
         </div>
       )}
-      
+
       {/* 结果统计 */}
       <div className="text-center text-xs text-muted-foreground">
         显示 {filteredItems.length} / {items.length} 个姿势
@@ -222,4 +222,3 @@ export function PoseLibraryWithFilters({
     </div>
   );
 }
-

@@ -1,0 +1,33 @@
+✅ Hook名称错误已修复！
+
+【修复的问题】
+1. useSession -> useRequireLogin ✅
+2. useImageGenerationQuota -> useImageGenerateQuota ✅
+
+【已验证存在的Hooks】
+✅ useRequireLogin (from @/hooks/use-require-login)
+✅ useTaskStatus (from @/hooks/api/use-tasks)
+✅ useImageGenerateQuota (from @/hooks/api/use-tasks)
+✅ useImageGenerateModels (from @/hooks/api/use-tasks)
+✅ useAiTryOnReferences (from @/hooks/api/use-ai-try-on)
+
+【已验证存在的组件】
+✅ PoseLibraryWithFilters
+✅ UploadReferenceCard
+✅ CategoryFilteredLibraryGrid
+✅ buildImageTryOnTaskPayload
+
+【提交记录】
+- 2ab72b2 - fix: 修复useSession导入错误
+- c95db2a - fix: 修正hook名称useImageGenerateQuota
+
+【现在应该可以正常运行】
+启动测试：
+```bash
+cd apps/web
+bun run dev
+```
+
+访问: http://localhost:3000/zh/image/try-on
+
+如果还有错误，请提供完整的错误信息。

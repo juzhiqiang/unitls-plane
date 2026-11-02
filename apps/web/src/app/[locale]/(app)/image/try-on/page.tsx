@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';

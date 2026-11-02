@@ -17,6 +17,7 @@ describe('ai try-on references schema', () => {
       'id',
       'slug',
       'kind',
+      'visibility',
       'title_zh',
       'title_en',
       'description_zh',
@@ -47,6 +48,7 @@ describe('ai try-on references schema', () => {
       'id',
       'slug',
       'kind',
+      'visibility',
       'title_zh',
       'title_en',
       'tags',
@@ -76,11 +78,20 @@ describe('ai try-on references schema', () => {
     }
   });
 
-  it('restricts kind to person, pose and garment', () => {
+  it('restricts kind and visibility to their documented values', () => {
     const kindEnum = (schema as Record<string, unknown>)
       .aiTryOnReferenceKindEnum as { enumValues: string[] };
+    const visibilityEnum = (schema as Record<string, unknown>)
+      .aiTryOnReferenceVisibilityEnum as { enumValues: string[] };
 
     expect(kindEnum.enumValues).toEqual(['person', 'pose', 'garment']);
+    // 只有 public 会进 API;其余保留在 MinIO 但不返回、也不能被生成任务解析。
+    expect(visibilityEnum.enumValues).toEqual([
+      'public',
+      'hidden',
+      'adult',
+      'intimate',
+    ]);
   });
 
   it('indexes kind with sort order for the gallery list query', () => {

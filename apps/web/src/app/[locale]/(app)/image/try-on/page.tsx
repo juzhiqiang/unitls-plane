@@ -12,7 +12,7 @@ import type { ToolStage } from '@/components/tools/tool-step-rail';
 import {
   buildImageTryOnTaskPayload,
   MAX_TRY_ON_REFERENCES,
-  ReferenceLibraryGrid,
+  CategoryFilteredLibraryGrid,
   TRY_ON_PROMPT_MAX_LENGTH,
   type TryOnPersonSource,
   UploadReferenceCard,
@@ -540,7 +540,7 @@ export default function ImageTryOnPage() {
             }
           />
         ) : (
-          <ReferenceLibraryGrid
+          <CategoryFilteredLibraryGrid
             role="person"
             items={personLibraryQuery.data ?? []}
             selectedId={personAssetId}
@@ -588,7 +588,7 @@ export default function ImageTryOnPage() {
             }
           />
         ) : (
-          <ReferenceLibraryGrid
+          <CategoryFilteredLibraryGrid
             role="garment"
             items={garmentLibraryQuery.data ?? []}
             selectedId={garmentAssetId}
@@ -614,7 +614,7 @@ export default function ImageTryOnPage() {
           </p>
         </div>
 
-        <ReferenceLibraryGrid
+        <CategoryFilteredLibraryGrid
           role="pose"
           items={poseLibraryQuery.data ?? []}
           selectedId={poseAssetId}
@@ -639,7 +639,7 @@ export default function ImageTryOnPage() {
           </p>
         </div>
 
-        <ReferenceLibraryGrid
+        <CategoryFilteredLibraryGrid
           role="style"
           items={garmentLibraryQuery.data ?? []}
           selectedId={styleAssetId}
@@ -887,6 +887,7 @@ export default function ImageTryOnPage() {
     </ToolPageShell>
   );
 }
+
 
 
 

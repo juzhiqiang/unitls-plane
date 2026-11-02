@@ -525,4 +525,89 @@ describe('ImageTryOnPage', () => {
       screen.getByText(/不承诺 100% 还原商品版型、色差、印花与细节/)
     ).toBeInTheDocument();
   });
+
+  it('groups 5-direction pose variants into a single card with bottom direction switcher and filters by gender at top', () => {
+    const femaleFrontId = '00000000-0000-4000-8000-000000000011';
+    const femaleSideId = '00000000-0000-4000-8000-000000000012';
+    const maleFrontId = '00000000-0000-4000-8000-000000000021';
+    const maleHighId = '00000000-0000-4000-8000-000000000022';
+
+    const multiviewPoses: AiTryOnReferenceAssetDto[] = [
+      {
+        id: femaleFrontId,
+        kind: 'pose',
+        title: 'S形站姿（正面）',
+        tags: ['front', 'female', '女性', '站姿'],
+        thumbnailUrl: 'https://cdn.example.test/full_sexy_P001_front.jpg',
+        sourceUrl: 'https://source.example.test/pose',
+        licenseName: 'CC0 1.0',
+        attribution: 'AI Pose Gallery ZH',
+      },
+      {
+        id: femaleSideId,
+        kind: 'pose',
+        title: 'S形站姿（侧面）',
+        tags: ['side', 'female', '女性', '站姿'],
+        thumbnailUrl: 'https://cdn.example.test/full_sexy_P001_side.jpg',
+        sourceUrl: 'https://source.example.test/pose',
+        licenseName: 'CC0 1.0',
+        attribution: 'AI Pose Gallery ZH',
+      },
+      {
+        id: maleFrontId,
+        kind: 'pose',
+        title: '男性 · 自然站立（正面）',
+        tags: ['front', 'male', '男性', '站姿'],
+        thumbnailUrl:
+          'https://cdn.example.test/custom_pose_male_001_front.webp',
+        sourceUrl: 'https://source.example.test/pose',
+        licenseName: 'Custom',
+        attribution: 'Open Pose & Costume',
+      },
+      {
+        id: maleHighId,
+        kind: 'pose',
+        title: '男性 · 自然站立（俯视）',
+        tags: ['high', 'male', '男性', '站姿'],
+        thumbnailUrl: 'https://cdn.example.test/custom_pose_male_001_high.webp',
+        sourceUrl: 'https://source.example.test/pose',
+        licenseName: 'Custom',
+        attribution: 'Open Pose & Costume',
+      },
+    ];
+
+    mocks.aiTryOnReferences.mockImplementation((kind: AiTryOnReferenceKind) => {
+      if (kind === 'pose') {
+        return { data: multiviewPoses, isLoading: false, isError: false };
+      }
+      return { data: [], isLoading: false, isError: false };
+    });
+
+    renderTryOnPage('zh');
+
+    expect(screen.getByTestId('pose-gender-filter-all')).toHaveTextContent(
+      '全部 (2)'
+    );
+    expect(screen.getByTestId('pose-gender-filter-female')).toHaveTextContent(
+      '女性 (1)'
+    );
+    expect(screen.getByTestId('pose-gender-filter-male')).toHaveTextContent(
+      '男性 (1)'
+    );
+
+    // Filter to Male poses only
+    fireEvent.click(screen.getByTestId('pose-gender-filter-male'));
+    expect(screen.queryByText('S形站姿')).not.toBeInTheDocument();
+    expect(screen.getByText('男性 · 自然站立')).toBeInTheDocument();
+
+    // Switch direction inside the male pose card from 正面 to 俯视
+    const highBtn = screen.getByTestId(
+      'pose-direction-https://cdn.example.test/custom_pose_male_001.webp-high'
+    );
+    fireEvent.click(highBtn);
+
+    expect(
+      screen.getByText('已选素材：男性 · 自然站立（俯视）')
+    ).toBeInTheDocument();
+  });
 });

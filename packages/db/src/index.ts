@@ -4,12 +4,15 @@ export * from './client';
 import { db } from './client';
 import {
   accountDeletionQueueScans,
+  aiTryOnReferences,
   cleanupObligations,
   files,
   imageGeneratePresets,
   tasks,
   type AccountDeletionQueueScan,
   type NewAccountDeletionQueueScan,
+  type AiTryOnReference,
+  type NewAiTryOnReference,
   type CleanupObligation,
   type NewCleanupObligation,
   type File,
@@ -23,6 +26,8 @@ import {
 export type {
   AccountDeletionQueueScan,
   NewAccountDeletionQueueScan,
+  AiTryOnReference,
+  NewAiTryOnReference,
   CleanupObligation,
   NewCleanupObligation,
   File,
@@ -34,6 +39,7 @@ export type {
 };
 export {
   accountDeletionQueueScans,
+  aiTryOnReferences,
   cleanupObligations,
   db,
   files,

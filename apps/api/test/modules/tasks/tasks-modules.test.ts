@@ -20,9 +20,12 @@ import { FontProcessor } from '../../../src/modules/tasks/processors/font.proces
 import { ImageProcessor } from '../../../src/modules/tasks/processors/image.processor';
 import { PdfProcessor } from '../../../src/modules/tasks/processors/pdf.processor';
 import { FontService } from '../../../src/modules/tasks/services/font.service';
+import { AiTryOnReferencesService } from '../../../src/modules/tasks/services/ai-try-on-references.service';
+import { AI_TRY_ON_REFERENCE_IMAGE_SOURCE } from '../../../src/modules/tasks/services/ai-try-on-reference-image-source';
 import { ImageGeneratePresetsService } from '../../../src/modules/tasks/services/image-generate-presets.service';
 import { ImageGenerationService } from '../../../src/modules/tasks/services/image-generation.service';
 import { TasksService } from '../../../src/modules/tasks/tasks.service';
+import { AiTryOnReferencesController } from '../../../src/modules/tasks/ai-try-on-references.controller';
 
 const processors = [
   ImageProcessor,
@@ -62,6 +65,11 @@ describe('task module composition', () => {
     expect(providers).toContain(FontService);
     expect(providers).toContain(ImageGenerationService);
     expect(providers).toContain(ImageGeneratePresetsService);
+    expect(providers).toContain(AiTryOnReferencesService);
+    // 图库端口 token 绑定到 AiTryOnReferencesService,并导出给 Worker 的 Processor。
+    expect(providerTokens(TasksCoreModule)).toContain(
+      AI_TRY_ON_REFERENCE_IMAGE_SOURCE
+    );
     for (const processor of processors) {
       expect(providers).not.toContain(processor);
     }
@@ -72,6 +80,8 @@ describe('task module composition', () => {
     expect(exports).toContain(FontService);
     expect(exports).toContain(ImageGenerationService);
     expect(exports).toContain(ImageGeneratePresetsService);
+    expect(exports).toContain(AiTryOnReferencesService);
+    expect(exports).toContain(AI_TRY_ON_REFERENCE_IMAGE_SOURCE);
     expect(exports).toContain(BullModule);
   });
 
@@ -79,6 +89,7 @@ describe('task module composition', () => {
     expect(metadata(MODULE_METADATA.CONTROLLERS, TasksApiModule)).toEqual([
       TasksController,
       FontsController,
+      AiTryOnReferencesController,
     ]);
     expect(metadata(MODULE_METADATA.PROVIDERS, TasksApiModule)).toHaveLength(0);
   });

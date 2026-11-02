@@ -15,6 +15,8 @@ import { PortraitSegmentationService } from './services/portrait-segmentation.se
 import { FaceDetectionService } from './services/face-detection.service';
 import { ImageGenerationService } from './services/image-generation.service';
 import { ImageGeneratePresetsService } from './services/image-generate-presets.service';
+import { AiTryOnReferencesService } from './services/ai-try-on-references.service';
+import { AI_TRY_ON_REFERENCE_IMAGE_SOURCE } from './services/ai-try-on-reference-image-source';
 
 const taskQueueNames = [
   'image-queue',
@@ -44,6 +46,13 @@ const taskQueueNames = [
     FaceDetectionService,
     ImageGenerationService,
     ImageGeneratePresetsService,
+    AiTryOnReferencesService,
+    // 图库端口 token 绑定到实现:任务 Processor 只依赖 AI_TRY_ON_REFERENCE_IMAGE_SOURCE,
+    // 不直接依赖图库实现类;Worker 模块经导出拿得到这个 token。
+    {
+      provide: AI_TRY_ON_REFERENCE_IMAGE_SOURCE,
+      useExisting: AiTryOnReferencesService,
+    },
     PdfService,
     PdfCadExtractorService,
     PdfToCadService,
@@ -60,6 +69,9 @@ const taskQueueNames = [
     FaceDetectionService,
     ImageGenerationService,
     ImageGeneratePresetsService,
+    AiTryOnReferencesService,
+    // 导出端口 token:Worker 模块的 Processor 经 @Inject 拿得到它。
+    AI_TRY_ON_REFERENCE_IMAGE_SOURCE,
     PdfService,
     PdfCadExtractorService,
     PdfToCadService,

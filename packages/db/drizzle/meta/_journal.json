@@ -162,6 +162,13 @@
       "when": 1793588637498,
       "tag": "0022_gorgeous_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793609798205,
+      "tag": "0023_familiar_thor",
+      "breakpoints": true
     }
   ]
 }

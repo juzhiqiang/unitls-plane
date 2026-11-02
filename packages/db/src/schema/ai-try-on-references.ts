@@ -24,6 +24,21 @@ export const aiTryOnReferenceKindEnum = pgEnum('ai_try_on_reference_kind', [
 ]);
 
 /**
+ * 试衣参考图库素材可见性。
+ *
+ * - `public`：公开可用，前端图库可见。
+ * - `hidden`：隐藏但保留，MinIO中保留文件，数据库有记录但API不返回。
+ * - `adult`：成人内容，MinIO中保留并单独分类，数据库有记录但API不返回。
+ * - `intimate`：亲密接触姿势，MinIO中保留并单独分类，数据库有记录但API不返回。
+ */
+export const aiTryOnReferenceVisibilityEnum = pgEnum('ai_try_on_reference_visibility', [
+  'public',
+  'hidden',
+  'adult',
+  'intimate',
+]);
+
+/**
  * AI 电商试衣参考图库。
  *
  * 与 image_generate_presets 同思路：DB 存元数据、MinIO 匿名只读桶存图片、
@@ -35,6 +50,7 @@ export const aiTryOnReferenceKindEnum = pgEnum('ai_try_on_reference_kind', [
  *   未核实可商用/再分发许可的素材不得进入本表，也不能用未授权开源仓库图片填充。
  * - 素材走 bucket/key 两列而非硬编码桶：图库桶与上传桶分离，换桶不改代码。
  * - 双语列：API 按 lang 查询参数取对应列拼成单语言扁平对象，前端零字段切换。
+ * - visibility 控制前端可见性：只有 public 可见，其他分类保留在 MinIO 但 API 不返回。
  *
  * slug 是 upsert 键：re-seed 只刷新内置素材的文案/存储 key/排序，不动 is_enabled
  * （后续后台禁用的内置素材 re-seed 后仍保持禁用），也不允许外部行占用同一 slug。
@@ -47,6 +63,7 @@ export const aiTryOnReferences = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     slug: text('slug').notNull().unique(),
     kind: aiTryOnReferenceKindEnum('kind').notNull(),
+    visibility: aiTryOnReferenceVisibilityEnum('visibility').notNull().default('public'),
     titleZh: text('title_zh').notNull(),
     titleEn: text('title_en').notNull(),
     descriptionZh: text('description_zh'),

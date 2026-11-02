@@ -74,6 +74,7 @@ export class AiTryOnReferencesService {
         and(
           eq(aiTryOnReferences.kind, kind),
           eq(aiTryOnReferences.isEnabled, true),
+          eq(aiTryOnReferences.visibility, 'public'),
           // 许可/来源四项缺任何一项都视为未审查，fail closed。
           isNotNull(aiTryOnReferences.sourceUrl),
           isNotNull(aiTryOnReferences.licenseName),
@@ -120,6 +121,7 @@ export class AiTryOnReferencesService {
           eq(aiTryOnReferences.id, assetId),
           eq(aiTryOnReferences.kind, expectedKind),
           eq(aiTryOnReferences.isEnabled, true),
+          eq(aiTryOnReferences.visibility, 'public'),
           isNotNull(aiTryOnReferences.sourceUrl),
           isNotNull(aiTryOnReferences.licenseName),
           isNotNull(aiTryOnReferences.attribution),

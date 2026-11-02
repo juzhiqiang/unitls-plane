@@ -1,0 +1,2 @@
+CREATE TYPE "public"."ai_try_on_reference_visibility" AS ENUM('public', 'hidden', 'adult', 'intimate');--> statement-breakpoint
+ALTER TABLE "ai_try_on_references" ADD COLUMN "visibility" "ai_try_on_reference_visibility" DEFAULT 'public' NOT NULL;

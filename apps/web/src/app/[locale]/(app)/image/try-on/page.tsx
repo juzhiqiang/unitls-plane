@@ -378,7 +378,7 @@ export default function ImageTryOnPage() {
       <div className="space-y-4 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
-            <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            <span className="text-sm uppercase tracking-wider text-muted-foreground">
               {t('modeLabel')}
             </span>
             <div
@@ -395,7 +395,7 @@ export default function ImageTryOnPage() {
                   setMode('product');
                   setError(null);
                 }}
-                className={`px-4 py-2 font-mono text-xs transition-colors ${
+                className={`px-4 py-2 text-sm transition-colors ${
                   mode === 'product'
                     ? 'bg-foreground text-background'
                     : 'bg-background text-muted-foreground hover:text-foreground'
@@ -412,7 +412,7 @@ export default function ImageTryOnPage() {
                   setMode('inspiration');
                   setError(null);
                 }}
-                className={`px-4 py-2 font-mono text-xs transition-colors ${
+                className={`px-4 py-2 text-sm transition-colors ${
                   mode === 'inspiration'
                     ? 'bg-foreground text-background'
                     : 'bg-background text-muted-foreground hover:text-foreground'
@@ -427,7 +427,7 @@ export default function ImageTryOnPage() {
             {quotaQuery.data && (
               <span
                 data-testid="try-on-quota-badge"
-                className="rounded-md border border-border bg-muted/30 px-2.5 py-1 font-mono text-xs text-foreground"
+                className="rounded-md border border-border bg-muted/30 px-2.5 py-1 text-sm text-foreground"
               >
                 {t('quotaBadge', {
                   remaining: quotaQuery.data.remaining,
@@ -437,7 +437,7 @@ export default function ImageTryOnPage() {
             )}
             <span
               data-testid="try-on-reference-count"
-              className="rounded-md border border-border bg-muted/20 px-2.5 py-1 font-mono text-xs text-muted-foreground"
+              className="rounded-md border border-border bg-muted/20 px-2.5 py-1 text-sm text-muted-foreground"
             >
               {t('referenceCount', {
                 count: activeReferenceCount,
@@ -478,7 +478,7 @@ export default function ImageTryOnPage() {
       </div>
 
       {/* 1. 人像参考（必选） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <section className="space-y-4 rounded-lg border border-border bg-card p-5 lg:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-medium">{t('personSectionTitle')}</h2>
@@ -496,7 +496,7 @@ export default function ImageTryOnPage() {
                 setPersonSource('upload');
                 setError(null);
               }}
-              className={`px-3 py-1.5 font-mono text-xs transition-colors ${
+              className={`px-3 py-1.5 text-sm transition-colors ${
                 personSource === 'upload'
                   ? 'bg-foreground text-background'
                   : 'bg-background text-muted-foreground hover:text-foreground'
@@ -513,7 +513,7 @@ export default function ImageTryOnPage() {
                 setPersonSource('library');
                 setError(null);
               }}
-              className={`px-3 py-1.5 font-mono text-xs transition-colors ${
+              className={`px-3 py-1.5 text-sm transition-colors ${
                 personSource === 'library'
                   ? 'bg-foreground text-background'
                   : 'bg-background text-muted-foreground hover:text-foreground'
@@ -558,7 +558,7 @@ export default function ImageTryOnPage() {
       </section>
 
       {/* 2. 目标服装参考（必选） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <section className="space-y-4 rounded-lg border border-border bg-card p-5 lg:p-6">
         <div>
           <h2 className="text-sm font-medium">
             {mode === 'product'
@@ -606,7 +606,7 @@ export default function ImageTryOnPage() {
       </section>
 
       {/* 3. 姿势参考（可选） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <section className="space-y-4 rounded-lg border border-border bg-card p-5 lg:p-6">
         <div>
           <h2 className="text-sm font-medium">{t('poseSectionTitle')}</h2>
           <p className="text-xs text-muted-foreground">
@@ -631,7 +631,7 @@ export default function ImageTryOnPage() {
       </section>
 
       {/* 4. 辅助穿搭风格（可选 · 弱优先级） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <section className="space-y-4 rounded-lg border border-border bg-card p-5 lg:p-6">
         <div>
           <h2 className="text-sm font-medium">{t('styleSectionTitle')}</h2>
           <p className="text-xs text-muted-foreground">
@@ -680,7 +680,7 @@ export default function ImageTryOnPage() {
           </div>
           <textarea
             id="try-on-prompt-addition"
-            rows={2}
+            rows={3}
             value={promptAddition}
             disabled={isBusy}
             placeholder={t('promptPlaceholder')}
@@ -710,7 +710,7 @@ export default function ImageTryOnPage() {
               value={size}
               disabled={isBusy}
               onChange={event => setSize(event.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground"
+              className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground"
             >
               <option value="auto">{t('sizes.auto')}</option>
               <option value="1024x1024">{t('sizes.square')}</option>
@@ -733,7 +733,7 @@ export default function ImageTryOnPage() {
               onChange={event =>
                 setQuality(event.target.value as 'auto' | 'standard' | 'high')
               }
-              className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground"
+              className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground"
             >
               <option value="high">{t('qualities.high')}</option>
               <option value="standard">{t('qualities.standard')}</option>
@@ -754,7 +754,7 @@ export default function ImageTryOnPage() {
                 value={model || models[0]?.model || ''}
                 disabled={isBusy}
                 onChange={event => setModel(event.target.value)}
-                className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground"
+                className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground"
               >
                 {models.map(item => (
                   <option key={item.model} value={item.model}>
@@ -865,7 +865,7 @@ export default function ImageTryOnPage() {
                 type="button"
                 data-testid="try-on-download"
                 onClick={() => downloadStoredFile(effectiveTask.outputFileId!)}
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-4 font-mono text-xs text-background transition-opacity hover:opacity-90"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90"
               >
                 <Download className="h-3.5 w-3.5" />
                 {t('download')}
@@ -875,7 +875,7 @@ export default function ImageTryOnPage() {
                 data-testid="try-on-regenerate"
                 disabled={isBusy}
                 onClick={handleRegenerate}
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 font-mono text-xs text-foreground transition-colors hover:border-foreground disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-foreground transition-colors hover:border-foreground disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 {t('regenerate')}
@@ -887,3 +887,6 @@ export default function ImageTryOnPage() {
     </ToolPageShell>
   );
 }
+
+
+

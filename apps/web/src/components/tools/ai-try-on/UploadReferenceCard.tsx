@@ -43,7 +43,7 @@ export function UploadReferenceCard({
   };
 
   return (
-    <div className="space-y-3 rounded-md border border-border bg-card p-4">
+    <div className="space-y-4 rounded-lg border border-border bg-card p-5">
       <input
         ref={inputRef}
         type="file"
@@ -59,14 +59,14 @@ export function UploadReferenceCard({
       />
 
       {!file ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border py-6 text-center">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-border/60 hover:border-foreground/40 transition-colors py-8 text-center">
           <button
             type="button"
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 font-mono text-xs text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Upload className="h-3.5 w-3.5" />
+            <Upload className="h-4 w-4" />
             {actionLabel}
           </button>
           <p className="text-xs text-muted-foreground">
@@ -81,11 +81,11 @@ export function UploadReferenceCard({
               <img
                 src={previewUrl}
                 alt={file.name}
-                className="h-14 w-14 shrink-0 rounded border border-border object-cover"
+                className="h-20 w-20 shrink-0 rounded border border-border object-cover"
               />
             ) : null}
             <div className="min-w-0 space-y-1">
-              <p className="truncate font-mono text-xs text-foreground">
+              <p className="truncate text-sm font-medium text-foreground">
                 {t('selectedFile', {
                   filename: file.name,
                   size: formatBytes(file.size, tUnits, locale),
@@ -117,3 +117,4 @@ export function UploadReferenceCard({
     </div>
   );
 }
+

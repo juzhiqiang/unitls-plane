@@ -27,7 +27,10 @@ const where = async condition => {
   return [{ count: 0 }];
 };
 const database = { select: () => ({ from: () => ({ where }) }) };
-await countTasksCreatedToday(database, 'user-1', 'image_generate');
+await countTasksCreatedToday(database, 'user-1', [
+  'image_generate',
+  'image_try_on',
+]);
 const query = new PgDialect().sqlToQuery(conditions[0]);
 console.log(JSON.stringify({ sql: query.sql, params: query.params }));
 `;
@@ -59,7 +62,10 @@ describe('countTasksCreatedToday', () => {
     const { database } = fakeDatabase(7);
 
     await expect(
-      countTasksCreatedToday(database as never, 'user-1', 'image_generate')
+      countTasksCreatedToday(database as never, 'user-1', [
+        'image_generate',
+        'image_try_on',
+      ])
     ).resolves.toBe(7);
   });
 
@@ -68,14 +74,20 @@ describe('countTasksCreatedToday', () => {
     const database = { select: vi.fn(() => ({ from: () => ({ where }) })) };
 
     await expect(
-      countTasksCreatedToday(database as never, 'user-1', 'image_generate')
+      countTasksCreatedToday(database as never, 'user-1', [
+        'image_generate',
+        'image_try_on',
+      ])
     ).resolves.toBe(0);
   });
 
   it('builds one select against a single where clause', async () => {
     const { database, select, from, where } = fakeDatabase(0);
 
-    await countTasksCreatedToday(database as never, 'user-1', 'image_generate');
+    await countTasksCreatedToday(database as never, 'user-1', [
+      'image_generate',
+      'image_try_on',
+    ]);
 
     expect(select).toHaveBeenCalledTimes(1);
     expect(from).toHaveBeenCalledTimes(1);
@@ -86,11 +98,16 @@ describe('countTasksCreatedToday', () => {
     const query = serializeWhereClause();
 
     expect(query.sql).toMatch(/"tasks"\."user_id"\s*=\s*\$\d+/);
-    expect(query.sql).toMatch(/"tasks"\."type"\s*=\s*\$\d+/);
+    expect(query.sql).toMatch(/"tasks"\."type"\s+in\s+\(\$\d+,\s*\$\d+\)/);
     expect(query.sql).toMatch(/"tasks"\."status"\s*<>\s*\$\d+/);
     expect(query.sql).toMatch(
       /"tasks"\."created_at"\s*>=\s*date_trunc\('day',\s*now\(\)\)/
     );
-    expect(query.params).toEqual(['user-1', 'image_generate', 'failed']);
+    expect(query.params).toEqual([
+      'user-1',
+      'image_generate',
+      'image_try_on',
+      'failed',
+    ]);
   });
 });

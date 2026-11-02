@@ -31,6 +31,7 @@ import {
   paginationOptions,
 } from '../../common/database/list-pagination';
 import type { Task, NewTask } from '@utils-plane/db';
+import { IMAGE_GENERATION_TASK_TYPES } from '@utils-plane/validators';
 import type {
   CreateTaskInput,
   PdfToCadConversionMeta,
@@ -61,6 +62,7 @@ const TASK_TYPES_BY_CATEGORY: Record<TaskCategory, readonly TaskType[]> = {
     'image_watermark',
     'image_id_photo',
     'image_generate',
+    'image_try_on',
   ],
   pdf: [
     'pdf_merge',
@@ -242,7 +244,11 @@ export class TasksService {
       { userId: user.id, plan: user.plan, role: user.role },
       'image.generate.dailyCount'
     );
-    const used = await countTasksCreatedToday(db, user.id, 'image_generate');
+    const used = await countTasksCreatedToday(
+      db,
+      user.id,
+      IMAGE_GENERATION_TASK_TYPES
+    );
     return { limit, used, remaining: Math.max(0, limit - used) };
   }
 
@@ -672,13 +678,21 @@ export class TasksService {
     user: Pick<User, 'id' | 'plan' | 'role'> | null,
     database: ActiveUserTransaction
   ): Promise<void> {
-    if (type !== 'image_generate' || !user) return;
+    if (
+      !IMAGE_GENERATION_TASK_TYPES.some(taskType => taskType === type) ||
+      !user
+    )
+      return;
 
     const limit = getLimit(
       { userId: user.id, plan: user.plan, role: user.role },
       'image.generate.dailyCount'
     );
-    const used = await countTasksCreatedToday(database, user.id, type);
+    const used = await countTasksCreatedToday(
+      database,
+      user.id,
+      IMAGE_GENERATION_TASK_TYPES
+    );
 
     if (used >= limit) {
       throw new ForbiddenException({
@@ -718,6 +732,7 @@ export class TasksService {
         return false;
       case 'image_id_photo':
       case 'image_generate':
+      case 'image_try_on':
       case 'pdf_merge':
       case 'pdf_split':
       case 'pdf_to_image':

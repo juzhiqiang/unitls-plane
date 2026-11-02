@@ -5,6 +5,7 @@ export * from './id-photo-background';
 export * from './id-photo-layout';
 export * from './id-photo-quality';
 export * from './image-generate';
+export * from './image-try-on';
 export * from './tasks';
 export * from './users';
 export * from './watermark';

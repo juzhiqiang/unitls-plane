@@ -2,7 +2,7 @@
 // 在 tasks.service.ts 的 assertWithinDailyQuota 内完成。
 import { tasks } from '@utils-plane/db';
 import type { TaskType } from '@utils-plane/validators';
-import { and, eq, gte, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, ne, sql } from 'drizzle-orm';
 import type { ActiveUserTransaction } from '../../common/database/active-user-transaction';
 
 /**
@@ -15,7 +15,7 @@ import type { ActiveUserTransaction } from '../../common/database/active-user-tr
 export async function countTasksCreatedToday(
   database: Pick<ActiveUserTransaction, 'select'>,
   userId: string,
-  type: TaskType
+  types: readonly TaskType[]
 ): Promise<number> {
   const rows = await database
     .select({ count: sql<number>`count(*)::int` })
@@ -23,7 +23,7 @@ export async function countTasksCreatedToday(
     .where(
       and(
         eq(tasks.userId, userId),
-        eq(tasks.type, type),
+        inArray(tasks.type, types),
         ne(tasks.status, 'failed'),
         gte(tasks.createdAt, sql`date_trunc('day', now())`)
       )

@@ -136,6 +136,7 @@ describe('TasksService listByUser category filtering', () => {
       'image_watermark',
       'image_id_photo',
       'image_generate',
+      'image_try_on',
     ]);
     expect(cursorCondition).toHaveBeenCalledWith(
       'cursor-1',

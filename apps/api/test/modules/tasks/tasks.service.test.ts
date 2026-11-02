@@ -260,6 +260,26 @@ describe('TasksService task creation', () => {
     expect(withActiveUserTransaction).not.toHaveBeenCalled();
   });
 
+  it('rejects anonymous try-on before inserting or queueing', async () => {
+    const { service, filesService, aiQueue } = createService();
+
+    await expect(
+      service.create(
+        {
+          type: 'image_try_on',
+          inputFileIds: [],
+          inputConfig: {},
+        },
+        null
+      )
+    ).rejects.toThrow('Sign in is required for server processing tasks');
+
+    expect(filesService.getById).not.toHaveBeenCalled();
+    expect(transactionInsert).not.toHaveBeenCalled();
+    expect(aiQueue.add).not.toHaveBeenCalled();
+    expect(withActiveUserTransaction).not.toHaveBeenCalled();
+  });
+
   it('writes anonymous task and outbox rows in one transaction before queueing', async () => {
     const { service, filesService, imageQueue } = createService();
 
@@ -565,6 +585,29 @@ describe('TasksService task creation', () => {
     expect(events).toContain('rollback');
   });
 
+  it('rejects a try-on task when ordinary generation already used the shared quota', async () => {
+    const { service, aiQueue } = createService();
+    countTasksCreatedToday.mockResolvedValue(10);
+
+    await expect(
+      service.create(
+        {
+          type: 'image_try_on',
+          inputFileIds: [],
+          inputConfig: {},
+        },
+        { id: 'user-1', plan: 'signed_in', role: 'user' } as never
+      )
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(countTasksCreatedToday).toHaveBeenCalledWith(transaction, 'user-1', [
+      'image_generate',
+      'image_try_on',
+    ]);
+    expect(transactionInsert).not.toHaveBeenCalled();
+    expect(aiQueue.add).not.toHaveBeenCalled();
+  });
+
   it('extracts a valid sessionId from image_generate inputConfig into the row', async () => {
     const { service } = createService();
     const sessionId = '0f0d7ac5-4d3a-4a9e-9a75-2f76db11a001';
@@ -702,7 +745,7 @@ describe('TasksService image generation quota snapshot', () => {
     expect(quota).toEqual({ limit: 100, used: 0, remaining: 100 });
   });
 
-  it('counts only image_generate tasks for the given user', async () => {
+  it('counts generation and try-on tasks together for the given user', async () => {
     const { service } = createService();
     countTasksCreatedToday.mockResolvedValue(5);
 
@@ -716,7 +759,7 @@ describe('TasksService image generation quota snapshot', () => {
       // 第一个参数是 db(只读查询用全局 db,不进事务)
       expect.objectContaining({ insert: globalInsert }),
       'user-1',
-      'image_generate'
+      ['image_generate', 'image_try_on']
     );
   });
 

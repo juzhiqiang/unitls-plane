@@ -16,6 +16,7 @@ describe('getTaskQueueName', () => {
 
   it('routes AI image generation to the dedicated ai-queue', () => {
     expect(getTaskQueueName('image_generate')).toBe('ai-queue');
+    expect(getTaskQueueName('image_try_on')).toBe('ai-queue');
   });
 });
 

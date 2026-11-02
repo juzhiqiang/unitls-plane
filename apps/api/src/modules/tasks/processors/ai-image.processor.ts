@@ -1,12 +1,18 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import {
   imageGenerateTaskConfigSchema,
+  imageTryOnTaskConfigSchema,
   type ImageGenerateTaskConfig,
+  type ImageTryOnReferenceBinding,
 } from '@utils-plane/validators';
 import { Job, UnrecoverableError } from 'bullmq';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import { FilesService } from '../../files/files.service';
+import {
+  AI_TRY_ON_REFERENCE_IMAGE_SOURCE,
+  type AiTryOnReferenceImageSource,
+} from '../services/ai-try-on-reference-image-source';
 import { markGeneratedImage } from '../services/generated-image-marker';
 import {
   ImageGenerationError,
@@ -39,8 +45,45 @@ type AiImageTask = {
  * 脱敏器会跳过空 secret。
  */
 function taskPrompt(task: AiImageTask): string {
-  const config = task.inputConfig as { prompt?: unknown } | null | undefined;
-  return typeof config?.prompt === 'string' ? config.prompt : '';
+  const config = task.inputConfig as
+    | { prompt?: unknown; promptAddition?: unknown }
+    | null
+    | undefined;
+  if (typeof config?.prompt === 'string') return config.prompt;
+  return typeof config?.promptAddition === 'string'
+    ? config.promptAddition
+    : '';
+}
+
+function composeTryOnPrompt(
+  mode: 'product' | 'inspiration',
+  references: readonly ImageTryOnReferenceBinding[],
+  promptAddition?: string
+): string {
+  const lines =
+    mode === 'product'
+      ? [
+          '生成真实、专业的电商服装试穿展示图。参考图按固定顺序提供：第 1 张是模特/人物，第 2 张是本次要展示的真实商品服装；如存在第 3 张，它只提供姿势参考；如存在第 4 张，它只提供弱优先级的搭配风格参考。',
+          '商品图是服装外观的唯一权威来源。尽可能准确保留商品的款式、颜色、图案、材质纹理、剪裁、细节和配饰；不要从姿势图或风格图复制、替换或改写商品设计。',
+          '保留人物身份与外貌，将商品服装自然穿在人物身上，生成干净、可信的电商展示摄影效果。',
+        ]
+      : [
+          '生成真实、专业的穿搭灵感试穿展示图。参考图按固定顺序提供：第 1 张是模特/人物，第 2 张是目标服饰；如存在第 3 张，它只提供姿势参考；如存在第 4 张，它只提供弱优先级的搭配风格参考。',
+          '以目标服饰图决定主要服装的款式、颜色、图案和整体搭配，保持人物身份与外貌，并自然穿着该服饰。',
+          '生成干净、可信的电商风格展示摄影效果。',
+        ];
+
+  if (references.some(reference => reference.role === 'pose')) {
+    lines.push('姿势参考只控制人物动作和构图，不改变人物身份或服装。');
+  }
+  if (references.some(reference => reference.role === 'style')) {
+    lines.push('风格参考仅用于弱化的搭配氛围，不得覆盖目标服装的具体设计。');
+  }
+  if (promptAddition?.trim()) {
+    lines.push(`用户补充的场景要求：${promptAddition.trim()}`);
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -57,7 +100,10 @@ export class AiImageProcessor extends WorkerHost {
   constructor(
     private readonly filesService: FilesService,
     private readonly tasksService: TasksService,
-    private readonly imageGenerationService: ImageGenerationService
+    private readonly imageGenerationService: ImageGenerationService,
+    @Optional()
+    @Inject(AI_TRY_ON_REFERENCE_IMAGE_SOURCE)
+    private readonly tryOnReferenceImageSource?: AiTryOnReferenceImageSource
   ) {
     super();
   }
@@ -75,6 +121,8 @@ export class AiImageProcessor extends WorkerHost {
       switch (task.type) {
         case 'image_generate':
           return await this.handleGenerate(task, job);
+        case 'image_try_on':
+          return await this.handleTryOn(task, job);
         default:
           throw new Error(`Unknown AI image task type: ${task.type}`);
       }
@@ -198,6 +246,42 @@ export class AiImageProcessor extends WorkerHost {
       references,
       preferredProviderId ? { preferredProviderId } : undefined
     );
+    return this.completeGeneratedImage(task, job, generated);
+  }
+
+  private async handleTryOn(task: AiImageTask, job: Job): Promise<unknown> {
+    const config = imageTryOnTaskConfigSchema.parse({
+      ...(task.inputConfig as Record<string, unknown>),
+      inputFileCount: task.inputFileIds?.length ?? 0,
+    });
+    await this.reportProgress(task.id, job, 30);
+
+    const references = await this.loadTryOnReferences(task, config.references);
+    const imageConfig = imageGenerateTaskConfigSchema.parse({
+      mode: 'image_to_image',
+      prompt: composeTryOnPrompt(
+        config.mode,
+        config.references,
+        config.promptAddition
+      ),
+      size: config.size,
+      quality: config.quality,
+      model: config.model,
+      inputFileCount: references.length,
+    });
+    const generated = await this.imageGenerationService.generate(
+      imageConfig,
+      references
+    );
+    return this.completeGeneratedImage(task, job, generated, 'ai-try-on');
+  }
+
+  private async completeGeneratedImage(
+    task: AiImageTask,
+    job: Job,
+    generated: Awaited<ReturnType<ImageGenerationService['generate']>>,
+    filenamePrefix = 'ai-image'
+  ): Promise<unknown> {
     await this.reportProgress(task.id, job, 80);
 
     // 模型与来源取实际出图的那一条:同模型多来源容错路由下,同会话也可能
@@ -212,7 +296,7 @@ export class AiImageProcessor extends WorkerHost {
     const outputFile = await this.filesService.upload(
       marked,
       {
-        filename: `ai-image-${task.id.slice(0, 8)}.${generated.extension}`,
+        filename: `${filenamePrefix}-${task.id.slice(0, 8)}.${generated.extension}`,
         mimeType: generated.mimeType,
         size: marked.length,
       },
@@ -230,6 +314,54 @@ export class AiImageProcessor extends WorkerHost {
     });
     await job.updateProgress(100);
     return { outputFileId: outputFile.id };
+  }
+
+  private async loadTryOnReferences(
+    task: AiImageTask,
+    bindings: readonly ImageTryOnReferenceBinding[]
+  ): Promise<Buffer[]> {
+    const roleOrder: ImageTryOnReferenceBinding['role'][] = [
+      'person',
+      'garment',
+      'pose',
+      'style',
+    ];
+    const orderedBindings = roleOrder.flatMap(role =>
+      bindings.filter(binding => binding.role === role)
+    );
+    const files = task.inputFileIds ?? [];
+
+    return Promise.all(
+      orderedBindings.map(async binding => {
+        if (binding.source === 'upload') {
+          const fileId = files[binding.inputIndex];
+          if (!fileId) {
+            throw new ImageGenerationError(
+              ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+              'A try-on reference file was not available'
+            );
+          }
+          const file = await this.filesService.getById(
+            fileId,
+            task.userId ?? null
+          );
+          return this.filesService.download(file.storageKey);
+        }
+
+        if (!this.tryOnReferenceImageSource) {
+          throw new ImageGenerationError(
+            ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+            'Try-on reference library is unavailable'
+          );
+        }
+        const expectedKind =
+          binding.role === 'style' ? 'garment' : binding.role;
+        return this.tryOnReferenceImageSource.getImageForGeneration(
+          binding.assetId,
+          expectedKind
+        );
+      })
+    );
   }
 
   /**

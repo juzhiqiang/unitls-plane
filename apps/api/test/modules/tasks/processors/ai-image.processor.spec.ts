@@ -372,6 +372,161 @@ it('sends every reference image for multi-image fusion', async () => {
   );
 });
 
+it('generates a product try-on with role-ordered owned and curated references', async () => {
+  const uploadedImages = new Map([
+    ['person-key', Buffer.from('person-image')],
+    ['garment-key', Buffer.from('product-image')],
+  ]);
+  const filesService = {
+    getById: vi.fn(async (id: string, userId: string) => ({
+      id,
+      userId,
+      storageKey: id === 'person-file' ? 'person-key' : 'garment-key',
+    })),
+    download: vi.fn(async (key: string) => uploadedImages.get(key)),
+    upload: vi.fn().mockResolvedValue({ id: 'output-1' }),
+  };
+  const tasksService = createTasksService({
+    type: 'image_try_on',
+    inputFileIds: ['person-file', 'garment-file'],
+    inputConfig: {
+      mode: 'product',
+      references: [
+        {
+          role: 'style',
+          source: 'library',
+          assetId: '00000000-0000-4000-8000-000000000004',
+        },
+        { role: 'garment', source: 'upload', inputIndex: 1 },
+        {
+          role: 'pose',
+          source: 'library',
+          assetId: '00000000-0000-4000-8000-000000000003',
+        },
+        { role: 'person', source: 'upload', inputIndex: 0 },
+      ],
+      promptAddition: 'clean white studio background',
+    },
+  });
+  const referenceSource = {
+    getImageForGeneration: vi.fn(async (assetId: string, kind: string) => {
+      if (
+        assetId === '00000000-0000-4000-8000-000000000003' &&
+        kind === 'pose'
+      ) {
+        return Buffer.from('pose-image');
+      }
+      if (
+        assetId === '00000000-0000-4000-8000-000000000004' &&
+        kind === 'garment'
+      ) {
+        return Buffer.from('style-image');
+      }
+      throw new Error('Unexpected curated reference');
+    }),
+  };
+  const imageGenerationService = {
+    generate: vi.fn().mockResolvedValue({
+      buffer: Buffer.from('png-bytes'),
+      mimeType: 'image/png',
+      extension: 'png',
+      model: 'gpt-image-1',
+      providerId: 'alpha',
+    }),
+  };
+  const processor = new AiImageProcessor(
+    filesService as never,
+    tasksService as never,
+    imageGenerationService as never,
+    referenceSource as never
+  );
+
+  await processor.process(createJob());
+
+  expect(filesService.getById).toHaveBeenNthCalledWith(
+    1,
+    'person-file',
+    'user-1'
+  );
+  expect(filesService.getById).toHaveBeenNthCalledWith(
+    2,
+    'garment-file',
+    'user-1'
+  );
+  expect(referenceSource.getImageForGeneration).toHaveBeenNthCalledWith(
+    1,
+    '00000000-0000-4000-8000-000000000003',
+    'pose'
+  );
+  expect(referenceSource.getImageForGeneration).toHaveBeenNthCalledWith(
+    2,
+    '00000000-0000-4000-8000-000000000004',
+    'garment'
+  );
+  expect(imageGenerationService.generate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mode: 'image_to_image',
+      prompt: expect.stringContaining('clean white studio background'),
+      inputFileCount: 4,
+    }),
+    [
+      Buffer.from('person-image'),
+      Buffer.from('product-image'),
+      Buffer.from('pose-image'),
+      Buffer.from('style-image'),
+    ]
+  );
+  const prompt = imageGenerationService.generate.mock.calls[0]?.[0].prompt;
+  expect(prompt).toContain('商品');
+  expect(prompt).toContain('风格参考');
+  expect(prompt).toContain('弱化');
+});
+
+it('does not call the image provider when a curated reference fails validation', async () => {
+  const tasksService = createTasksService({
+    type: 'image_try_on',
+    inputFileIds: [],
+    inputConfig: {
+      mode: 'inspiration',
+      references: [
+        {
+          role: 'person',
+          source: 'library',
+          assetId: '00000000-0000-4000-8000-000000000001',
+        },
+        {
+          role: 'garment',
+          source: 'library',
+          assetId: '00000000-0000-4000-8000-000000000002',
+        },
+      ],
+    },
+  });
+  const imageGenerationService = { generate: vi.fn() };
+  const referenceSource = {
+    getImageForGeneration: vi.fn(async (assetId: string) => {
+      if (assetId.endsWith('0001')) return Buffer.from('person-image');
+      throw new Error('Reference is disabled or has not passed license review');
+    }),
+  };
+  const processor = new AiImageProcessor(
+    { upload: vi.fn() } as never,
+    tasksService as never,
+    imageGenerationService as never,
+    referenceSource as never
+  );
+
+  await processor.process(createJob()).catch(() => undefined);
+
+  expect(referenceSource.getImageForGeneration).toHaveBeenCalledTimes(2);
+  expect(imageGenerationService.generate).not.toHaveBeenCalled();
+  expect(tasksService.markFailed).toHaveBeenCalledWith(
+    'task-1',
+    ErrorCodes.AI_IMAGE_GENERATION_FAILED,
+    expect.any(String)
+  );
+});
+
 it('fails image_to_image without leaking why when the input file is missing', async () => {
   const tasksService = createTasksService({
     inputConfig: { mode: 'image_to_image', prompt: '把背景换成海边' },

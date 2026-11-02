@@ -30,6 +30,7 @@ export function getTaskQueueName(type: TaskType): TaskQueueName {
     case 'font_convert':
       return 'font-queue';
     case 'image_generate':
+    case 'image_try_on':
       return 'ai-queue';
   }
 }

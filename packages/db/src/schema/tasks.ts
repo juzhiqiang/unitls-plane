@@ -29,6 +29,7 @@ export const taskTypeEnum = pgEnum('task_type', [
   'pdf_rearrange',
   'pdf_from_document',
   'image_generate',
+  'image_try_on',
   'pdf_to_cad',
 ]);
 

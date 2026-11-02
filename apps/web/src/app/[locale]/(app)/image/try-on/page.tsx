@@ -430,7 +430,7 @@ export default function AiTryOnPage() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            disabled={isSubmitting || sessionPending}
+            disabled={isSubmitting}
             placeholder={t('promptPlaceholder')}
             maxLength={5000}
             rows={3}
@@ -448,7 +448,7 @@ export default function AiTryOnPage() {
             <select
               value={size}
               onChange={(e) => setSize(e.target.value)}
-              disabled={isSubmitting || sessionPending}
+              disabled={isSubmitting}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             >
               <option value="1024x1024">{t('sizes.square')}</option>
@@ -462,7 +462,7 @@ export default function AiTryOnPage() {
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value as any)}
-              disabled={isSubmitting || sessionPending}
+              disabled={isSubmitting}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             >
               <option value="auto">{t('qualities.auto')}</option>
@@ -479,7 +479,7 @@ export default function AiTryOnPage() {
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              disabled={isSubmitting || sessionPending}
+              disabled={isSubmitting}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             >
               <option value="">{t('modelDefault')}</option>
@@ -596,6 +596,7 @@ export default function AiTryOnPage() {
     </div>
   );
 }
+
 
 
 

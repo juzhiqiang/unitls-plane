@@ -9,6 +9,7 @@
 推荐从以下开源项目获取更多姿势：
 
 ### 1. AI Pose Gallery ZH（推荐）
+
 - **项目地址**：https://github.com/anhao/ai-pose-gallery-zh
 - **许可证**：CC0 1.0（公共领域）
 - **姿势数量**：1439 个（含多角度）
@@ -16,9 +17,17 @@
 - **适用类别**：站姿、行走、坐姿、跪姿等
 
 ### 2. Open Pose & Costume
+
 - **在线预览**：https://hongye007.github.io/open-pose-costume/
 - **GitHub**：https://github.com/hongye007/open-pose-costume
 - **说明**：整合上述数据源的可视化参考库
+- **自建男性姿势**：仓库 `data/custom/pose.json` 中带 `male` 标签的 13 个姿势 ×
+  5 视角（共 65 张）属于自建素材，默认条款禁止商用与再分发；本项目已取得维护者单独授权后导入。
+  - 导入脚本：`cd apps/api && bun --env-file=../../.env.local run src/scripts/import-pose-male-custom.ts`
+  - MinIO：原图 `try-on-references/pose/custom_pose_male_*.png`，缩略图
+    `try-on-references/pose/thumbnails/custom_pose_male_*.webp`
+  - 数据库：slug `custom_pose_male_XXX_{view}`，标签含 `male` / `男性`，`license_reviewed_at`
+    已填写，可被图库接口返回
 
 ## 扩展步骤
 
@@ -51,12 +60,14 @@ bun run src/scripts/import-pose-references.ts ../../../pose-zh.json
 ## 筛选建议
 
 **优先选择**：
+
 - ✅ 站姿（自然站立、展示型站姿）
 - ✅ 行走（走秀步态、日常行走）
 - ✅ 坐姿（椅子坐姿、地面坐姿）
 - ✅ 跪姿（适合某些服装展示）
 
 **避免选择**：
+
 - ❌ 躺卧姿势（试衣展示效果差）
 - ❌ 极端动作（舞蹈、运动、瑜伽等）
 - ❌ 双人或多人姿势
@@ -97,6 +108,7 @@ bun run src/scripts/import-pose-references.ts ../../../pose-zh.json
 ## 维护与更新
 
 当开源库更新时：
+
 1. 重新运行导入脚本获取最新数据
 2. 检查新增姿势是否适合试衣场景
 3. 更新 `apps/api/src/scripts/seed-ai-try-on-references.ts`
@@ -108,5 +120,3 @@ bun run src/scripts/import-pose-references.ts ../../../pose-zh.json
 - 种子脚本：`apps/api/src/scripts/seed-ai-try-on-references.ts`
 - 图库 Service：`apps/api/src/modules/tasks/services/ai-try-on-references.service.ts`
 - 数据库 Schema：`packages/db/src/schema/ai-try-on-references.ts`
-
-

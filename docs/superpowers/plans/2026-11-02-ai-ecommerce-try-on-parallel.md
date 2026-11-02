@@ -87,6 +87,7 @@
 - `apps/api/src/modules/tasks/tasks.service.ts`
 - `apps/api/src/modules/tasks/daily-task-quota.ts`
 - `apps/api/src/modules/tasks/processors/ai-image.processor.ts`
+- `apps/api/src/modules/tasks/services/ai-try-on-reference-image-source.ts`（新建，图库端口 token 与接口）
 - 对应 validators/API tests 中仅覆盖上述功能的测试
 
 **实现要求：**
@@ -97,7 +98,7 @@
   `ai-queue`；TaskService 验证所有 upload 输入归属并对两个生图任务类型合并计算额度。
 - Processor 支持 `image_generate` 原行为不变；`image_try_on` 按 reference
   bindings 解析上传图和图库图，调用现有生成服务并沿用进度、失败脱敏、产物标记和输出保存逻辑。
-- 图库解析依赖 Agent B 的 `AiTryOnReferencesService` 接口：
+- 图库解析通过 Agent A 定义的 `AI_TRY_ON_REFERENCE_IMAGE_SOURCE` injection token；端口接口为：
 
 ```ts
 getImageForGeneration(
@@ -108,8 +109,7 @@ getImageForGeneration(
 
 - `role='style'` 调用上述方法时传
   `expectedKind='garment'`。Asset 未启用、kind 不匹配、许可未审查或不存在均失败关闭，不调用图像供应商。
-- Processor 可直接 import Agent B 将创建的 service，但不得修改 Agent
-  B 的 service、controller、DTO 或 module 文件。
+- Agent B 在 `TasksCoreModule` 将 token 绑定到图库 service（`useExisting`）；Processor 不直接依赖图库实现类。
 - 添加测试：无效 binding 拒绝、上传文件用户归属校验、图库 kind 错配拒绝、四图上限、商品图优先级提示词、两任务类型共享额度、失败任务排除、现有
   `image_generate` 回归。
 
@@ -148,6 +148,7 @@ getImageForGeneration(
 - 实现 Agent A 消费的
   `getImageForGeneration(assetId, expectedKind): Promise<Buffer>`；重新校验启用状态、许可字段和 kind，然后服务端读取对象存储。`style`
   对应 `garment`。
+- 在 `TasksCoreModule` 将 `AI_TRY_ON_REFERENCE_IMAGE_SOURCE` token 通过 `useExisting` 绑定到图库 service。
 - API 不要求登录素材检索，但不能泄露对象 key；任务处理解析只在服务端执行。
 - 加入带明确 provenance/license 的少量原创或明确授权种子数据；没有可确认的素材时允许空图库，不能用未授权开源仓库图片填充。提供种子脚本或现有 seed 机制接入。
 - 添加测试：语言选择、kind 筛选、未启用和许可字段不全时过滤、生成解析时 kind/license 校验、对象读取失败行为。

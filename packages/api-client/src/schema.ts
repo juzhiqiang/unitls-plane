@@ -209,6 +209,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/ai-try-on/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List AI try-on reference library assets */
+        get: operations["AiTryOnReferencesController_listReferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/upload": {
         parameters: {
             query?: never;
@@ -535,7 +552,7 @@ export interface components {
     schemas: {
         CreateTaskDto: {
             /** @enum {string} */
-            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "pdf_to_cad";
+            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "image_try_on" | "pdf_to_cad";
             inputFileIds: string[];
             inputConfig?: Record<string, never>;
         };
@@ -545,7 +562,7 @@ export interface components {
             /** Format: uuid */
             userId?: string;
             /** @enum {string} */
-            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "pdf_to_cad";
+            type: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "image_try_on" | "pdf_to_cad";
             /** @enum {string} */
             status: "pending" | "processing" | "completed" | "failed";
             inputFileIds: string[];
@@ -633,6 +650,34 @@ export interface components {
             errorCode?: string;
             errorMessage?: string;
         };
+        AiTryOnReferenceDto: {
+            /**
+             * Format: uuid
+             * @description 素材 id（uuid）
+             */
+            id: string;
+            /**
+             * @description 素材类别
+             * @enum {string}
+             */
+            kind: "person" | "pose" | "garment";
+            /** @description 当前语言（由 lang 查询参数决定）的标题 */
+            title: string;
+            /** @description 当前语言的描述；未提供时为 null */
+            description: string | null;
+            /** @description 检索用标签 */
+            tags: string[][];
+            /** @description 缩略图公网 URL（服务端拼接，不下发 bucket / storage key）；未配置公网 base 时为 null */
+            thumbnailUrl: string | null;
+            /** @description 素材来源 URL */
+            sourceUrl: string;
+            /** @description 许可名称 */
+            licenseName: string;
+            /** @description 署名要求 */
+            attribution: string;
+            /** @description 排序值，升序展示 */
+            sortOrder: number;
+        };
         FileIdsDto: {
             ids: string[];
         };
@@ -710,7 +755,7 @@ export interface operations {
                 limit?: number;
                 status?: "pending" | "processing" | "completed" | "failed";
                 category?: "image" | "pdf" | "font";
-                type?: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "pdf_to_cad";
+                type?: "compress" | "convert" | "image_watermark" | "image_id_photo" | "pdf_merge" | "pdf_split" | "pdf_to_image" | "font_convert" | "pdf_to_text" | "image_to_pdf" | "pdf_rotate" | "pdf_watermark" | "pdf_encrypt" | "pdf_compress" | "pdf_metadata" | "pdf_rearrange" | "pdf_from_document" | "image_generate" | "image_try_on" | "pdf_to_cad";
             };
             header?: never;
             path?: never;
@@ -1074,6 +1119,38 @@ export interface operations {
             };
             /** @description File not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AiTryOnReferencesController_listReferences: {
+        parameters: {
+            query: {
+                /** @description 素材类别：person 人像 / pose 姿势 / garment 服饰 */
+                kind: "person" | "pose" | "garment";
+                /** @description 标题/描述语言，默认 zh */
+                lang?: "zh" | "en";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enabled, license-reviewed reference assets in the requested language */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiTryOnReferenceDto"][];
+                };
+            };
+            /** @description Invalid kind or lang */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

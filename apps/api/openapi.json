@@ -129,6 +129,7 @@
                 "pdf_rearrange",
                 "pdf_from_document",
                 "image_generate",
+                "image_try_on",
                 "pdf_to_cad"
               ]
             }
@@ -562,6 +563,62 @@
         "summary": "Get font file metadata",
         "tags": [
           "fonts"
+        ]
+      }
+    },
+    "/tasks/ai-try-on/references": {
+      "get": {
+        "operationId": "AiTryOnReferencesController_listReferences",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "query",
+            "description": "素材类别：person 人像 / pose 姿势 / garment 服饰",
+            "schema": {
+              "enum": [
+                "person",
+                "pose",
+                "garment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "required": false,
+            "in": "query",
+            "description": "标题/描述语言，默认 zh",
+            "schema": {
+              "enum": [
+                "zh",
+                "en"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enabled, license-reviewed reference assets in the requested language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiTryOnReferenceDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid kind or lang"
+          }
+        },
+        "summary": "List AI try-on reference library assets",
+        "tags": [
+          "tasks"
         ]
       }
     },
@@ -1350,6 +1407,7 @@
               "pdf_rearrange",
               "pdf_from_document",
               "image_generate",
+              "image_try_on",
               "pdf_to_cad"
             ]
           },
@@ -1401,6 +1459,7 @@
               "pdf_rearrange",
               "pdf_from_document",
               "image_generate",
+              "image_try_on",
               "pdf_to_cad"
             ]
           },
@@ -1679,6 +1738,77 @@
         "required": [
           "status",
           "progress"
+        ]
+      },
+      "AiTryOnReferenceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "素材 id（uuid）",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "素材类别",
+            "enum": [
+              "person",
+              "pose",
+              "garment"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "当前语言（由 lang 查询参数决定）的标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "当前语言的描述；未提供时为 null",
+            "nullable": true
+          },
+          "tags": {
+            "description": "检索用标签",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": "array"
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "description": "缩略图公网 URL（服务端拼接，不下发 bucket / storage key）；未配置公网 base 时为 null",
+            "nullable": true
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "素材来源 URL"
+          },
+          "licenseName": {
+            "type": "string",
+            "description": "许可名称"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "署名要求"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "排序值，升序展示"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "description",
+          "tags",
+          "thumbnailUrl",
+          "sourceUrl",
+          "licenseName",
+          "attribution",
+          "sortOrder"
         ]
       },
       "FileIdsDto": {

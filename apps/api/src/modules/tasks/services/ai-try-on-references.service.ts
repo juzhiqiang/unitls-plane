@@ -6,6 +6,7 @@ import {
   type S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { aiTryOnReferences, db } from '@utils-plane/db';
+import type { AiTryOnReferencePromptMetadata } from './ai-try-on-reference-image-source';
 
 /** 图库素材类别。与 DB 枚举 ai_try_on_reference_kind 一致。 */
 export type AiTryOnReferenceKind = 'person' | 'pose' | 'garment';
@@ -139,6 +140,43 @@ export class AiTryOnReferencesService {
     }
 
     return this.readObject(row.assetBucket, row.assetStorageKey);
+  }
+
+  /**
+   * 读取图库素材的标题、描述与标签，用于向试衣提示词注入视角机位与服饰关键词。
+   */
+  async getPromptMetadata(
+    assetId: string,
+    expectedKind: AiTryOnReferenceKind
+  ): Promise<AiTryOnReferencePromptMetadata | null> {
+    const rows = await db
+      .select({
+        titleZh: aiTryOnReferences.titleZh,
+        titleEn: aiTryOnReferences.titleEn,
+        descriptionZh: aiTryOnReferences.descriptionZh,
+        descriptionEn: aiTryOnReferences.descriptionEn,
+        tags: aiTryOnReferences.tags,
+      })
+      .from(aiTryOnReferences)
+      .where(
+        and(
+          eq(aiTryOnReferences.id, assetId),
+          eq(aiTryOnReferences.kind, expectedKind),
+          eq(aiTryOnReferences.isEnabled, true),
+          eq(aiTryOnReferences.visibility, 'public')
+        )
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      titleZh: row.titleZh,
+      titleEn: row.titleEn,
+      descriptionZh: row.descriptionZh,
+      descriptionEn: row.descriptionEn,
+      tags: row.tags ?? [],
+    };
   }
 
   /** 读对象存储。桶名来自记录本身，图库桶与上传桶分离。 */

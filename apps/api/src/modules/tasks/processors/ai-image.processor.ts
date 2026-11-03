@@ -12,6 +12,7 @@ import { FilesService } from '../../files/files.service';
 import {
   AI_TRY_ON_REFERENCE_IMAGE_SOURCE,
   type AiTryOnReferenceImageSource,
+  type AiTryOnReferencePromptMetadata,
 } from '../services/ai-try-on-reference-image-source';
 import { markGeneratedImage } from '../services/generated-image-marker';
 import {
@@ -55,33 +56,128 @@ function taskPrompt(task: AiImageTask): string {
     : '';
 }
 
-function composeTryOnPrompt(
+const TRY_ON_ROLE_ORDER: readonly ImageTryOnReferenceBinding['role'][] = [
+  'person',
+  'garment',
+  'pose',
+  'style',
+];
+
+const POSE_ANGLE_CAMERA_NOTES: Record<string, string> = {
+  front: '正面（front view at chest height）',
+  正面: '正面（front view at chest height）',
+  diag: '斜侧（three-quarter view）',
+  斜侧: '斜侧（three-quarter view）',
+  side: '侧面（strict side profile）',
+  侧面: '侧面（strict side profile）',
+  high: '俯视（high angle, camera looking down）',
+  俯视: '俯视（high angle, camera looking down）',
+  高角度: '俯视（high angle, camera looking down）',
+  low: '仰视（low angle, camera looking up）',
+  仰视: '仰视（low angle, camera looking up）',
+  低角度: '仰视（low angle, camera looking up）',
+  back: '背面（back view）',
+  背面: '背面（back view）',
+};
+
+export interface TryOnPromptMetadataMap {
+  person?: AiTryOnReferencePromptMetadata | null;
+  garment?: AiTryOnReferencePromptMetadata | null;
+  pose?: AiTryOnReferencePromptMetadata | null;
+  style?: AiTryOnReferencePromptMetadata | null;
+}
+
+function resolvePoseCameraNote(
+  poseMeta?: AiTryOnReferencePromptMetadata | null
+): string | null {
+  if (!poseMeta) return null;
+  for (const tag of poseMeta.tags) {
+    const matched = POSE_ANGLE_CAMERA_NOTES[tag.toLowerCase()];
+    if (matched) return matched;
+  }
+  for (const [key, note] of Object.entries(POSE_ANGLE_CAMERA_NOTES)) {
+    if (poseMeta.titleZh.includes(key)) return note;
+  }
+  return null;
+}
+
+export function composeTryOnPrompt(
   mode: 'product' | 'inspiration',
   references: readonly ImageTryOnReferenceBinding[],
-  promptAddition?: string
+  promptAddition?: string,
+  metadataByRole?: TryOnPromptMetadataMap
 ): string {
-  const lines =
-    mode === 'product'
-      ? [
-          '生成真实、专业的电商服装试穿展示图。参考图按固定顺序提供：第 1 张是模特/人物，第 2 张是本次要展示的真实商品服装；如存在第 3 张，它只提供姿势参考；如存在第 4 张，它只提供弱优先级的搭配风格参考。',
-          '商品图是服装外观的唯一权威来源。尽可能准确保留商品的款式、颜色、图案、材质纹理、剪裁、细节和配饰；不要从姿势图或风格图复制、替换或改写商品设计。',
-          '保留人物身份与外貌，将商品服装自然穿在人物身上，生成干净、可信的电商展示摄影效果。',
-        ]
-      : [
-          '生成真实、专业的穿搭灵感试穿展示图。参考图按固定顺序提供：第 1 张是模特/人物，第 2 张是目标服饰；如存在第 3 张，它只提供姿势参考；如存在第 4 张，它只提供弱优先级的搭配风格参考。',
-          '以目标服饰图决定主要服装的款式、颜色、图案和整体搭配，保持人物身份与外貌，并自然穿着该服饰。',
-          '生成干净、可信的电商风格展示摄影效果。',
-        ];
+  const orderedRoles = TRY_ON_ROLE_ORDER.filter(role =>
+    references.some(reference => reference.role === role)
+  );
+  const roleParts = orderedRoles.map((role, idx) => {
+    const position = idx + 1;
+    switch (role) {
+      case 'person':
+        return `第 ${position} 张是模特/人物参考`;
+      case 'garment':
+        return mode === 'product'
+          ? `第 ${position} 张是本次要展示的真实商品服装图`
+          : `第 ${position} 张是没有人物的目标服饰图`;
+      case 'pose':
+        return `第 ${position} 张是姿势结构线稿`;
+      case 'style':
+        return `第 ${position} 张是弱优先级的搭配风格参考`;
+    }
+  });
 
-  if (references.some(reference => reference.role === 'pose')) {
-    lines.push('姿势参考只控制人物动作和构图，不改变人物身份或服装。');
+  const introTitle =
+    mode === 'product'
+      ? '生成真实、专业的电商服装试穿展示图。'
+      : '生成真实、专业的穿搭灵感试穿展示图。';
+
+  const lines: string[] = [
+    `${introTitle}参考图按固定顺序提供：${roleParts.join('，')}。`,
+    mode === 'product'
+      ? '商品图是服装外观的唯一权威来源。尽可能准确保留商品的款式、颜色、图案、材质纹理、剪裁、层次、细节和配饰；将人物参考图中的原有衣物全部替换，不要保留第一张参考图上的原衣服，不要从姿势图或风格图复制、替换或改写商品设计，也不要画出商品图里的人台、假人模特、衣架或空白身体。'
+      : '以目标服饰图决定主要服装的款式、颜色、图案、层次、鞋袜和配饰。目标服饰图只有衣服、没有人物，将人物完整换穿为这套目标服饰，人物参考图中的原衣服不要保留，也不要画出服饰图里的人台、假人模特或空白身体。',
+  ];
+
+  const garmentMeta = metadataByRole?.garment;
+  if (garmentMeta) {
+    const desc = garmentMeta.descriptionZh
+      ? `（${garmentMeta.descriptionZh}）`
+      : '';
+    lines.push(`目标服饰描述：${garmentMeta.titleZh}${desc}。`);
   }
-  if (references.some(reference => reference.role === 'style')) {
-    lines.push('风格参考仅用于弱化的搭配氛围，不得覆盖目标服装的具体设计。');
+
+  lines.push(
+    '人物（必须保持身份）：保留人物参考图中的五官、脸型、骨相、肤色、发型与发色，将目标服装自然穿在人物身上。这是成年人物，禁止画成儿童、幼儿或青少年，脸和身体都使用自然真实的成人比例。'
+  );
+
+  if (orderedRoles.includes('pose')) {
+    lines.push(
+      '姿势参考只控制人物动作和构图，不改变人物身份或服装。只从线稿提取身体姿态、重心、四肢位置、手部动作和镜头角度；不要把线稿轮廓、关节圆、骨骼连线、比例辅助线或线稿的空白身体画进成图。'
+    );
+    const poseMeta = metadataByRole?.pose;
+    if (poseMeta) {
+      const cameraNote = resolvePoseCameraNote(poseMeta);
+      lines.push(
+        `目标姿势：${poseMeta.titleZh}${cameraNote ? `。视角：${cameraNote}` : ''}。`
+      );
+    }
   }
+
+  if (orderedRoles.includes('style')) {
+    lines.push(
+      '风格参考仅用于弱化的搭配氛围与光影参考，不得覆盖或改动目标服装的具体设计。'
+    );
+  }
+
   if (promptAddition?.trim()) {
     lines.push(`用户补充的场景要求：${promptAddition.trim()}`);
+  } else {
+    lines.push('画面补充：干净商业棚拍，柔和自然光影，真实面料质感与垂坠。');
   }
+
+  lines.push(
+    '生成干净、可信的电商展示摄影效果。不要水印，不要文字，不要画框外的说明。'
+  );
 
   return lines.join('\n');
 }
@@ -256,13 +352,17 @@ export class AiImageProcessor extends WorkerHost {
     });
     await this.reportProgress(task.id, job, 30);
 
-    const references = await this.loadTryOnReferences(task, config.references);
+    const [references, metadataByRole] = await Promise.all([
+      this.loadTryOnReferences(task, config.references),
+      this.loadTryOnPromptMetadata(config.references),
+    ]);
     const imageConfig = imageGenerateTaskConfigSchema.parse({
       mode: 'image_to_image',
       prompt: composeTryOnPrompt(
         config.mode,
         config.references,
-        config.promptAddition
+        config.promptAddition,
+        metadataByRole
       ),
       size: config.size,
       quality: config.quality,
@@ -362,6 +462,30 @@ export class AiImageProcessor extends WorkerHost {
         );
       })
     );
+  }
+
+  private async loadTryOnPromptMetadata(
+    bindings: readonly ImageTryOnReferenceBinding[]
+  ): Promise<TryOnPromptMetadataMap> {
+    const getMeta = this.tryOnReferenceImageSource?.getPromptMetadata?.bind(
+      this.tryOnReferenceImageSource
+    );
+    if (!getMeta) return {};
+
+    const result: TryOnPromptMetadataMap = {};
+    await Promise.all(
+      bindings.map(async binding => {
+        if (binding.source !== 'library') return;
+        const expectedKind =
+          binding.role === 'style' ? 'garment' : binding.role;
+        try {
+          result[binding.role] = await getMeta(binding.assetId, expectedKind);
+        } catch {
+          // 元数据仅用于增强提示词，读取失败不阻塞任务主流程
+        }
+      })
+    );
+    return result;
   }
 
   /**

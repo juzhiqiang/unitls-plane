@@ -36,7 +36,7 @@ afterAll(() => {
   );
 });
 
-const { AiImageProcessor } =
+const { AiImageProcessor, composeTryOnPrompt } =
   await import('../../../../src/modules/tasks/processors/ai-image.processor');
 const { ImageGenerationError } =
   await import('../../../../src/modules/tasks/services/image-generation.service');
@@ -651,5 +651,79 @@ it('stops retrying a deterministic rejection instead of paying for it again', as
     'task-1',
     ErrorCodes.AI_IMAGE_CONTENT_REJECTED,
     'The prompt was rejected by the provider content policy'
+  );
+});
+
+it('composes try-on prompt with exact dynamic reference numbering, anti-mannequin/line-art rules, and camera angle notes', () => {
+  // 1) 省略 pose、直接选 person + garment + style 时，style 应准确标记为第 3 张而非第 4 张
+  const promptWithoutPose = composeTryOnPrompt('product', [
+    { role: 'person', source: 'upload', inputIndex: 0 },
+    { role: 'garment', source: 'upload', inputIndex: 1 },
+    {
+      role: 'style',
+      source: 'library',
+      assetId: '00000000-0000-4000-8000-000000000004',
+    },
+  ]);
+  expect(promptWithoutPose).toContain(
+    '第 1 张是模特/人物参考，第 2 张是本次要展示的真实商品服装图，第 3 张是弱优先级的搭配风格参考'
+  );
+  expect(promptWithoutPose).toContain(
+    '不要画出商品图里的人台、假人模特、衣架或空白身体'
+  );
+  expect(promptWithoutPose).toContain(
+    '禁止画成儿童、幼儿或青少年，脸和身体都使用自然真实的成人比例'
+  );
+  expect(promptWithoutPose).toContain('不要水印，不要文字，不要画框外的说明');
+
+  // 2) inspiration 模式下注入图库服饰描述与姿势视角机位注释（如 low angle, camera looking up）
+  const promptWithPoseAndGarmentMeta = composeTryOnPrompt(
+    'inspiration',
+    [
+      {
+        role: 'person',
+        source: 'library',
+        assetId: '00000000-0000-4000-8000-000000000001',
+      },
+      {
+        role: 'garment',
+        source: 'library',
+        assetId: '00000000-0000-4000-8000-000000000002',
+      },
+      {
+        role: 'pose',
+        source: 'library',
+        assetId: '00000000-0000-4000-8000-000000000003',
+      },
+    ],
+    undefined,
+    {
+      garment: {
+        titleZh: '春日穿搭 SPR-0001',
+        titleEn: 'Spring SPR-0001',
+        descriptionZh: '象牙白、荷叶边、针织、牛仔半身裙',
+        descriptionEn: 'ivory, frill, knit, denim mini skirt',
+        tags: ['female', '女性', '象牙白', '针织'],
+      },
+      pose: {
+        titleZh: 'S形站姿（仰视）',
+        titleEn: 'S-curve standing (Low angle)',
+        descriptionZh: '站姿 · 全身',
+        descriptionEn: 'Standing · Full body',
+        tags: ['low', 'female', '站姿'],
+      },
+    }
+  );
+  expect(promptWithPoseAndGarmentMeta).toContain(
+    '第 1 张是模特/人物参考，第 2 张是没有人物的目标服饰图，第 3 张是姿势结构线稿'
+  );
+  expect(promptWithPoseAndGarmentMeta).toContain(
+    '目标服饰描述：春日穿搭 SPR-0001（象牙白、荷叶边、针织、牛仔半身裙）'
+  );
+  expect(promptWithPoseAndGarmentMeta).toContain(
+    '不要把线稿轮廓、关节圆、骨骼连线、比例辅助线或线稿的空白身体画进成图'
+  );
+  expect(promptWithPoseAndGarmentMeta).toContain(
+    '目标姿势：S形站姿（仰视）。视角：仰视（low angle, camera looking up）'
   );
 });

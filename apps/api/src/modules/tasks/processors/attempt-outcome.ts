@@ -43,7 +43,6 @@ export function isRetryableError(error: unknown): boolean {
 
   return true;
 }
-}
 
 /**
  * 本次 attempt 是不是最后一次。
@@ -78,4 +77,3 @@ export function hasExhaustedAttempts(
 ): boolean {
   return job.attemptsMade >= (job.opts?.attempts ?? 1);
 }
-

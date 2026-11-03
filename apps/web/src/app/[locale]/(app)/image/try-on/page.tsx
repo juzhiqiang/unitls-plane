@@ -7,6 +7,7 @@ import { Download, RotateCcw, Sparkles } from 'lucide-react';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
+import { ImageViewerModal } from '@/components/tools/image-viewer-modal';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import type { ToolStage } from '@/components/tools/tool-step-rail';
 import {
@@ -98,6 +99,9 @@ export default function ImageTryOnPage() {
   const [activeTask, setActiveTask] = useState<ActiveTryOnTaskState | null>(
     null
   );
+
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerSrc, setViewerSrc] = useState('');
 
   const uploadedFileCacheRef = useRef<WeakMap<File, string>>(new WeakMap());
   const failedQuotaInvalidatedRef = useRef<Set<string>>(new Set());
@@ -858,7 +862,11 @@ export default function ImageTryOnPage() {
               <img
                 src={buildFileDownloadUrl(effectiveTask.outputFileId)}
                 alt={t('resultPreviewAlt')}
-                className="mx-auto max-h-96 w-auto rounded-md border border-border object-contain"
+                className="mx-auto max-h-96 w-auto rounded-md border border-border object-contain cursor-pointer hover:opacity-90"
+                onClick={() => {
+                  setViewerSrc(buildFileDownloadUrl(effectiveTask.outputFileId!));
+                  setViewerOpen(true);
+                }}"
               />
             </div>
           }
@@ -887,6 +895,14 @@ export default function ImageTryOnPage() {
           }
         />
       )}
+    
+      {/* 图片查看器 */}
+      <ImageViewerModal
+        src={viewerSrc}
+        alt={t('resultPreviewAlt')}
+        isOpen={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+      />
     </ToolPageShell>
   );
 }

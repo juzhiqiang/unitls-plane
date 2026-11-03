@@ -172,23 +172,27 @@ function detectAssetGender(
   if (
     item.tags.includes('male') ||
     item.tags.includes('男性') ||
-    /\b(male|man|men|boy)\b/.test(combined) ||
+    item.tags.includes('男装') ||
+    /\b(male|man|men|boy|mens|menswear)\b/.test(combined) ||
     combined.includes('男性') ||
-    combined.includes('男士')
+    combined.includes('男士') ||
+    combined.includes('男装')
   ) {
     return 'male';
   }
   if (
     item.tags.includes('female') ||
     item.tags.includes('女性') ||
-    /\b(female|woman|women|girl)\b/.test(combined) ||
+    item.tags.includes('女装') ||
+    /\b(female|woman|women|girl|womens|womenswear)\b/.test(combined) ||
     combined.includes('女性') ||
     combined.includes('女士') ||
+    combined.includes('女装') ||
     combined.includes('女孩')
   ) {
     return 'female';
   }
-  return item.kind === 'pose' ? 'female' : 'unisex';
+  return item.kind === 'pose' || item.kind === 'garment' ? 'female' : 'unisex';
 }
 
 function detectGarmentStyle(item: AiTryOnReferenceAssetDto): GarmentStyleKey {
@@ -307,7 +311,7 @@ export function ReferenceLibraryGrid({
 
   const garmentStyleCounts = useMemo(() => {
     const counts: Record<GarmentStyleKey, number> = {
-      all: items.length,
+      all: 0,
       spring: 0,
       summer: 0,
       autumn: 0,
@@ -315,12 +319,17 @@ export function ReferenceLibraryGrid({
       party: 0,
     };
     if (!isGarmentRole) return counts;
-    for (const item of items) {
+    const baseItems =
+      genderFilter === 'all'
+        ? items
+        : items.filter(item => detectAssetGender(item) === genderFilter);
+    counts.all = baseItems.length;
+    for (const item of baseItems) {
       const s = detectGarmentStyle(item);
       if (s !== 'all') counts[s]++;
     }
     return counts;
-  }, [isGarmentRole, items]);
+  }, [genderFilter, isGarmentRole, items]);
 
   const filteredPoseGroups = useMemo(() => {
     if (role !== 'pose') return [];
@@ -632,7 +641,12 @@ export function ReferenceLibraryGrid({
                   {(['all', 'female', 'male'] as const).map(genderKey => {
                     const labelObj = GENDER_FILTER_LABELS[genderKey];
                     const count = genderCounts[genderKey];
-                    if (role !== 'pose' && genderKey !== 'all' && count === 0) {
+                    if (
+                      role !== 'pose' &&
+                      !isGarmentRole &&
+                      genderKey !== 'all' &&
+                      count === 0
+                    ) {
                       return null;
                     }
                     const isActive = genderFilter === genderKey;
@@ -649,6 +663,7 @@ export function ReferenceLibraryGrid({
                         disabled={disabled}
                         onClick={() => {
                           setGenderFilter(genderKey);
+                          setStyleFilter('all');
                           setCurrentPage(1);
                         }}
                         className={`rounded-full px-3 py-1 font-mono text-xs font-medium transition-colors ${
@@ -882,6 +897,18 @@ export function ReferenceLibraryGrid({
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {paginatedStandardItems.map(item => {
                     const isSelected = selectedId === item.id;
+                    const itemGender = detectAssetGender(item);
+                    const displayTags = item.tags.filter(
+                      tag =>
+                        ![
+                          'female',
+                          'male',
+                          '女性',
+                          '男性',
+                          'photo',
+                          'anime',
+                        ].includes(tag)
+                    );
                     return (
                       <div
                         key={item.id}
@@ -916,6 +943,17 @@ export function ReferenceLibraryGrid({
                                 loading="lazy"
                                 className="h-full w-full object-cover transition-transform group-hover:scale-105"
                               />
+                              {isGarmentRole && itemGender !== 'unisex' && (
+                                <span className="absolute top-2 left-2 rounded bg-background/90 px-1.5 py-0.5 font-mono text-[11px] font-medium text-foreground shadow-xs backdrop-blur-xs">
+                                  {itemGender === 'male'
+                                    ? isZh
+                                      ? '男装'
+                                      : 'Male'
+                                    : isZh
+                                      ? '女装'
+                                      : 'Female'}
+                                </span>
+                              )}
                             </div>
                           ) : null}
 
@@ -929,9 +967,9 @@ export function ReferenceLibraryGrid({
                               </p>
                             ) : null}
 
-                            {item.tags.length > 0 && (
+                            {displayTags.length > 0 && (
                               <div className="flex flex-wrap gap-1.5 pt-1">
-                                {item.tags.slice(0, 4).map(tag => (
+                                {displayTags.slice(0, 4).map(tag => (
                                   <span
                                     key={tag}
                                     className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
@@ -939,9 +977,9 @@ export function ReferenceLibraryGrid({
                                     {tag}
                                   </span>
                                 ))}
-                                {item.tags.length > 4 && (
+                                {displayTags.length > 4 && (
                                   <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                                    +{item.tags.length - 4}
+                                    +{displayTags.length - 4}
                                   </span>
                                 )}
                               </div>

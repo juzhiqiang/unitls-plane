@@ -624,4 +624,71 @@ describe('ImageTryOnPage', () => {
       screen.getByText('已选素材：男性 · 自然站立（俯视）')
     ).toBeInTheDocument();
   });
+
+  it('provides gender classification (全部 / 女性 / 男性) inside the garment reference modal and filters garments by gender', () => {
+    const femaleGarmentId = '00000000-0000-4000-8000-000000000031';
+    const maleGarmentId = '00000000-0000-4000-8000-000000000032';
+
+    const garmentsWithGender: AiTryOnReferenceAssetDto[] = [
+      {
+        id: femaleGarmentId,
+        kind: 'garment',
+        title: '春日穿搭 SPR-0001',
+        description: '春日穿搭 · 象牙白、针织、半身裙',
+        tags: ['female', '女性', '春日穿搭', '针织', '半身裙'],
+        thumbnailUrl: 'https://cdn.example.test/SPR-0001.webp',
+        sourceUrl: 'https://source.example.test/garment-f',
+        licenseName: 'Custom',
+        attribution: 'ギア (@giaaibusi)',
+      },
+      {
+        id: maleGarmentId,
+        kind: 'garment',
+        title: '男士黑色礼服套装 (MC-001)',
+        description: '派对礼服 · 黑色 西装 礼服 男性 男士',
+        tags: ['male', '男性', 'party', '派对礼服', '西装'],
+        thumbnailUrl: 'https://cdn.example.test/custom_costume_male_001.webp',
+        sourceUrl: 'https://source.example.test/garment-m',
+        licenseName: 'Custom',
+        attribution: 'Open Pose & Costume',
+      },
+    ];
+
+    mocks.aiTryOnReferences.mockImplementation((kind: AiTryOnReferenceKind) => {
+      if (kind === 'garment') {
+        return { data: garmentsWithGender, isLoading: false, isError: false };
+      }
+      return { data: [], isLoading: false, isError: false };
+    });
+
+    renderTryOnPage('zh');
+
+    // Switch to inspiration mode and open garment library modal
+    fireEvent.click(screen.getByTestId('mode-inspiration'));
+    fireEvent.click(screen.getByTestId('open-library-modal-garment'));
+
+    expect(screen.getByTestId('gender-filter-all')).toHaveTextContent(
+      '全部 (2)'
+    );
+    expect(screen.getByTestId('gender-filter-female')).toHaveTextContent(
+      '女性 (1)'
+    );
+    expect(screen.getByTestId('gender-filter-male')).toHaveTextContent(
+      '男性 (1)'
+    );
+
+    // Filter to Male garments only
+    fireEvent.click(screen.getByTestId('gender-filter-male'));
+    expect(screen.queryByText('春日穿搭 SPR-0001')).not.toBeInTheDocument();
+    expect(screen.getByText('男士黑色礼服套装 (MC-001)')).toBeInTheDocument();
+    expect(screen.getByText('男装')).toBeInTheDocument();
+
+    // Filter to Female garments only
+    fireEvent.click(screen.getByTestId('gender-filter-female'));
+    expect(
+      screen.queryByText('男士黑色礼服套装 (MC-001)')
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('春日穿搭 SPR-0001')).toBeInTheDocument();
+    expect(screen.getByText('女装')).toBeInTheDocument();
+  });
 });

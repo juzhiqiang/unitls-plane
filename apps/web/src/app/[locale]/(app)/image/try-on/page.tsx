@@ -17,6 +17,7 @@ import {
   type TryOnPersonSource,
   UploadReferenceCard,
 } from '@/components/tools/ai-try-on';
+import { GarmentLibraryGrid } from '@/components/tools/ai-try-on/GarmentLibraryGrid';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import {
@@ -588,7 +589,7 @@ export default function ImageTryOnPage() {
             }
           />
         ) : (
-          <ReferenceLibraryGrid
+          <GarmentLibraryGrid
             role="garment"
             items={garmentLibraryQuery.data ?? []}
             selectedId={garmentAssetId}
@@ -887,3 +888,5 @@ export default function ImageTryOnPage() {
     </ToolPageShell>
   );
 }
+
+

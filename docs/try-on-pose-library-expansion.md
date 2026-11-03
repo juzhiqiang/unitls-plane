@@ -21,6 +21,24 @@
 - **在线预览**：https://hongye007.github.io/open-pose-costume/
 - **GitHub**：https://github.com/hongye007/open-pose-costume
 - **说明**：整合上述数据源的可视化参考库
+- **自建人物参考**：仓库 `data/custom/character.json` 共 28 条，属于自建素材，
+  默认条款禁止商用与再分发；本项目已取得维护者单独授权后导入。
+  - 多地区人物参考 22 条（RCF-001 ~ RCF-022）：11 个地区 × 男女
+    （法/加/美/日/德/巴西/印度/俄/澳/韩/英），带性别与地区标签；
+  - 男性风格参考 6 条（MCF-001 ~ MCF-006）：只有性别，没有地区。
+  - 导入脚本：`cd apps/api && bun --env-file=../../.env.local run src/scripts/import-character-custom.ts`
+  - MinIO：原图 `try-on-references/person/custom/custom_character_*.png`，缩略图
+    `try-on-references/person/custom/thumbnails/custom_character_*.webp`
+  - 数据库：slug 用上游变体 id（如 `custom_character_region_fr_female`），
+    `kind='person'`、`visibility='public'`，标签含 `male`/`女性`、两位地区码
+    （`fr`/`kr`）、地区中英名与 `多地区`/`regional`；`license_reviewed_at` 已填写。
+  - 地区边界：上游明确「国家仅为编辑分组，不推定真实国籍或代表性外貌」，
+    描述里固定带该免责声明，且不从地区反推发型/五官/肤色等外观属性。
+    无地区条目（男性风格）不会被打上地区码。
+  - 上游后续新增人物会自动纳入（按元数据全量导入，不写死 ID）。
+- **上游人物库（未导入）**：`data/source/portrait.json` 约 1499 条（893 人脸 +
+  606 造型），原站标注 CC0 1.0，但**元数据里没有性别和地区字段**，且单张原图
+  约 2MB。目前未导入；如后续需要扩充人像量，需自行补齐性别/地区分类。
 - **自建男性姿势**：仓库 `data/custom/pose.json` 中带 `male` 标签的 13 个姿势 ×
   5 视角（共 65 张）属于自建素材，默认条款禁止商用与再分发；本项目已取得维护者单独授权后导入。
   - 导入脚本：`cd apps/api && bun --env-file=../../.env.local run src/scripts/import-pose-male-custom.ts`

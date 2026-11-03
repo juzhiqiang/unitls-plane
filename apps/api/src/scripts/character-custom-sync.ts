@@ -99,7 +99,10 @@ function asString(value: unknown): string | null {
     : null;
 }
 
-function localized(value: LocalizedText | undefined): { zh: string; en: string } {
+function localized(value: LocalizedText | undefined): {
+  zh: string;
+  en: string;
+} {
   return { zh: asString(value?.zh) ?? '', en: asString(value?.en) ?? '' };
 }
 
@@ -161,7 +164,8 @@ export function buildCharacterRecords(
     const genderTag = character.tags?.find(
       tag => tag.id === 'male' || tag.id === 'female'
     );
-    const gender = parsed?.gender ?? (genderTag?.id === 'male' ? 'male' : 'female');
+    const gender =
+      parsed?.gender ?? (genderTag?.id === 'male' ? 'male' : 'female');
 
     // 地区名取标题首段;取不到就只用代码,不硬编码一张「代码→国家」表——
     // 上游新增地区时不必改代码。
@@ -179,29 +183,26 @@ export function buildCharacterRecords(
       const view = (asString(variant.angle) ?? '').toLowerCase();
       const label = localized(variant.label);
 
+      const rawTags: (string | null)[] = [
+        view,
+        gender,
+        gender === 'male' ? '男性' : '女性',
+        ...(parsed
+          ? [parsed.regionCode, regionName, regionNameEn, '多地区', 'regional']
+          : []),
+        categoryId,
+        categoryZh,
+        ...(character.tags ?? []).flatMap(tag => {
+          const tagId = asString(tag.id);
+          const tagZh = asString(tag.zh);
+          return tagId && tagZh ? [tagId, tagZh] : tagId ? [tagId] : [];
+        }),
+      ];
       const tags = [
         ...new Set(
-          [
-            view,
-            gender,
-            gender === 'male' ? '男性' : '女性',
-            ...(parsed
-              ? [
-                  parsed.regionCode,
-                  regionName,
-                  regionNameEn,
-                  '多地区',
-                  'regional',
-                ]
-              : []),
-            categoryId,
-            categoryZh,
-            ...(character.tags ?? []).flatMap(tag => {
-              const tagId = asString(tag.id);
-              const tagZh = asString(tag.zh);
-              return tagId && tagZh ? [tagId, tagZh] : tagId ? [tagId] : [];
-            }),
-          ].filter(Boolean)
+          rawTags.filter(
+            (tag): tag is string => typeof tag === 'string' && tag.length > 0
+          )
         ),
       ];
 
@@ -210,23 +211,14 @@ export function buildCharacterRecords(
           slug: variantId.toLowerCase(),
           kind: 'person',
           visibility: 'public',
-          titleZh: title.zh && label.zh ? `${title.zh}（${label.zh}）` : title.zh,
+          titleZh:
+            title.zh && label.zh ? `${title.zh}（${label.zh}）` : title.zh,
           titleEn:
             title.en && label.en ? `${title.en} (${label.en})` : title.en,
-          descriptionZh: [
-            code,
-            categoryZh,
-            series.zh,
-            REGION_DISCLAIMER_ZH,
-          ]
+          descriptionZh: [code, categoryZh, series.zh, REGION_DISCLAIMER_ZH]
             .filter(Boolean)
             .join(' · '),
-          descriptionEn: [
-            code,
-            categoryEn,
-            series.en,
-            REGION_DISCLAIMER_EN,
-          ]
+          descriptionEn: [code, categoryEn, series.en, REGION_DISCLAIMER_EN]
             .filter(Boolean)
             .join(' · '),
           tags,

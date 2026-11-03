@@ -21,7 +21,28 @@ export interface RetryableAwareError {
  * 内容策略拒绝、参数非法这类重来一次也必然一样的错误,由抛出方标 retryable: false。
  */
 export function isRetryableError(error: unknown): boolean {
-  return (error as RetryableAwareError | null)?.retryable !== false;
+  // 显式标记为不可重试的错误
+  if ((error as RetryableAwareError | null)?.retryable === false) {
+    return false;
+  }
+
+  // 证书验证错误应该重试（可能是临时网络问题）
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (
+      msg.includes('certificate') ||
+      msg.includes('cert ') ||
+      msg.includes('ssl') ||
+      msg.includes('tls') ||
+      msg.includes('self signed') ||
+      msg.includes('unable to verify')
+    ) {
+      return true;
+    }
+  }
+
+  return true;
+}
 }
 
 /**
@@ -57,3 +78,4 @@ export function hasExhaustedAttempts(
 ): boolean {
   return job.attemptsMade >= (job.opts?.attempts ?? 1);
 }
+

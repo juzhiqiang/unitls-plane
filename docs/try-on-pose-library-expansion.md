@@ -28,6 +28,21 @@
     `try-on-references/pose/thumbnails/custom_pose_male_*.webp`
   - 数据库：slug `custom_pose_male_XXX_{view}`，标签含 `male` / `男性`，`license_reviewed_at`
     已填写，可被图库接口返回
+- **自建男性服饰**：仓库 `data/custom/costume.json` 中带 `male` 标签的 4 套
+  （MC-001 礼服 / MC-002 针织 Polo / MC-003 休闲西装 / MC-004 短背心短裤，各一个正面视角）
+  同属自建素材、同一份授权。上游写实服饰库（`data/source/costume.json`，约 1405 条）
+  没有男性条目，男性服饰目前仅此来源。
+  - 导入脚本：`cd apps/api && bun --env-file=../../.env.local run src/scripts/import-costume-custom.ts`
+    （该脚本一次导入全部自建服饰：4 套男装 + 40 套自建女装，并按 `male` / `female`
+    标签打性别标记；同时给存量上游女装补 `female` / `女性` 标签）
+  - MinIO：原图 `try-on-references/costume/custom_costume_male_*.png`，缩略图
+    `try-on-references/costume/thumbs/custom_costume_male_*.webp`
+  - 数据库：slug `costume-custom_costume_male_00X`，`kind='garment'`，
+    标签含 `male` / `男性`，`license_reviewed_at` 已填写，可被图库接口返回
+  - 上游后续新增男性服饰会自动纳入（脚本按 `male` 标签过滤，不写死 ID）
+- **上游写实服饰（女性）**：`data/source/costume.json` 约 1405 条，
+  导入脚本 `src/scripts/seed-ai-try-on-costumes.ts`，storage key 前缀 `costume/`。
+  注意该文件 ID 会中途重头编号（默认区块 + 扩展区块），脚本按出现次序消歧。
 
 ## 扩展步骤
 

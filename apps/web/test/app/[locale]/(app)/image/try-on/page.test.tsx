@@ -232,7 +232,8 @@ describe('ImageTryOnPage', () => {
     fireEvent.click(screen.getByTestId('mode-inspiration'));
     expect(submitButton).toBeDisabled();
 
-    // Pick inspiration garment from library -> enabled again
+    // Pick inspiration garment from library modal -> enabled again
+    fireEvent.click(screen.getByTestId('open-library-modal-garment'));
     fireEvent.click(
       screen.getByTestId(`library-item-garment-${GARMENT_UUID_1}`)
     );
@@ -276,8 +277,9 @@ describe('ImageTryOnPage', () => {
   it('maps garment upload to inputIndex 0 when person is selected from the library and supports all 4 reference roles', async () => {
     renderTryOnPage('en');
 
-    // Switch person to library and pick a model
+    // Switch person to library and pick a model via modal
     fireEvent.click(screen.getByTestId('person-source-library'));
+    fireEvent.click(screen.getByTestId('open-library-modal-person'));
     fireEvent.click(screen.getByTestId(`library-item-person-${PERSON_UUID}`));
 
     // Upload product photo
@@ -285,8 +287,10 @@ describe('ImageTryOnPage', () => {
       target: { files: [makeFile('product-dress.png')] },
     });
 
-    // Pick optional pose and optional auxiliary style (up to 4 references)
+    // Pick optional pose and optional auxiliary style via modals (up to 4 references)
+    fireEvent.click(screen.getByTestId('open-library-modal-pose'));
     fireEvent.click(screen.getByTestId(`library-item-pose-${POSE_UUID}`));
+    fireEvent.click(screen.getByTestId('open-library-modal-style'));
     fireEvent.click(screen.getByTestId(`library-item-style-${GARMENT_UUID_2}`));
 
     expect(screen.getByTestId('try-on-reference-count')).toHaveTextContent(
@@ -401,7 +405,9 @@ describe('ImageTryOnPage', () => {
 
     fireEvent.click(screen.getByTestId('mode-inspiration'));
     fireEvent.click(screen.getByTestId('person-source-library'));
+    fireEvent.click(screen.getByTestId('open-library-modal-person'));
     fireEvent.click(screen.getByTestId(`library-item-person-${PERSON_UUID}`));
+    fireEvent.click(screen.getByTestId('open-library-modal-garment'));
     fireEvent.click(
       screen.getByTestId(`library-item-garment-${GARMENT_UUID_1}`)
     );
@@ -585,6 +591,13 @@ describe('ImageTryOnPage', () => {
 
     renderTryOnPage('zh');
 
+    // Open pose library modal
+    fireEvent.click(screen.getByTestId('open-library-modal-pose'));
+    expect(screen.getByTestId('library-modal-pose')).toBeInTheDocument();
+    expect(screen.getByTestId('library-page-indicator-pose')).toHaveTextContent(
+      '第 1 / 1 页（共 2 项）'
+    );
+
     expect(screen.getByTestId('pose-gender-filter-all')).toHaveTextContent(
       '全部 (2)'
     );
@@ -605,6 +618,7 @@ describe('ImageTryOnPage', () => {
       'pose-direction-https://cdn.example.test/custom_pose_male_001.webp-high'
     );
     fireEvent.click(highBtn);
+    fireEvent.click(screen.getByTestId('confirm-library-modal-pose'));
 
     expect(
       screen.getByText('已选素材：男性 · 自然站立（俯视）')

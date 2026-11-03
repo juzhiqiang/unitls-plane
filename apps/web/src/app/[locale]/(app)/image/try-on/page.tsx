@@ -478,183 +478,185 @@ export default function ImageTryOnPage() {
         )}
       </div>
 
-      {/* 1. 人像参考（必选） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* 1. 人像参考（必选） */}
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-medium">{t('personSectionTitle')}</h2>
+              <p className="text-xs text-muted-foreground">
+                {t('personSectionHint')}
+              </p>
+            </div>
+            <div className="flex rounded-md border border-border overflow-hidden">
+              <button
+                type="button"
+                aria-pressed={personSource === 'upload'}
+                data-testid="person-source-upload"
+                disabled={isBusy}
+                onClick={() => {
+                  setPersonSource('upload');
+                  setError(null);
+                }}
+                className={`px-3 py-1.5 font-mono text-xs transition-colors ${
+                  personSource === 'upload'
+                    ? 'bg-foreground text-background'
+                    : 'bg-background text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('personSourceUpload')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={personSource === 'library'}
+                data-testid="person-source-library"
+                disabled={isBusy}
+                onClick={() => {
+                  setPersonSource('library');
+                  setError(null);
+                }}
+                className={`px-3 py-1.5 font-mono text-xs transition-colors ${
+                  personSource === 'library'
+                    ? 'bg-foreground text-background'
+                    : 'bg-background text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('personSourceLibrary')}
+              </button>
+            </div>
+          </div>
+
+          {personSource === 'upload' ? (
+            <UploadReferenceCard
+              role="person"
+              file={personFile}
+              actionLabel={t('personUploadAction')}
+              maxFileSize={maxFileSize}
+              disabled={isBusy}
+              onFileChange={file => {
+                setPersonFile(file);
+                setError(null);
+              }}
+              onOversizeError={maxSizeFormatted =>
+                setError(t('errors.fileTooLarge', { size: maxSizeFormatted }))
+              }
+            />
+          ) : (
+            <ReferenceLibraryGrid
+              role="person"
+              items={personLibraryQuery.data ?? []}
+              selectedId={personAssetId}
+              onSelect={id => {
+                setPersonAssetId(id);
+                setError(null);
+              }}
+              isLoading={personLibraryQuery.isLoading}
+              isError={personLibraryQuery.isError}
+              onRetry={() => void personLibraryQuery.refetch?.()}
+              onFallbackToUpload={handleFallbackToUpload}
+              disabled={isBusy}
+            />
+          )}
+        </section>
+
+        {/* 2. 目标服装参考（必选） */}
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
           <div>
-            <h2 className="text-sm font-medium">{t('personSectionTitle')}</h2>
+            <h2 className="text-sm font-medium">
+              {mode === 'product'
+                ? t('garmentProductSectionTitle')
+                : t('garmentInspirationSectionTitle')}
+            </h2>
             <p className="text-xs text-muted-foreground">
-              {t('personSectionHint')}
+              {mode === 'product'
+                ? t('garmentProductSectionHint')
+                : t('garmentInspirationSectionHint')}
             </p>
           </div>
-          <div className="flex rounded-md border border-border overflow-hidden">
-            <button
-              type="button"
-              aria-pressed={personSource === 'upload'}
-              data-testid="person-source-upload"
+
+          {mode === 'product' ? (
+            <UploadReferenceCard
+              role="garment"
+              file={garmentFile}
+              actionLabel={t('garmentUploadAction')}
+              maxFileSize={maxFileSize}
               disabled={isBusy}
-              onClick={() => {
-                setPersonSource('upload');
+              onFileChange={file => {
+                setGarmentFile(file);
                 setError(null);
               }}
-              className={`px-3 py-1.5 font-mono text-xs transition-colors ${
-                personSource === 'upload'
-                  ? 'bg-foreground text-background'
-                  : 'bg-background text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {t('personSourceUpload')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={personSource === 'library'}
-              data-testid="person-source-library"
-              disabled={isBusy}
-              onClick={() => {
-                setPersonSource('library');
+              onOversizeError={maxSizeFormatted =>
+                setError(t('errors.fileTooLarge', { size: maxSizeFormatted }))
+              }
+            />
+          ) : (
+            <GarmentLibraryGrid
+              role="garment"
+              items={garmentLibraryQuery.data ?? []}
+              selectedId={garmentAssetId}
+              onSelect={id => {
+                setGarmentAssetId(id);
                 setError(null);
               }}
-              className={`px-3 py-1.5 font-mono text-xs transition-colors ${
-                personSource === 'library'
-                  ? 'bg-foreground text-background'
-                  : 'bg-background text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {t('personSourceLibrary')}
-            </button>
+              isLoading={garmentLibraryQuery.isLoading}
+              isError={garmentLibraryQuery.isError}
+              onRetry={() => void garmentLibraryQuery.refetch?.()}
+              onFallbackToUpload={handleFallbackToUpload}
+              disabled={isBusy}
+            />
+          )}
+        </section>
+
+        {/* 3. 姿势参考（可选） */}
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div>
+            <h2 className="text-sm font-medium">{t('poseSectionTitle')}</h2>
+            <p className="text-xs text-muted-foreground">
+              {t('poseSectionHint')}
+            </p>
           </div>
-        </div>
 
-        {personSource === 'upload' ? (
-          <UploadReferenceCard
-            role="person"
-            file={personFile}
-            actionLabel={t('personUploadAction')}
-            maxFileSize={maxFileSize}
-            disabled={isBusy}
-            onFileChange={file => {
-              setPersonFile(file);
-              setError(null);
-            }}
-            onOversizeError={maxSizeFormatted =>
-              setError(t('errors.fileTooLarge', { size: maxSizeFormatted }))
-            }
-          />
-        ) : (
           <ReferenceLibraryGrid
-            role="person"
-            items={personLibraryQuery.data ?? []}
-            selectedId={personAssetId}
+            role="pose"
+            items={poseLibraryQuery.data ?? []}
+            selectedId={poseAssetId}
             onSelect={id => {
-              setPersonAssetId(id);
+              setPoseAssetId(id);
               setError(null);
             }}
-            isLoading={personLibraryQuery.isLoading}
-            isError={personLibraryQuery.isError}
-            onRetry={() => void personLibraryQuery.refetch?.()}
-            onFallbackToUpload={handleFallbackToUpload}
+            isLoading={poseLibraryQuery.isLoading}
+            isError={poseLibraryQuery.isError}
+            onRetry={() => void poseLibraryQuery.refetch?.()}
             disabled={isBusy}
+            optional
           />
-        )}
-      </section>
+        </section>
 
-      {/* 2. 目标服装参考（必选） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <div>
-          <h2 className="text-sm font-medium">
-            {mode === 'product'
-              ? t('garmentProductSectionTitle')
-              : t('garmentInspirationSectionTitle')}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {mode === 'product'
-              ? t('garmentProductSectionHint')
-              : t('garmentInspirationSectionHint')}
-          </p>
-        </div>
+        {/* 4. 辅助穿搭风格（可选 · 弱优先级） */}
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div>
+            <h2 className="text-sm font-medium">{t('styleSectionTitle')}</h2>
+            <p className="text-xs text-muted-foreground">
+              {t('styleSectionHint')}
+            </p>
+          </div>
 
-        {mode === 'product' ? (
-          <UploadReferenceCard
-            role="garment"
-            file={garmentFile}
-            actionLabel={t('garmentUploadAction')}
-            maxFileSize={maxFileSize}
-            disabled={isBusy}
-            onFileChange={file => {
-              setGarmentFile(file);
-              setError(null);
-            }}
-            onOversizeError={maxSizeFormatted =>
-              setError(t('errors.fileTooLarge', { size: maxSizeFormatted }))
-            }
-          />
-        ) : (
-          <GarmentLibraryGrid
-            role="garment"
+          <ReferenceLibraryGrid
+            role="style"
             items={garmentLibraryQuery.data ?? []}
-            selectedId={garmentAssetId}
+            selectedId={styleAssetId}
             onSelect={id => {
-              setGarmentAssetId(id);
+              setStyleAssetId(id);
               setError(null);
             }}
             isLoading={garmentLibraryQuery.isLoading}
             isError={garmentLibraryQuery.isError}
             onRetry={() => void garmentLibraryQuery.refetch?.()}
-            onFallbackToUpload={handleFallbackToUpload}
             disabled={isBusy}
+            optional
           />
-        )}
-      </section>
-
-      {/* 3. 姿势参考（可选） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <div>
-          <h2 className="text-sm font-medium">{t('poseSectionTitle')}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t('poseSectionHint')}
-          </p>
-        </div>
-
-        <ReferenceLibraryGrid
-          role="pose"
-          items={poseLibraryQuery.data ?? []}
-          selectedId={poseAssetId}
-          onSelect={id => {
-            setPoseAssetId(id);
-            setError(null);
-          }}
-          isLoading={poseLibraryQuery.isLoading}
-          isError={poseLibraryQuery.isError}
-          onRetry={() => void poseLibraryQuery.refetch?.()}
-          disabled={isBusy}
-          optional
-        />
-      </section>
-
-      {/* 4. 辅助穿搭风格（可选 · 弱优先级） */}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <div>
-          <h2 className="text-sm font-medium">{t('styleSectionTitle')}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t('styleSectionHint')}
-          </p>
-        </div>
-
-        <ReferenceLibraryGrid
-          role="style"
-          items={garmentLibraryQuery.data ?? []}
-          selectedId={styleAssetId}
-          onSelect={id => {
-            setStyleAssetId(id);
-            setError(null);
-          }}
-          isLoading={garmentLibraryQuery.isLoading}
-          isError={garmentLibraryQuery.isError}
-          onRetry={() => void garmentLibraryQuery.refetch?.()}
-          disabled={isBusy}
-          optional
-        />
-      </section>
+        </section>
+      </div>
 
       {/* 5. 场景补充说明与生成参数（可选） */}
       <section className="space-y-4 rounded-lg border border-border bg-card p-4">
@@ -888,5 +890,3 @@ export default function ImageTryOnPage() {
     </ToolPageShell>
   );
 }
-
-

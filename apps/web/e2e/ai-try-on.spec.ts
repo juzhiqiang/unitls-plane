@@ -83,10 +83,12 @@ test.describe('AI e-commerce try-on workbench', () => {
     );
     await expect(page.getByTestId('try-on-submit')).toBeDisabled();
 
-    // Switch to inspiration mode and select library person + garment
+    // Switch to inspiration mode and select library person + garment via modals
     await page.getByTestId('mode-inspiration').click();
     await page.getByTestId('person-source-library').click();
+    await page.getByTestId('open-library-modal-person').click();
     await page.getByTestId(`library-item-person-${PERSON_UUID}`).click();
+    await page.getByTestId('open-library-modal-garment').click();
     await page.getByTestId(`library-item-garment-${GARMENT_UUID}`).click();
     await expect(page.getByTestId('try-on-submit')).toBeEnabled();
 

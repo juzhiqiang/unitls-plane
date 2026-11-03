@@ -954,6 +954,17 @@ export function ReferenceLibraryGrid({
                                       : 'Female'}
                                 </span>
                               )}
+                              {role === 'person' && itemGender !== 'unisex' && (
+                                <span className="absolute top-2 left-2 rounded bg-background/90 px-1.5 py-0.5 font-mono text-[11px] font-medium text-foreground shadow-xs backdrop-blur-xs">
+                                  {itemGender === 'male'
+                                    ? isZh
+                                      ? '男性'
+                                      : 'Male'
+                                    : isZh
+                                      ? '女性'
+                                      : 'Female'}
+                                </span>
+                              )}
                             </div>
                           ) : null}
 

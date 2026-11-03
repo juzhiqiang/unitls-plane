@@ -866,7 +866,7 @@ export default function ImageTryOnPage() {
                 onClick={() => {
                   setViewerSrc(buildFileDownloadUrl(effectiveTask.outputFileId!));
                   setViewerOpen(true);
-                }}"
+                }}
               />
             </div>
           }

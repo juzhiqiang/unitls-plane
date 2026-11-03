@@ -116,13 +116,14 @@ export function ImageViewerModal({
         className="absolute inset-0 flex items-center justify-center overflow-hidden cursor-move"
         onClick={e => e.stopPropagation()}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt={alt}
           draggable={false}
           onMouseDown={handleMouseDown}
           style={{
-            transform: \	ranslate(\px, \px) scale(\)\,
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
             transformOrigin: 'center',
             cursor: isDragging ? 'grabbing' : scale > 1 ? 'grab' : 'move',
             maxHeight: '90vh',

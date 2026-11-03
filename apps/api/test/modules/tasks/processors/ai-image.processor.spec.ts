@@ -655,7 +655,7 @@ it('stops retrying a deterministic rejection instead of paying for it again', as
 });
 
 it('composes try-on prompt with exact dynamic reference numbering, anti-mannequin/line-art rules, and camera angle notes', () => {
-  // 1) 省略 pose、直接选 person + garment + style 时，style 应准确标记为第 3 张而非第 4 张
+  // 1) 省略 pose、直接选 person + garment + style 时，style 应准确标记为第 3 张（图3）而非第 4 张
   const promptWithoutPose = composeTryOnPrompt('product', [
     { role: 'person', source: 'upload', inputIndex: 0 },
     { role: 'garment', source: 'upload', inputIndex: 1 },
@@ -665,18 +665,27 @@ it('composes try-on prompt with exact dynamic reference numbering, anti-mannequi
       assetId: '00000000-0000-4000-8000-000000000004',
     },
   ]);
+  expect(promptWithoutPose).toContain('请根据提供的 3 张参考图');
   expect(promptWithoutPose).toContain(
     '第 1 张是模特/人物参考，第 2 张是本次要展示的真实商品服装图，第 3 张是弱优先级的搭配风格参考'
   );
   expect(promptWithoutPose).toContain(
-    '不要画出商品图里的人台、假人模特、衣架或空白身体'
+    '所有裸露皮肤（包括四肢及服装镂空处露出的皮肤）必须与脸部肤色统一'
   );
   expect(promptWithoutPose).toContain(
-    '禁止画成儿童、幼儿或青少年，脸和身体都使用自然真实的成人比例'
+    '不要画出图2中的人台、假人模特、衣架或空白身体'
   );
-  expect(promptWithoutPose).toContain('不要水印，不要文字，不要画框外的说明');
+  expect(promptWithoutPose).toContain(
+    '图3仅用于弱化的搭配氛围与光影参考，不得覆盖或改动图2目标服装的具体设计'
+  );
+  expect(promptWithoutPose).toContain(
+    '写实商业摄影级质感，85mm 人像镜头，自然柔和光影，真实肌肤纹理与织物细节，8k 高清画质'
+  );
+  expect(promptWithoutPose).toContain(
+    '画面中没有任何文字、标志、画框外说明或水印'
+  );
 
-  // 2) inspiration 模式下注入图库服饰描述与姿势视角机位注释（如 low angle, camera looking up）
+  // 2) inspiration 模式下注入人像特征、清洗内部编号后的图库服饰描述与姿势视角机位注释
   const promptWithPoseAndGarmentMeta = composeTryOnPrompt(
     'inspiration',
     [
@@ -698,6 +707,13 @@ it('composes try-on prompt with exact dynamic reference numbering, anti-mannequi
     ],
     undefined,
     {
+      person: {
+        titleZh: '男性 · 清爽短发（正面人像）',
+        titleEn: 'Male · Clean short hair',
+        descriptionZh: null,
+        descriptionEn: null,
+        tags: ['male', '男性'],
+      },
       garment: {
         titleZh: '春日穿搭 SPR-0001',
         titleEn: 'Spring SPR-0001',
@@ -715,15 +731,16 @@ it('composes try-on prompt with exact dynamic reference numbering, anti-mannequi
     }
   );
   expect(promptWithPoseAndGarmentMeta).toContain(
-    '第 1 张是模特/人物参考，第 2 张是没有人物的目标服饰图，第 3 张是姿势结构线稿'
+    '• 人物：图1中的人物，保持其脸型、五官、骨相、发型（清爽短发）和发色一致'
   );
   expect(promptWithPoseAndGarmentMeta).toContain(
-    '目标服饰描述：春日穿搭 SPR-0001（象牙白、荷叶边、针织、牛仔半身裙）'
+    '• 服装：让人物穿上图2中展示的整套服装和配饰（参考名称：春日穿搭 · 象牙白、荷叶边、针织、牛仔半身裙），每件单品的颜色、款式、图案、面料与配饰都以图2为准，名称仅作辅助说明'
+  );
+  expect(promptWithPoseAndGarmentMeta).not.toContain('SPR-0001');
+  expect(promptWithPoseAndGarmentMeta).toContain(
+    '• 姿势：按照图3中人体模型/线稿的动作和镜头角度摆姿势（S形站姿（仰视），视角：仰视（low angle, camera looking up））；图3只是动作示意'
   );
   expect(promptWithPoseAndGarmentMeta).toContain(
-    '不要把线稿轮廓、关节圆、骨骼连线、比例辅助线或线稿的空白身体画进成图'
-  );
-  expect(promptWithPoseAndGarmentMeta).toContain(
-    '目标姿势：S形站姿（仰视）。视角：仰视（low angle, camera looking up）'
+    '最终画面中的人物是真人，皮肤真实自然，穿着图2的服装'
   );
 });

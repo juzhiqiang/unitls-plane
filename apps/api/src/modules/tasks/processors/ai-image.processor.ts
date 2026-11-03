@@ -101,6 +101,32 @@ function resolvePoseCameraNote(
   return null;
 }
 
+function cleanGarmentReferenceLabel(
+  garmentMeta?: AiTryOnReferencePromptMetadata | null
+): string | null {
+  if (!garmentMeta) return null;
+  const cleanTitle = garmentMeta.titleZh
+    .replace(/\s*\([A-Z]+-[A-Z0-9]+\)\s*$/i, '')
+    .replace(/\s+[A-Z]+-\d+(?:-\d+)?\s*$/i, '')
+    .trim();
+  const cleanDesc = garmentMeta.descriptionZh?.trim();
+  if (cleanTitle && cleanDesc) {
+    return `${cleanTitle} · ${cleanDesc}`;
+  }
+  return cleanDesc || cleanTitle || null;
+}
+
+function cleanPersonReferenceLabel(
+  personMeta?: AiTryOnReferencePromptMetadata | null
+): string | null {
+  if (!personMeta) return null;
+  const cleaned = personMeta.titleZh
+    .replace(/（正面人像）$/, '')
+    .replace(/^(?:[^·]+·\s*)?/, '')
+    .trim();
+  return cleaned || personMeta.titleZh.trim() || null;
+}
+
 export function composeTryOnPrompt(
   mode: 'product' | 'inspiration',
   references: readonly ImageTryOnReferenceBinding[],
@@ -110,8 +136,10 @@ export function composeTryOnPrompt(
   const orderedRoles = TRY_ON_ROLE_ORDER.filter(role =>
     references.some(reference => reference.role === role)
   );
+  const roleIndex = new Map<ImageTryOnReferenceBinding['role'], number>();
   const roleParts = orderedRoles.map((role, idx) => {
     const position = idx + 1;
+    roleIndex.set(role, position);
     switch (role) {
       case 'person':
         return `第 ${position} 张是模特/人物参考`;
@@ -126,58 +154,55 @@ export function composeTryOnPrompt(
     }
   });
 
-  const introTitle =
-    mode === 'product'
-      ? '生成真实、专业的电商服装试穿展示图。'
-      : '生成真实、专业的穿搭灵感试穿展示图。';
+  const personIdx = roleIndex.get('person') ?? 1;
+  const garmentIdx = roleIndex.get('garment') ?? 2;
+  const poseIdx = roleIndex.get('pose');
+  const styleIdx = roleIndex.get('style');
+
+  const personLabel = cleanPersonReferenceLabel(metadataByRole?.person);
+  const personTraitNote = personLabel ? `（${personLabel}）` : '';
+
+  const garmentLabel = cleanGarmentReferenceLabel(metadataByRole?.garment);
+  const garmentNameNote = garmentLabel ? `（参考名称：${garmentLabel}）` : '';
 
   const lines: string[] = [
-    `${introTitle}参考图按固定顺序提供：${roleParts.join('，')}。`,
+    `请根据提供的 ${orderedRoles.length} 张参考图，生成一张完整的真实商业试穿人物照片（参考图按固定顺序提供：${roleParts.join('，')}）：`,
+    `• 人物：图${personIdx}中的人物，保持其脸型、五官、骨相、发型${personTraitNote}和发色一致。人物的肤色必须与图${personIdx}人物一致，所有裸露皮肤（包括四肢及服装镂空处露出的皮肤）必须与脸部肤色统一，统一后的肤色与质感按风格要求呈现；这是成年人物，禁止画成儿童、幼儿或青少年，脸和身体都使用自然真实的成人比例。`,
     mode === 'product'
-      ? '商品图是服装外观的唯一权威来源。尽可能准确保留商品的款式、颜色、图案、材质纹理、剪裁、层次、细节和配饰；将人物参考图中的原有衣物全部替换，不要保留第一张参考图上的原衣服，不要从姿势图或风格图复制、替换或改写商品设计，也不要画出商品图里的人台、假人模特、衣架或空白身体。'
-      : '以目标服饰图决定主要服装的款式、颜色、图案、层次、鞋袜和配饰。目标服饰图只有衣服、没有人物，将人物完整换穿为这套目标服饰，人物参考图中的原衣服不要保留，也不要画出服饰图里的人台、假人模特或空白身体。',
+      ? `• 服装：让人物穿上图${garmentIdx}中展示的真实商品服装和配饰${garmentNameNote}；商品图是服装外观的唯一权威来源，每件单品的款式、颜色、图案、材质纹理、剪裁、层次与配饰都以图${garmentIdx}为准，名称仅作辅助说明。完全替换图${personIdx}人物原有的衣物，不要从姿势图或风格图复制、替换或改写商品设计，也不要画出图${garmentIdx}中的人台、假人模特、衣架或空白身体。`
+      : `• 服装：让人物穿上图${garmentIdx}中展示的整套服装和配饰${garmentNameNote}，每件单品的颜色、款式、图案、面料与配饰都以图${garmentIdx}为准，名称仅作辅助说明；图${garmentIdx}只有衣服、没有人物，完全替换图${personIdx}人物原有的衣物，不要画出图${garmentIdx}中的人台、假人模特或空白身体。`,
   ];
 
-  const garmentMeta = metadataByRole?.garment;
-  if (garmentMeta) {
-    const desc = garmentMeta.descriptionZh
-      ? `（${garmentMeta.descriptionZh}）`
-      : '';
-    lines.push(`目标服饰描述：${garmentMeta.titleZh}${desc}。`);
-  }
-
-  lines.push(
-    '人物（必须保持身份）：保留人物参考图中的五官、脸型、骨相、肤色、发型与发色，将目标服装自然穿在人物身上。这是成年人物，禁止画成儿童、幼儿或青少年，脸和身体都使用自然真实的成人比例。'
-  );
-
-  if (orderedRoles.includes('pose')) {
-    lines.push(
-      '姿势参考只控制人物动作和构图，不改变人物身份或服装。只从线稿提取身体姿态、重心、四肢位置、手部动作和镜头角度；不要把线稿轮廓、关节圆、骨骼连线、比例辅助线或线稿的空白身体画进成图。'
-    );
+  if (poseIdx !== undefined) {
     const poseMeta = metadataByRole?.pose;
-    if (poseMeta) {
-      const cameraNote = resolvePoseCameraNote(poseMeta);
-      lines.push(
-        `目标姿势：${poseMeta.titleZh}${cameraNote ? `。视角：${cameraNote}` : ''}。`
-      );
-    }
-  }
+    const cameraNote = resolvePoseCameraNote(poseMeta);
+    const poseTitle = poseMeta?.titleZh.trim();
+    const poseNoteParts = [
+      poseTitle,
+      cameraNote ? `视角：${cameraNote}` : null,
+    ].filter(Boolean);
+    const poseDetailNote =
+      poseNoteParts.length > 0 ? `（${poseNoteParts.join('，')}）` : '';
 
-  if (orderedRoles.includes('style')) {
     lines.push(
-      '风格参考仅用于弱化的搭配氛围与光影参考，不得覆盖或改动目标服装的具体设计。'
+      `• 姿势：按照图${poseIdx}中人体模型/线稿的动作和镜头角度摆姿势${poseDetailNote}；图${poseIdx}只是动作示意，只从线稿提取身体姿态、重心、四肢位置、手部动作和镜头角度，不要把线稿轮廓、关节圆、骨骼连线、比例辅助线或线稿的空白身体画进成图，最终画面中的人物是真人，皮肤真实自然，穿着图${garmentIdx}的服装。`
     );
   }
 
-  if (promptAddition?.trim()) {
-    lines.push(`用户补充的场景要求：${promptAddition.trim()}`);
-  } else {
-    lines.push('画面补充：干净商业棚拍，柔和自然光影，真实面料质感与垂坠。');
+  const styleSegments = [
+    '• 风格：写实商业摄影级质感，85mm 人像镜头，自然柔和光影，真实肌肤纹理与织物细节，8k 高清画质。人物比例协调，手部与五官自然，光影统一。',
+  ];
+  if (styleIdx !== undefined) {
+    styleSegments.push(
+      `图${styleIdx}仅用于弱化的搭配氛围与光影参考，不得覆盖或改动图${garmentIdx}目标服装的具体设计。`
+    );
   }
+  if (promptAddition?.trim()) {
+    styleSegments.push(`用户补充的场景要求：${promptAddition.trim()}。`);
+  }
+  lines.push(styleSegments.join(' '));
 
-  lines.push(
-    '生成干净、可信的电商展示摄影效果。不要水印，不要文字，不要画框外的说明。'
-  );
+  lines.push('画面中没有任何文字、标志、画框外说明或水印。');
 
   return lines.join('\n');
 }

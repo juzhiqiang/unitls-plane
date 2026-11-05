@@ -9,6 +9,32 @@ function readRepoFile(path: string): string {
 }
 
 describe('Dockerfile runtime assets', () => {
+  it('compiles startup scripts required by production entrypoints', () => {
+    const compiler = readRepoFile('scripts/compile-api-runtime-scripts.cjs');
+    const dockerfiles = [
+      readRepoFile('Dockerfile'),
+      readRepoFile('apps/api/Dockerfile'),
+    ];
+
+    for (const script of [
+      'migrate.js',
+      'sync-id-photo-models.js',
+      'seed-image-generate-presets.js',
+    ]) {
+      expect(compiler).toContain(script);
+    }
+    for (const sourceName of [
+      'migrate.ts',
+      'sync-id-photo-models.ts',
+      'seed-image-generate-presets.ts',
+    ]) {
+      expect(compiler).toContain(`'${sourceName}'`);
+    }
+    for (const source of dockerfiles) {
+      expect(source).toContain('compile-api-runtime-scripts.cjs');
+    }
+  });
+
   it('copies portrait segmentation ONNX models into the runtime image', () => {
     const source = readFileSync(join(repoRoot, 'Dockerfile'), 'utf8');
 

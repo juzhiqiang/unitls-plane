@@ -24,6 +24,7 @@ WORKDIR /app
 
 COPY . .
 RUN bun run build --filter=@utils-plane/api
+RUN bun scripts/compile-api-runtime-scripts.cjs
 RUN bun node_modules/typescript/bin/tsc -p packages/db/tsconfig.json --module commonjs --moduleResolution node --outDir packages/db/dist-cjs --declaration false --declarationMap false --sourceMap false \
     && bun node_modules/typescript/bin/tsc -p packages/auth/tsconfig.json --module commonjs --moduleResolution node --outDir packages/auth/dist-cjs --declaration false --declarationMap false --sourceMap false \
     && bun node_modules/typescript/bin/tsc -p packages/utils/tsconfig.json --module commonjs --moduleResolution node --outDir packages/utils/dist-cjs --declaration false --declarationMap false --sourceMap false \

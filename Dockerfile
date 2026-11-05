@@ -42,6 +42,7 @@ RUN if [ "$NEXT_PUBLIC_RELEASE" = "prod" ]; then \
       bun -e "const email=process.env.NEXT_PUBLIC_SUPPORT_EMAIL||''; if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||email.endsWith('.local')){console.error('NEXT_PUBLIC_SUPPORT_EMAIL must be a reachable email');process.exit(1)}"; \
     fi
 RUN bun run build --filter=@utils-plane/api --filter=@utils-plane/web
+RUN bun scripts/compile-api-runtime-scripts.cjs
 RUN bun node_modules/typescript/bin/tsc -p packages/db/tsconfig.json --module commonjs --moduleResolution node --outDir packages/db/dist-cjs --declaration false --declarationMap false --sourceMap false \
     && bun node_modules/typescript/bin/tsc -p packages/auth/tsconfig.json --module commonjs --moduleResolution node --outDir packages/auth/dist-cjs --declaration false --declarationMap false --sourceMap false \
     && bun node_modules/typescript/bin/tsc -p packages/utils/tsconfig.json --module commonjs --moduleResolution node --outDir packages/utils/dist-cjs --declaration false --declarationMap false --sourceMap false \

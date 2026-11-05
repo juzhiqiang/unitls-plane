@@ -11,6 +11,16 @@ export class CleanupScheduler implements OnModuleInit {
   async onModuleInit() {
     await Promise.all([
       this.cleanupQueue.add(
+        'cleanup-orphan-thumbnails',
+        {},
+        {
+          jobId: 'daily-orphan-thumbnails',
+          repeat: { pattern: '0 3 * * *' },
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+        }
+      ),
+      this.cleanupQueue.add(
         'cleanup-expired-files',
         {},
         {

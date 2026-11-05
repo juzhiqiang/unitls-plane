@@ -31,7 +31,9 @@ function createReconciler(
       { cleanupExpired: vi.fn(), cleanupTrashed: vi.fn() } as any,
       minio as any,
       cleanupObligations as any,
-      taskJobReconciler as any
+      taskJobReconciler as any,
+      {} as never,
+      {} as never
     ),
     cleanupObligations,
     minio,
@@ -40,6 +42,95 @@ function createReconciler(
 }
 
 describe('CleanupProcessor', () => {
+  it('continues thumbnail sweeps with a bounded page and stable retry identity', async () => {
+    const summary = {
+      scanned: 100,
+      deleted: 3,
+      failed: 1,
+      continuationToken: 'page-2',
+    };
+    const cleanupPage = vi.fn(async () => summary);
+    const add = vi.fn(async () => ({}));
+    const processor = new CleanupProcessor(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { cleanupPage } as never,
+      { add } as never
+    );
+    const job = {
+      id: 'repeat:daily:1',
+      name: 'cleanup-orphan-thumbnails',
+      data: {},
+    } as Job;
+    expect(await processor.process(job)).toEqual(summary);
+    expect(cleanupPage).toHaveBeenCalledWith(undefined);
+    expect(add).toHaveBeenCalledWith(
+      'cleanup-orphan-thumbnails',
+      {
+        continuationToken: 'page-2',
+        sweepId: 'repeat:daily:1',
+      },
+      expect.objectContaining({
+        attempts: 3,
+        jobId: expect.any(String),
+        backoff: { type: 'exponential', delay: 1000 },
+      })
+    );
+    const firstJobId = add.mock.calls[0]?.[2]?.jobId;
+    expect(firstJobId).not.toContain(':');
+    await processor.process(job);
+    expect(add.mock.calls[1]?.[2]?.jobId).toBe(firstJobId);
+  });
+
+  it('stops a thumbnail sweep after the final page', async () => {
+    const cleanupPage = vi.fn(async () => ({
+      scanned: 0,
+      deleted: 0,
+      failed: 0,
+    }));
+    const add = vi.fn();
+    const processor = new CleanupProcessor(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { cleanupPage } as never,
+      { add } as never
+    );
+    await processor.process({
+      id: 'page-2',
+      name: 'cleanup-orphan-thumbnails',
+      data: { continuationToken: 'page-2', sweepId: 'sweep-1' },
+    } as Job);
+    expect(cleanupPage).toHaveBeenCalledWith('page-2');
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('does not advance the thumbnail cursor when storage or database lookup fails', async () => {
+    const cleanupPage = vi.fn(async () => {
+      throw new Error('database unavailable');
+    });
+    const add = vi.fn();
+    const processor = new CleanupProcessor(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { cleanupPage } as never,
+      { add } as never
+    );
+    await expect(
+      processor.process({
+        id: 'sweep-1',
+        name: 'cleanup-orphan-thumbnails',
+        data: {},
+      } as Job)
+    ).rejects.toThrow('database unavailable');
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it('runs expired and trash cleanup once in order and returns both summaries', async () => {
     const callOrder: string[] = [];
     const expired = {
@@ -72,7 +163,9 @@ describe('CleanupProcessor', () => {
       } as any,
       { delete: deleteObject } as any,
       {} as any,
-      { reconcile: vi.fn() } as any
+      { reconcile: vi.fn() } as any,
+      {} as never,
+      {} as never
     );
 
     const result = await processor.process({
@@ -101,7 +194,9 @@ describe('CleanupProcessor', () => {
       filesService as any,
       minio as any,
       cleanupObligations as any,
-      { reconcile: vi.fn() } as any
+      { reconcile: vi.fn() } as any,
+      {} as never,
+      {} as never
     );
 
     const result = await processor.process({
@@ -129,7 +224,9 @@ describe('CleanupProcessor', () => {
       { cleanupExpired: vi.fn(), cleanupTrashed: vi.fn() } as any,
       minio as any,
       cleanupObligations as any,
-      { reconcile: vi.fn() } as any
+      { reconcile: vi.fn() } as any,
+      {} as never,
+      {} as never
     );
 
     await processor.process({
@@ -150,7 +247,9 @@ describe('CleanupProcessor', () => {
       {} as any,
       {} as any,
       {} as any,
-      { reconcile: vi.fn() } as any
+      { reconcile: vi.fn() } as any,
+      {} as never,
+      {} as never
     );
     const logError = vi
       .spyOn((processor as any).logger, 'error')
@@ -445,6 +544,19 @@ describe('CleanupProcessor', () => {
 });
 
 describe('CleanupScheduler', () => {
+  it('starts a retryable daily orphan-thumbnail sweep', async () => {
+    const add = vi.fn(async () => undefined);
+    await new CleanupScheduler({ add } as never).onModuleInit();
+    expect(add).toHaveBeenCalledWith(
+      'cleanup-orphan-thumbnails',
+      {},
+      expect.objectContaining({
+        jobId: 'daily-orphan-thumbnails',
+        repeat: { pattern: '0 3 * * *' },
+        attempts: 3,
+      })
+    );
+  });
   it('uses a stable job id for the hourly retention schedule', async () => {
     const add = vi.fn(async () => undefined);
     const scheduler = new CleanupScheduler({ add } as any);

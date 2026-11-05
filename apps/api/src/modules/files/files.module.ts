@@ -7,6 +7,7 @@ import { MinioService } from './minio.service';
 import { CleanupObligationService } from './cleanup-obligation.service';
 import { UploadBudgetInterceptor } from './upload-budget.interceptor';
 import { initializeUploadTempDir } from './upload-temp-file';
+import { ThumbnailCleanupService } from './thumbnail-cleanup.service';
 
 @Module({
   imports: [
@@ -19,8 +20,14 @@ import { initializeUploadTempDir } from './upload-temp-file';
     FilesService,
     MinioService,
     UploadBudgetInterceptor,
+    ThumbnailCleanupService,
   ],
-  exports: [CleanupObligationService, FilesService, MinioService],
+  exports: [
+    CleanupObligationService,
+    FilesService,
+    MinioService,
+    ThumbnailCleanupService,
+  ],
 })
 export class FilesModule implements OnModuleInit {
   onModuleInit() {

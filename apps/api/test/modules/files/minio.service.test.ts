@@ -3,6 +3,8 @@ import {
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
@@ -33,6 +35,118 @@ function withClient(
   (service as unknown as { uploadMode: string }).uploadMode = uploadMode;
   return service;
 }
+
+describe('MinioService thumbnail prefix deletion', () => {
+  it('deletes every version across pages using the exact file prefix', async () => {
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof ListObjectsV2Command) {
+        return command.input.ContinuationToken
+          ? { Contents: [{ Key: 'thumbnails/file-1/2-640.webp' }] }
+          : {
+              Contents: [{ Key: 'thumbnails/file-1/1-320.webp' }],
+              IsTruncated: true,
+              NextContinuationToken: 'page-2',
+            };
+      }
+      return {};
+    });
+    const service = withClient(send);
+
+    await service.deletePrefix('thumbnails/file-1/');
+
+    const commands = send.mock.calls.map(([command]) => command);
+    expect(
+      commands
+        .filter(command => command instanceof ListObjectsV2Command)
+        .map(command => command.input)
+    ).toEqual([
+      {
+        Bucket: 'uploads',
+        Prefix: 'thumbnails/file-1/',
+        MaxKeys: 100,
+        ContinuationToken: undefined,
+      },
+      {
+        Bucket: 'uploads',
+        Prefix: 'thumbnails/file-1/',
+        MaxKeys: 100,
+        ContinuationToken: 'page-2',
+      },
+    ]);
+    expect(
+      commands
+        .filter(command => command instanceof DeleteObjectsCommand)
+        .map(command => command.input.Delete?.Objects)
+    ).toEqual([
+      [{ Key: 'thumbnails/file-1/1-320.webp' }],
+      [{ Key: 'thumbnails/file-1/2-640.webp' }],
+    ]);
+  });
+
+  it('reports an HTTP-success batch with per-object errors as incomplete', async () => {
+    const service = withClient(
+      vi.fn(async (command: unknown) =>
+        command instanceof ListObjectsV2Command
+          ? { Contents: [{ Key: 'thumbnails/file-1/1-320.webp' }] }
+          : {
+              Errors: [
+                { Key: 'thumbnails/file-1/1-320.webp', Code: 'AccessDenied' },
+              ],
+            }
+      )
+    );
+
+    await expect(service.deletePrefix('thumbnails/file-1/')).rejects.toThrow(
+      'Object prefix deletion is incomplete'
+    );
+  });
+
+  it('rejects empty or non-directory prefixes before contacting storage', async () => {
+    const send = vi.fn();
+    const service = withClient(send);
+    for (const prefix of ['', '/', 'thumbnails/file-1']) {
+      await expect(service.deletePrefix(prefix)).rejects.toThrow(
+        'Invalid object prefix'
+      );
+    }
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('fails a truncated listing without a progressing continuation token', async () => {
+    const send = vi.fn(async () => ({
+      IsTruncated: true,
+      NextContinuationToken: 'same',
+    }));
+    const service = withClient(send);
+    await expect(service.listObjects('thumbnails/', 'same')).rejects.toThrow(
+      'Invalid object listing continuation'
+    );
+  });
+
+  it('treats an already empty prefix as a successful retry', async () => {
+    const send = vi.fn(async () => ({}));
+    await expect(
+      withClient(send).deletePrefix('thumbnails/file-1/')
+    ).resolves.toBeUndefined();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops cyclic listing tokens instead of looping forever', async () => {
+    let requests = 0;
+    const send = vi.fn(async () => {
+      requests += 1;
+      if (requests > 4) throw new Error('unbounded listing');
+      return {
+        IsTruncated: true,
+        NextContinuationToken: requests % 2 ? 'A' : 'B',
+      };
+    });
+    await expect(
+      withClient(send).deletePrefix('thumbnails/file-1/')
+    ).rejects.toThrow('Invalid object listing continuation');
+    expect(requests).toBe(3);
+  });
+});
 
 describe('MINIO_UPLOAD_MODE', () => {
   it('uses multipart on Node and Buffer on Bun in auto mode', () => {

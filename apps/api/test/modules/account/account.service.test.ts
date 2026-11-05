@@ -39,9 +39,9 @@ const repository = {
     events.push('deleteAccountRecords');
   }),
 };
-const minio = {
-  delete: vi.fn(async (storageKey: string) => {
-    events.push(`deleteObject:${storageKey}`);
+const fileDeletion = {
+  forceDeleteOwned: vi.fn(async (fileId: string, userId: string) => {
+    events.push(`deleteFile:${userId}:${fileId}`);
   }),
 };
 const taskQueues = {
@@ -53,7 +53,7 @@ const taskQueues = {
 function createService() {
   return new AccountService(
     repository as never,
-    minio as never,
+    fileDeletion as never,
     taskQueues as never,
     new AccountSummaryCache()
   );
@@ -80,8 +80,8 @@ beforeEach(() => {
   repository.deleteAccountRecords.mockImplementation(async () => {
     events.push('deleteAccountRecords');
   });
-  minio.delete.mockImplementation(async storageKey => {
-    events.push(`deleteObject:${storageKey}`);
+  fileDeletion.forceDeleteOwned.mockImplementation(async (fileId, userId) => {
+    events.push(`deleteFile:${userId}:${fileId}`);
   });
   taskQueues.assertNoActiveAndRemove.mockImplementation(async () => {
     events.push('removeTaskJobs');
@@ -171,11 +171,13 @@ it('confirms the email before persisting deletion state', async () => {
   expect(events).toEqual(['profile']);
   expect(repository.markDeletionStarted).not.toHaveBeenCalled();
   expect(taskQueues.assertNoActiveAndRemove).not.toHaveBeenCalled();
-  expect(minio.delete).not.toHaveBeenCalled();
+  expect(fileDeletion.forceDeleteOwned).not.toHaveBeenCalled();
 });
 
 it('keeps deletion state and sessions when object deletion fails', async () => {
-  minio.delete.mockRejectedValueOnce(new Error('storage unavailable'));
+  fileDeletion.forceDeleteOwned.mockRejectedValueOnce(
+    new Error('storage unavailable')
+  );
 
   await expect(
     createService().deleteAccount('user-1', 'owner@example.com')
@@ -202,7 +204,7 @@ it('stops before object deletion when any task job is active', async () => {
   ).rejects.toThrow('Account has active tasks');
 
   expect(repository.markDeletionStarted).toHaveBeenCalledWith('user-1');
-  expect(minio.delete).not.toHaveBeenCalled();
+  expect(fileDeletion.forceDeleteOwned).not.toHaveBeenCalled();
   expect(repository.deleteSessions).not.toHaveBeenCalled();
   expect(repository.deleteAccountRecords).not.toHaveBeenCalled();
 });
@@ -216,7 +218,7 @@ it('stops before object deletion while the bounded legacy scan is incomplete', a
     createService().deleteAccount('user-1', 'owner@example.com')
   ).rejects.toThrow('Account task scan is incomplete');
 
-  expect(minio.delete).not.toHaveBeenCalled();
+  expect(fileDeletion.forceDeleteOwned).not.toHaveBeenCalled();
   expect(repository.deleteAccountRecords).not.toHaveBeenCalled();
 });
 
@@ -233,14 +235,14 @@ it('removes jobs and objects before the final records transaction', async () => 
     'markDeletionStarted',
     'snapshot',
     'removeTaskJobs',
-    'deleteObject:users/user-1/file-1',
-    'deleteObject:users/user-1/file-2',
+    'deleteFile:user-1:file-1',
+    'deleteFile:user-1:file-2',
     'deleteAccountRecords',
   ]);
 });
 
 it('retries idempotently after an object failure without revoking sessions', async () => {
-  minio.delete
+  fileDeletion.forceDeleteOwned
     .mockResolvedValueOnce(undefined)
     .mockRejectedValueOnce(new Error('storage unavailable'))
     .mockResolvedValue(undefined);
@@ -256,4 +258,18 @@ it('retries idempotently after an object failure without revoking sessions', asy
   expect(repository.markDeletionStarted).toHaveBeenCalledTimes(2);
   expect(repository.deleteSessions).not.toHaveBeenCalled();
   expect(repository.deleteAccountRecords).toHaveBeenCalledTimes(1);
+});
+
+it('keeps account records when file cleanup is still leased by another worker', async () => {
+  fileDeletion.forceDeleteOwned.mockRejectedValueOnce(
+    new Error('File deletion is in progress')
+  );
+  await expect(
+    createService().deleteAccount('user-1', 'owner@example.com')
+  ).rejects.toThrow('Account deletion is incomplete');
+  expect(fileDeletion.forceDeleteOwned).toHaveBeenCalledWith(
+    'file-1',
+    'user-1'
+  );
+  expect(repository.deleteAccountRecords).not.toHaveBeenCalled();
 });

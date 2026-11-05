@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import * as Tabs from '@radix-ui/react-tabs';
 import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
-import { DownloadButton } from '@/components/tools/download-button';
+import { StoredFileDownloadButton } from '@/components/tools/stored-download-button';
 import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
@@ -14,11 +14,13 @@ import { loadPdf, renderPdfPage } from '@/lib/processing/pdf-client';
 import { useUploadFile } from '@/hooks/api/use-files';
 import { useCreateTask } from '@/hooks/api/use-tasks';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
-import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
-import { createSplitOutputFile } from './output-file';
+import {
+  buildSplitOutputFilename,
+  estimateSplitOutputKind,
+} from './output-file';
 import { buildSplitInputConfig, type SplitMode } from './input-config';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
@@ -87,12 +89,11 @@ export default function SplitPage() {
   const [everyN, setEveryN] = useState(5);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
-  // 不再每页手写一遍 fetch + try/finally。服务端会把多产物包装成一个 ZIP。
-  const output = useTaskOutput<File>();
-  // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
-  const resetOutput = output.reset;
-  const result = output.result;
+  // 大 ZIP 不经前端 Blob;只保留产物 ID,下载交给浏览器流式落盘。
+  const [outputFile, setOutputFile] = useState<{
+    fileId: string;
+    filename: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { requireLogin } = useRequireLogin();
@@ -100,12 +101,22 @@ export default function SplitPage() {
   const createTask = useCreateTask();
 
   const { data: progress } = useTaskProgress(taskId, {
-    onCompleted: async outputFileId => {
-      const { error: downloadError } = await output.download(
-        outputFileId,
-        blob => createSplitOutputFile(blob, file?.name ?? 'pdf')
-      );
-      if (downloadError) setError(downloadError.message);
+    onCompleted: completedOutputFileId => {
+      if (completedOutputFileId) {
+        setOutputFile({
+          fileId: completedOutputFileId,
+          filename: buildSplitOutputFilename(
+            file?.name ?? 'pdf.pdf',
+            estimateSplitOutputKind(mode, {
+              pageCount,
+              selectedPages,
+              everyN,
+            })
+          ),
+        });
+      } else {
+        setError('Missing output file');
+      }
       setProcessing(false);
     },
     onFailed: err => {
@@ -130,19 +141,16 @@ export default function SplitPage() {
     };
   }, [file]);
 
-  const handleDrop = useCallback(
-    (files: File[]) => {
-      const pdfFile = files.find(f => f.type === 'application/pdf');
-      if (!pdfFile) return;
-      setFile(pdfFile);
-      setPdf(null);
-      setPageCount(0);
-      setSelectedPages(new Set());
-      resetOutput();
-      setError(null);
-    },
-    [resetOutput]
-  );
+  const handleDrop = useCallback((files: File[]) => {
+    const pdfFile = files.find(f => f.type === 'application/pdf');
+    if (!pdfFile) return;
+    setFile(pdfFile);
+    setPdf(null);
+    setPageCount(0);
+    setSelectedPages(new Set());
+    setOutputFile(null);
+    setError(null);
+  }, []);
 
   const togglePage = (page: number) => {
     setSelectedPages(prev => {
@@ -183,7 +191,7 @@ export default function SplitPage() {
 
     setProcessing(true);
     setError(null);
-    resetOutput();
+    setOutputFile(null);
 
     try {
       const uploaded = (await uploadFile.mutateAsync(file)) as any;
@@ -204,13 +212,13 @@ export default function SplitPage() {
     setPdf(null);
     setPageCount(0);
     setSelectedPages(new Set());
-    resetOutput();
+    setOutputFile(null);
     setError(null);
     setTaskId(null);
     setProcessing(false);
   };
 
-  const stage = result
+  const stage = outputFile
     ? 'result'
     : processing
       ? 'processing'
@@ -369,11 +377,16 @@ export default function SplitPage() {
         />
       )}
 
-      {result && (
+      {outputFile && (
         <ResultPanel
-          title={result.name}
+          title={outputFile.filename}
           description={tShell('result.ready')}
-          action={<DownloadButton file={result} />}
+          action={
+            <StoredFileDownloadButton
+              fileId={outputFile.fileId}
+              filename={outputFile.filename}
+            />
+          }
         />
       )}
     </ToolPageShell>

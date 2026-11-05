@@ -1157,7 +1157,14 @@ export class PdfService {
             'ranges must be provided and non-empty'
           );
         }
-        for (const [start, end] of opts.ranges) {
+        for (const range of opts.ranges) {
+          const [start = NaN, end = NaN] =
+            Array.isArray(range) && range.length === 2 ? range : [];
+          if (!Number.isInteger(start) || !Number.isInteger(end)) {
+            throw new BadRequestException(
+              'ranges must be zero-based integer tuples'
+            );
+          }
           if (start < 0 || end >= totalPages || start > end) {
             throw new BadRequestException(
               `Invalid range [${start}, ${end}], total pages: ${totalPages}`
@@ -1171,7 +1178,7 @@ export class PdfService {
           throw new BadRequestException('pages must be provided and non-empty');
         }
         for (const p of opts.pages) {
-          if (p < 0 || p >= totalPages) {
+          if (!Number.isInteger(p) || p < 0 || p >= totalPages) {
             throw new BadRequestException(
               `Invalid page ${p}, total pages: ${totalPages}`
             );
@@ -1180,7 +1187,7 @@ export class PdfService {
         break;
       }
       case 'every': {
-        if (!opts.every || opts.every <= 0) {
+        if (!Number.isInteger(opts.every) || opts.every <= 0) {
           throw new BadRequestException('every must be greater than 0');
         }
         break;

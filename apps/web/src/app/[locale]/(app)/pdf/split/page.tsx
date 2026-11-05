@@ -19,9 +19,8 @@ import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
+import { buildSplitInputConfig, type SplitMode } from './input-config';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-
-type SplitMode = 'ranges' | 'pages' | 'every';
 
 interface PageThumbProps {
   pdf: PDFDocumentProxy;
@@ -158,20 +157,12 @@ export default function SplitPage() {
   };
 
   const getInputConfig = () => {
-    switch (mode) {
-      case 'ranges':
-        return {
-          mode: 'ranges',
-          ranges: [{ start: rangeStart, end: rangeEnd }],
-        };
-      case 'pages':
-        return {
-          mode: 'pages',
-          pages: Array.from(selectedPages).sort((a, b) => a - b),
-        };
-      case 'every':
-        return { mode: 'every', everyN };
-    }
+    return buildSplitInputConfig(mode, {
+      rangeStart,
+      rangeEnd,
+      selectedPages,
+      everyN,
+    });
   };
 
   const canSplit = () => {

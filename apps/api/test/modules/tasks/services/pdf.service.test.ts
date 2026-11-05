@@ -1017,3 +1017,17 @@ describe('PdfService.encrypt', () => {
     expect(encrypted.includes('permission test')).toBe(false);
   });
 });
+
+describe('PdfService.split', () => {
+  it('rejects object-form ranges instead of silently producing empty output', async () => {
+    const service = new PdfService();
+    const input = await createTextPdf(['One', 'Two']);
+
+    await expect(
+      service.split(input, {
+        mode: 'ranges',
+        ranges: [{ start: 0, end: 1 }] as unknown as [number, number][],
+      })
+    ).rejects.toThrow('ranges must be zero-based integer tuples');
+  });
+});

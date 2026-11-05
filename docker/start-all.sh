@@ -41,6 +41,12 @@ if [ -f apps/api/dist/scripts/seed-image-generate-presets.js ]; then
   node apps/api/dist/scripts/seed-image-generate-presets.js || echo "[start-all] image generate presets seed skipped (failed or MinIO not ready)"
 fi
 
+# Seed AI 试衣基础参考图库到 ai_try_on_references 表和 try-on-references 桶。
+# 失败不阻塞启动;大图库/外部授权素材用一次性维护脚本单独导入。
+if [ -f apps/api/dist/scripts/seed-ai-try-on-references.js ]; then
+  node apps/api/dist/scripts/seed-ai-try-on-references.js || echo "[start-all] try-on reference seed skipped (failed or MinIO not ready)"
+fi
+
 PROCESS_ROLE=api node apps/api/dist/main.js &
 api_pid="$!"
 

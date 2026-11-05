@@ -133,7 +133,7 @@ services:
       [
         'sh',
         '-c',
-        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/scripts/sync-id-photo-models.js && node apps/api/dist/scripts/seed-image-generate-presets.js && exec node apps/api/dist/main.js',
+        'node apps/api/dist/scripts/migrate.js && node apps/api/dist/scripts/sync-id-photo-models.js && node apps/api/dist/scripts/seed-image-generate-presets.js && node apps/api/dist/scripts/seed-ai-try-on-references.js && exec node apps/api/dist/main.js',
       ]
     ports:
       - '5006:3001'

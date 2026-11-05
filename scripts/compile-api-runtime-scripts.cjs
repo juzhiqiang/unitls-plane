@@ -4,28 +4,19 @@ const ts = require('typescript');
 
 const apiDir = path.join(__dirname, '..', 'apps', 'api');
 const distDir = path.join(apiDir, 'dist');
+const scriptsSourceDir = path.join(apiDir, 'src', 'scripts');
 const runtimeSources = [
   {
     source: path.join(apiDir, 'src', 'env-loader.ts'),
     output: path.join(distDir, 'env-loader.js'),
   },
-  {
-    source: path.join(apiDir, 'src', 'scripts', 'migrate.ts'),
-    output: path.join(distDir, 'scripts', 'migrate.js'),
-  },
-  {
-    source: path.join(apiDir, 'src', 'scripts', 'sync-id-photo-models.ts'),
-    output: path.join(distDir, 'scripts', 'sync-id-photo-models.js'),
-  },
-  {
-    source: path.join(
-      apiDir,
-      'src',
-      'scripts',
-      'seed-image-generate-presets.ts'
-    ),
-    output: path.join(distDir, 'scripts', 'seed-image-generate-presets.js'),
-  },
+  ...fs
+    .readdirSync(scriptsSourceDir)
+    .filter(name => name.endsWith('.ts'))
+    .map(name => ({
+      source: path.join(scriptsSourceDir, name),
+      output: path.join(distDir, 'scripts', name.replace(/\.ts$/, '.js')),
+    })),
 ];
 
 const compilerOptions = {

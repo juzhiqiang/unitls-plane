@@ -16,19 +16,20 @@ describe('Dockerfile runtime assets', () => {
       readRepoFile('apps/api/Dockerfile'),
     ];
 
-    for (const script of [
-      'migrate.js',
-      'sync-id-photo-models.js',
-      'seed-image-generate-presets.js',
-    ]) {
-      expect(compiler).toContain(script);
-    }
+    expect(compiler).toContain('readdirSync(scriptsSourceDir)');
     for (const sourceName of [
       'migrate.ts',
       'sync-id-photo-models.ts',
       'seed-image-generate-presets.ts',
+      'seed-ai-try-on-references.ts',
+      'seed-ai-try-on-costumes.ts',
+      'import-pose-male-custom.ts',
+      'import-character-custom.ts',
+      'import-costume-custom.ts',
     ]) {
-      expect(compiler).toContain(`'${sourceName}'`);
+      expect(() =>
+        readRepoFile(`apps/api/src/scripts/${sourceName}`)
+      ).not.toThrow();
     }
     for (const source of dockerfiles) {
       expect(source).toContain('compile-api-runtime-scripts.cjs');
@@ -87,11 +88,17 @@ describe('Dockerfile runtime assets', () => {
     expect(combinedEntrypoint).toContain(
       'PROCESS_ROLE=api node apps/api/dist/main.js &'
     );
+    expect(combinedEntrypoint).toContain(
+      'node apps/api/dist/scripts/seed-ai-try-on-references.js'
+    );
     // 生产 compose 允许在 migrate 与 main 之间插入其它 node 启动脚本
     // (当前是 sync-id-photo-models),但顺序必须是 migrate 最先、main 最后,
     // 且全部走 node 而不是 bun。
     expect(productionCompose).toMatch(
       /node apps\/api\/dist\/scripts\/migrate\.js( && node apps\/api\/dist\/scripts\/[\w-]+\.js)* && exec node apps\/api\/dist\/main\.js/
+    );
+    expect(productionCompose).toContain(
+      'node apps/api/dist/scripts/seed-ai-try-on-references.js'
     );
     expect(accountExportService).not.toContain(
       "import { Database } from 'bun:sqlite'"

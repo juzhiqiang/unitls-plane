@@ -285,6 +285,7 @@ it('stamps retriedFrom on the new task and passes the rest of the config through
         retriedFrom: originalId,
       },
     },
-    user
+    user,
+    undefined
   );
 });

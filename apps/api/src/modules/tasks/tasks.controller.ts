@@ -17,6 +17,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiQuery,
+  ApiHeader,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { isUUID } from 'class-validator';
@@ -44,6 +45,18 @@ interface AuthenticatedRequest extends Request {
   user?: User;
 }
 
+function submissionHeaders(req: AuthenticatedRequest) {
+  const key = req.headers?.['idempotency-key'];
+  const clientId = req.headers?.['x-task-client-id'];
+  if (key === undefined) return undefined;
+  if (
+    typeof key !== 'string' ||
+    (clientId !== undefined && typeof clientId !== 'string')
+  )
+    throw new BadRequestException('Invalid submission headers');
+  return { key, clientId };
+}
+
 @ApiTags('tasks')
 @Controller('tasks')
 export class TasksController {
@@ -57,6 +70,22 @@ export class TasksController {
   @Public()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new task' })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description: 'UUID for one submission; retained for 24 hours',
+  })
+  @ApiHeader({
+    name: 'X-Task-Client-Id',
+    required: false,
+    description:
+      'Anonymous browser session UUID; required with Idempotency-Key when unauthenticated',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Key already used with different parameters',
+  })
+  @ApiResponse({ status: 410, description: 'The submitted task was deleted' })
   @ApiResponse({
     status: 201,
     description: 'Task created',
@@ -70,8 +99,31 @@ export class TasksController {
         inputFileIds: dto.inputFileIds,
         inputConfig: dto.inputConfig ?? {},
       },
-      user ?? null
+      user ?? null,
+      submissionHeaders(req)
     );
+  }
+
+  @Get('submissions/:key')
+  @Public()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Recover a submission receipt within 24 hours' })
+  @ApiHeader({
+    name: 'X-Task-Client-Id',
+    required: false,
+    description: 'Anonymous browser session UUID',
+  })
+  @ApiResponse({ status: 200, type: TaskResponseDto })
+  @ApiResponse({ status: 404, description: 'No receipt for this identity' })
+  @ApiResponse({ status: 410, description: 'The submitted task was deleted' })
+  getSubmission(
+    @Param('key', ParseUUIDPipe) key: string,
+    @Req() req: AuthenticatedRequest
+  ) {
+    const clientId = req.headers?.['x-task-client-id'];
+    if (clientId !== undefined && typeof clientId !== 'string')
+      throw new BadRequestException('Invalid client identity');
+    return this.tasksService.getSubmission(key, req.user?.id, clientId);
   }
 
   /**
@@ -303,6 +355,16 @@ export class TasksController {
   @Post(':id/retry')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Retry a failed task' })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description: 'UUID for one retry or regeneration; retained for 24 hours',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Key already used with different parameters',
+  })
+  @ApiResponse({ status: 410, description: 'The submitted task was deleted' })
   @ApiResponse({
     status: 201,
     description: 'New task created',
@@ -323,7 +385,8 @@ export class TasksController {
           retriedFrom: id,
         },
       },
-      user ?? null
+      user ?? null,
+      submissionHeaders(req)
     );
   }
 }

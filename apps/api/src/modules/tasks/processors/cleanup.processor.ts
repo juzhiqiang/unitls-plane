@@ -12,6 +12,7 @@ import { FilesService, type CleanupSummary } from '../../files/files.service';
 import { MinioService } from '../../files/minio.service';
 import { CleanupObligationService } from '../../files/cleanup-obligation.service';
 import { TaskJobReconciler } from '../task-job-reconciler.service';
+import { cleanupTaskSubmissions } from '../task-submissions';
 import {
   ThumbnailCleanupService,
   type ThumbnailCleanupSummary,
@@ -47,8 +48,13 @@ export class CleanupProcessor extends WorkerHost {
     | { orphanFileId: string }
     | CleanupObligationSummary
     | ThumbnailCleanupSummary
+    | { submissionsCleaned: true }
   > {
     this.logger.log(`Processing cleanup job ${job.id}`);
+    if (job.name === 'cleanup-task-submissions') {
+      await cleanupTaskSubmissions();
+      return { submissionsCleaned: true };
+    }
     if (job.name === 'cleanup-orphan-thumbnails') {
       const { continuationToken, sweepId = job.id } = job.data as {
         continuationToken?: string;

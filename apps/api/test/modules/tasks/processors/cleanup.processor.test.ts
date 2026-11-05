@@ -544,6 +544,15 @@ describe('CleanupProcessor', () => {
 });
 
 describe('CleanupScheduler', () => {
+  it('schedules bounded submission receipt retention cleanup every minute', async () => {
+    const add = vi.fn().mockResolvedValue(undefined);
+    await new CleanupScheduler({ add } as never).onModuleInit();
+    expect(add).toHaveBeenCalledWith(
+      'cleanup-task-submissions',
+      {},
+      expect.objectContaining({ repeat: { pattern: '* * * * *' } })
+    );
+  });
   it('starts a retryable daily orphan-thumbnail sweep', async () => {
     const add = vi.fn(async () => undefined);
     await new CleanupScheduler({ add } as never).onModuleInit();

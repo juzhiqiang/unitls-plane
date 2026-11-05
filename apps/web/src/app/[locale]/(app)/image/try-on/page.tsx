@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useQueryClient } from '@tanstack/react-query';
-import { Download, RotateCcw, Sparkles } from 'lucide-react';
+import { Check, Copy, Download, RotateCcw, Sparkles, X } from 'lucide-react';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
 import { ImageViewerModal } from '@/components/tools/image-viewer-modal';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
+import { ImageGenerateCompare } from '@/components/tools/image-generate-compare';
 import type { ToolStage } from '@/components/tools/tool-step-rail';
 import {
   buildImageTryOnTaskPayload,
@@ -17,6 +18,8 @@ import {
   TRY_ON_PROMPT_MAX_LENGTH,
   type TryOnPersonSource,
   UploadReferenceCard,
+  TryOnCompositionStrip,
+  TryOnPresetsBar,
 } from '@/components/tools/ai-try-on';
 import { GarmentLibraryGrid } from '@/components/tools/ai-try-on/GarmentLibraryGrid';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
@@ -35,6 +38,7 @@ import {
 } from '@/hooks/api/use-tasks';
 import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';
 import { useTaskProgress } from '@/hooks/api/use-task-progress';
+import { useObjectUrl } from '@/hooks/use-object-url';
 import { taskQueryKeys } from '@/hooks/api/query-keys';
 import type { AiTryOnMode } from '@/hooks/api/types';
 
@@ -62,9 +66,50 @@ interface ActiveTryOnTaskState {
   mode: AiTryOnMode;
 }
 
+const SCENE_CHIPS = [
+  {
+    labelZh: '纯白极简影棚',
+    labelEn: 'Pure white studio',
+    valueZh: '极简纯白影棚，无杂物无阴影',
+    valueEn: 'Minimalist white studio, clean background without shadows',
+  },
+  {
+    labelZh: '高级浅灰画册',
+    labelEn: 'Minimalist grey backdrop',
+    valueZh: '高级浅灰色背景，现代画册风格',
+    valueEn: 'Neutral grey backdrop, modern lookbook aesthetic',
+  },
+  {
+    labelZh: '柔和摄影棚漫射光',
+    labelEn: 'Soft studio lighting',
+    valueZh: '柔和摄影棚自然光，侧光漫射',
+    valueEn: 'Soft diffused studio lighting, gentle side fill light',
+  },
+  {
+    labelZh: '现代都市街拍',
+    labelEn: 'Modern city street',
+    valueZh: '极简现代都市街拍，自然景深',
+    valueEn: 'Modern city street scene, natural depth of field',
+  },
+  {
+    labelZh: '温暖午后咖啡厅',
+    labelEn: 'Warm afternoon cafe',
+    valueZh: '温暖午后街角咖啡厅，复古柔和光感',
+    valueEn: 'Afternoon corner cafe, warm ambient light, vintage touch',
+  },
+  {
+    labelZh: '海滨度假日光',
+    labelEn: 'Coastal resort daylight',
+    valueZh: '阳光明媚海滨度假风，通透清爽',
+    valueEn: 'Sunny seaside resort vibe, bright and breezy natural daylight',
+  },
+];
+
 export default function ImageTryOnPage() {
   const t = useTranslations('ImageTryOn');
   const tShell = useTranslations('ToolShell');
+  const locale = useLocale();
+  const isZh = locale.startsWith('zh');
   const queryClient = useQueryClient();
   const tool = getToolByHref('/image/try-on')!;
   const { session, requireLogin } = useRequireLogin();
@@ -100,6 +145,12 @@ export default function ImageTryOnPage() {
     null
   );
 
+  // 结果展示模式：单图 vs 滑动卷帘对比
+  const [resultViewMode, setResultViewMode] = useState<'single' | 'compare'>(
+    'single'
+  );
+  const [copied, setCopied] = useState(false);
+
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerSrc, setViewerSrc] = useState('');
 
@@ -107,6 +158,9 @@ export default function ImageTryOnPage() {
   const failedQuotaInvalidatedRef = useRef<Set<string>>(new Set());
 
   const taskProgressQuery = useTaskProgress(activeTask?.id ?? null);
+
+  const garmentObjectUrl = useObjectUrl(garmentFile);
+  const personObjectUrl = useObjectUrl(personFile);
 
   const effectiveTask = useMemo<ActiveTryOnTaskState | null>(() => {
     if (!activeTask) return null;
@@ -302,6 +356,20 @@ export default function ImageTryOnPage() {
     }
   };
 
+  // 支持快捷键 Ctrl + Enter / Cmd + Enter 提交任务
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        if (canSubmit) {
+          e.preventDefault();
+          void handleSubmit();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canSubmit]);
+
   const handleRegenerate = () => {
     if (!effectiveTask) return;
     if (effectiveTask.status === 'failed') {
@@ -352,7 +420,112 @@ export default function ImageTryOnPage() {
     setErrorCode(undefined);
   };
 
+  // 复制结果图到剪贴板
+  const handleCopyResultImage = async () => {
+    if (!effectiveTask?.outputFileId) return;
+    try {
+      const url = buildFileDownloadUrl(effectiveTask.outputFileId);
+      const res = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type || 'image/png']: blob }),
+      ]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError(t('copyFailed'));
+    }
+  };
+
+  // 应用快速体验预设
+  const handleApplyPreset = (preset: {
+    personAssetId: string;
+    garmentAssetId: string;
+    poseAssetId: string;
+    promptAddition: string;
+  }) => {
+    setMode('inspiration');
+    setPersonSource('library');
+    setPersonAssetId(preset.personAssetId);
+    setPersonFile(null);
+    setGarmentAssetId(preset.garmentAssetId);
+    setGarmentFile(null);
+    setPoseAssetId(preset.poseAssetId);
+    setPromptAddition(preset.promptAddition);
+    setError(null);
+  };
+
+  const handleToggleSceneChip = (chipValue: string) => {
+    setPromptAddition(prev => {
+      const trimmed = prev.trim();
+      const delimiter = isZh ? '，' : ', ';
+      if (trimmed.includes(chipValue)) {
+        const cleaned = trimmed
+          .replace(
+            new RegExp(
+              `(，\\s*${chipValue}|${chipValue}，?|\\b${chipValue}\\b)`,
+              'g'
+            ),
+            ''
+          )
+          .trim();
+        return cleaned.replace(/^[，,\s]+|[，,\s]+$/g, '');
+      }
+      return trimmed ? `${trimmed}${delimiter}${chipValue}` : chipValue;
+    });
+    setError(null);
+  };
+
   const models = modelsQuery.data ?? [];
+
+  const selectedPersonAsset = useMemo(() => {
+    if (!personAssetId) return null;
+    return (
+      (personLibraryQuery.data ?? []).find(item => item.id === personAssetId) ??
+      null
+    );
+  }, [personAssetId, personLibraryQuery.data]);
+
+  const selectedGarmentAsset = useMemo(() => {
+    if (!garmentAssetId) return null;
+    return (
+      (garmentLibraryQuery.data ?? []).find(
+        item => item.id === garmentAssetId
+      ) ?? null
+    );
+  }, [garmentAssetId, garmentLibraryQuery.data]);
+
+  const selectedPoseAsset = useMemo(() => {
+    if (!poseAssetId) return null;
+    return (
+      (poseLibraryQuery.data ?? []).find(item => item.id === poseAssetId) ??
+      null
+    );
+  }, [poseAssetId, poseLibraryQuery.data]);
+
+  const selectedStyleAsset = useMemo(() => {
+    if (!styleAssetId) return null;
+    return (
+      (garmentLibraryQuery.data ?? []).find(item => item.id === styleAssetId) ??
+      null
+    );
+  }, [styleAssetId, garmentLibraryQuery.data]);
+
+  // 前后对比物料图 URL（优先使用目标服装，其次模特人像）
+  const comparisonBeforeUrl = useMemo(() => {
+    if (garmentObjectUrl) return garmentObjectUrl;
+    if (selectedGarmentAsset?.thumbnailUrl)
+      return selectedGarmentAsset.thumbnailUrl;
+    if (personObjectUrl) return personObjectUrl;
+    if (selectedPersonAsset?.thumbnailUrl)
+      return selectedPersonAsset.thumbnailUrl;
+    return '';
+  }, [
+    garmentObjectUrl,
+    personObjectUrl,
+    selectedGarmentAsset,
+    selectedPersonAsset,
+  ]);
 
   const taskFailureMessage = useMemo(() => {
     if (effectiveTask?.status !== 'failed') return null;
@@ -362,12 +535,42 @@ export default function ImageTryOnPage() {
     return effectiveTask.errorMessage || t('errors.failed');
   }, [effectiveTask, t]);
 
+  const progressPercent =
+    effectiveTask?.status === 'processing'
+      ? Math.max(10, effectiveTask.progress)
+      : 5;
+
   const progressLabel =
     effectiveTask?.status === 'pending'
       ? t('queued')
       : submitting
         ? t('submitting')
         : t('processing');
+
+  const dynamicProgressPhase = useMemo(() => {
+    if (progressPercent < 25) return t('phases.phase1');
+    if (progressPercent < 55) return t('phases.phase2');
+    if (progressPercent < 85) return t('phases.phase3');
+    return t('phases.phase4');
+  }, [progressPercent, t]);
+
+  const submitGuideMessage = useMemo(() => {
+    if (canSubmit || isBusy) return null;
+    if (quotaExhausted) return t('quotaExhausted');
+    if (!hasPerson && !hasGarment) return t('submitMissingBoth');
+    if (!hasPerson) return t('submitMissingPerson');
+    if (!hasGarment) return t('submitMissingGarment');
+    if (promptTooLong) return t('errors.promptTooLong');
+    return null;
+  }, [
+    canSubmit,
+    hasGarment,
+    hasPerson,
+    isBusy,
+    promptTooLong,
+    quotaExhausted,
+    t,
+  ]);
 
   return (
     <ToolPageShell
@@ -380,7 +583,7 @@ export default function ImageTryOnPage() {
       stage={stage}
     >
       {/* 顶部模式切换 + 共享额度快照 + 参考图计数 */}
-      <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
@@ -402,7 +605,7 @@ export default function ImageTryOnPage() {
                 }}
                 className={`px-4 py-2 font-mono text-xs transition-colors ${
                   mode === 'product'
-                    ? 'bg-foreground text-background'
+                    ? 'bg-foreground text-background font-medium'
                     : 'bg-background text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -419,7 +622,7 @@ export default function ImageTryOnPage() {
                 }}
                 className={`px-4 py-2 font-mono text-xs transition-colors ${
                   mode === 'inspiration'
-                    ? 'bg-foreground text-background'
+                    ? 'bg-foreground text-background font-medium'
                     : 'bg-background text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -461,6 +664,15 @@ export default function ImageTryOnPage() {
           {t('referenceLimitHint')}
         </p>
 
+        {/* 快速体验灵感预设条 */}
+        <TryOnPresetsBar
+          personLibrary={personLibraryQuery.data ?? []}
+          garmentLibrary={garmentLibraryQuery.data ?? []}
+          poseLibrary={poseLibraryQuery.data ?? []}
+          disabled={isBusy}
+          onApplyPreset={handleApplyPreset}
+        />
+
         {quotaExhausted && (
           <div
             role="alert"
@@ -482,9 +694,13 @@ export default function ImageTryOnPage() {
         )}
       </div>
 
+      {/* 4 大要素配置区域（2x2 网格） */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 1. 人像参考（必选） */}
-        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <section
+          id="try-on-section-person"
+          className="space-y-3 rounded-xl border border-border bg-card p-4 transition-all"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-medium">{t('personSectionTitle')}</h2>
@@ -504,7 +720,7 @@ export default function ImageTryOnPage() {
                 }}
                 className={`px-3 py-1.5 font-mono text-xs transition-colors ${
                   personSource === 'upload'
-                    ? 'bg-foreground text-background'
+                    ? 'bg-foreground text-background font-medium'
                     : 'bg-background text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -521,7 +737,7 @@ export default function ImageTryOnPage() {
                 }}
                 className={`px-3 py-1.5 font-mono text-xs transition-colors ${
                   personSource === 'library'
-                    ? 'bg-foreground text-background'
+                    ? 'bg-foreground text-background font-medium'
                     : 'bg-background text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -548,6 +764,7 @@ export default function ImageTryOnPage() {
           ) : (
             <ReferenceLibraryGrid
               role="person"
+              showQuickPicks
               items={personLibraryQuery.data ?? []}
               selectedId={personAssetId}
               onSelect={id => {
@@ -564,7 +781,10 @@ export default function ImageTryOnPage() {
         </section>
 
         {/* 2. 目标服装参考（必选） */}
-        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <section
+          id="try-on-section-garment"
+          className="space-y-3 rounded-xl border border-border bg-card p-4 transition-all"
+        >
           <div>
             <h2 className="text-sm font-medium">
               {mode === 'product'
@@ -612,7 +832,10 @@ export default function ImageTryOnPage() {
         </section>
 
         {/* 3. 姿势参考（可选） */}
-        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <section
+          id="try-on-section-pose"
+          className="space-y-3 rounded-xl border border-border bg-card p-4 transition-all"
+        >
           <div>
             <h2 className="text-sm font-medium">{t('poseSectionTitle')}</h2>
             <p className="text-xs text-muted-foreground">
@@ -622,6 +845,7 @@ export default function ImageTryOnPage() {
 
           <ReferenceLibraryGrid
             role="pose"
+            showQuickPicks
             items={poseLibraryQuery.data ?? []}
             selectedId={poseAssetId}
             onSelect={id => {
@@ -637,7 +861,10 @@ export default function ImageTryOnPage() {
         </section>
 
         {/* 4. 辅助穿搭风格（可选 · 弱优先级） */}
-        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <section
+          id="try-on-section-style"
+          className="space-y-3 rounded-xl border border-border bg-card p-4 transition-all"
+        >
           <div>
             <h2 className="text-sm font-medium">{t('styleSectionTitle')}</h2>
             <p className="text-xs text-muted-foreground">
@@ -662,9 +889,73 @@ export default function ImageTryOnPage() {
         </section>
       </div>
 
+      {/* 穿搭搭配即时看板（总览与快速检查） */}
+      <TryOnCompositionStrip
+        personFile={personFile}
+        personAsset={selectedPersonAsset}
+        onClearPerson={() => {
+          setPersonFile(null);
+          setPersonAssetId(null);
+        }}
+        garmentFile={garmentFile}
+        garmentAsset={selectedGarmentAsset}
+        onClearGarment={() => {
+          setGarmentFile(null);
+          setGarmentAssetId(null);
+        }}
+        poseAsset={selectedPoseAsset}
+        onClearPose={() => setPoseAssetId(null)}
+        styleAsset={selectedStyleAsset}
+        onClearStyle={() => setStyleAssetId(null)}
+        onResetAll={handleReset}
+        disabled={isBusy}
+      />
+
       {/* 5. 场景补充说明与生成参数（可选） */}
-      <section className="space-y-4 rounded-lg border border-border bg-card p-4">
-        <h2 className="text-sm font-medium">{t('promptSectionTitle')}</h2>
+      <section className="space-y-4 rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">{t('promptSectionTitle')}</h2>
+          {promptAddition && (
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => setPromptAddition('')}
+              className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <X className="h-3 w-3" />
+              {t('clearPrompt')}
+            </button>
+          )}
+        </div>
+
+        {/* 场景与光影快捷标签推荐 */}
+        <div className="space-y-2">
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {t('sceneChipsLabel')}
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {SCENE_CHIPS.map(chip => {
+              const label = isZh ? chip.labelZh : chip.labelEn;
+              const val = isZh ? chip.valueZh : chip.valueEn;
+              const isActive = promptAddition.includes(val);
+              return (
+                <button
+                  key={chip.labelZh}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => handleToggleSceneChip(val)}
+                  className={`rounded-full px-2.5 py-1 text-xs transition-all ${
+                    isActive
+                      ? 'border border-foreground bg-foreground text-background font-medium'
+                      : 'border border-border bg-muted/30 text-muted-foreground hover:border-foreground/50 hover:text-foreground'
+                  } disabled:opacity-50`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
@@ -783,28 +1074,46 @@ export default function ImageTryOnPage() {
           </div>
         )}
 
-        <button
-          type="button"
-          data-testid="try-on-submit"
-          disabled={!canSubmit}
-          onClick={() => void handleSubmit()}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Sparkles className="h-4 w-4" />
-          {isBusy ? progressLabel : t('submit')}
-        </button>
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            data-testid="try-on-submit"
+            disabled={!canSubmit}
+            onClick={() => void handleSubmit()}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground font-mono text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" />
+            {isBusy ? progressLabel : t('submit')}
+          </button>
+
+          {/* 提交按钮下方防呆提示与快捷键说明 */}
+          <div className="text-center font-mono text-xs">
+            {submitGuideMessage ? (
+              <span className="text-amber-600 dark:text-amber-400">
+                {submitGuideMessage}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/80">
+                {t('submitShortcut')}
+              </span>
+            )}
+          </div>
+        </div>
       </section>
 
-      {/* 排队 / 处理中状态 */}
+      {/* 排队 / 处理中状态（阶段动态反馈） */}
       {isBusy && (
-        <ProcessingProgress
-          progress={
-            effectiveTask?.status === 'processing'
-              ? Math.max(10, effectiveTask.progress)
-              : 5
-          }
-          label={progressLabel}
-        />
+        <div className="space-y-1.5">
+          <ProcessingProgress
+            progress={progressPercent}
+            label={progressLabel}
+          />
+          {effectiveTask?.status === 'processing' && (
+            <p className="text-center font-mono text-xs text-muted-foreground animate-pulse">
+              {dynamicProgressPhase}
+            </p>
+          )}
+        </div>
       )}
 
       {/* 失败恢复面板（表单级报错或任务执行失败） */}
@@ -821,7 +1130,7 @@ export default function ImageTryOnPage() {
         />
       )}
 
-      {/* 成功结果面板：标明 AI 生成及试衣模式 */}
+      {/* 成功结果面板：标明 AI 生成及试衣模式 + 单图 / 滑动对比切换 */}
       {effectiveTask?.status === 'completed' && effectiveTask.outputFileId && (
         <ResultPanel
           title={t('resultTitle')}
@@ -841,33 +1150,80 @@ export default function ImageTryOnPage() {
           ]}
           preview={
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  data-testid="result-ai-badge"
-                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  {t('aiGeneratedBadge')}
-                </span>
-                <span
-                  data-testid="result-mode-badge"
-                  className="inline-flex items-center rounded border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
-                >
-                  {effectiveTask.mode === 'product'
-                    ? t('resultModeProductBadge')
-                    : t('resultModeInspirationBadge')}
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    data-testid="result-ai-badge"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {t('aiGeneratedBadge')}
+                  </span>
+                  <span
+                    data-testid="result-mode-badge"
+                    className="inline-flex items-center rounded border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                  >
+                    {effectiveTask.mode === 'product'
+                      ? t('resultModeProductBadge')
+                      : t('resultModeInspirationBadge')}
+                  </span>
+                </div>
+
+                {/* 视图切换：单图预览 vs 滑动卷帘对比 */}
+                {comparisonBeforeUrl && (
+                  <div className="flex rounded-md border border-border overflow-hidden text-xs font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setResultViewMode('single')}
+                      className={`px-3 py-1 transition-colors ${
+                        resultViewMode === 'single'
+                          ? 'bg-foreground text-background font-medium'
+                          : 'bg-background text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t('resultViewSingle')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setResultViewMode('compare')}
+                      className={`px-3 py-1 transition-colors ${
+                        resultViewMode === 'compare'
+                          ? 'bg-foreground text-background font-medium'
+                          : 'bg-background text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t('resultViewCompare')}
+                    </button>
+                  </div>
+                )}
               </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={buildFileDownloadUrl(effectiveTask.outputFileId)}
-                alt={t('resultPreviewAlt')}
-                className="mx-auto max-h-96 w-auto rounded-md border border-border object-contain cursor-pointer hover:opacity-90"
-                onClick={() => {
-                  setViewerSrc(buildFileDownloadUrl(effectiveTask.outputFileId!));
-                  setViewerOpen(true);
-                }}
-              />
+
+              {resultViewMode === 'compare' && comparisonBeforeUrl ? (
+                <div className="pt-2">
+                  <ImageGenerateCompare
+                    beforeUrl={comparisonBeforeUrl}
+                    afterUrl={buildFileDownloadUrl(effectiveTask.outputFileId)}
+                    title={
+                      garmentFile || selectedGarmentAsset
+                        ? t('compareOriginalGarment')
+                        : t('compareOriginalPerson')
+                    }
+                  />
+                </div>
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={buildFileDownloadUrl(effectiveTask.outputFileId)}
+                  alt={t('resultPreviewAlt')}
+                  className="mx-auto max-h-96 w-auto rounded-md border border-border object-contain cursor-pointer hover:opacity-90"
+                  onClick={() => {
+                    setViewerSrc(
+                      buildFileDownloadUrl(effectiveTask.outputFileId!)
+                    );
+                    setViewerOpen(true);
+                  }}
+                />
+              )}
             </div>
           }
           action={
@@ -883,6 +1239,23 @@ export default function ImageTryOnPage() {
               </button>
               <button
                 type="button"
+                onClick={() => void handleCopyResultImage()}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 font-mono text-xs text-foreground transition-colors hover:border-foreground"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>{t('copySuccess')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>{t('copyImage')}</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
                 data-testid="try-on-regenerate"
                 disabled={isBusy}
                 onClick={handleRegenerate}
@@ -895,7 +1268,7 @@ export default function ImageTryOnPage() {
           }
         />
       )}
-    
+
       {/* 图片查看器 */}
       <ImageViewerModal
         src={viewerSrc}

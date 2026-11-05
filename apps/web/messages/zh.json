@@ -1115,7 +1115,52 @@
     "personLabel": "人像参考",
     "garmentLabel": "服饰参考",
     "poseLabel": "姿势参考",
-    "optionalLabel": "(可选)"
+    "optionalLabel": "(可选)",
+    "dropzoneDropPrompt": "释放图片以上传",
+    "clickToUpload": "点击或拖拽图片至此处",
+    "pasteHint": "支持截图或复制后按 Ctrl+V 直接粘贴",
+    "viewFullImage": "查看大图",
+    "replaceImage": "更换图片",
+    "quickPicksTitle": "常用精选（点击直接选定）",
+    "viewAllLibrary": "浏览完整图库 ({count})",
+    "compositionBoardTitle": "穿搭搭配看板",
+    "compositionBoardSubtitle": "已选素材总览与搭配检查",
+    "compositionCoreReady": "核心要素已就绪",
+    "compositionCoreMissing": "尚缺核心要素",
+    "slotPerson": "模特人像",
+    "slotGarment": "目标服装",
+    "slotPose": "姿势参考",
+    "slotStyle": "辅助风格",
+    "slotRequired": "必选",
+    "slotOptional": "可选",
+    "emptySlotPerson": "+ 选择模特人像",
+    "emptySlotGarment": "+ 上传/选择目标服装",
+    "emptySlotPose": "+ 选择姿势参考",
+    "emptySlotStyle": "+ 选择风格参考",
+    "presetsLabel": "快速体验灵感预设：",
+    "preset1Title": "法式优雅风衣",
+    "preset2Title": "商务绅士西装",
+    "preset3Title": "清新夏日度假",
+    "presetApplied": "已应用预设搭配",
+    "sceneChipsLabel": "场景与光影快捷标签：",
+    "clearPrompt": "清空说明",
+    "submitShortcut": "按 Ctrl+Enter 快速生成",
+    "submitMissingPerson": "还需选择：模特人像",
+    "submitMissingGarment": "还需选择：目标服装",
+    "submitMissingBoth": "请先选择模特人像与目标服装",
+    "phases": {
+      "phase1": "正在分析人像特征与骨骼关节点...",
+      "phase2": "正在对齐服装版型与面料纹理...",
+      "phase3": "正在融合环境光影与影棚背景...",
+      "phase4": "正在渲染超清电商试衣展示图..."
+    },
+    "resultViewSingle": "单图展示",
+    "resultViewCompare": "滑动对比",
+    "compareOriginalGarment": "原目标服装",
+    "compareOriginalPerson": "原模特人像",
+    "copyImage": "复制图片",
+    "copySuccess": "图片已复制到剪贴板！",
+    "copyFailed": "复制失败，请尝试直接下载"
   },
   "PdfTool": {
     "title": "PDF 工具",
@@ -1738,9 +1783,7 @@
         {
           "id": "operator-support",
           "title": "7. 运营主体与支持",
-          "paragraphs": [
-            "本服务由下方所列项目团队运营。对条款、账号限制或公测问题有疑问时，请通过下方支持邮箱联系。"
-          ]
+          "paragraphs": ["本服务由下方所列项目团队运营。对条款、账号限制或公测问题有疑问时，请通过下方支持邮箱联系。"]
         }
       ]
     },

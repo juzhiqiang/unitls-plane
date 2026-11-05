@@ -33,7 +33,10 @@ const POSE_CATEGORIES: Record<string, PoseCategory> = {
   kneeling: { label: '跪姿', tags: ['跪立', '跪立・四肢着地'] },
   lying: { label: '躺卧', tags: ['趴卧', '躺卧'] },
   squatting: { label: '蹲姿', tags: ['蹲姿'] },
-  sexy: { label: '性感系', tags: ['性感・大胆系', '挤胸・强调事业线系', '前倾', '后仰・挺背'] },
+  sexy: {
+    label: '性感系',
+    tags: ['性感・大胆系', '挤胸・强调事业线系', '前倾', '后仰・挺背'],
+  },
   cute: { label: '可爱系', tags: ['可爱系'] },
   motion: { label: '动作', tags: ['motion', 'walking', '扭身', '立位'] },
 };
@@ -56,9 +59,9 @@ export function CategoryFilteredLibraryGrid({
   // 按分类筛选图片
   const filteredItems = useMemo(() => {
     if (activeCategory === 'all') return items;
-    
+
     const categoryTags = POSE_CATEGORIES[activeCategory]?.tags ?? [];
-    return items.filter(item => 
+    return items.filter(item =>
       item.tags.some(tag => categoryTags.includes(tag))
     );
   }, [items, activeCategory]);
@@ -66,7 +69,7 @@ export function CategoryFilteredLibraryGrid({
   // 统计每个分类的数量
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: items.length };
-    
+
     Object.keys(POSE_CATEGORIES).forEach(key => {
       if (key === 'all') return;
       const categoryTags = POSE_CATEGORIES[key]?.tags ?? [];
@@ -74,7 +77,7 @@ export function CategoryFilteredLibraryGrid({
         item.tags.some(tag => categoryTags.includes(tag))
       ).length;
     });
-    
+
     return counts;
   }, [items]);
 
@@ -159,12 +162,12 @@ export function CategoryFilteredLibraryGrid({
       {role === 'pose' && (
         <div className="flex flex-wrap gap-2">
           {Object.keys(POSE_CATEGORIES).map(key => {
-            const category = (POSE_CATEGORIES[key] ?? { label: "", tags: [] });
+            const category = POSE_CATEGORIES[key] ?? { label: '', tags: [] };
             const count = categoryCounts[key] || 0;
             const isActive = activeCategory === key;
-            
+
             if (key !== 'all' && count === 0) return null;
-            
+
             return (
               <button
                 key={key}
@@ -247,7 +250,7 @@ export function CategoryFilteredLibraryGrid({
                       />
                     </div>
                   ) : null}
-                  
+
                   <div className="flex-1 space-y-2 p-3">
                     <p className="font-medium leading-snug text-foreground">
                       {item.title}
@@ -257,7 +260,7 @@ export function CategoryFilteredLibraryGrid({
                         {item.description}
                       </p>
                     ) : null}
-                    
+
                     {item.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {item.tags.slice(0, 3).map(tag => (
@@ -285,7 +288,9 @@ export function CategoryFilteredLibraryGrid({
                     )}
                     {item.attribution && (
                       <p>
-                        {t('attributionLabel', { attribution: item.attribution })}
+                        {t('attributionLabel', {
+                          attribution: item.attribution,
+                        })}
                       </p>
                     )}
                   </div>

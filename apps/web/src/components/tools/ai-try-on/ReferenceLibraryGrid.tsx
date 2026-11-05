@@ -6,10 +6,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Grid,
   Search,
   X,
 } from 'lucide-react';
+import { ImageViewerModal } from '@/components/tools/image-viewer-modal';
 import type {
   AiTryOnReferenceAssetDto,
   AiTryOnReferenceRole,
@@ -27,6 +29,7 @@ export interface ReferenceLibraryGridProps {
   disabled?: boolean;
   optional?: boolean;
   pageSize?: number;
+  showQuickPicks?: boolean;
 }
 
 type PoseDirection = 'front' | 'high' | 'low' | 'side' | 'diag' | 'back';
@@ -226,12 +229,14 @@ export function ReferenceLibraryGrid({
   disabled = false,
   optional = false,
   pageSize = DEFAULT_PAGE_SIZE,
+  showQuickPicks = false,
 }: ReferenceLibraryGridProps) {
   const t = useTranslations('ImageTryOn');
   const locale = useLocale();
   const isZh = locale.startsWith('zh');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);
   const [genderFilter, setGenderFilter] = useState<GenderFilterKey>('all');
   const [styleFilter, setStyleFilter] = useState<GarmentStyleKey>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -241,18 +246,6 @@ export function ReferenceLibraryGrid({
   >({});
 
   const isGarmentRole = role === 'garment' || role === 'style';
-
-  // 按 ESC 关闭弹窗
-  useEffect(() => {
-    if (!isModalOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
 
   // 将姿势按基础动作聚合为「单卡片 + 底部五方向切换」
   const poseGroups = useMemo<PoseCardGroup[]>(() => {
@@ -380,6 +373,22 @@ export function ReferenceLibraryGrid({
   const safePage = Math.min(currentPage, totalPages);
   const startIdx = (safePage - 1) * pageSize;
 
+  // 按 ESC 关闭弹窗，左右方向键翻页
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsModalOpen(false);
+      } else if (event.key === 'ArrowLeft') {
+        setCurrentPage(p => Math.max(1, p - 1));
+      } else if (event.key === 'ArrowRight') {
+        setCurrentPage(p => Math.min(totalPages, p + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, totalPages]);
+
   const paginatedPoseGroups = useMemo(
     () => filteredPoseGroups.slice(startIdx, startIdx + pageSize),
     [filteredPoseGroups, pageSize, startIdx]
@@ -479,6 +488,14 @@ export function ReferenceLibraryGrid({
         ? `共 ${items.length} 项图库素材可选`
         : `${items.length} library assets available`;
 
+  const quickPickItems = useMemo<AiTryOnReferenceAssetDto[]>(() => {
+    if (items.length === 0) return [];
+    if (role === 'pose') {
+      return poseGroups.slice(0, 4).map(g => g.variants[0]!.item);
+    }
+    return items.slice(0, 4);
+  }, [items, poseGroups, role]);
+
   return (
     <div className="space-y-3">
       {/* 主页面紧凑摘要卡：已选状态 vs 未选触发器 */}
@@ -490,12 +507,26 @@ export function ReferenceLibraryGrid({
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               {selectedAsset.thumbnailUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selectedAsset.thumbnailUrl}
-                  alt={selectedAsset.title}
-                  className="h-16 w-16 shrink-0 rounded-md border border-border bg-white object-contain"
-                />
+                <div
+                  role="button"
+                  tabIndex={0}
+                  title={isZh ? '点击查看大图' : 'Click to view'}
+                  onClick={() => setZoomSrc(selectedAsset.thumbnailUrl)}
+                  onKeyDown={e =>
+                    e.key === 'Enter' && setZoomSrc(selectedAsset.thumbnailUrl)
+                  }
+                  className="group/thumb relative h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border bg-white"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selectedAsset.thumbnailUrl}
+                    alt={selectedAsset.title}
+                    className="h-full w-full object-contain transition-transform group-hover/thumb:scale-105"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity">
+                    <Eye className="h-4 w-4 text-white" />
+                  </div>
+                </div>
               ) : null}
               <div className="min-w-0 space-y-1">
                 <p className="truncate text-sm font-medium text-foreground">
@@ -572,25 +603,63 @@ export function ReferenceLibraryGrid({
           )}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-between gap-3 rounded-lg border-2 border-dashed border-border/60 bg-muted/10 px-4 py-6 text-center sm:flex-row sm:text-left">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">
-              {isZh ? modalTitle.zh : modalTitle.en}
-            </p>
-            <p className="font-mono text-xs text-muted-foreground">
-              {libraryCountText}
-            </p>
+        <div className="space-y-3 rounded-lg border-2 border-dashed border-border/60 bg-muted/10 p-4">
+          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">
+                {isZh ? modalTitle.zh : modalTitle.en}
+              </p>
+              <p className="font-mono text-[11px] text-muted-foreground">
+                {libraryCountText}
+              </p>
+            </div>
+            <button
+              type="button"
+              data-testid={`open-library-modal-${role}`}
+              disabled={disabled}
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Grid className="h-3.5 w-3.5" />
+              {isZh ? '从图库选择' : 'Browse library'}
+            </button>
           </div>
-          <button
-            type="button"
-            data-testid={`open-library-modal-${role}`}
-            disabled={disabled}
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Grid className="h-4 w-4" />
-            {isZh ? '从图库选择' : 'Browse library'}
-          </button>
+
+          {/* 快捷推荐项（直接在卡片内一键点选，无需打开弹窗） */}
+          {!isModalOpen && showQuickPicks && quickPickItems.length > 0 && (
+            <div className="space-y-1.5 pt-1 border-t border-border/50">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                {isZh
+                  ? '常用精选（点击直接选定）：'
+                  : 'Quick picks (click to select):'}
+              </span>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {quickPickItems.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onSelect(item.id)}
+                    className="group flex items-center gap-2 rounded-md border border-border bg-background/80 p-1.5 text-left transition-all hover:border-foreground/60 hover:bg-background hover:shadow-xs disabled:opacity-50"
+                  >
+                    {item.thumbnailUrl && (
+                      <div className="h-9 w-9 shrink-0 overflow-hidden rounded bg-white">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.thumbnailUrl}
+                          alt={item.title}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                      {item.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1092,6 +1161,15 @@ export function ReferenceLibraryGrid({
             </div>
           </div>
         </div>
+      )}
+      {/* 素材大图放大预览 */}
+      {zoomSrc && (
+        <ImageViewerModal
+          src={zoomSrc}
+          alt={selectedAsset?.title ?? ''}
+          isOpen={Boolean(zoomSrc)}
+          onClose={() => setZoomSrc(null)}
+        />
       )}
     </div>
   );

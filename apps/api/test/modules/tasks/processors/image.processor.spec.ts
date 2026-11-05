@@ -85,7 +85,6 @@ it('processes image_id_photo tasks through IdPhotoService', async () => {
 it('uses shared task output owner lookup instead of fabricating free users', () => {
   for (const processor of [
     'image.processor.ts',
-    'pdf.processor.ts',
     'font.processor.ts',
     'ai-image.processor.ts',
   ]) {

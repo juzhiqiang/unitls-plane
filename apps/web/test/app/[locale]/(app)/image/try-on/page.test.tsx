@@ -126,6 +126,23 @@ vi.mock('@/hooks/use-object-url', () => ({
   useObjectUrl: (file: File | null) => (file ? `blob:${file.name}` : undefined),
 }));
 
+vi.mock('@/components/tools/image-generate-compare', () => ({
+  ImageGenerateCompare: ({
+    beforeUrl,
+    afterUrl,
+  }: {
+    beforeUrl: string;
+    afterUrl: string;
+  }) => (
+    <div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt="before" src={beforeUrl} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt="after" src={afterUrl} />
+    </div>
+  ),
+}));
+
 vi.mock('@/lib/tools/image-limits', () => ({
   getImageUploadMaxFileSize: () => mocks.maxFileSize(),
 }));
@@ -203,6 +220,181 @@ beforeEach(() => {
 });
 
 describe('ImageTryOnPage', () => {
+  it.each(['en', 'zh'] as const)(
+    'preserves localized scene chip prompts in %s',
+    locale => {
+      renderTryOnPage(locale);
+      const messages = locale === 'zh' ? zh.ImageTryOn : en.ImageTryOn;
+      const { whiteStudio, greyBackdrop } = messages.workbench.sceneChips;
+      const prompt = screen.getByLabelText(messages.promptLabel);
+      fireEvent.click(screen.getByRole('button', { name: whiteStudio.label }));
+      expect(prompt).toHaveValue(whiteStudio.value);
+      fireEvent.click(screen.getByRole('button', { name: greyBackdrop.label }));
+      expect(prompt).toHaveValue(
+        `${whiteStudio.value}${messages.workbench.sceneDelimiter}${greyBackdrop.value}`
+      );
+      fireEvent.click(screen.getByRole('button', { name: greyBackdrop.label }));
+      expect(prompt).toHaveValue(whiteStudio.value);
+    }
+  );
+
+  it('keeps a successful portrait upload cached when garment upload fails and the user retries', async () => {
+    mocks.uploadFile
+      .mockResolvedValueOnce({ id: 'cached-portrait' })
+      .mockRejectedValueOnce(new Error('upload interrupted'))
+      .mockResolvedValueOnce({ id: 'retried-garment' });
+    renderTryOnPage();
+    fireEvent.change(screen.getByTestId('upload-input-person'), {
+      target: { files: [makeFile('person.png')] },
+    });
+    fireEvent.change(screen.getByTestId('upload-input-garment'), {
+      target: { files: [makeFile('garment.png')] },
+    });
+    fireEvent.click(screen.getByTestId('try-on-submit'));
+    await waitFor(() =>
+      expect(
+        screen.getByText(en.ImageTryOn.errors.uploadFailed)
+      ).toBeInTheDocument()
+    );
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(3);
+    expect(mocks.createTask.mock.calls[0]?.[0].inputFileIds).toEqual([
+      'cached-portrait',
+      'retried-garment',
+    ]);
+  });
+
+  it('shows the upload recovery error when the upload endpoint returns no file record', async () => {
+    mocks.uploadFile.mockResolvedValueOnce(undefined);
+    renderTryOnPage();
+    fireEvent.change(screen.getByTestId('upload-input-person'), {
+      target: { files: [makeFile('person.png')] },
+    });
+    fireEvent.change(screen.getByTestId('upload-input-garment'), {
+      target: { files: [makeFile('garment.png')] },
+    });
+    fireEvent.click(screen.getByTestId('try-on-submit'));
+    await waitFor(() =>
+      expect(
+        screen.getByText(en.ImageTryOn.errors.uploadFailed)
+      ).toBeInTheDocument()
+    );
+    expect(mocks.createTask).not.toHaveBeenCalled();
+  });
+
+  it('reuses uploaded file IDs when regenerating a completed product result and submits the current parameters', async () => {
+    mocks.createTask.mockResolvedValue({
+      id: 'completed-task',
+      status: 'completed',
+      progress: 100,
+      outputFileId: 'result-file',
+    });
+    renderTryOnPage();
+    fireEvent.change(screen.getByTestId('upload-input-person'), {
+      target: { files: [makeFile('person.png')] },
+    });
+    fireEvent.change(screen.getByTestId('upload-input-garment'), {
+      target: { files: [makeFile('garment.png')] },
+    });
+    fireEvent.click(screen.getByTestId('try-on-submit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('try-on-regenerate')).toBeInTheDocument()
+    );
+
+    fireEvent.change(screen.getByLabelText('Output size'), {
+      target: { value: '1024x1536' },
+    });
+    fireEvent.change(screen.getByLabelText(en.ImageTryOn.qualityLabel), {
+      target: { value: 'standard' },
+    });
+    fireEvent.change(screen.getByLabelText('Scene & background notes'), {
+      target: { value: 'warm evening light' },
+    });
+    fireEvent.click(screen.getByTestId('try-on-regenerate'));
+
+    await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(2));
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(2);
+    expect(mocks.createTask.mock.calls[1]?.[0]).toMatchObject({
+      inputFileIds: ['uploaded-file-1', 'uploaded-file-2'],
+      inputConfig: {
+        mode: 'product',
+        size: '1024x1536',
+        quality: 'standard',
+        promptAddition: 'warm evening light',
+      },
+    });
+  });
+
+  it('refreshes quota once for a failed task and retries without creating or uploading another task', async () => {
+    mocks.createTask.mockResolvedValue({
+      id: 'failed-task',
+      status: 'failed',
+      progress: 0,
+      errorMessage: 'Generation failed',
+    });
+    const { rerender } = renderTryOnPage();
+    fireEvent.change(screen.getByTestId('upload-input-person'), {
+      target: { files: [makeFile('person.png')] },
+    });
+    fireEvent.change(screen.getByTestId('upload-input-garment'), {
+      target: { files: [makeFile('garment.png')] },
+    });
+    fireEvent.click(screen.getByTestId('try-on-submit'));
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+    rerender();
+    expect(mocks.invalidate).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(mocks.retryTask).toHaveBeenCalledWith(
+      'failed-task',
+      expect.any(Object)
+    );
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(2);
+    expect(mocks.createTask).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a completed result preview and garment comparison available', async () => {
+    mocks.createTask.mockResolvedValue({
+      id: 'preview-task',
+      status: 'completed',
+      progress: 100,
+      outputFileId: 'preview-output',
+    });
+    renderTryOnPage();
+    fireEvent.change(screen.getByTestId('upload-input-person'), {
+      target: { files: [makeFile('person.png')] },
+    });
+    fireEvent.change(screen.getByTestId('upload-input-garment'), {
+      target: { files: [makeFile('garment.png')] },
+    });
+    fireEvent.click(screen.getByTestId('try-on-submit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('try-on-download')).toBeInTheDocument()
+    );
+    const resultImage = screen.getByAltText(en.ImageTryOn.resultPreviewAlt);
+    expect(resultImage).toHaveAttribute(
+      'src',
+      'http://api.test:3001/files/preview-output/download'
+    );
+    fireEvent.click(resultImage);
+    expect(screen.getAllByAltText(en.ImageTryOn.resultPreviewAlt)).toHaveLength(
+      2
+    );
+    fireEvent.click(screen.getByTitle('关闭'));
+    fireEvent.click(
+      screen.getByRole('button', { name: en.ImageTryOn.resultViewCompare })
+    );
+    expect(screen.getByAltText('before')).toHaveAttribute(
+      'src',
+      'blob:garment.png'
+    );
+    expect(screen.getByAltText('after')).toHaveAttribute(
+      'src',
+      'http://api.test:3001/files/preview-output/download'
+    );
+  });
+
   it('renders both product and inspiration modes and gates the submit button until person and garment are provided', () => {
     renderTryOnPage('en');
 

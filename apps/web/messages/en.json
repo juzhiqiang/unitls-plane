@@ -1160,7 +1160,89 @@
     "compareOriginalPerson": "Model Portrait",
     "copyImage": "Copy image",
     "copySuccess": "Image copied to clipboard!",
-    "copyFailed": "Copy failed. Please download instead"
+    "copyFailed": "Copy failed. Please download instead",
+    "workbench": {
+      "sceneDelimiter": ", ",
+      "sceneChips": {
+        "whiteStudio": {
+          "label": "Pure white studio",
+          "value": "Minimalist white studio, clean background without shadows"
+        },
+        "greyBackdrop": {
+          "label": "Minimalist grey backdrop",
+          "value": "Neutral grey backdrop, modern lookbook aesthetic"
+        },
+        "softLighting": {
+          "label": "Soft studio lighting",
+          "value": "Soft diffused studio lighting, gentle side fill light"
+        },
+        "cityStreet": {
+          "label": "Modern city street",
+          "value": "Modern city street scene, natural depth of field"
+        },
+        "afternoonCafe": {
+          "label": "Warm afternoon cafe",
+          "value": "Afternoon corner cafe, warm ambient light, vintage touch"
+        },
+        "coastalDaylight": {
+          "label": "Coastal resort daylight",
+          "value": "Sunny seaside resort vibe, bright and breezy natural daylight"
+        }
+      }
+    },
+    "referenceLibrary": {
+      "directions": {
+        "front": "Front",
+        "high": "High",
+        "low": "Low",
+        "side": "Side",
+        "diag": "3/4",
+        "back": "Back"
+      },
+      "genders": {
+        "all": "All",
+        "female": "Female",
+        "male": "Male"
+      },
+      "garmentStyles": {
+        "all": "All styles",
+        "spring": "Spring",
+        "summer": "Summer",
+        "autumn": "Autumn",
+        "winter": "Winter",
+        "party": "Party & Formal"
+      },
+      "titles": {
+        "person": "Select model portrait reference",
+        "garment": "Select target garment reference",
+        "pose": "Select pose reference",
+        "style": "Select auxiliary style reference"
+      },
+      "poseGenders": {
+        "female": "FEMALE",
+        "male": "MALE"
+      },
+      "garmentGenders": {
+        "female": "Female",
+        "male": "Male"
+      },
+      "poseBadge": "POSE · {gender}",
+      "poseCount": "{count} multi-angle poses available",
+      "assetCount": "{count} library assets available",
+      "viewImage": "Click to view",
+      "changeAsset": "Change",
+      "browse": "Browse library",
+      "quickPicks": "Quick picks (click to select):",
+      "closeModal": "Close library modal",
+      "filterGender": "Filter by gender",
+      "searchPlaceholder": "Search name or tags...",
+      "noMatches": "No matching references found.",
+      "switchPoseAngle": "Switch pose angle",
+      "previousPage": "Prev",
+      "nextPage": "Next",
+      "pageIndicator": "Page {page} / {pages} ({count})",
+      "done": "Done"
+    }
   },
   "PdfTool": {
     "title": "PDF Tools",

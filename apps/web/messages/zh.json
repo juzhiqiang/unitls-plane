@@ -1160,7 +1160,89 @@
     "compareOriginalPerson": "原模特人像",
     "copyImage": "复制图片",
     "copySuccess": "图片已复制到剪贴板！",
-    "copyFailed": "复制失败，请尝试直接下载"
+    "copyFailed": "复制失败，请尝试直接下载",
+    "workbench": {
+      "sceneDelimiter": "，",
+      "sceneChips": {
+        "whiteStudio": {
+          "label": "纯白极简影棚",
+          "value": "极简纯白影棚，无杂物无阴影"
+        },
+        "greyBackdrop": {
+          "label": "高级浅灰画册",
+          "value": "高级浅灰色背景，现代画册风格"
+        },
+        "softLighting": {
+          "label": "柔和摄影棚漫射光",
+          "value": "柔和摄影棚自然光，侧光漫射"
+        },
+        "cityStreet": {
+          "label": "现代都市街拍",
+          "value": "极简现代都市街拍，自然景深"
+        },
+        "afternoonCafe": {
+          "label": "温暖午后咖啡厅",
+          "value": "温暖午后街角咖啡厅，复古柔和光感"
+        },
+        "coastalDaylight": {
+          "label": "海滨度假日光",
+          "value": "阳光明媚海滨度假风，通透清爽"
+        }
+      }
+    },
+    "referenceLibrary": {
+      "directions": {
+        "front": "正面",
+        "high": "俯视",
+        "low": "仰视",
+        "side": "侧面",
+        "diag": "斜侧",
+        "back": "背面"
+      },
+      "genders": {
+        "all": "全部",
+        "female": "女性",
+        "male": "男性"
+      },
+      "garmentStyles": {
+        "all": "全部风格",
+        "spring": "春日穿搭",
+        "summer": "夏日穿搭",
+        "autumn": "秋日穿搭",
+        "winter": "冬日穿搭",
+        "party": "派对礼服"
+      },
+      "titles": {
+        "person": "选择模特人像参考",
+        "garment": "选择目标服装参考",
+        "pose": "选择姿势参考",
+        "style": "选择辅助穿搭风格参考"
+      },
+      "poseGenders": {
+        "female": "女",
+        "male": "男"
+      },
+      "garmentGenders": {
+        "female": "女装",
+        "male": "男装"
+      },
+      "poseBadge": "POSE · {gender}",
+      "poseCount": "共 {count} 组多视角姿势可选",
+      "assetCount": "共 {count} 项图库素材可选",
+      "viewImage": "点击查看大图",
+      "changeAsset": "更换素材",
+      "browse": "从图库选择",
+      "quickPicks": "常用精选（点击直接选定）：",
+      "closeModal": "关闭图库弹窗",
+      "filterGender": "按性别筛选",
+      "searchPlaceholder": "搜索名称或标签...",
+      "noMatches": "没有找到匹配的参考图，请尝试其他关键词或筛选条件。",
+      "switchPoseAngle": "切换姿势方向",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "pageIndicator": "第 {page} / {pages} 页（共 {count} 项）",
+      "done": "确认完成"
+    }
   },
   "PdfTool": {
     "title": "PDF 工具",

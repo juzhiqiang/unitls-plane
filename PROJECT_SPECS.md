@@ -355,6 +355,12 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 
 ### AI 电商试衣
 
+- 工作台页面只组合视图；`components/tools/ai-try-on/useTryOnForm.ts` 管理表单， `useTryOnTask.ts`
+  管理上传复用、提交、重试与任务状态，`useTryOnWorkbench.ts`
+  汇总查询和派生状态。模式、参考配置、参数、反馈和结果由各自组件展示。
+- 参考图库的分组与分类规则集中在
+  `referenceLibrary.ts`，卡片、筛选、摘要和弹窗独立维护；保持现有客户端分页。试衣文案统一来自中英文
+  `ImageTryOn` 消息，图库请求使用生成的 OpenAPI 类型，`tags` 为一维字符串数组。
 - 独立工作台路由为
   `/image/try-on`，支持「真实商品试穿」(`product`) 和「穿搭灵感」(`inspiration`)；任务类型为
   `image_try_on`，任务历史中单独显示并归入图像类别。
@@ -478,6 +484,11 @@ cd packages/api-client && bun run generate
 `compress`、`convert`、`image_watermark`、`image_id_photo`、`pdf_merge`、`pdf_split`、`pdf_to_image`、`pdf_to_text`、`image_to_pdf`、`font_convert`、`pdf_rotate`、`pdf_watermark`、`pdf_encrypt`、`pdf_compress`、`pdf_metadata`、`pdf_rearrange`、`pdf_from_document`、`image_generate`、`image_try_on`、`pdf_to_cad`。
 
 ## API 服务
+
+PDF 的 `PdfService`
+保持原有注入入口、直接构造方式与方法导出，具体实现按页面操作、内容与元数据、安全与压缩、文本提取、Markdown/DOCX 转换拆到
+`services/pdf/`。 `PdfProcessor` 负责队列状态与重试，具体操作委派到 `processors/pdf/`，由
+`PdfTaskContext` 统一处理进度、产物上传和完成顺序。内部拆分不改变任务协议或处理算法。
 
 当前 API 模块：
 

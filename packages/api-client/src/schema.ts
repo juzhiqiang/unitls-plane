@@ -666,7 +666,7 @@ export interface components {
             /** @description 当前语言的描述；未提供时为 null */
             description: string | null;
             /** @description 检索用标签 */
-            tags: string[][];
+            tags: string[];
             /** @description 缩略图公网 URL（服务端拼接，不下发 bucket / storage key）；未配置公网 base 时为 null */
             thumbnailUrl: string | null;
             /** @description 素材来源 URL */

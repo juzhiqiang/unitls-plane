@@ -74,12 +74,9 @@ export function useAiTryOnReferences(kind: AiTryOnReferenceKind) {
   return useQuery({
     queryKey: aiTryOnQueryKeys.references(kind, lang),
     queryFn: async () => {
-      const { data, error } = await api.GET(
-        '/tasks/ai-try-on/references' as any,
-        {
-          params: { query: { kind, lang } } as any,
-        }
-      );
+      const { data, error } = await api.GET('/tasks/ai-try-on/references', {
+        params: { query: { kind, lang } },
+      });
       if (error) throw error;
       return extractReferenceRows(data).map(item =>
         normalizeAiTryOnReferenceAsset(item, kind)

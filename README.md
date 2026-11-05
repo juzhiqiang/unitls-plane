@@ -4,6 +4,11 @@
 [性能审计与实施结果](./docs/performance-audit-2026-09-09.md)，接口兼容约定见
 [项目规范](./PROJECT_SPECS.md)。
 
+核心模块维护入口：试衣工作台的表单、任务与展示位于
+`apps/web/src/components/tools/ai-try-on/`；PDF 算法与任务操作分别位于
+`apps/api/src/modules/tasks/services/pdf/` 和
+`processors/pdf/`。拆分范围与验证记录见[维护性优化计划](./docs/superpowers/plans/2026-11-05-core-maintainability.md)。
+
 Utils-Plane 是一个基于 Monorepo 的文件处理工具平台，支持图片、PDF、字体、文件管理和异步任务处理。项目包含 Next.js 前端、NestJS
 API、PostgreSQL、Redis、MinIO 和 BullMQ 队列。
 

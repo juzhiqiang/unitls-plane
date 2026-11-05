@@ -53,7 +53,6 @@ export class AiTryOnReferenceDto {
   @ApiProperty({
     description: '检索用标签',
     type: [String],
-    isArray: true,
   })
   tags!: string[];
 

@@ -1768,13 +1768,10 @@
           },
           "tags": {
             "description": "检索用标签",
+            "type": "array",
             "items": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "type": "array"
+              "type": "string"
+            }
           },
           "thumbnailUrl": {
             "type": "string",

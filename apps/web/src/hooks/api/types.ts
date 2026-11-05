@@ -1,24 +1,11 @@
-export type TaskTypeValue =
-  | 'compress'
-  | 'convert'
-  | 'image_watermark'
-  | 'image_id_photo'
-  | 'pdf_merge'
-  | 'pdf_split'
-  | 'pdf_to_image'
-  | 'font_convert'
-  | 'pdf_to_text'
-  | 'image_to_pdf'
-  | 'pdf_rotate'
-  | 'pdf_watermark'
-  | 'pdf_encrypt'
-  | 'pdf_compress'
-  | 'pdf_metadata'
-  | 'pdf_rearrange'
-  | 'pdf_from_document'
-  | 'image_generate'
-  | 'image_try_on'
-  | 'pdf_to_cad';
+import type { components } from '@utils-plane/api-client';
+import type {
+  ImageTryOnMode,
+  ImageTryOnReferenceBinding,
+  TaskType,
+} from '@utils-plane/validators';
+
+export type TaskTypeValue = TaskType;
 
 export interface CreateTaskDto {
   type: TaskTypeValue;
@@ -85,17 +72,11 @@ export interface ImageGeneratePresetDto {
   sortOrder: number;
 }
 
-export type AiTryOnMode = 'product' | 'inspiration';
-export type AiTryOnReferenceKind = 'person' | 'pose' | 'garment';
-export type AiTryOnReferenceRole = 'person' | 'garment' | 'pose' | 'style';
-
-export type AiTryOnReferenceBinding =
-  | { role: 'person'; source: 'upload'; inputIndex: number }
-  | { role: 'person'; source: 'library'; assetId: string }
-  | { role: 'garment'; source: 'upload'; inputIndex: number }
-  | { role: 'garment'; source: 'library'; assetId: string }
-  | { role: 'pose'; source: 'library'; assetId: string }
-  | { role: 'style'; source: 'library'; assetId: string };
+export type AiTryOnMode = ImageTryOnMode;
+type ApiTryOnReference = components['schemas']['AiTryOnReferenceDto'];
+export type AiTryOnReferenceKind = ApiTryOnReference['kind'];
+export type AiTryOnReferenceBinding = ImageTryOnReferenceBinding;
+export type AiTryOnReferenceRole = AiTryOnReferenceBinding['role'];
 
 export interface AiTryOnTaskConfig {
   [key: string]: unknown;
@@ -107,16 +88,13 @@ export interface AiTryOnTaskConfig {
   model?: string;
 }
 
-export interface AiTryOnReferenceAssetDto {
-  id: string;
-  kind: AiTryOnReferenceKind;
-  title: string;
+/** 兼容旧响应的 UI 模型；必填字段类型跟随 OpenAPI。 */
+export interface AiTryOnReferenceAssetDto extends Pick<
+  ApiTryOnReference,
+  'id' | 'kind' | 'title' | 'tags' | 'sourceUrl' | 'licenseName' | 'attribution'
+> {
   description?: string | null;
-  tags: string[];
   thumbnailUrl: string;
-  sourceUrl: string;
-  licenseName: string;
   licenseUrl?: string | null;
-  attribution: string;
   sortOrder?: number;
 }

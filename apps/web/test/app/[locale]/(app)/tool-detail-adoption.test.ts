@@ -9,7 +9,6 @@ const detailPages = [
   ['/image/animation', 'src/app/[locale]/(app)/image/animation/page.tsx'],
   ['/image/watermark', 'src/app/[locale]/(app)/image/watermark/page.tsx'],
   ['/image/id-photo', 'src/app/[locale]/(app)/image/id-photo/page.tsx'],
-  ['/image/try-on', 'src/app/[locale]/(app)/image/try-on/page.tsx'],
   ['/font', 'src/app/[locale]/(app)/font/page.tsx'],
   ['/pdf/merge', 'src/app/[locale]/(app)/pdf/merge/page.tsx'],
   ['/pdf/split', 'src/app/[locale]/(app)/pdf/split/page.tsx'],
@@ -25,6 +24,9 @@ const detailPages = [
   ['/pdf/metadata', 'src/app/[locale]/(app)/pdf/metadata/page.tsx'],
   ['/pdf/rearrange', 'src/app/[locale]/(app)/pdf/rearrange/page.tsx'],
 ] as const;
+
+// 试衣工作台已拆为视图组件；image/try-on/page.test.tsx 通过实际渲染覆盖
+// 结果、失败恢复与重试，不再要求这些组件名直接出现在路由源码中。
 
 describe('tool detail shell adoption', () => {
   it.each(detailPages)(

@@ -4,12 +4,17 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PDFDocument, rgb, StandardFonts } from '@cantoo/pdf-lib';
 import sharp from 'sharp';
+import type { DocumentPdfConverter } from '../../../../src/modules/tasks/services/pdf/document-pdf-converter';
 import {
   buildLibreOfficeArgs,
   buildMarkdownDocumentHtml,
   extractDocxPlainText,
   PdfService,
 } from '../../../../src/modules/tasks/services/pdf.service';
+
+function documentConverter(service: PdfService): DocumentPdfConverter {
+  return (service as unknown as { documents: DocumentPdfConverter }).documents;
+}
 
 function createStoredZip(entries: Record<string, string>): Buffer {
   const parts: Buffer[] = [];
@@ -139,8 +144,8 @@ async function createVisualThenTextPdf(
 
 async function convertMarkdownWithMockPdf(output: Buffer): Promise<Buffer> {
   const service = new PdfService();
-  const originalConverter = (service as any).convertWithLibreOffice;
-  (service as any).convertWithLibreOffice = async (
+  const originalConverter = documentConverter(service).libreOffice.convert;
+  documentConverter(service).libreOffice.convert = async (
     sourcePath: string,
     outputDir: string
   ) => {
@@ -162,7 +167,7 @@ async function convertMarkdownWithMockPdf(output: Buffer): Promise<Buffer> {
       { sourceFormat: 'markdown' }
     );
   } finally {
-    (service as any).convertWithLibreOffice = originalConverter;
+    documentConverter(service).libreOffice.convert = originalConverter;
   }
 }
 
@@ -451,8 +456,8 @@ describe('PdfService.documentToPdf', () => {
 
   it('falls back when LibreOffice creates a blank Markdown PDF', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -480,14 +485,14 @@ describe('PdfService.documentToPdf', () => {
       expect(text).toContain('Server Export');
       expect(text).toContain('Content survives');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
+      documentConverter(service).libreOffice.convert = originalConverter;
     }
   });
 
   it('removes a blank leading page from a LibreOffice Markdown PDF', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -517,7 +522,7 @@ describe('PdfService.documentToPdf', () => {
       expect(document.getPageCount()).toBe(1);
       expect(text).toContain('Expected title and body');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
+      documentConverter(service).libreOffice.convert = originalConverter;
     }
   });
 
@@ -574,7 +579,7 @@ describe('PdfService.documentToPdf', () => {
 
     try {
       const service = new PdfService();
-      await (service as any).normalizeMarkdownPdfOutput(
+      await documentConverter(service).normalizer.normalize(
         await createVisualThenTextPdf('image'),
         '# Visible body'
       );
@@ -608,7 +613,7 @@ describe('PdfService.documentToPdf', () => {
     try {
       const service = new PdfService();
       await expect(
-        (service as any).normalizeMarkdownPdfOutput(
+        documentConverter(service).normalizer.normalize(
           await createTextPdf(['', 'Visible body']),
           '# Visible body'
         )
@@ -659,7 +664,7 @@ describe('PdfService.documentToPdf', () => {
 
     try {
       const service = new PdfService();
-      await (service as any).normalizeMarkdownPdfOutput(
+      await documentConverter(service).normalizer.normalize(
         await createVisualThenTextPdf('vector'),
         '# Visible body'
       );
@@ -672,8 +677,8 @@ describe('PdfService.documentToPdf', () => {
 
   it('falls back when a LibreOffice Markdown PDF omits source content', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -702,15 +707,15 @@ describe('PdfService.documentToPdf', () => {
       expect(text).toContain('Required heading');
       expect(text).toContain('Content that must survive');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
+      documentConverter(service).libreOffice.convert = originalConverter;
     }
   });
 
   it('does not fall back solely for a one-character Markdown fragment', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    const originalFallback = (service as any).renderMarkdownFallbackPdf;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    const originalFallback = documentConverter(service).fallback.renderMarkdown;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -721,7 +726,7 @@ describe('PdfService.documentToPdf', () => {
       await writeFile(outputPath, await createTextPdf(['Other body']));
       return outputPath;
     };
-    (service as any).renderMarkdownFallbackPdf = async () => {
+    documentConverter(service).fallback.renderMarkdown = async () => {
       throw new Error('unexpected fallback');
     };
 
@@ -738,20 +743,20 @@ describe('PdfService.documentToPdf', () => {
       const text = await service.toText(pdf, { format: 'text' });
       expect(text).toContain('Other body');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
-      (service as any).renderMarkdownFallbackPdf = originalFallback;
+      documentConverter(service).libreOffice.convert = originalConverter;
+      documentConverter(service).fallback.renderMarkdown = originalFallback;
     }
   });
 
   it('falls back when a Markdown PDF omits visible noscript text', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    const originalFallback = (service as any).renderMarkdownFallbackPdf;
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    const originalFallback = documentConverter(service).fallback.renderMarkdown;
     const fallbackPdf = await createTextPdf([
       'Required fallback text Other body',
     ]);
     let fallbackCalls = 0;
-    (service as any).convertWithLibreOffice = async (
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -762,7 +767,7 @@ describe('PdfService.documentToPdf', () => {
       await writeFile(outputPath, await createTextPdf(['Other body']));
       return outputPath;
     };
-    (service as any).renderMarkdownFallbackPdf = async () => {
+    documentConverter(service).fallback.renderMarkdown = async () => {
       fallbackCalls++;
       return fallbackPdf;
     };
@@ -785,16 +790,16 @@ describe('PdfService.documentToPdf', () => {
       expect(text).toContain('Required fallback text');
       expect(text).toContain('Other body');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
-      (service as any).renderMarkdownFallbackPdf = originalFallback;
+      documentConverter(service).libreOffice.convert = originalConverter;
+      documentConverter(service).fallback.renderMarkdown = originalFallback;
     }
   });
 
   it('keeps literal code punctuation when validating Markdown PDF content', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    const originalFallback = (service as any).renderMarkdownFallbackPdf;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    const originalFallback = documentConverter(service).fallback.renderMarkdown;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -808,7 +813,7 @@ describe('PdfService.documentToPdf', () => {
       );
       return outputPath;
     };
-    (service as any).renderMarkdownFallbackPdf = async () => {
+    documentConverter(service).fallback.renderMarkdown = async () => {
       throw new Error('unexpected fallback');
     };
 
@@ -828,16 +833,16 @@ describe('PdfService.documentToPdf', () => {
       const text = await service.toText(pdf, { format: 'text' });
       expect(text).toContain('const result = left * right;');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
-      (service as any).renderMarkdownFallbackPdf = originalFallback;
+      documentConverter(service).libreOffice.convert = originalConverter;
+      documentConverter(service).fallback.renderMarkdown = originalFallback;
     }
   });
 
   it('ignores HTML attribute delimiters when validating visible Markdown text', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    const originalFallback = (service as any).renderMarkdownFallbackPdf;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    const originalFallback = documentConverter(service).fallback.renderMarkdown;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -848,7 +853,7 @@ describe('PdfService.documentToPdf', () => {
       await writeFile(outputPath, await createTextPdf(['Visible body']));
       return outputPath;
     };
-    (service as any).renderMarkdownFallbackPdf = async () => {
+    documentConverter(service).fallback.renderMarkdown = async () => {
       throw new Error('unexpected fallback');
     };
 
@@ -870,15 +875,15 @@ describe('PdfService.documentToPdf', () => {
       const text = await service.toText(pdf, { format: 'text' });
       expect(text).toContain('Visible body');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
-      (service as any).renderMarkdownFallbackPdf = originalFallback;
+      documentConverter(service).libreOffice.convert = originalConverter;
+      documentConverter(service).fallback.renderMarkdown = originalFallback;
     }
   });
 
   it('falls back when a Markdown PDF omits visible comparison text', async () => {
     const service = new PdfService();
-    const originalConverter = (service as any).convertWithLibreOffice;
-    (service as any).convertWithLibreOffice = async (
+    const originalConverter = documentConverter(service).libreOffice.convert;
+    documentConverter(service).libreOffice.convert = async (
       sourcePath: string,
       outputDir: string
     ) => {
@@ -906,7 +911,7 @@ describe('PdfService.documentToPdf', () => {
       const text = await service.toText(pdf, { format: 'text' });
       expect(text).toContain('Beta and Gamma');
     } finally {
-      (service as any).convertWithLibreOffice = originalConverter;
+      documentConverter(service).libreOffice.convert = originalConverter;
     }
   });
 
@@ -1029,5 +1034,50 @@ describe('PdfService.split', () => {
         ranges: [{ start: 0, end: 1 }] as unknown as [number, number][],
       })
     ).rejects.toThrow('ranges must be zero-based integer tuples');
+  });
+});
+
+describe('PdfService page operations', () => {
+  it('splits zero-based inclusive ranges in the requested order', async () => {
+    const service = new PdfService();
+    const input = await createTextPdf([
+      'First page',
+      'Second page',
+      'Third page',
+    ]);
+    const outputs = await service.split(input, {
+      mode: 'ranges',
+      ranges: [
+        [1, 2],
+        [0, 0],
+      ],
+    });
+
+    expect(outputs).toHaveLength(2);
+    expect(await service.getPageCount(outputs[0]!)).toBe(2);
+    expect(
+      await service.toText(outputs[0]!, { format: 'text', pageBreak: '|' })
+    ).toBe('Second page\n\n|Third page\n\n');
+    expect(await service.toText(outputs[1]!, { format: 'text' })).toBe(
+      'First page\n\n'
+    );
+  });
+
+  it('rearranges, duplicates and removes pages using zero-based indices', async () => {
+    const service = new PdfService();
+    const input = await createTextPdf([
+      'First page',
+      'Second page',
+      'Third page',
+    ]);
+    const output = await service.rearrange(input, { pageOrder: [2, 0, 2] });
+
+    expect(await service.getPageCount(output)).toBe(3);
+    expect(
+      await service.toText(output, { format: 'text', pageBreak: '|' })
+    ).toBe('Third page\n\n|First page\n\n|Third page\n\n');
+    await expect(service.rearrange(input, { pageOrder: [3] })).rejects.toThrow(
+      'Invalid page index 3'
+    );
   });
 });

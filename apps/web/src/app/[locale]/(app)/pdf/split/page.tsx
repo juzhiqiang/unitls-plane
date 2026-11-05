@@ -7,7 +7,6 @@ import { FileDropzone } from '@/components/tools/file-dropzone';
 import { ProcessingProgress } from '@/components/tools/processing-progress';
 import { DownloadButton } from '@/components/tools/download-button';
 import { PdfPagePreviewImage } from '@/components/tools/pdf-page-preview-image';
-import { ZipDownloadButton } from '@/components/tools/zip-download-button';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { FailureRecoveryPanel } from '@/components/tools/failure-recovery-panel';
 import { ResultPanel } from '@/components/tools/result-panel';
@@ -19,6 +18,7 @@ import { useTaskOutput } from '@/hooks/api/use-task-output';
 import { useRequireLogin } from '@/hooks/use-require-login';
 import { getToolByHref } from '@/lib/tools/tool-metadata';
 import { cn } from '@/lib/utils';
+import { createSplitOutputFile } from './output-file';
 import { buildSplitInputConfig, type SplitMode } from './input-config';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
@@ -88,11 +88,11 @@ export default function SplitPage() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   // 产物取回走 useTaskOutput:pending / error 由 hook 统一持有,
-  // 不再每页手写一遍 fetch + try/finally。这一页的产物是文件数组。
-  const output = useTaskOutput<File[]>();
+  // 不再每页手写一遍 fetch + try/finally。服务端会把多产物包装成一个 ZIP。
+  const output = useTaskOutput<File>();
   // reset 的身份稳定(hook 内是 useCallback([])),放进依赖数组不会让回调反复重建。
   const resetOutput = output.reset;
-  const results = output.result ?? [];
+  const result = output.result;
   const [error, setError] = useState<string | null>(null);
 
   const { requireLogin } = useRequireLogin();
@@ -103,10 +103,7 @@ export default function SplitPage() {
     onCompleted: async outputFileId => {
       const { error: downloadError } = await output.download(
         outputFileId,
-        blob => {
-          const name = `split-${Date.now()}.pdf`;
-          return [new File([blob], name, { type: 'application/pdf' })];
-        }
+        blob => createSplitOutputFile(blob, file?.name ?? 'pdf')
       );
       if (downloadError) setError(downloadError.message);
       setProcessing(false);
@@ -213,14 +210,13 @@ export default function SplitPage() {
     setProcessing(false);
   };
 
-  const stage =
-    results.length > 0
-      ? 'result'
-      : processing
-        ? 'processing'
-        : file
-          ? 'configure'
-          : 'upload';
+  const stage = result
+    ? 'result'
+    : processing
+      ? 'processing'
+      : file
+        ? 'configure'
+        : 'upload';
 
   return (
     <ToolPageShell
@@ -373,21 +369,11 @@ export default function SplitPage() {
         />
       )}
 
-      {results.length > 0 && (
+      {result && (
         <ResultPanel
-          title={results.length === 1 ? results[0]!.name : 'split-pages.zip'}
-          description={
-            results.length === 1
-              ? tShell('result.ready')
-              : tShell('result.filesReady', { count: results.length })
-          }
-          action={
-            results.length === 1 ? (
-              <DownloadButton file={results[0]!} />
-            ) : (
-              <ZipDownloadButton files={results} zipName="split-pages.zip" />
-            )
-          }
+          title={result.name}
+          description={tShell('result.ready')}
+          action={<DownloadButton file={result} />}
         />
       )}
     </ToolPageShell>

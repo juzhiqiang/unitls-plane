@@ -1,6 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
+import { useObjectUrl } from '@/hooks/use-object-url';
 import {
   ArrowRight,
   CheckCircle2,
@@ -63,6 +64,9 @@ export function TryOnCompositionStrip({
   const locale = useLocale();
   const isZh = locale.startsWith('zh');
 
+  const personObjectUrl = useObjectUrl(personFile);
+  const garmentObjectUrl = useObjectUrl(garmentFile);
+
   const personFilled = Boolean(personFile || personAsset);
   const garmentFilled = Boolean(garmentFile || garmentAsset);
   const poseFilled = Boolean(poseAsset);
@@ -85,9 +89,7 @@ export function TryOnCompositionStrip({
           : isZh
             ? '模特人像'
             : 'Model Portrait',
-      thumbnailUrl: personFile
-        ? URL.createObjectURL(personFile)
-        : personAsset?.thumbnailUrl,
+      thumbnailUrl: personObjectUrl ?? personAsset?.thumbnailUrl,
       sourceType: personFile ? 'upload' : 'library',
       required: true,
       isFilled: personFilled,
@@ -102,9 +104,7 @@ export function TryOnCompositionStrip({
           : isZh
             ? '目标服装'
             : 'Target Garment',
-      thumbnailUrl: garmentFile
-        ? URL.createObjectURL(garmentFile)
-        : garmentAsset?.thumbnailUrl,
+      thumbnailUrl: garmentObjectUrl ?? garmentAsset?.thumbnailUrl,
       sourceType: garmentFile ? 'upload' : 'library',
       required: true,
       isFilled: garmentFilled,

@@ -399,6 +399,14 @@ export function ReferenceLibraryGrid({
     [filteredStandardItems, pageSize, startIdx]
   );
 
+  const quickPickItems = useMemo<AiTryOnReferenceAssetDto[]>(() => {
+    if (items.length === 0) return [];
+    if (role === 'pose') {
+      return poseGroups.slice(0, 4).map(g => g.variants[0]!.item);
+    }
+    return items.slice(0, 4);
+  }, [items, poseGroups, role]);
+
   if (isLoading) {
     return (
       <div
@@ -487,14 +495,6 @@ export function ReferenceLibraryGrid({
       : isZh
         ? `共 ${items.length} 项图库素材可选`
         : `${items.length} library assets available`;
-
-  const quickPickItems = useMemo<AiTryOnReferenceAssetDto[]>(() => {
-    if (items.length === 0) return [];
-    if (role === 'pose') {
-      return poseGroups.slice(0, 4).map(g => g.variants[0]!.item);
-    }
-    return items.slice(0, 4);
-  }, [items, poseGroups, role]);
 
   return (
     <div className="space-y-3">

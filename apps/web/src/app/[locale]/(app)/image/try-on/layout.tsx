@@ -1,18 +1,6 @@
-import { Metadata } from 'next';
-import { getTranslations } from 'next-intl/server';
+import { createToolMetadataGenerator } from '@/lib/tools/tool-route-metadata';
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { locale: string };
-}): Promise<Metadata> {
-  const t = await getTranslations({ locale: params.locale, namespace: 'ImageTryOn' });
-  
-  return {
-    title: t('title'),
-    description: t('description'),
-  };
-}
+export const generateMetadata = createToolMetadataGenerator('/image/try-on');
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return children;

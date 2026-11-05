@@ -171,11 +171,12 @@ export async function createChineseAnnotationFixture(): Promise<CadFixture> {
   }
 
   // 内置 CJK 回退字体整套嵌入有 3.6MB,pdf-lib 解析要几十秒;子集化后只剩 20KB。
+  const renderedBytes = buffer.asUint8Array().slice();
+  buffer.destroy();
   const rendered = mupdf.Document.openDocument(
-    buffer.asUint8Array(),
+    renderedBytes,
     'application/pdf'
   ) as mupdf.PDFDocument;
-  buffer.destroy();
   let subsetBytes: Uint8Array;
   try {
     rendered.subsetFonts();

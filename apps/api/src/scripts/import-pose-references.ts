@@ -1,6 +1,6 @@
 /**
  * 导入姿势参考图片
- * 
+ *
  * 从 ai-pose-gallery-zh 项目筛选适合试衣的姿势并导入到图库。
  */
 
@@ -23,22 +23,42 @@ interface PoseData {
 
 // 排除明显成人内容，但保留合理的泳装/内衣/性感系展示姿势
 const EXCLUDED_CATEGORIES = [
-  '正常位', '后入位', '骑乘位', '侧卧位', '坐位贴身',
-  '立位贴身', '贴身', '贴脸系', '面对面坐位',
+  '正常位',
+  '后入位',
+  '骑乘位',
+  '侧卧位',
+  '坐位贴身',
+  '立位贴身',
+  '贴身',
+  '贴脸系',
+  '面对面坐位',
 ] as const;
 
 function shouldIncludePose(pose: PoseData): boolean {
   if (pose.角度 !== '正面') return false;
   if (EXCLUDED_CATEGORIES.some(ex => pose.分类.includes(ex))) return false;
   if (pose.体系.includes('R18') || pose.体系.includes('成人')) return false;
-  
+
   const validCategories = [
-    '站姿', '行走', '坐姿', '跪立', '跪立・四肢着地',
-    '躺卧', '趴卧', '蹲姿', '侧坐・女孩坐', '背向坐位',
-    '性感・大胆系', '可爱系', '挤胸・强调事业线系',
-    '前倾', '后仰・挺背', '扭身', '立位'
+    '站姿',
+    '行走',
+    '坐姿',
+    '跪立',
+    '跪立・四肢着地',
+    '躺卧',
+    '趴卧',
+    '蹲姿',
+    '侧坐・女孩坐',
+    '背向坐位',
+    '性感・大胆系',
+    '可爱系',
+    '挤胸・强调事业线系',
+    '前倾',
+    '后仰・挺背',
+    '扭身',
+    '立位',
   ];
-  
+
   return validCategories.includes(pose.分类);
 }
 
@@ -61,30 +81,32 @@ function generateTags(pose: PoseData): string[] {
 
 async function main() {
   console.log('[ImportPoseReferences] Starting import...');
-  
+
   const dataPath = process.argv[2] || path.join(process.cwd(), 'pose-zh.json');
   const rawData = await fs.readFile(dataPath, 'utf-8');
   const poses: PoseData[] = JSON.parse(rawData);
   console.log(`[ImportPoseReferences] Loaded ${poses.length} poses`);
-  
+
   const suitable = poses.filter(shouldIncludePose);
   console.log(`[ImportPoseReferences] Found ${suitable.length} suitable poses`);
-  
+
   const byCategory = new Map<string, PoseData[]>();
   suitable.forEach(pose => {
     const cat = pose.分类;
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(pose);
   });
-  
+
   const selected: PoseData[] = [];
   const maxPerCategory = Math.ceil(60 / byCategory.size);
-  
+
   for (const [category, poses] of byCategory.entries()) {
     selected.push(...poses.slice(0, maxPerCategory));
   }
-  console.log(`[ImportPoseReferences] Selected ${selected.length} poses for import`);
-  
+  console.log(
+    `[ImportPoseReferences] Selected ${selected.length} poses for import`
+  );
+
   // 使用camelCase字段名
   const records = selected.map((pose, index) => ({
     slug: generateSlug(pose),
@@ -105,17 +127,19 @@ async function main() {
     isEnabled: true,
     sortOrder: index,
   }));
-  
+
   console.log('[ImportPoseReferences] Inserting records...');
-  
+
   try {
     await db.insert(aiTryOnReferences).values(records).onConflictDoNothing();
-    console.log(`[ImportPoseReferences] Successfully imported ${records.length} pose references`);
+    console.log(
+      `[ImportPoseReferences] Successfully imported ${records.length} pose references`
+    );
   } catch (err: any) {
     console.error('[ImportPoseReferences] Insert failed:', err);
     throw err;
   }
-  
+
   // 导出图片清单
   const imageList = records.map(r => ({
     original: `https://raw.githubusercontent.com/anhao/ai-pose-gallery-zh/main/public/${r.assetStorageKey.replace('pose/', 'img/')}`,
@@ -123,7 +147,7 @@ async function main() {
     minioPath: r.assetStorageKey,
     minioThumbPath: r.thumbnailStorageKey,
   }));
-  
+
   const listPath = path.join(process.cwd(), 'pose-images-to-download.json');
   await fs.writeFile(listPath, JSON.stringify(imageList, null, 2));
   console.log(`[ImportPoseReferences] Image list saved to: ${listPath}`);
@@ -131,7 +155,7 @@ async function main() {
 
 main()
   .then(() => process.exit(0))
-  .catch((err) => {
+  .catch(err => {
     console.error('[ImportPoseReferences] Failed:', err);
     process.exit(1);
   });

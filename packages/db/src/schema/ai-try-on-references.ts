@@ -31,12 +31,10 @@ export const aiTryOnReferenceKindEnum = pgEnum('ai_try_on_reference_kind', [
  * - `adult`：成人内容，MinIO中保留并单独分类，数据库有记录但API不返回。
  * - `intimate`：亲密接触姿势，MinIO中保留并单独分类，数据库有记录但API不返回。
  */
-export const aiTryOnReferenceVisibilityEnum = pgEnum('ai_try_on_reference_visibility', [
-  'public',
-  'hidden',
-  'adult',
-  'intimate',
-]);
+export const aiTryOnReferenceVisibilityEnum = pgEnum(
+  'ai_try_on_reference_visibility',
+  ['public', 'hidden', 'adult', 'intimate']
+);
 
 /**
  * AI 电商试衣参考图库。
@@ -63,7 +61,9 @@ export const aiTryOnReferences = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     slug: text('slug').notNull().unique(),
     kind: aiTryOnReferenceKindEnum('kind').notNull(),
-    visibility: aiTryOnReferenceVisibilityEnum('visibility').notNull().default('public'),
+    visibility: aiTryOnReferenceVisibilityEnum('visibility')
+      .notNull()
+      .default('public'),
     titleZh: text('title_zh').notNull(),
     titleEn: text('title_en').notNull(),
     descriptionZh: text('description_zh'),

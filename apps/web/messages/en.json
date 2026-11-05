@@ -1853,6 +1853,35 @@
       "intro": "A concise record of new capabilities, product improvements, and important fixes in each public release.",
       "entries": [
         {
+          "version": "v0.12.0",
+          "date": "2026-11-05",
+          "title": "AI e-commerce try-on and PDF split fixes",
+          "summary": "A new AI e-commerce try-on workbench supports model, garment, pose, and reference selection; PDF split fixes argument errors and download format, with browser-streamed output; image generation certificate errors are also fixed.",
+          "groups": [
+            {
+              "title": "New features",
+              "items": [
+                "New AI e-commerce try-on tool: upload a model and garment, choose poses, human references, and viewpoints, filter by gender and visual style, then generate the try-on result.",
+                "AI image-generation previews can now be opened full size by clicking."
+              ]
+            },
+            {
+              "title": "Improvements",
+              "items": [
+                "PDF split output now streams directly in the browser, so large ZIP archives are no longer loaded whole into page memory first."
+              ]
+            },
+            {
+              "title": "Fixes",
+              "items": [
+                "Fixed argument mismatches that made PDF splitting by ranges or every N pages fail.",
+                "Fixed multi-page split downloads being saved with the wrong PDF format.",
+                "Fixed certificate verification errors in AI image-generation requests."
+              ]
+            }
+          ]
+        },
+        {
           "version": "v0.11.0",
           "date": "2026-10-27",
           "title": "Smart ID-photo framing and faster first screen",

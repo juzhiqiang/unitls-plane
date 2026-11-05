@@ -25,13 +25,13 @@ const filesToDelete = [
   'pose/thumbnails/t.png',
   'pose/walk.png',
   'pose/thumbnails/walk.png',
-  
+
   // M字开腿系列
   'pose/full_sexy_P018_front.png',
   'pose/thumbnails/full_sexy_P018_front.jpg',
   'pose/full_sexy_P019_front.png',
   'pose/thumbnails/full_sexy_P019_front.jpg',
-  
+
   // 性感大胆系
   'pose/full_sexy_P051_front.png',
   'pose/thumbnails/full_sexy_P051_front.jpg',
@@ -41,7 +41,7 @@ const filesToDelete = [
   'pose/thumbnails/full_sexy_P053_front.jpg',
   'pose/full_sexy_P054_front.png',
   'pose/thumbnails/full_sexy_P054_front.jpg',
-  
+
   // 双人立位
   'pose/pair60_P001_front.png',
   'pose/thumbnails/pair60_P001_front.jpg',
@@ -51,7 +51,7 @@ const filesToDelete = [
   'pose/thumbnails/pair60_P052_front.jpg',
   'pose/pair60_P053_front.png',
   'pose/thumbnails/pair60_P053_front.jpg',
-  
+
   // 背向坐位
   'pose/pair60_P009_front.png',
   'pose/thumbnails/pair60_P009_front.jpg',
@@ -61,7 +61,7 @@ const filesToDelete = [
   'pose/thumbnails/pair60_P016_front.jpg',
   'pose/pair60_P019_front.png',
   'pose/thumbnails/pair60_P019_front.jpg',
-  
+
   // 挤胸系列
   'pose/full_sexy_P026_front.png',
   'pose/thumbnails/full_sexy_P026_front.jpg',
@@ -69,7 +69,7 @@ const filesToDelete = [
   'pose/thumbnails/full_sexy_P028_front.jpg',
   'pose/full_sexy_P029_front.png',
   'pose/thumbnails/full_sexy_P029_front.jpg',
-  
+
   // 过度后仰
   'pose/full_sexy_P033_front.png',
   'pose/thumbnails/full_sexy_P033_front.jpg',
@@ -80,21 +80,25 @@ const filesToDelete = [
 ];
 
 async function main() {
-  console.log(`[DeleteInappropriatePoses] Deleting ${filesToDelete.length} files from MinIO...`);
-  
+  console.log(
+    `[DeleteInappropriatePoses] Deleting ${filesToDelete.length} files from MinIO...`
+  );
+
   let successCount = 0;
   let failureCount = 0;
-  
+
   for (let i = 0; i < filesToDelete.length; i++) {
     const key = filesToDelete[i];
     const progress = `[${i + 1}/${filesToDelete.length}]`;
-    
+
     try {
-      await s3Client.send(new DeleteObjectCommand({
-        Bucket: BUCKET,
-        Key: key,
-      }));
-      
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: BUCKET,
+          Key: key,
+        })
+      );
+
       successCount++;
       console.log(`${progress} ✓ Deleted: ${key}`);
     } catch (err) {
@@ -102,7 +106,7 @@ async function main() {
       console.error(`${progress} ✗ Failed to delete ${key}:`, err);
     }
   }
-  
+
   console.log('[DeleteInappropriatePoses] Complete!');
   console.log(`  Success: ${successCount}`);
   console.log(`  Failed: ${failureCount}`);
@@ -110,7 +114,7 @@ async function main() {
 
 main()
   .then(() => process.exit(0))
-  .catch((err) => {
+  .catch(err => {
     console.error('[DeleteInappropriatePoses] Fatal error:', err);
     process.exit(1);
   });

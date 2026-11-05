@@ -14,7 +14,7 @@ const builtinSlugs = [
   'garment-tshirt-flat',
   'garment-dress-flat',
   'garment-trousers-flat',
-  'garment-jacket-flat'
+  'garment-jacket-flat',
 ];
 
 async function main() {
@@ -29,9 +29,11 @@ async function main() {
           inArray(aiTryOnReferences.slug, builtinSlugs)
         )
       );
-    
+
     console.log('Done! Builtin flat garments disabled.');
-    console.log('Now only real costume garments will be shown in the try-on page.');
+    console.log(
+      'Now only real costume garments will be shown in the try-on page.'
+    );
   } finally {
     await client.end();
   }

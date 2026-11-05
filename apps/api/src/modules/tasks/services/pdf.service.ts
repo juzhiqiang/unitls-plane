@@ -1187,7 +1187,8 @@ export class PdfService {
         break;
       }
       case 'every': {
-        if (!Number.isInteger(opts.every) || opts.every <= 0) {
+        const every = opts.every ?? 0;
+        if (!Number.isInteger(every) || every <= 0) {
           throw new BadRequestException('every must be greater than 0');
         }
         break;

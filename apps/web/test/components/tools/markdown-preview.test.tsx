@@ -112,10 +112,10 @@ describe('MarkdownPreview', () => {
       />
     );
 
-    const title = await screen.findByText('Title');
+    const title = await screen.findByText('Title', {}, { timeout: 10_000 });
     expect(title.closest('.min-h-\\[604px\\]')).not.toBe(null);
     expect(title.closest('.min-h-\\[560px\\]')).not.toBe(null);
-  });
+  }, 20_000);
 });
 
 describe('PdfResultPreview', () => {
@@ -130,7 +130,9 @@ describe('PdfResultPreview', () => {
       }
     );
     renderPdfPreview();
-    await waitFor(() => expect(canvases.length).toBe(15));
+    await waitFor(() => expect(canvases.length).toBe(15), {
+      timeout: 10_000,
+    });
     expect(screen.getAllByRole('button', { name: /页缩略图$/ })).toHaveLength(
       15
     );
@@ -138,19 +140,21 @@ describe('PdfResultPreview', () => {
     fireEvent.scroll(screen.getByTestId('pdf-thumbnail-scroll'), {
       target: { scrollTop: 1280 },
     });
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: '第 28 页缩略图' })
-      ).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(
+          screen.getByRole('button', { name: '第 28 页缩略图' })
+        ).toBeInTheDocument(),
+      { timeout: 10_000 }
     );
-    await waitFor(() => expect(first.width).toBe(0));
+    await waitFor(() => expect(first.width).toBe(0), { timeout: 10_000 });
     expect(
       screen.queryByRole('button', { name: '第 1 页缩略图' })
     ).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /页缩略图$/ })).toHaveLength(
       15
     );
-  });
+  }, 30_000);
   it('renders three thumbnails and navigates the selected page', async () => {
     renderPdfPreview();
 

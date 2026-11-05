@@ -12,10 +12,10 @@ async function detailedStats() {
     GROUP BY view, visibility
     ORDER BY visibility, view
   `);
-  
+
   console.log('By view & visibility:');
   console.table(byView.rows);
-  
+
   const publicPoses = await db.execute(sql`
     SELECT slug, visibility, array_to_string(tags, ', ') as tags
     FROM ai_try_on_references
@@ -23,7 +23,7 @@ async function detailedStats() {
     ORDER BY sort_order
     LIMIT 10
   `);
-  
+
   console.log('\n=== Sample Public Poses ===');
   publicPoses.rows.forEach((r: any) => {
     console.log(`${r.slug} | ${r.tags}`);
@@ -32,7 +32,7 @@ async function detailedStats() {
 
 detailedStats()
   .then(() => process.exit(0))
-  .catch((err) => {
+  .catch(err => {
     console.error(err);
     process.exit(1);
   });

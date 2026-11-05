@@ -9,7 +9,7 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 
 ## 版本与更新日志
 
-- 当前统一发布版本为 `v0.11.0`，根包、Web、API 及所有 `packages/*` 共享 `0.11.0` 版本号。
+- 当前统一发布版本为 `v0.12.0`，根包、Web、API 及所有 `packages/*` 共享 `0.12.0` 版本号。
 - 面向用户的精选更新日志公开地址为 `/{locale}/changelog`，并从营销页页脚和认证页版本号进入。
 - 套餐额度公开页为 `/{locale}/plans`，展示各套餐的单文件上传额度与定位说明，数据来源于
   `packages/utils` 的 `entitlements`。
@@ -355,11 +355,21 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 
 ### AI 电商试衣
 
-- 独立工作台路由为 `/image/try-on`，支持「真实商品试穿」(`product`) 和「穿搭灵感」(`inspiration`)；任务类型为 `image_try_on`，任务历史中单独显示并归入图像类别。
-- 继续使用现有 `ImageGenerationService`、`ai-queue` 和文件存储，不接入专用 VTON 模型。普通 `image_generate` 与 `image_try_on` 共用 `image.generate.dailyCount` 每日总额度；额度快照的 `limit` / `used` / `remaining` 响应结构不变，失败任务不计入用量。
-- 试衣参考最多 4 张，每个角色最多一张，服务端按 `person`、`garment`、`pose`、`style` 顺序加载。商品模式必须使用用户上传的商品图作为 garment；灵感模式使用图库 garment。用户上传文件须通过现有文件归属校验，客户端只传图库 asset UUID，不得传 URL、bucket 或 storage key。
-- `pose` 只控制姿势和构图；`style` 映射到图库 `garment`，只作弱优先级搭配参考，不能覆盖目标商品的款式、颜色、图案与纹理。服务端组装固定角色提示词，`promptAddition` 仅补充场景要求。
-- 图库表为 `ai_try_on_references`，类别为 `person`、`pose`、`garment`。公开只读端点 `GET /tasks/ai-try-on/references?kind=person|pose|garment&lang=zh|en` 仅返回启用且来源、许可名称、署名和许可审查时间齐全的素材；响应下发缩略图 URL 与许可信息，不下发对象存储 bucket/key。任务执行时会再次检查 kind、启用状态与许可字段，检查失败时不调用生图供应商。没有经核准的图库素材时允许图库为空，上传人像和真实商品图流程仍可使用。
+- 独立工作台路由为
+  `/image/try-on`，支持「真实商品试穿」(`product`) 和「穿搭灵感」(`inspiration`)；任务类型为
+  `image_try_on`，任务历史中单独显示并归入图像类别。
+- 继续使用现有 `ImageGenerationService`、`ai-queue` 和文件存储，不接入专用 VTON 模型。普通
+  `image_generate` 与 `image_try_on` 共用 `image.generate.dailyCount` 每日总额度；额度快照的 `limit`
+  / `used` / `remaining` 响应结构不变，失败任务不计入用量。
+- 试衣参考最多 4 张，每个角色最多一张，服务端按 `person`、`garment`、`pose`、`style`
+  顺序加载。商品模式必须使用用户上传的商品图作为 garment；灵感模式使用图库 garment。用户上传文件须通过现有文件归属校验，客户端只传图库 asset
+  UUID，不得传 URL、bucket 或 storage key。
+- `pose` 只控制姿势和构图；`style` 映射到图库
+  `garment`，只作弱优先级搭配参考，不能覆盖目标商品的款式、颜色、图案与纹理。服务端组装固定角色提示词，`promptAddition`
+  仅补充场景要求。
+- 图库表为 `ai_try_on_references`，类别为 `person`、`pose`、`garment`。公开只读端点
+  `GET /tasks/ai-try-on/references?kind=person|pose|garment&lang=zh|en`
+  仅返回启用且来源、许可名称、署名和许可审查时间齐全的素材；响应下发缩略图 URL 与许可信息，不下发对象存储 bucket/key。任务执行时会再次检查 kind、启用状态与许可字段，检查失败时不调用生图供应商。没有经核准的图库素材时允许图库为空，上传人像和真实商品图流程仍可使用。
 - 生成结果标记为 AI 生成；真实商品模式不承诺通用生图模型精准还原商品细节，开放前应按不同 SKU 品类评估颜色、图案、剪裁和配饰偏差。图库图片不得因其代码仓库开源而推定可商用或再分发。
 
 ## 本地服务
@@ -473,9 +483,9 @@ cd packages/api-client && bun run generate
 
 - `auth` - Better-Auth handler 和认证集成。
 - `files` - 上传、下载、缩略图、签名 URL、文件列表、回收站、恢复、永久删除、批量操作。
-- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup scheduler、PDF 转 CAD 和 AI 试衣参考图库查询。任务核心能力在
-  `TasksCoreModule`，HTTP Controller 在 `TasksApiModule`，Processor 和 `CleanupScheduler` 只进入
-  `TasksWorkerModule`。
+- `tasks` - 任务创建、查询、图片/PDF/字体处理、cleanup
+  scheduler、PDF 转 CAD 和 AI 试衣参考图库查询。任务核心能力在 `TasksCoreModule`，HTTP Controller 在
+  `TasksApiModule`，Processor 和 `CleanupScheduler` 只进入 `TasksWorkerModule`。
 - `health` - 健康检查。
 
 全局能力：

@@ -11,15 +11,16 @@ const imageGenerateSessionsKey = [
   'image-generate',
   'sessions',
 ] as const;
+const catalogQueryKey = ['catalog'] as const;
 
 export const taskQueryKeys = {
   all: ['tasks'] as const,
   imageGenerateQuota: (userId?: string) =>
     userId ? [...imageGenerateQuotaKey, userId] : imageGenerateQuotaKey,
   imageGenerateModels: () =>
-    [...taskQueryKeys.all, 'image-generate', 'models'] as const,
+    [...catalogQueryKey, 'image-generate', 'models'] as const,
   imageGeneratePresets: (lang?: string) =>
-    [...taskQueryKeys.all, 'image-generate', 'presets', lang] as const,
+    [...catalogQueryKey, 'image-generate', 'presets', lang] as const,
   imageGenerateSessions: (userId?: string) =>
     userId ? [...imageGenerateSessionsKey, userId] : imageGenerateSessionsKey,
   imageGenerateSessionTasks: (sessionId: string, userId?: string) =>

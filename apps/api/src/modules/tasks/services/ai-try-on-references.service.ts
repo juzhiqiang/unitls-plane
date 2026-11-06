@@ -69,7 +69,21 @@ export class AiTryOnReferencesService {
     lang: AiTryOnReferenceLang
   ): Promise<AiTryOnReferenceDescriptor[]> {
     const rows = await db
-      .select()
+      .select({
+        id: aiTryOnReferences.id,
+        kind: aiTryOnReferences.kind,
+        titleZh: aiTryOnReferences.titleZh,
+        titleEn: aiTryOnReferences.titleEn,
+        descriptionZh: aiTryOnReferences.descriptionZh,
+        descriptionEn: aiTryOnReferences.descriptionEn,
+        tags: aiTryOnReferences.tags,
+        thumbnailBucket: aiTryOnReferences.thumbnailBucket,
+        thumbnailStorageKey: aiTryOnReferences.thumbnailStorageKey,
+        sourceUrl: aiTryOnReferences.sourceUrl,
+        licenseName: aiTryOnReferences.licenseName,
+        attribution: aiTryOnReferences.attribution,
+        sortOrder: aiTryOnReferences.sortOrder,
+      })
       .from(aiTryOnReferences)
       .where(
         and(

@@ -703,6 +703,9 @@
               }
             }
           },
+          "304": {
+            "description": "Catalog unchanged (ETag validation)"
+          },
           "400": {
             "description": "Invalid kind or lang"
           }

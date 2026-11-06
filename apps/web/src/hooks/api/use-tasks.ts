@@ -15,6 +15,7 @@ import type {
   TaskTypeValue,
 } from './types';
 import { accountQueryKeys, taskQueryKeys } from './query-keys';
+import { catalogQueryOptions } from './catalog-query-options';
 
 export type TaskType = TaskTypeValue;
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -227,7 +228,7 @@ export function useImageGenerateModels() {
  * 端点是公开的，所以这里不做 session 门控。
  *
  * 服务端按 lang 返回单语言扁平对象，故 queryKey 带上当前 locale：
- * 切语言要重新拉一次，同一语言内容在进程生命周期内不会变，设成永不过期。
+ * 切换语言使用独立缓存；定期校验后台导入、编辑和下架的模板。
  */
 export function useImageGeneratePresets() {
   const locale = useLocale();
@@ -235,14 +236,15 @@ export function useImageGeneratePresets() {
 
   return useQuery({
     queryKey: taskQueryKeys.imageGeneratePresets(lang),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await api.GET('/tasks/image-generate/presets', {
-        params: { query: { lang } } as any,
+        params: { query: { lang } },
+        signal,
       });
       if (error) throw error;
       return data as ImageGeneratePresetDto[];
     },
-    staleTime: Infinity,
+    ...catalogQueryOptions,
   });
 }
 

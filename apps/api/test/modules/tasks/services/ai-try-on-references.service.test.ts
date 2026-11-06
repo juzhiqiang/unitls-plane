@@ -105,6 +105,21 @@ describe('AiTryOnReferencesService list', () => {
     await service.list('person', 'zh');
 
     expect(select).toHaveBeenCalled();
+    expect(select).toHaveBeenCalledWith({
+      id: table.id,
+      kind: table.kind,
+      titleZh: table.titleZh,
+      titleEn: table.titleEn,
+      descriptionZh: table.descriptionZh,
+      descriptionEn: table.descriptionEn,
+      tags: table.tags,
+      thumbnailBucket: table.thumbnailBucket,
+      thumbnailStorageKey: table.thumbnailStorageKey,
+      sourceUrl: table.sourceUrl,
+      licenseName: table.licenseName,
+      attribution: table.attribution,
+      sortOrder: table.sortOrder,
+    });
     expect(eq).toHaveBeenCalledWith(table.kind, 'person');
     expect(eq).toHaveBeenCalledWith(table.isEnabled, true);
     expect(isNotNull).toHaveBeenCalledWith(table.sourceUrl);

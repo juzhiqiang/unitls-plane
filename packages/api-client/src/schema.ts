@@ -1240,6 +1240,13 @@ export interface operations {
                     "application/json": components["schemas"]["AiTryOnReferenceDto"][];
                 };
             };
+            /** @description Catalog unchanged (ETag validation) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Invalid kind or lang */
             400: {
                 headers: {

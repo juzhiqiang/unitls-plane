@@ -344,6 +344,8 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
   的后台新增行。脚本同时建桶、设匿名只读策略并上传示例图，全程失败不阻塞启动。组合镜像由
   `docker/start-all.sh`、prod compose 由 `api.command` 在 `main.js` 之前调用。
 - 后台模板 CRUD 尚未开发。
+- 图库、模板与模型查询使用独立 `catalog`
+  缓存键，不受任务写入失效影响。模板与图库元数据缓存新鲜期为 5 分钟，未使用缓存保留 30 分钟；已启用查询在前台每 5 分钟检查更新，并在过期后聚焦或重连时重新获取。请求取消会传递到 fetch。
 - 每日张数配额是全局的，不按模型或来源区分。
 - 都没配置时 `/image/generate` 入口仍然可见，任务会以 `AI_IMAGE_NOT_CONFIGURED`
   失败，页面提示未配置。
@@ -368,6 +370,11 @@ AI_IMAGE_PROVIDERS='[{"id":"openai","label":"OpenAI","baseUrl":"https://api.open
 - 参考图库的分组与分类规则集中在
   `referenceLibrary.ts`，卡片、筛选、摘要和弹窗独立维护；保持现有客户端分页。试衣文案统一来自中英文
   `ImageTryOn` 消息，图库请求使用生成的 OpenAPI 类型，`tags` 为一维字符串数组。
+- `useTryOnLibraries.ts`
+  管理按需加载和失效选择：默认上传流程不请求图库；选择模特图库、进入灵感模式或主动打开姿势/风格图库后才启用对应查询，服饰与风格共用数据。点击「加载灵感预设」可一次启用三类图库。成功刷新后清除已下架素材并提示，后台刷新失败保留原列表和选择；首次加载失败仍提供重试或上传恢复。
+- 图库保留全量元数据与客户端分组分页，以维持多视角姿势分组、搜索与分类计数。API 显式读取展示所需字段，响应
+  `Cache-Control: public, max-age=0, must-revalidate` 并使用 Express
+  ETag；内容不变返回 304，后台更新后下一次校验直接返回新内容，不设置额外服务端长期缓存。此优化不改变任务执行时的素材可用性校验。
 - 独立工作台路由为
   `/image/try-on`，支持「真实商品试穿」(`product`) 和「穿搭灵感」(`inspiration`)；任务类型为
   `image_try_on`，任务历史中单独显示并归入图像类别。

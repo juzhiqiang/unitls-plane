@@ -1,4 +1,5 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 import { AiTryOnReferencesService } from './services/ai-try-on-references.service';
@@ -47,7 +48,20 @@ export class AiTryOnReferencesController {
     isArray: true,
   })
   @ApiResponse({ status: 400, description: 'Invalid kind or lang' })
-  async listReferences(@Query() query: ListAiTryOnReferencesQueryDto) {
-    return this.aiTryOnReferencesService.list(query.kind, query.lang ?? 'zh');
+  @ApiResponse({
+    status: 304,
+    description: 'Catalog unchanged (ETag validation)',
+  })
+  async listReferences(
+    @Query() query: ListAiTryOnReferencesQueryDto,
+    @Res({ passthrough: true }) response?: Response
+  ) {
+    const items = await this.aiTryOnReferencesService.list(
+      query.kind,
+      query.lang ?? 'zh'
+    );
+    // Express 根据实际 JSON 生成 ETag，浏览器复用未修改的响应；每次都校验数据库。
+    response?.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    return items;
   }
 }

@@ -1,3 +1,11 @@
+const resourceBudget = {
+  run: async (
+    _task: unknown,
+    _job: unknown,
+    _token: unknown,
+    operation: () => Promise<unknown>
+  ) => operation(),
+};
 import { afterAll, expect, it, mock, vi } from 'bun:test';
 import { UnrecoverableError } from 'bullmq';
 import { ErrorCodes } from '../../../../src/common/errors/error-codes';
@@ -93,7 +101,8 @@ it('generates an image and stores it against the task owner', async () => {
   const processor = new AiImageProcessor(
     filesService as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await processor.process(createJob());
@@ -161,7 +170,8 @@ it('passes the sticky source of the session as the routing preference', async ()
   const processor = new AiImageProcessor(
     filesService as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await processor.process(createJob());
@@ -204,7 +214,8 @@ it('skips the sticky lookup for legacy tasks without a model', async () => {
   const processor = new AiImageProcessor(
     filesService as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await processor.process(createJob());
@@ -233,7 +244,8 @@ it('marks the task failed with the provider error code and a fixed message', asy
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await expect(processor.process(createJob())).rejects.toThrow();
@@ -256,7 +268,8 @@ it('sanitizes an unexpected error message before storing it', async () => {
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await expect(processor.process(createJob())).rejects.toThrow();
@@ -296,7 +309,8 @@ it('sends the uploaded reference image for image_to_image', async () => {
   const processor = new AiImageProcessor(
     filesService as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await processor.process(createJob());
@@ -356,7 +370,8 @@ it('sends every reference image for multi-image fusion', async () => {
   const processor = new AiImageProcessor(
     filesService as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await processor.process(createJob());
@@ -438,6 +453,7 @@ it('generates a product try-on with role-ordered owned and curated references', 
     filesService as never,
     tasksService as never,
     imageGenerationService as never,
+    resourceBudget as never,
     referenceSource as never
   );
 
@@ -513,6 +529,7 @@ it('does not call the image provider when a curated reference fails validation',
     { upload: vi.fn() } as never,
     tasksService as never,
     imageGenerationService as never,
+    resourceBudget as never,
     referenceSource as never
   );
 
@@ -536,7 +553,8 @@ it('fails image_to_image without leaking why when the input file is missing', as
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    { generate: vi.fn() } as never
+    { generate: vi.fn() } as never,
+    resourceBudget as never
   );
 
   await expect(processor.process(createJob())).rejects.toThrow();
@@ -553,7 +571,8 @@ it('rejects a mode this processor does not implement yet', async () => {
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    { generate: vi.fn() } as never
+    { generate: vi.fn() } as never,
+    resourceBudget as never
   );
 
   await expect(processor.process(createJob())).rejects.toThrow();
@@ -577,7 +596,8 @@ it('leaves the task pending when a retry is still coming', async () => {
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   // 网关 502 这类瞬时失败在第一次 attempt 上不能落库成 failed:前端把 failed 当终态,
@@ -607,7 +627,8 @@ it('records the failure once the retries are used up', async () => {
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   await expect(
@@ -638,7 +659,8 @@ it('stops retrying a deterministic rejection instead of paying for it again', as
   const processor = new AiImageProcessor(
     { upload: vi.fn() } as never,
     tasksService as never,
-    imageGenerationService as never
+    imageGenerationService as never,
+    resourceBudget as never
   );
 
   // 内容策略拒绝重来一次也一样:立刻落库,并用 UnrecoverableError 掐断剩下的 attempt。

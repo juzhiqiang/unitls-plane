@@ -177,6 +177,7 @@ export default function CompressPage() {
           });
         } else {
           result = await runImageTask({
+            recoveryScope: createTask.recoveryScope,
             file: item.file,
             type: 'compress',
             inputConfig: {

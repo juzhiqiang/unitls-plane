@@ -51,6 +51,11 @@ import { CleanupObligationService } from '../files/cleanup-obligation.service';
 import { getTaskQueueName } from './task-queue';
 import { countTasksCreatedToday } from './daily-task-quota';
 import {
+  createTaskOnce,
+  getTaskSubmission,
+  type TaskSubmissionIdentity,
+} from './task-submissions';
+import {
   TaskJobReconciler,
   type TaskJobIdentity,
 } from './task-job-reconciler.service';
@@ -99,10 +104,9 @@ export class TasksService {
 
   async create(
     input: CreateTaskInput,
-    user?: Pick<User, 'id' | 'plan' | 'role'> | null
+    user?: Pick<User, 'id' | 'plan' | 'role'> | null,
+    submission?: TaskSubmissionIdentity
   ): Promise<Task> {
-    this.assertCanCreateTask(input.type, user);
-
     const queue = this.getQueue(input.type);
     const taskId = globalThis.crypto.randomUUID();
     const identity: TaskJobIdentity = {
@@ -110,8 +114,15 @@ export class TasksService {
       queueName: queue.name,
       jobId: taskId,
     };
-    const operation = (tx: ActiveUserTransaction) =>
-      this.createTask(input, user ?? null, tx, identity);
+    const operation = (tx: ActiveUserTransaction) => {
+      const create = () => {
+        this.assertCanCreateTask(input.type, user);
+        return this.createTask(input, user ?? null, tx, identity);
+      };
+      return submission
+        ? createTaskOnce(tx, input, user?.id ?? null, submission, create)
+        : create();
+    };
     const task = user
       ? await withActiveUserTransaction(user.id, operation)
       : await withProducerTransaction(operation);
@@ -119,12 +130,24 @@ export class TasksService {
     this.summaryCache.invalidate(task.userId);
     let job: Job | null = null;
     try {
-      job = await this.taskJobReconciler.reconcile(identity);
+      job = await this.taskJobReconciler.reconcile({
+        ...identity,
+        resourceId: task.id,
+        jobId: task.id,
+      });
     } catch {
       this.logger.error(`Task job dispatch deferred for task ${task.id}`);
     }
     if (job) this.logCreatedTask(task, job, queue);
     return task;
+  }
+
+  getSubmission(
+    key: string,
+    userId?: string,
+    clientId?: string
+  ): Promise<Task> {
+    return getTaskSubmission({ key, clientId }, userId);
   }
 
   private async createTask(

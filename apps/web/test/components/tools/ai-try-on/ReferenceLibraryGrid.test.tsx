@@ -75,6 +75,122 @@ function showLibrary(
 }
 
 describe('ReferenceLibraryGrid', () => {
+  it('moves back one visible page immediately after a refresh shrinks the catalog', () => {
+    const items = Array.from({ length: 5 }, (_, i) => asset(`item-${i}`));
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ ImageTryOn: en.ImageTryOn }}
+      >
+        {children}
+      </NextIntlClientProvider>
+    );
+    const props = {
+      role: 'person' as const,
+      selectedId: null,
+      onSelect: vi.fn(),
+      pageSize: 1,
+    };
+    const view = render(<ReferenceLibraryGrid {...props} items={items} />, {
+      wrapper,
+    });
+    fireEvent.click(screen.getByTestId('open-library-modal-person'));
+    for (let i = 0; i < 4; i++)
+      fireEvent.click(screen.getByTestId('library-next-page-person'));
+    view.rerender(
+      <ReferenceLibraryGrid {...props} items={items.slice(0, 2)} />
+    );
+    expect(
+      screen.getByTestId('library-page-indicator-person')
+    ).toHaveTextContent('Page 2 / 2');
+    fireEvent.click(screen.getByTestId('library-prev-page-person'));
+    expect(
+      screen.getByTestId('library-page-indicator-person')
+    ).toHaveTextContent('Page 1 / 2');
+    expect(
+      screen.getByTestId('library-item-person-item-0')
+    ).toBeInTheDocument();
+  });
+  it('offers an unloaded library without claiming it is empty and opens it after loading', () => {
+    const onLoad = vi.fn();
+    const props = {
+      role: 'pose' as const,
+      selectedId: null,
+      onSelect: vi.fn(),
+      onLoad,
+    };
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ ImageTryOn: en.ImageTryOn }}
+      >
+        {children}
+      </NextIntlClientProvider>
+    );
+    const view = render(
+      <ReferenceLibraryGrid {...props} items={[]} isRequested={false} />,
+      { wrapper }
+    );
+    expect(screen.queryByTestId('library-empty-pose')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('open-library-modal-pose'));
+    expect(onLoad).toHaveBeenCalledOnce();
+    view.rerender(
+      <ReferenceLibraryGrid {...props} items={poses} isRequested />
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('retains selection, filters and page when background refresh fails and offers retry in the dialog', () => {
+    const onRetry = vi.fn();
+    const { dialog } = showLibrary(
+      {
+        items: [asset('first'), asset('second')],
+        selectedId: 'first',
+        isError: true,
+        onRetry,
+        pageSize: 1,
+      },
+      'en'
+    );
+    expect(screen.getByTestId('selected-summary-person')).toBeInTheDocument();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'Could not refresh'
+    );
+    fireEvent.click(screen.getByTestId('library-next-page-person'));
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: /Retry loading/ })
+    );
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(
+      screen.getByTestId('library-item-person-second')
+    ).toBeInTheDocument();
+  });
+
+  it('allows refreshing an empty library and prevents another refresh while fetching', () => {
+    const onRetry = vi.fn();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ ImageTryOn: en.ImageTryOn }}
+      >
+        {children}
+      </NextIntlClientProvider>
+    );
+    const props = {
+      role: 'pose' as const,
+      items: [],
+      selectedId: null,
+      onSelect: vi.fn(),
+      onRetry,
+    };
+    const view = render(<ReferenceLibraryGrid {...props} />, { wrapper });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh library' }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    view.rerender(<ReferenceLibraryGrid {...props} isRefreshing />);
+    expect(
+      screen.getByRole('button', { name: 'Refreshing library…' })
+    ).toBeDisabled();
+  });
   it('groups pose angles, keeps the first duplicate, and selects a direction without closing', () => {
     const { dialog, onSelect } = showLibrary({ role: 'pose', items: poses });
 

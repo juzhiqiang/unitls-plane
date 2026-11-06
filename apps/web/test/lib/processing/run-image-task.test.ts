@@ -4,7 +4,8 @@ const mocks = vi.hoisted(() => ({
   waitForTask: vi.fn(),
 }));
 
-vi.mock('@/lib/wait-for-task', () => ({
+vi.mock('@/lib/wait-for-task', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/wait-for-task')>()),
   waitForTask: mocks.waitForTask,
 }));
 
@@ -31,6 +32,37 @@ afterEach(() => {
 });
 
 describe('runImageTask', () => {
+  it('reuses a created task when only the result download failed', async () => {
+    const options = {
+      file: inputFile(),
+      type: 'convert',
+      inputConfig: {},
+      outputName: 'photo.webp',
+      recoveryScope: 'user-a',
+      upload: vi.fn().mockResolvedValue({ id: 'file' }),
+      createTask: vi.fn().mockResolvedValue({ id: 'task' }),
+    };
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('offline'));
+    await expect(runImageTask(options)).rejects.toThrow('offline');
+    await runImageTask(options);
+    expect(options.createTask).toHaveBeenCalledTimes(1);
+    expect(options.upload).toHaveBeenCalledTimes(1);
+  });
+  it('does not reuse an unfinished task after account switching', async () => {
+    const options = {
+      file: inputFile(),
+      type: 'convert',
+      inputConfig: {},
+      outputName: 'photo.webp',
+      recoveryScope: 'user-a',
+      upload: vi.fn().mockResolvedValue({ id: 'file' }),
+      createTask: vi.fn().mockResolvedValue({ id: 'task' }),
+    };
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('offline'));
+    await expect(runImageTask(options)).rejects.toThrow('offline');
+    await runImageTask({ ...options, recoveryScope: 'user-b' });
+    expect(options.createTask).toHaveBeenCalledTimes(2);
+  });
   it('uploads, creates the task, waits and downloads the output', async () => {
     const upload = vi.fn().mockResolvedValue({ id: 'file-1' });
     const createTask = vi.fn().mockResolvedValue({ id: 'task-1' });

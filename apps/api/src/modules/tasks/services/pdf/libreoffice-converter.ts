@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, stat, rm } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -54,7 +54,7 @@ export class LibreOfficeConverter {
           { timeout: 120_000, windowsHide: true }
         );
 
-        await readFile(outputPath);
+        await stat(outputPath);
         return outputPath;
       } catch {
         // Continue with the next available LibreOffice executable.

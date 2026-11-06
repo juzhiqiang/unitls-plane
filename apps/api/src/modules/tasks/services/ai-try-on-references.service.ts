@@ -1,3 +1,8 @@
+import {
+  readTaskInput,
+  assertTaskImage,
+  currentResourceLimits,
+} from '../../../common/resources/task-resource-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, isNotNull } from 'drizzle-orm';
 import {
@@ -69,7 +74,21 @@ export class AiTryOnReferencesService {
     lang: AiTryOnReferenceLang
   ): Promise<AiTryOnReferenceDescriptor[]> {
     const rows = await db
-      .select()
+      .select({
+        id: aiTryOnReferences.id,
+        kind: aiTryOnReferences.kind,
+        titleZh: aiTryOnReferences.titleZh,
+        titleEn: aiTryOnReferences.titleEn,
+        descriptionZh: aiTryOnReferences.descriptionZh,
+        descriptionEn: aiTryOnReferences.descriptionEn,
+        tags: aiTryOnReferences.tags,
+        thumbnailBucket: aiTryOnReferences.thumbnailBucket,
+        thumbnailStorageKey: aiTryOnReferences.thumbnailStorageKey,
+        sourceUrl: aiTryOnReferences.sourceUrl,
+        licenseName: aiTryOnReferences.licenseName,
+        attribution: aiTryOnReferences.attribution,
+        sortOrder: aiTryOnReferences.sortOrder,
+      })
       .from(aiTryOnReferences)
       .where(
         and(
@@ -181,17 +200,22 @@ export class AiTryOnReferencesService {
 
   /** 读对象存储。桶名来自记录本身，图库桶与上传桶分离。 */
   private async readObject(bucket: string, key: string): Promise<Buffer> {
+    const controller = new globalThis.AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
     try {
       const response = await this.getClient().send(
-        new GetObjectCommand({ Bucket: bucket, Key: key })
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { abortSignal: controller.signal }
       );
       const body = response.Body as unknown as AsyncIterable<Uint8Array>;
       if (!body) throw new Error('Object body is empty');
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of body) {
-        chunks.push(chunk);
-      }
-      return Buffer.concat(chunks);
+      const buffer = await readTaskInput(
+        body,
+        currentResourceLimits().libraryImageBytes,
+        controller.signal
+      );
+      await assertTaskImage(buffer);
+      return buffer;
     } catch (error) {
       // 只记 asset 维度信息：存储 key 不进日志。
       this.logger.warn(
@@ -200,6 +224,9 @@ export class AiTryOnReferencesService {
         }`
       );
       throw error;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
     }
   }
 

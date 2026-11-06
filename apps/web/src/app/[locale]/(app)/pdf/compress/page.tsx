@@ -266,6 +266,9 @@ export default function CompressPage() {
 
       {error && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error ? () => output.retryDownload(setError) : undefined
+          }
           message={error}
           onRetry={handleCompress}
           onReset={handleReset}

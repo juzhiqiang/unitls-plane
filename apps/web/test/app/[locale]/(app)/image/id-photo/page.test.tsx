@@ -425,7 +425,11 @@ describe('IdPhotoPage', () => {
       await mocks.onCompleted('output-file-1');
     });
 
-    expect(screen.getByText('Download failed')).toBeInTheDocument();
+    expect(screen.getByText('Result download incomplete')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Download result' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(taskMutate).toHaveBeenCalledTimes(1);
+    expect(uploadMutate).toHaveBeenCalledTimes(1);
     // 按钮回到可点状态,而不是停在处理中文案上。
     expect(
       screen.getByRole('button', { name: 'Generate ID photo' })

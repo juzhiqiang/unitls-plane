@@ -1,3 +1,9 @@
+import { readBoundedResponse } from '../../../common/resources/bounded-read';
+import {
+  currentResourceLimits,
+  assertTaskImage,
+} from '../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
@@ -156,25 +162,10 @@ async function bufferFromMaskReference(
   maskReference: string,
   fetchImpl: typeof fetch
 ): Promise<Buffer> {
-  if (maskReference.startsWith('data:')) {
-    const [, payload] = maskReference.split(',', 2);
-    if (!payload) {
-      throw new Error('Invalid mask data URL');
-    }
-    return Buffer.from(payload, 'base64');
-  }
-
-  if (/^https?:\/\//i.test(maskReference)) {
-    const response = await fetchImpl(maskReference);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download segmentation mask: ${response.status}`
-      );
-    }
-    return Buffer.from(await response.arrayBuffer());
-  }
-
-  return Buffer.from(maskReference, 'base64');
+  return bufferFromGeneratedImagePayload(
+    { data: [{ url: maskReference }] },
+    fetchImpl
+  );
 }
 
 export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiProvider {
@@ -211,9 +202,11 @@ export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiP
       throw new Error('image_result provider does not return a mask');
     }
 
+    await assertTaskImage(input, false);
     const orientedInput = await sharp(input).rotate().png().toBuffer();
     const response = await this.fetchImpl(this.chatUrl, {
       method: 'POST',
+      signal: globalThis.AbortSignal.timeout(120_000),
       headers: {
         'Content-Type': 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
@@ -254,7 +247,14 @@ export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiP
       );
     }
 
-    const payload = (await response.json()) as {
+    const payload = JSON.parse(
+      (
+        await readBoundedResponse(
+          response,
+          currentResourceLimits().providerResponseBytes
+        )
+      ).toString()
+    ) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = payload.choices?.[0]?.message?.content;
@@ -269,6 +269,7 @@ export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiP
       maskReference,
       this.fetchImpl
     );
+    await assertTaskImage(maskBuffer, false);
     const metadata = await sharp(orientedInput).metadata();
     if (!metadata.width || !metadata.height) {
       return { mask: Buffer.alloc(0), faceCount: 0 };
@@ -297,6 +298,7 @@ export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiP
     }
     void mask;
 
+    await assertTaskImage(input, false);
     const orientedInput = await sharp(input).rotate().png().toBuffer();
     const metadata = await sharp(orientedInput).metadata();
     if (!metadata.width || !metadata.height) {
@@ -330,6 +332,7 @@ export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiP
 
     const response = await this.fetchImpl(this.imageEditUrl, {
       method: 'POST',
+      signal: globalThis.AbortSignal.timeout(120_000),
       headers: {
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
       },
@@ -339,20 +342,35 @@ export class OpenAiCompatiblePortraitSegmentationProvider implements PortraitAiP
     if (!response.ok) {
       let message = `OpenAI-compatible image result failed: ${response.status}`;
       try {
-        const payload = (await response.json()) as {
+        const payload = JSON.parse(
+          (
+            await readBoundedResponse(
+              response,
+              currentResourceLimits().providerResponseBytes
+            )
+          ).toString()
+        ) as {
           error?: { message?: string; code?: string };
         };
         if (payload.error?.message) {
           message = `${message} ${payload.error.message}`;
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof TaskResourceLimitError) throw error;
         // Keep the status-only message when upstream does not return JSON.
       }
       throw new Error(message);
     }
 
     return bufferFromGeneratedImagePayload(
-      await response.json(),
+      JSON.parse(
+        (
+          await readBoundedResponse(
+            response,
+            currentResourceLimits().providerResponseBytes
+          )
+        ).toString()
+      ),
       this.fetchImpl
     );
   }
@@ -379,11 +397,13 @@ export class PortraitSegmentationService {
     if (options.mode === 'ai' && this.externalProvider?.segment) {
       try {
         return await this.externalProvider.segment(input);
-      } catch {
+      } catch (error) {
+        if (error instanceof TaskResourceLimitError) throw error;
         // Fall back to the local model so AI mode still produces a result.
       }
     }
 
+    await assertTaskImage(input, false);
     const orientedInput = await sharp(input).rotate().toBuffer();
     const metadata = await sharp(orientedInput).metadata();
     if (!metadata.width || !metadata.height) {

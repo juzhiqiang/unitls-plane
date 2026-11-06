@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { api } from '@/lib/api-client';
 import type { AiTryOnReferenceAssetDto, AiTryOnReferenceKind } from './types';
+import { catalogQueryOptions } from './catalog-query-options';
 
 export const aiTryOnQueryKeys = {
-  all: ['tasks', 'ai-try-on'] as const,
+  all: ['catalog', 'ai-try-on'] as const,
   references: (kind: AiTryOnReferenceKind, lang?: string) =>
     [...aiTryOnQueryKeys.all, 'references', kind, lang] as const,
 };
@@ -22,7 +23,8 @@ function extractReferenceRows(payload: unknown): Record<string, unknown>[] {
       return record.references as Record<string, unknown>[];
     }
   }
-  return [];
+  // 格式错误不能冒充成功的空图库，否则刷新会清除用户的选择。
+  throw new Error('Invalid reference catalog response');
 }
 
 export function normalizeAiTryOnReferenceAsset(
@@ -67,21 +69,26 @@ export function normalizeAiTryOnReferenceAsset(
   };
 }
 
-export function useAiTryOnReferences(kind: AiTryOnReferenceKind) {
+export function useAiTryOnReferences(
+  kind: AiTryOnReferenceKind,
+  options?: { enabled?: boolean }
+) {
   const locale = useLocale();
   const lang = locale === 'en' ? 'en' : 'zh';
 
   return useQuery({
     queryKey: aiTryOnQueryKeys.references(kind, lang),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await api.GET('/tasks/ai-try-on/references', {
         params: { query: { kind, lang } },
+        signal,
       });
       if (error) throw error;
       return extractReferenceRows(data).map(item =>
         normalizeAiTryOnReferenceAsset(item, kind)
       );
     },
-    staleTime: Infinity,
+    enabled: options?.enabled ?? true,
+    ...catalogQueryOptions,
   });
 }

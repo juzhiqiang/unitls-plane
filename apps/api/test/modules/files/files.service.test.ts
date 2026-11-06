@@ -104,6 +104,7 @@ const withProducerTransaction = vi.fn(
 
 const minioService = {
   delete: vi.fn(),
+  deletePrefix: vi.fn(async () => undefined),
   probeObjectExists: vi.fn(),
 };
 const cleanupQueue = {
@@ -1276,6 +1277,9 @@ describe('FilesService restore and permanent deletion races', () => {
       PURGE_CLAIMED_AT,
     ]);
     expect(eq).toHaveBeenCalledWith('purgeStartedAt', PURGE_CLAIMED_AT);
+    expect(minioService.deletePrefix).toHaveBeenCalledWith(
+      'thumbnails/file-1/'
+    );
     expect(deletionEvents).toEqual([
       'transaction-start',
       'marker-set',
@@ -1284,6 +1288,91 @@ describe('FilesService restore and permanent deletion races', () => {
       'transaction-start',
       'row-delete',
       'transaction-commit',
+    ]);
+  });
+
+  it('keeps an irreversible purge retryable when thumbnail deletion fails', async () => {
+    lockedRows = [userFile()];
+    transactionUpdatedRows = [purgeClaim()];
+    transactionDeletedRows = [{ id: 'file-1' }];
+    minioService.deletePrefix.mockRejectedValueOnce(
+      new Error('thumbnail cleanup failed')
+    );
+    const service = new FilesService(
+      minioService as never,
+      cleanupQueue as never,
+      cleanupObligationService as never
+    );
+
+    await expect(service.permanentDelete('file-1', 'user-1')).rejects.toThrow(
+      'thumbnail cleanup failed'
+    );
+    expect(transactionDelete).not.toHaveBeenCalled();
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
+
+    await expect(
+      service.permanentDelete('file-1', 'user-1')
+    ).resolves.toBeUndefined();
+    expect(transactionDeleteReturning).toHaveBeenCalledTimes(1);
+    expect(minioService.deletePrefix).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report an owned hard deletion as complete while another purge owns the lease', async () => {
+    lockedRows = [
+      userFile({ deletedAt: null, purgeStartedAt: PURGE_CLAIMED_AT }),
+    ];
+    transactionUpdatedRows = [];
+    const service = new FilesService(
+      minioService as never,
+      cleanupQueue as never,
+      cleanupObligationService as never
+    );
+    await expect(service.forceDeleteOwned('file-1', 'user-1')).rejects.toThrow(
+      'File deletion is in progress'
+    );
+    expect(minioService.delete).not.toHaveBeenCalled();
+  });
+
+  it('retains the only durable retry marker when a non-trash hard delete cannot remove the original', async () => {
+    const file = userFile({ deletedAt: null });
+    lockedRows = [file];
+    transactionUpdatedRows = [purgeClaim(file)];
+    minioService.delete.mockRejectedValueOnce(new Error('storage unavailable'));
+    minioService.probeObjectExists.mockResolvedValueOnce(true);
+    const service = new FilesService(
+      minioService as never,
+      cleanupQueue as never,
+      cleanupObligationService as never
+    );
+    await expect(service.forceDeleteOwned(file.id, 'user-1')).rejects.toThrow(
+      'storage unavailable'
+    );
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(minioService.deletePrefix).not.toHaveBeenCalled();
+    expect(transactionDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh an existing trash timestamp on repeated single or batch soft deletion', async () => {
+    selectedFile = userFile();
+    selectedRows = [userFile()];
+    const service = new FilesService(
+      minioService as never,
+      cleanupQueue as never,
+      cleanupObligationService as never
+    );
+    await service.softDelete('file-1', 'user-1');
+    expect(updateWhere).toHaveBeenLastCalledWith([
+      'file-1',
+      'user-1',
+      'purgeStartedAt',
+      'deletedAt',
+    ]);
+    await service.batchSoftDelete(['file-1'], 'user-1');
+    expect(updateWhere).toHaveBeenLastCalledWith([
+      ['file-1'],
+      'user-1',
+      'purgeStartedAt',
+      'deletedAt',
     ]);
   });
 
@@ -1341,7 +1430,7 @@ describe('FilesService restore and permanent deletion races', () => {
     expect(withProducerTransaction).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a concurrent delete until the known failure clears its marker', async () => {
+  it('rejects a concurrent delete and preserves the intent after a storage failure', async () => {
     const deleteStarted = deferred();
     const failDelete = deferred();
     const storageError = new Error('storage unavailable');
@@ -1374,11 +1463,11 @@ describe('FilesService restore and permanent deletion races', () => {
     await expect(firstDelete).rejects.toBe(storageError);
 
     expect(String(concurrentResult)).toContain('File deletion is in progress');
-    expect(updateSet).toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
     expect(minioService.delete).toHaveBeenCalledTimes(1);
   });
 
-  it('clears the purge marker and remains restorable when storage still has the object', async () => {
+  it('does not allow restore after an ambiguous delete even when HEAD still sees the original', async () => {
     lockedRows = [userFile()];
     transactionUpdatedRows = [purgeClaim()];
     minioService.delete.mockRejectedValueOnce(new Error('storage unavailable'));
@@ -1395,10 +1484,12 @@ describe('FilesService restore and permanent deletion races', () => {
 
     expect(transactionDelete).not.toHaveBeenCalled();
     expect(transactionDeleteReturning).not.toHaveBeenCalled();
-    expect(updateSet).toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
 
-    restoredRows = [{ id: 'file-1' }];
-    await expect(service.restore('file-1', 'user-1')).resolves.toBeUndefined();
+    restoredRows = [];
+    await expect(service.restore('file-1', 'user-1')).rejects.toThrow(
+      'File not found'
+    );
   });
 
   it('finishes the row purge when DeleteObject failed but the object is absent', async () => {
@@ -1642,8 +1733,8 @@ describe('FilesService retention cleanup', () => {
 
     expect(lte).toHaveBeenCalledWith('deletedAt', cutoff);
     expect(selectWhere).toHaveBeenCalledWith([
-      'deletedAt',
-      [cutoff, 'purgeStartedAt'],
+      ['deletedAt', cutoff],
+      'purgeStartedAt',
     ]);
     expect(transactionLock).toHaveBeenCalledWith('update');
     expect(transactionDeleteWhere).toHaveBeenCalledWith([
@@ -1675,8 +1766,8 @@ describe('FilesService retention cleanup', () => {
     const result = await service.cleanupTrashed(now);
 
     expect(selectWhere).toHaveBeenCalledWith([
-      'deletedAt',
-      [cutoff, 'purgeStartedAt'],
+      ['deletedAt', cutoff],
+      'purgeStartedAt',
     ]);
     expect(result.deletedFileIds).toEqual(['file-1']);
   });
@@ -1695,7 +1786,7 @@ describe('FilesService retention cleanup', () => {
     );
 
     expect(transactionDelete).not.toHaveBeenCalled();
-    expect(updateSet).toHaveBeenCalledWith({ purgeStartedAt: null });
+    expect(updateSet).not.toHaveBeenCalledWith({ purgeStartedAt: null });
     expect(result).toEqual({
       scanned: 1,
       deleted: 0,
@@ -1730,6 +1821,7 @@ describe('FilesService thumbnail cache', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     restoreRenderThumbnail();
+    findFirst.mockImplementation(() => userFile({ deletedAt: null }));
   });
 
   function createService() {
@@ -1738,6 +1830,7 @@ describe('FilesService thumbnail cache', () => {
       download: vi.fn(),
       downloadStream: vi.fn(),
       upload: vi.fn(),
+      delete: vi.fn(async () => undefined),
     };
     const service = new FilesService(
       minio as never,
@@ -1887,6 +1980,69 @@ describe('FilesService thumbnail cache', () => {
     expect(renderThumbnail).toHaveBeenCalledTimes(2);
     expect(minio.upload).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache when the file is deleted while its thumbnail is rendering', async () => {
+    const { minio, service } = createService();
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockResolvedValue(
+      Readable.from(Buffer.from('original'))
+    );
+    const generated = Buffer.from('thumbnail');
+    renderThumbnail.mockImplementationOnce(async () => {
+      findFirst.mockResolvedValue(undefined);
+      return generated;
+    });
+    await expect(
+      service.thumbnail({ id: 'file-1', storageKey: 'source' })
+    ).resolves.toBe(generated);
+    expect(minio.upload).not.toHaveBeenCalled();
+  });
+
+  it('removes a late cache write when deletion starts during the upload', async () => {
+    const { minio, service } = createService();
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockResolvedValue(
+      Readable.from(Buffer.from('original'))
+    );
+    renderThumbnail.mockResolvedValue(Buffer.from('thumbnail'));
+    minio.upload.mockImplementationOnce(async () => {
+      findFirst.mockResolvedValue(undefined);
+    });
+    await service.thumbnail({ id: 'file-1', storageKey: 'source' });
+    expect(minio.delete).toHaveBeenCalledWith('thumbnails/file-1/1-320.webp');
+    expect(findFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed for cache writes when the database cannot confirm the file exists', async () => {
+    const { minio, service } = createService();
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockResolvedValue(
+      Readable.from(Buffer.from('original'))
+    );
+    const generated = Buffer.from('thumbnail');
+    renderThumbnail.mockResolvedValue(generated);
+    findFirst.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(
+      service.thumbnail({ id: 'file-1', storageKey: 'source' })
+    ).resolves.toBe(generated);
+    expect(minio.upload).not.toHaveBeenCalled();
+  });
+
+  it('preserves thumbnail caching for a restorable trash file', async () => {
+    const { minio, service } = createService();
+    minio.probeObjectExists.mockResolvedValue(false);
+    minio.downloadStream.mockResolvedValue(
+      Readable.from(Buffer.from('original'))
+    );
+    renderThumbnail.mockResolvedValue(Buffer.from('thumbnail'));
+    findFirst.mockResolvedValue(userFile());
+    await service.thumbnail({ id: 'file-1', storageKey: 'source' });
+    expect(minio.upload).toHaveBeenCalledTimes(1);
+    expect(minio.delete).not.toHaveBeenCalled();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: ['file-1', 'purgeStartedAt'],
+    });
   });
 });
 

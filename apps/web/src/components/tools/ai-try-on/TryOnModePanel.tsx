@@ -11,6 +11,7 @@ type TryOnModePanelProps = Pick<
   | 'task'
   | 'quotaQuery'
   | 'libraries'
+  | 'requestLibrary'
   | 'activeReferenceCount'
   | 'quotaExhausted'
   | 'quotaLoadFailed'
@@ -21,6 +22,7 @@ export function TryOnModePanel({
   task,
   quotaQuery,
   libraries,
+  requestLibrary,
   activeReferenceCount,
   quotaExhausted,
   quotaLoadFailed,
@@ -120,6 +122,30 @@ export function TryOnModePanel({
       </p>
 
       {/* 快速体验灵感预设条 */}
+      {(!personLibraryQuery.data ||
+        !garmentLibraryQuery.data ||
+        !poseLibraryQuery.data) && (
+        <button
+          type="button"
+          disabled={
+            isBusy ||
+            personLibraryQuery.isFetching ||
+            garmentLibraryQuery.isFetching ||
+            poseLibraryQuery.isFetching
+          }
+          onClick={() => {
+            requestLibrary('person');
+            requestLibrary('garment');
+            requestLibrary('pose');
+            if (personLibraryQuery.isError) void personLibraryQuery.refetch();
+            if (garmentLibraryQuery.isError) void garmentLibraryQuery.refetch();
+            if (poseLibraryQuery.isError) void poseLibraryQuery.refetch();
+          }}
+          className="rounded-md border border-border px-3 py-2 text-xs hover:bg-muted/20 disabled:opacity-50"
+        >
+          {t('loadPresets')}
+        </button>
+      )}
       <TryOnPresetsBar
         personLibrary={personLibraryQuery.data ?? []}
         garmentLibrary={garmentLibraryQuery.data ?? []}

@@ -7,6 +7,9 @@ import { LibreOfficeConverter } from '../../../../../src/modules/tasks/services/
 import { MarkdownPdfNormalizer } from '../../../../../src/modules/tasks/services/pdf/markdown-pdf-normalizer';
 import { DocumentFallbackRenderer } from '../../../../../src/modules/tasks/services/pdf/document-fallback-renderer';
 import { PdfService } from '../../../../../src/modules/tasks/services/pdf.service';
+import { runWithTaskResources } from '../../../../../src/common/resources/task-resource-context';
+import { resourceLimits } from '../../../../../src/common/resources/resource-limits';
+import { TaskResourceLimitError } from '../../../../../src/common/resources/resource-error';
 
 async function textPdf(text: string) {
   const doc = await PDFDocument.create();
@@ -18,6 +21,30 @@ async function textPdf(text: string) {
 const input = { buffer: Buffer.from('# Visible body'), filename: 'report.md' };
 
 describe('DocumentPdfConverter', () => {
+  it('Office 产物在整份读入或标准化前限流，超限不换过滤器或回退', async () => {
+    let calls = 0;
+    const libreOffice = new LibreOfficeConverter();
+    libreOffice.convert = async (_source, outputDir) => {
+      calls++;
+      const output = join(outputDir, 'converted.pdf');
+      await writeFile(output, Buffer.alloc(100));
+      return output;
+    };
+    await expect(
+      runWithTaskResources(
+        {
+          limits: { ...resourceLimits({}), outputBytes: 10 },
+          inputBytes: 100,
+          files: new Map(),
+        },
+        () =>
+          new DocumentPdfConverter(libreOffice).convert(input, {
+            sourceFormat: 'markdown',
+          })
+      )
+    ).rejects.toBeInstanceOf(TaskResourceLimitError);
+    expect(calls).toBe(1);
+  });
   it('tries the generic filter after writer failure and removes temporary files', async () => {
     const libreOffice = new LibreOfficeConverter();
     const filters: string[] = [];

@@ -553,6 +553,14 @@ export default function ToCadPage() {
 
       {error && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error
+              ? () =>
+                  output.retryDownload(message =>
+                    setError(message ? { message } : null)
+                  )
+              : undefined
+          }
           message={error.message}
           errorCode={error.code}
           onRetry={handleConvert}

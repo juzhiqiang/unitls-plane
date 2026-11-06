@@ -388,6 +388,9 @@ export default function IdPhotoPage() {
 
       {(processingMode === 'local' ? local.error : error) && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error ? () => output.retryDownload(setError) : undefined
+          }
           // @imgly 均衡档(isnet_fp16)在 CPU 也能本地处理,失败一律用通用文案;
           // 高精度需要 WebGPU 的限制已由 highPrecisionDisabled 开关单独表达。
           message={

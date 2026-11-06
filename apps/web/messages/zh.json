@@ -1011,7 +1011,8 @@
     "backgroundTransparent": "透明",
     "emptyTitle": "开始你的创作",
     "emptyHint": "在下方输入提示词，或从灵感模板开始。",
-    "quotaRemaining": "今日剩余 {remaining} / {limit} 张"
+    "quotaRemaining": "今日剩余 {remaining} / {limit} 张",
+    "resourceLimit": "任务超出资源处理上限，请减小文件或图片分辨率、减少页数或降低导出 DPI 后重新提交。"
   },
   "ImageTryOn": {
     "title": "AI 电商试衣",
@@ -1070,6 +1071,11 @@
     "libraryEmpty": "当前分类暂无可用授权素材。",
     "libraryError": "参考图库加载失败，请重试。",
     "libraryRetry": "重试加载图库",
+    "libraryRefresh": "刷新图库",
+    "libraryRefreshing": "正在刷新图库…",
+    "libraryRefreshError": "图库更新失败，仍显示上次加载的内容。",
+    "librarySelectionRemoved": "部分已选素材已不可用，已清除对应选择，请重新选择。",
+    "loadPresets": "加载灵感预设",
     "fallbackToUploadAction": "切换为上传真实商品与人像",
     "fallbackToUploadHint": "图库为空或不可用时，仍可在「真实商品试穿」模式下直接上传个人照片与商品实拍完成生成。",
     "licenseLabel": "许可：{license}",
@@ -2392,5 +2398,33 @@
     "label": "语言",
     "zh": "中文",
     "en": "English"
+  },
+  "TaskRecovery": {
+    "title": "最近任务（{count}）",
+    "background": "离开页面后，任务仍会在服务端继续。本标签页保留最近 100 次提交记录 24 小时，刷新后也可找回。",
+    "pending": "排队中",
+    "processing": "处理中",
+    "completed": "已完成",
+    "failed": "任务失败",
+    "unavailable": "任务已不可用。",
+    "checking": "正在查询任务状态…",
+    "unconfirmed": "提交尚未确认，系统会继续查询。再次提交前，请先在这里确认原任务状态。",
+    "reconnecting": "连接中断，正在自动重连；这不代表任务失败。",
+    "refresh": "立即查询",
+    "showMore": "显示更多",
+    "allTasks": "全部任务",
+    "elapsed": "已用时 {time}",
+    "hide": "隐藏",
+    "hideHint": "仅隐藏提示，任务仍会继续执行。",
+    "task": "任务",
+    "download": "下载结果",
+    "downloading": "正在取回结果…",
+    "downloadError": "下载失败，已完成的任务仍然可用，请再次下载。",
+    "waitStopped": "已停止在当前页面等待，任务可能仍在运行，请查看最近任务。",
+    "contextChanged": "页面已离开或账号已切换。请在原账号的最近任务中确认提交结果。",
+    "checkOriginal": "请先确认原任务",
+    "viewRecent": "查看最近任务",
+    "downloadFailedTitle": "结果下载未完成",
+    "resourceLimit": "任务超出资源处理上限，请减小文件或图片分辨率、减少页数或降低导出 DPI 后重新提交。"
   }
 }

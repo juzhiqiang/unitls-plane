@@ -1,3 +1,11 @@
+const resourceBudget = {
+  run: async (
+    _task: unknown,
+    _job: unknown,
+    _token: unknown,
+    operation: () => Promise<unknown>
+  ) => operation(),
+};
 import { describe, expect, it, mock, vi } from 'bun:test';
 import { UnrecoverableError, type Job } from 'bullmq';
 import { inflateRawSync } from 'node:zlib';
@@ -115,7 +123,8 @@ function createProcessor(
     pdfService as unknown as PdfService,
     filesService as unknown as FilesService,
     tasksService as unknown as TasksService,
-    pdfToCad as unknown as PdfToCadService
+    pdfToCad as unknown as PdfToCadService,
+    resourceBudget as never
   );
 }
 
@@ -143,7 +152,8 @@ describe('PdfProcessor zip outputs', () => {
       splitService as unknown as PdfService,
       filesService as unknown as FilesService,
       tasksService as unknown as TasksService,
-      {} as PdfToCadService
+      {} as PdfToCadService,
+      resourceBudget as never
     );
 
     await processor.process(createJob());
@@ -455,7 +465,8 @@ describe('PdfProcessor operation dispatch', () => {
         service,
         files as unknown as FilesService,
         tasks as unknown as TasksService,
-        {} as PdfToCadService
+        {} as PdfToCadService,
+        resourceBudget as never
       );
 
       const result = await processor.process(createJob());
@@ -503,7 +514,8 @@ describe('PdfProcessor operation dispatch', () => {
       new PdfService(),
       files as unknown as FilesService,
       tasks as unknown as TasksService,
-      {} as PdfToCadService
+      {} as PdfToCadService,
+      resourceBudget as never
     );
     await processor.process(createJob());
 
@@ -541,7 +553,8 @@ describe('PdfProcessor operation dispatch', () => {
         service,
         files as unknown as FilesService,
         tasks as unknown as TasksService,
-        {} as PdfToCadService
+        {} as PdfToCadService,
+        resourceBudget as never
       );
       await processor.process(createJob());
 
@@ -578,7 +591,8 @@ describe('PdfProcessor operation dispatch', () => {
       new PdfService(),
       files as unknown as FilesService,
       tasks as unknown as TasksService,
-      {} as PdfToCadService
+      {} as PdfToCadService,
+      resourceBudget as never
     );
 
     await expect(processor.process(createJob())).rejects.toThrow(
@@ -610,7 +624,8 @@ describe('PdfProcessor operation dispatch', () => {
       new PdfService(),
       files as unknown as FilesService,
       tasks as unknown as TasksService,
-      {} as PdfToCadService
+      {} as PdfToCadService,
+      resourceBudget as never
     );
     await processor.process(createJob());
 
@@ -663,7 +678,8 @@ describe('PdfProcessor operation dispatch', () => {
       service,
       files as unknown as FilesService,
       tasks as unknown as TasksService,
-      {} as PdfToCadService
+      {} as PdfToCadService,
+      resourceBudget as never
     );
     const job = createJob();
 
@@ -704,7 +720,8 @@ describe('PdfProcessor operation dispatch', () => {
       service,
       files as unknown as FilesService,
       tasks as unknown as TasksService,
-      {} as PdfToCadService
+      {} as PdfToCadService,
+      resourceBudget as never
     );
     await processor.process(createJob());
 

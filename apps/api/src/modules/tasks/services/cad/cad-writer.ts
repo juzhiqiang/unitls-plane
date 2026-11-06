@@ -1,15 +1,11 @@
-import * as archiver from 'archiver';
+import {
+  createZipArchive,
+  streamToBuffer,
+} from '../../processors/pdf/zip-output';
+import { assertTaskOutput } from '../../../../common/resources/task-resource-context';
 import type { CadOutputFormat } from '@utils-plane/validators';
 import { DxfWriter, type DxfWriterOptions } from './dxf-writer';
 import { CadError, type CadWriteResult, type CadWriter } from './types';
-
-// archiver 运行时是 v8(ESM,只导出 ZipArchive 类),@types/archiver 仍是 v7 的 create() 形状;
-// 与 account-export.service 相同的取法,绕开类型与运行时不一致。
-const ZipArchive = (
-  archiver as unknown as {
-    ZipArchive: new (options: { zlib: { level: number } }) => archiver.Archiver;
-  }
-).ZipArchive;
 
 /**
  * CAD 写出器入口(02 契约)。
@@ -63,6 +59,9 @@ export async function packageCadWriteResult(
       'Writer result is missing its primary file'
     );
   }
+  assertTaskOutput(
+    result.files.reduce((total, file) => total + file.data.length, 0)
+  );
   if (result.files.length === 1) {
     return {
       filename: primary.name,
@@ -72,18 +71,11 @@ export async function packageCadWriteResult(
     };
   }
 
-  const archive = new ZipArchive({ zlib: { level: 6 } });
-  const done = new Promise<Buffer>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
-    archive.on('error', reject);
-  });
+  const archive = createZipArchive();
   for (const file of result.files) {
     archive.append(file.data, { name: file.name });
   }
-  await archive.finalize();
-  const data = await done;
+  const data = await streamToBuffer(archive);
   return {
     filename: primary.name.replace(/\.dxf$/i, '') + '.zip',
     mimeType: 'application/zip',

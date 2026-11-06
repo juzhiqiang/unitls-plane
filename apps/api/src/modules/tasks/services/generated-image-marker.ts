@@ -1,3 +1,8 @@
+import {
+  assertTaskImage,
+  currentResourceLimits,
+} from '../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
 import sharp from 'sharp';
 
 export interface GeneratedImageMarkerOptions {
@@ -23,7 +28,10 @@ export async function markGeneratedImage(
   input: Buffer,
   { model, source, generatedAt }: GeneratedImageMarkerOptions
 ): Promise<Buffer> {
-  return sharp(input)
+  if (input.length > currentResourceLimits().generatedImageBytes)
+    throw new TaskResourceLimitError('generated image byte budget exceeded');
+  await assertTaskImage(input, false);
+  return sharp(input, { limitInputPixels: currentResourceLimits().imagePixels })
     .withExif({
       IFD0: {
         Software: 'Utils-Plane AI Image Generation',

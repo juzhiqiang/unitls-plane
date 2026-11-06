@@ -1,3 +1,8 @@
+import {
+  assertRasterPixels,
+  assertTaskOutput,
+} from '../../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../../common/resources/resource-error';
 import { Injectable } from '@nestjs/common';
 import {
   CAD_POINT_TO_UNIT,
@@ -152,6 +157,7 @@ interface PageContext {
   resourceBaseName: string;
   includeUnderlay: boolean;
   totalEntities: { value: number };
+  encodedResources: { value: number };
   maxEntities: number;
 }
 
@@ -200,6 +206,7 @@ export class PdfCadExtractorService {
       const textStyles = new Map<string, CadTextStyle>();
       const degradations: CadDegradation[] = [];
       const totalEntities = { value: 0 };
+      const encodedResources = { value: 0 };
       const pages: CadPage[] = [];
       const k = CAD_POINT_TO_UNIT[config.unit] * config.scale;
 
@@ -214,6 +221,7 @@ export class PdfCadExtractorService {
             includeUnderlay: config.includeRasterUnderlay,
             resourceBaseName: options.resourceBaseName ?? 'underlay',
             totalEntities,
+            encodedResources,
             maxEntities: options.maxEntities ?? PDF_TO_CAD_MAX_ENTITIES,
           });
           this.runDevice(mupdf, page, context);
@@ -287,6 +295,7 @@ export class PdfCadExtractorService {
       | 'textStyles'
       | 'includeUnderlay'
       | 'resourceBaseName'
+      | 'encodedResources'
       | 'totalEntities'
       | 'maxEntities'
     >
@@ -321,6 +330,7 @@ export class PdfCadExtractorService {
       includeUnderlay: shared.includeUnderlay,
       resourceBaseName: shared.resourceBaseName,
       totalEntities: shared.totalEntities,
+      encodedResources: shared.encodedResources,
       maxEntities: shared.maxEntities,
     };
   }
@@ -609,6 +619,8 @@ export class PdfCadExtractorService {
         `${context.resourceBaseName}-page-${context.page.number}-${context.counters.images}.png`
       );
       if (resource) {
+        context.encodedResources.value += resource.data.length;
+        assertTaskOutput(context.encodedResources.value);
         entity.resource = resource;
       } else {
         entity.placeholder = true;
@@ -1158,6 +1170,7 @@ function renderImageResource(
   name: string
 ): CadImageResource | null {
   try {
+    assertRasterPixels([0, 0, image.getWidth(), image.getHeight()], 1);
     let pixmap = image.toPixmap();
     try {
       if (maskColor) {
@@ -1204,7 +1217,8 @@ function renderImageResource(
     } finally {
       pixmap.destroy();
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof TaskResourceLimitError) throw error;
     return null;
   }
 }

@@ -12,6 +12,10 @@ type TryOnReferencesPanelProps = Pick<
   | 'form'
   | 'task'
   | 'libraries'
+  | 'requestedLibraries'
+  | 'requestLibrary'
+  | 'librarySelectionRemoved'
+  | 'dismissLibraryNotice'
   | 'maxFileSize'
   | 'selectedPersonAsset'
   | 'selectedGarmentAsset'
@@ -29,6 +33,10 @@ export function TryOnReferencesPanel({
   selectedGarmentAsset,
   selectedPoseAsset,
   selectedStyleAsset,
+  requestedLibraries,
+  requestLibrary,
+  librarySelectionRemoved,
+  dismissLibraryNotice,
   handleFallbackToUpload,
 }: TryOnReferencesPanelProps) {
   const t = useTranslations('ImageTryOn');
@@ -57,6 +65,21 @@ export function TryOnReferencesPanel({
   } = libraries;
   return (
     <>
+      {librarySelectionRemoved && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-3 text-sm"
+        >
+          <p>{t('librarySelectionRemoved')}</p>
+          <button
+            type="button"
+            onClick={dismissLibraryNotice}
+            className="underline"
+          >
+            {t('referenceLibrary.done')}
+          </button>
+        </div>
+      )}
       {/* 4 大要素配置区域（2x2 网格） */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 1. 人像参考（必选） */}
@@ -135,6 +158,11 @@ export function TryOnReferencesPanel({
                 setError(null);
               }}
               isLoading={personLibraryQuery.isLoading}
+              isRequested={requestedLibraries.person}
+              isRefreshing={
+                personLibraryQuery.isFetching && !personLibraryQuery.isLoading
+              }
+              onLoad={() => requestLibrary('person')}
               isError={personLibraryQuery.isError}
               onRetry={() => void personLibraryQuery.refetch?.()}
               onFallbackToUpload={handleFallbackToUpload}
@@ -186,6 +214,11 @@ export function TryOnReferencesPanel({
                 setError(null);
               }}
               isLoading={garmentLibraryQuery.isLoading}
+              isRequested={requestedLibraries.garment}
+              isRefreshing={
+                garmentLibraryQuery.isFetching && !garmentLibraryQuery.isLoading
+              }
+              onLoad={() => requestLibrary('garment')}
               isError={garmentLibraryQuery.isError}
               onRetry={() => void garmentLibraryQuery.refetch?.()}
               onFallbackToUpload={handleFallbackToUpload}
@@ -216,6 +249,11 @@ export function TryOnReferencesPanel({
               setError(null);
             }}
             isLoading={poseLibraryQuery.isLoading}
+            isRequested={requestedLibraries.pose}
+            isRefreshing={
+              poseLibraryQuery.isFetching && !poseLibraryQuery.isLoading
+            }
+            onLoad={() => requestLibrary('pose')}
             isError={poseLibraryQuery.isError}
             onRetry={() => void poseLibraryQuery.refetch?.()}
             disabled={isBusy}
@@ -244,6 +282,11 @@ export function TryOnReferencesPanel({
               setError(null);
             }}
             isLoading={garmentLibraryQuery.isLoading}
+            isRequested={requestedLibraries.garment}
+            isRefreshing={
+              garmentLibraryQuery.isFetching && !garmentLibraryQuery.isLoading
+            }
+            onLoad={() => requestLibrary('garment')}
             isError={garmentLibraryQuery.isError}
             onRetry={() => void garmentLibraryQuery.refetch?.()}
             disabled={isBusy}

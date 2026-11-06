@@ -1,3 +1,7 @@
+import {
+  assertRasterPixels,
+  assertPdfPages,
+} from '../../../../common/resources/task-resource-context';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { getMupdf, type MupdfModule } from './mupdf-runtime';
 import {
@@ -13,6 +17,7 @@ export class MarkdownPdfNormalizer {
     let firstVisiblePage = -1;
 
     try {
+      assertPdfPages(document.countPages());
       for (let index = 0; index < document.countPages(); index++) {
         const page = document.loadPage(index);
         try {
@@ -70,6 +75,7 @@ export class MarkdownPdfNormalizer {
     mupdf: MupdfModule,
     page: import('mupdf').Page
   ): boolean {
+    assertRasterPixels(page.getBounds(), 1);
     const pixmap = page.toPixmap(
       [1, 0, 0, 1, 0, 0],
       mupdf.ColorSpace.DeviceGray,

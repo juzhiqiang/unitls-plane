@@ -9,6 +9,7 @@ import {
   files,
   imageGeneratePresets,
   tasks,
+  taskSubmissions,
   type AccountDeletionQueueScan,
   type NewAccountDeletionQueueScan,
   type AiTryOnReference,
@@ -21,6 +22,8 @@ import {
   type NewImageGeneratePreset,
   type Task,
   type NewTask,
+  type TaskSubmission,
+  type NewTaskSubmission,
 } from './schema';
 
 export type {
@@ -36,6 +39,8 @@ export type {
   NewImageGeneratePreset,
   Task,
   NewTask,
+  TaskSubmission,
+  NewTaskSubmission,
 };
 export {
   accountDeletionQueueScans,
@@ -45,4 +50,5 @@ export {
   files,
   imageGeneratePresets,
   tasks,
+  taskSubmissions,
 };

@@ -356,6 +356,9 @@ export default function RotatePage() {
 
       {error && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error ? () => output.retryDownload(setError) : undefined
+          }
           message={error}
           onRetry={handleRotate}
           onReset={handleReset}

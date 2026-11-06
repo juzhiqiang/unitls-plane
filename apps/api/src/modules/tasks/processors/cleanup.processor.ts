@@ -1,11 +1,22 @@
-import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import {
+  Processor,
+  WorkerHost,
+  OnWorkerEvent,
+  InjectQueue,
+} from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import type { CleanupObligation } from '@utils-plane/db';
 import { FilesService, type CleanupSummary } from '../../files/files.service';
 import { MinioService } from '../../files/minio.service';
 import { CleanupObligationService } from '../../files/cleanup-obligation.service';
 import { TaskJobReconciler } from '../task-job-reconciler.service';
+import { cleanupTaskSubmissions } from '../task-submissions';
+import {
+  ThumbnailCleanupService,
+  type ThumbnailCleanupSummary,
+} from '../../files/thumbnail-cleanup.service';
 
 export type CleanupObligationSummary = {
   scanned: number;
@@ -23,7 +34,9 @@ export class CleanupProcessor extends WorkerHost {
     private readonly filesService: FilesService,
     private readonly minioService: MinioService,
     private readonly cleanupObligationService: CleanupObligationService,
-    private readonly taskJobReconciler: TaskJobReconciler
+    private readonly taskJobReconciler: TaskJobReconciler,
+    private readonly thumbnailCleanup: ThumbnailCleanupService,
+    @InjectQueue('cleanup-queue') private readonly cleanupQueue: Queue
   ) {
     super();
   }
@@ -34,8 +47,45 @@ export class CleanupProcessor extends WorkerHost {
     | { expired: CleanupSummary; trash: CleanupSummary }
     | { orphanFileId: string }
     | CleanupObligationSummary
+    | ThumbnailCleanupSummary
+    | { submissionsCleaned: true }
   > {
     this.logger.log(`Processing cleanup job ${job.id}`);
+    if (job.name === 'cleanup-task-submissions') {
+      await cleanupTaskSubmissions();
+      return { submissionsCleaned: true };
+    }
+    if (job.name === 'cleanup-orphan-thumbnails') {
+      const { continuationToken, sweepId = job.id } = job.data as {
+        continuationToken?: string;
+        sweepId?: string;
+      };
+      const summary =
+        await this.thumbnailCleanup.cleanupPage(continuationToken);
+      if (summary.continuationToken) {
+        const identity = createHash('sha256')
+          .update(JSON.stringify([sweepId, summary.continuationToken]))
+          .digest('hex');
+        await this.cleanupQueue.add(
+          'cleanup-orphan-thumbnails',
+          {
+            continuationToken: summary.continuationToken,
+            sweepId,
+          },
+          {
+            jobId: `thumbnail-sweep-${identity}`,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 1000 },
+            removeOnComplete: { age: 7 * 24 * 60 * 60, count: 10000 },
+            removeOnFail: { age: 7 * 24 * 60 * 60, count: 1000 },
+          }
+        );
+      }
+      this.logger.log(
+        `Thumbnail cleanup: deleted=${summary.deleted}/${summary.scanned}, failed=${summary.failed}`
+      );
+      return summary;
+    }
     if (job.name === 'reconcile-cleanup-obligations') {
       return this.reconcileCleanupObligations();
     }

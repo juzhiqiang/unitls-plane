@@ -66,17 +66,14 @@ describe('bufferFromGeneratedImagePayload', () => {
   });
 
   it('downloads the image when only a url is returned', async () => {
-    const download = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      arrayBuffer: async () =>
-        new Uint8Array(Buffer.from('hello', 'utf8')).buffer,
-    }));
+    const download = vi.fn(async () => new Response('hello'));
     const buffer = await bufferFromGeneratedImagePayload(
       { data: [{ url: 'https://cdn.test/a.png' }] },
       download as unknown as typeof fetch
     );
-    expect(download).toHaveBeenCalledWith('https://cdn.test/a.png');
+    expect(download).toHaveBeenCalledWith('https://cdn.test/a.png', {
+      signal: expect.any(globalThis.AbortSignal),
+    });
     expect(buffer.toString('utf8')).toBe('hello');
   });
 

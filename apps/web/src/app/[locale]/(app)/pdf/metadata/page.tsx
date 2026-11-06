@@ -290,6 +290,9 @@ export default function MetadataPage() {
 
       {error && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error ? () => output.retryDownload(setError) : undefined
+          }
           message={error}
           onRetry={handleStart}
           onReset={handleReset}

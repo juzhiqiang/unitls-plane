@@ -28,7 +28,7 @@ export function useTaskProgress(
   const interval = options?.pollingInterval ?? 1000;
   const onCompleted = options?.onCompleted;
   const onFailed = options?.onFailed;
-  const calledRef = useRef<string | null>(null);
+  const calledRef = useRef(new Set<string>());
 
   const query = useQuery({
     queryKey: ['task-progress', taskId],
@@ -58,24 +58,19 @@ export function useTaskProgress(
   useEffect(() => {
     const data = query.data;
 
-    if (!data || calledRef.current === taskId) return;
+    if (!data || !taskId || calledRef.current.has(taskId)) return;
 
     if (data.status === 'completed') {
-      calledRef.current = taskId;
+      calledRef.current.add(taskId);
       onCompleted?.(data.outputFileId ?? '');
     } else if (data.status === 'failed') {
-      calledRef.current = taskId;
+      calledRef.current.add(taskId);
       onFailed?.({
         code: data.errorCode ?? 'UNKNOWN',
         message: data.errorMessage ?? 'Task failed',
       });
     }
   }, [onCompleted, onFailed, query.data, taskId]);
-
-  // Reset when taskId changes
-  useEffect(() => {
-    calledRef.current = null;
-  }, [taskId]);
 
   return query;
 }

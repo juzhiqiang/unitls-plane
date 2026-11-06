@@ -11,6 +11,34 @@ export interface FileDownloadUrlOptions {
   attachment?: boolean;
 }
 
+/** 保留服务端产物的格式和中文名；filename* 优先于 ASCII 回退名。 */
+export function downloadedFilename(
+  disposition: string | null,
+  fallback: string
+): string {
+  let name: string | undefined;
+  const encoded = disposition?.match(
+    /(?:^|;)\s*filename\*=UTF-8''([^;]+)/i
+  )?.[1];
+  if (encoded) {
+    try {
+      name = decodeURIComponent(encoded.trim());
+    } catch {
+      /* 使用普通 filename */
+    }
+  }
+  name ??=
+    disposition
+      ?.match(/(?:^|;)\s*filename="((?:\\.|[^"\\])*)"/i)?.[1]
+      ?.replace(/\\(.)/g, '$1') ??
+    disposition?.match(/(?:^|;)\s*filename=([^;]+)/i)?.[1]?.trim();
+  const safe = Array.from(name ?? '')
+    .filter(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
+    .join('')
+    .replace(/[\\/]/g, '_');
+  return safe && safe !== '.' && safe !== '..' ? safe : fallback;
+}
+
 export function buildFileDownloadUrl(
   fileId: string,
   options: FileDownloadUrlOptions = {}

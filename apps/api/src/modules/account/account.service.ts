@@ -3,7 +3,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { MinioService } from '../files/minio.service';
+import { FilesService } from '../files/files.service';
 import { AccountTaskQueueService } from './account-task-queue.service';
 import { AccountRepository } from './account.repository';
 import { AccountSummaryCache } from '../../common/cache/account-summary-cache.service';
@@ -12,7 +12,7 @@ import { AccountSummaryCache } from '../../common/cache/account-summary-cache.se
 export class AccountService {
   constructor(
     private readonly repository: AccountRepository,
-    private readonly minio: MinioService,
+    private readonly filesService: FilesService,
     private readonly taskQueues: AccountTaskQueueService,
     private readonly summaryCache: AccountSummaryCache
   ) {}
@@ -45,7 +45,7 @@ export class AccountService {
 
     try {
       for (const file of snapshot.files) {
-        await this.minio.delete(file.storageKey);
+        await this.filesService.forceDeleteOwned(file.id, userId);
       }
     } catch {
       throw new ServiceUnavailableException('Account deletion is incomplete');

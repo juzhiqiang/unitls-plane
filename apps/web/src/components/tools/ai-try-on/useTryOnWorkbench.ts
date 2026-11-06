@@ -7,7 +7,7 @@ import {
   useImageGenerateModels,
   useImageGenerateQuota,
 } from '@/hooks/api/use-tasks';
-import { useAiTryOnReferences } from '@/hooks/api/use-ai-try-on';
+import { useTryOnLibraries } from './useTryOnLibraries';
 import { useObjectUrl } from '@/hooks/use-object-url';
 import { getImageUploadMaxFileSize } from '@/lib/tools/image-limits';
 import type { ToolStage } from '@/components/tools/tool-step-rail';
@@ -22,9 +22,6 @@ export function useTryOnWorkbench() {
   const maxFileSize = getImageUploadMaxFileSize(session);
   const quotaQuery = useImageGenerateQuota();
   const modelsQuery = useImageGenerateModels();
-  const personLibraryQuery = useAiTryOnReferences('person');
-  const garmentLibraryQuery = useAiTryOnReferences('garment');
-  const poseLibraryQuery = useAiTryOnReferences('pose');
   const form = useTryOnForm();
   const {
     mode,
@@ -37,6 +34,12 @@ export function useTryOnWorkbench() {
     styleAssetId,
     promptAddition,
   } = form;
+  const libraryState = useTryOnLibraries(form);
+  const {
+    person: personLibraryQuery,
+    garment: garmentLibraryQuery,
+    pose: poseLibraryQuery,
+  } = libraryState.libraries;
   const garmentObjectUrl = useObjectUrl(garmentFile);
   const personObjectUrl = useObjectUrl(personFile);
 
@@ -51,14 +54,19 @@ export function useTryOnWorkbench() {
     Number(hasPerson) + Number(hasGarment) + Number(hasPose) + Number(hasStyle);
 
   const personLibraryRequiredAndFailed =
-    personSource === 'library' && Boolean(personLibraryQuery.isError);
+    personSource === 'library' &&
+    Boolean(personLibraryQuery.isError) &&
+    !personLibraryQuery.data;
   const garmentLibraryRequiredAndFailed =
-    mode === 'inspiration' && Boolean(garmentLibraryQuery.isError);
+    mode === 'inspiration' &&
+    Boolean(garmentLibraryQuery.isError) &&
+    !garmentLibraryQuery.data;
   const quotaLoadFailed = Boolean(session && quotaQuery.isError);
   const requiredApiFailed =
     personLibraryRequiredAndFailed ||
     garmentLibraryRequiredAndFailed ||
-    quotaLoadFailed;
+    quotaLoadFailed ||
+    libraryState.hasUnavailableSelection;
 
   const quotaExhausted = Boolean(
     quotaQuery.data && quotaQuery.data.remaining <= 0
@@ -211,11 +219,7 @@ export function useTryOnWorkbench() {
     maxFileSize,
     quotaQuery,
     models,
-    libraries: {
-      person: personLibraryQuery,
-      garment: garmentLibraryQuery,
-      pose: poseLibraryQuery,
-    },
+    ...libraryState,
     activeReferenceCount,
     quotaExhausted,
     quotaLoadFailed,

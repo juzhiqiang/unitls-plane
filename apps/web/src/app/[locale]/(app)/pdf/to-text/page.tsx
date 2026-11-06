@@ -371,6 +371,9 @@ export default function ToTextPage() {
 
       {error && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error ? () => output.retryDownload(setError) : undefined
+          }
           message={error}
           onRetry={handleConvert}
           onReset={handleReset}

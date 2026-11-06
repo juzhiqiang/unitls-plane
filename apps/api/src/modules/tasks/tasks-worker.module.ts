@@ -1,3 +1,4 @@
+import { TaskResourceBudgetService } from './services/task-resource-budget.service';
 import { Module } from '@nestjs/common';
 import { AiImageProcessor } from './processors/ai-image.processor';
 import { CleanupProcessor } from './processors/cleanup.processor';
@@ -11,6 +12,7 @@ import { TasksCoreModule } from './tasks-core.module';
 @Module({
   imports: [TasksCoreModule],
   providers: [
+    TaskResourceBudgetService,
     ImageProcessor,
     PdfProcessor,
     FontProcessor,

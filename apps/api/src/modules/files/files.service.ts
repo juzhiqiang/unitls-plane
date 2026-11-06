@@ -1,4 +1,12 @@
 import {
+  currentTaskResources,
+  readTaskInput,
+  assertTaskImage,
+  assertTaskPdf,
+  assertTaskOutput,
+} from '../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../common/resources/resource-error';
+import {
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -42,6 +50,7 @@ import { normalizeUploadedFilename } from './filename.util';
 import {
   THUMBNAIL_CONTENT_TYPE,
   getThumbnailObjectKey,
+  getThumbnailObjectPrefix,
   renderThumbnail,
 } from './thumbnail.util';
 import { CleanupObligationService } from './cleanup-obligation.service';
@@ -167,6 +176,8 @@ export class FilesService {
     const tempPath = Buffer.isBuffer(file) ? undefined : file.path;
 
     try {
+      if (currentTaskResources())
+        assertTaskOutput(Buffer.isBuffer(file) ? file.length : meta.size);
       if (tempPath && !isUploadTempPath(tempPath)) {
         throw new BadRequestException('Invalid upload temporary file');
       }
@@ -354,7 +365,29 @@ export class FilesService {
   }
 
   async download(storageKey: string): Promise<Buffer> {
-    return this.minioService.download(storageKey);
+    const resources = currentTaskResources();
+    if (!resources) return this.minioService.download(storageKey);
+    const file = resources.files.get(storageKey);
+    if (!file) throw new TaskResourceLimitError('input was not reserved');
+    const controller = new globalThis.AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const stream = await this.minioService.downloadStream(
+        storageKey,
+        controller.signal
+      );
+      const buffer = await readTaskInput(
+        stream,
+        file.originalSize,
+        controller.signal
+      );
+      if (file.mimeType.startsWith('image/')) await assertTaskImage(buffer);
+      if (file.mimeType === 'application/pdf') await assertTaskPdf(buffer);
+      return buffer;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
   }
 
   downloadStream(storageKey: string, signal?: globalThis.AbortSignal) {
@@ -365,8 +398,8 @@ export class FilesService {
    * 列表缩略图。生成结果按 file.id 持久化到 MinIO，版本化对象键由
    * thumbnail.util.ts 统一维护；同一进程内用 single-flight 避免并发冷请求重复解码。
    *
-   * 注意：软删除/永久删除暂不清理 thumbnails/ 前缀，后续统一通过对象生命周期
-   * 或批处理清理，本批不扩大删除链路范围。
+   * 软删除保留缓存；永久删除统一清理全部版本。冷生成写入前后检查 purge 状态，
+   * 跨进程崩溃留下的晚到缓存由缩略图孤儿巡检回收。
    */
   async thumbnail(file: Pick<File, 'id' | 'storageKey'>): Promise<Buffer> {
     const existing = this.thumbnailFlights.get(file.id);
@@ -396,20 +429,28 @@ export class FilesService {
     const buffer = await renderThumbnail(source);
 
     try {
+      if (!(await this.canCacheThumbnail(file.id))) return buffer;
       await this.minioService.upload(
         thumbnailKey,
         buffer,
         THUMBNAIL_CONTENT_TYPE
       );
-    } catch (error) {
+      if (!(await this.canCacheThumbnail(file.id))) {
+        await this.minioService.delete(thumbnailKey);
+      }
+    } catch {
       this.logger.warn(
-        `Failed to cache thumbnail file=${file.id}: ${
-          error instanceof Error ? error.message : 'unknown error'
-        }`
+        `Failed to cache or reconcile thumbnail file=${file.id}`
       );
     }
 
     return buffer;
+  }
+
+  private async canCacheThumbnail(fileId: string): Promise<boolean> {
+    return !!(await db.query.files.findFirst({
+      where: and(eq(files.id, fileId), isNull(files.purgeStartedAt)),
+    }));
   }
 
   async getSignedUrl(id: string, userId?: string): Promise<string> {
@@ -498,7 +539,8 @@ export class FilesService {
         and(
           eq(files.id, id),
           eq(files.userId, userId),
-          isNull(files.purgeStartedAt)
+          isNull(files.purgeStartedAt),
+          isNull(files.deletedAt)
         )
       );
 
@@ -514,7 +556,8 @@ export class FilesService {
         and(
           inArray(files.id, ids),
           eq(files.userId, userId),
-          isNull(files.purgeStartedAt)
+          isNull(files.purgeStartedAt),
+          isNull(files.deletedAt)
         )
       );
 
@@ -528,7 +571,8 @@ export class FilesService {
         and(
           inArray(files.id, validIds),
           eq(files.userId, userId),
-          isNull(files.purgeStartedAt)
+          isNull(files.purgeStartedAt),
+          isNull(files.deletedAt)
         )
       );
 
@@ -659,6 +703,9 @@ export class FilesService {
     const result = await this.permanentlyDeleteEligibleFile(
       requireFileEligibility(and(eq(files.id, id), eq(files.userId, userId)))
     );
+    if (result === 'in-progress') {
+      throw new ServiceUnavailableException('File deletion is in progress');
+    }
     if (result === 'deleted') {
       this.logger.log(`Force deleted owned file ${id}`);
     }
@@ -756,9 +803,9 @@ export class FilesService {
       .select()
       .from(files)
       .where(
-        and(
-          isNotNull(files.deletedAt),
-          or(lte(files.deletedAt, cutoff), isNotNull(files.purgeStartedAt))
+        or(
+          and(isNotNull(files.deletedAt), lte(files.deletedAt, cutoff)),
+          isNotNull(files.purgeStartedAt)
         )
       );
 
@@ -766,8 +813,10 @@ export class FilesService {
       requireFileEligibility(
         and(
           eq(files.id, file.id),
-          isNotNull(files.deletedAt),
-          or(lte(files.deletedAt, cutoff), isNotNull(files.purgeStartedAt))
+          or(
+            and(isNotNull(files.deletedAt), lte(files.deletedAt, cutoff)),
+            isNotNull(files.purgeStartedAt)
+          )
         )
       )
     );
@@ -889,13 +938,14 @@ export class FilesService {
       }
 
       if (objectExists) {
-        await db
-          .update(files)
-          .set({ purgeStartedAt: null })
-          .where(this.filePurgeClaimEligibility(claim));
+        // HEAD 只证明此刻存在，超时的 DELETE 仍可能晚到。
+        // 已接受的永久删除保留持久标记，由后台接续，避免恢复后原图被晚到请求删除。
         throw error;
       }
     }
+
+    // 原图已不存在，此后失败只能继续清理，不能解除标记并允许恢复。
+    await this.minioService.deletePrefix(getThumbnailObjectPrefix(claim.id));
 
     const deleted = await withProducerTransaction(tx =>
       tx

@@ -7,6 +7,8 @@ import {
   HeadObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -20,6 +22,11 @@ export const MINIO_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 export const MINIO_DELETE_TIMEOUT_MS = 30 * 1000;
 export const MINIO_MULTIPART_PART_SIZE = 8 * 1024 * 1024;
 export const MINIO_MULTIPART_QUEUE_SIZE = 2;
+
+export type ObjectPage = {
+  objects: { key: string; lastModified?: Date }[];
+  continuationToken?: string;
+};
 
 export type MinioUploadMode = 'auto' | 'multipart' | 'buffer';
 export type MinioRuntime = 'node' | 'bun';
@@ -398,6 +405,71 @@ export class MinioService implements OnModuleInit {
       }),
       { abortSignal }
     );
+  }
+
+  async listObjects(
+    prefix: string,
+    continuationToken?: string
+  ): Promise<ObjectPage> {
+    if (!prefix || prefix === '/' || !prefix.endsWith('/')) {
+      throw new Error('Invalid object prefix');
+    }
+    const response = await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: prefix,
+        MaxKeys: 100,
+        ContinuationToken: continuationToken,
+      }),
+      { abortSignal: globalThis.AbortSignal.timeout(MINIO_DELETE_TIMEOUT_MS) }
+    );
+    const next = response.IsTruncated
+      ? response.NextContinuationToken
+      : undefined;
+    if (response.IsTruncated && (!next || next === continuationToken)) {
+      throw new Error('Invalid object listing continuation');
+    }
+    const objects = (response.Contents ?? []).flatMap(object =>
+      object.Key ? [{ key: object.Key, lastModified: object.LastModified }] : []
+    );
+    if (objects.some(object => !object.key.startsWith(prefix))) {
+      throw new Error('Object listing escaped the requested prefix');
+    }
+    return { objects, continuationToken: next };
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    let continuationToken: string | undefined;
+    const visitedTokens = new Set<string>();
+    do {
+      const page = await this.listObjects(prefix, continuationToken);
+      if (page.continuationToken) {
+        if (visitedTokens.has(page.continuationToken)) {
+          throw new Error('Invalid object listing continuation');
+        }
+        visitedTokens.add(page.continuationToken);
+      }
+      if (page.objects.length > 0) {
+        const response = await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: {
+              Objects: page.objects.map(object => ({ Key: object.key })),
+              Quiet: true,
+            },
+          }),
+          {
+            abortSignal: globalThis.AbortSignal.timeout(
+              MINIO_DELETE_TIMEOUT_MS
+            ),
+          }
+        );
+        if (response.Errors?.length) {
+          throw new Error('Object prefix deletion is incomplete');
+        }
+      }
+      continuationToken = page.continuationToken;
+    } while (continuationToken);
   }
 
   async probeObjectExists(key: string): Promise<boolean> {

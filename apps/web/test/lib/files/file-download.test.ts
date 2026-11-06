@@ -13,6 +13,7 @@ import {
   buildFileThumbnailUrl,
   downloadStoredFile,
   triggerBrowserDownload,
+  downloadedFilename,
 } from '@/lib/files/file-download';
 
 const API_URL = 'https://api.example.com';
@@ -28,6 +29,18 @@ afterAll(() => {
 });
 
 describe('buildFileDownloadUrl', () => {
+  it('preserves quoted filenames and safely falls back from malformed encoding', () => {
+    expect(
+      downloadedFilename('inline; filename="report; final.md"', 'result.txt')
+    ).toBe('report; final.md');
+    expect(
+      downloadedFilename(
+        "inline; filename=model.dxf; filename*=UTF-8''%broken",
+        'result.bin'
+      )
+    ).toBe('model.dxf');
+    expect(downloadedFilename(null, 'result.avif')).toBe('result.avif');
+  });
   it('returns the inline preview url by default', () => {
     expect(buildFileDownloadUrl('file-1')).toBe(
       `${API_URL}/files/file-1/download`

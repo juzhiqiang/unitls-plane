@@ -27,6 +27,29 @@ function createWrapper() {
 }
 
 describe('useTaskProgress', () => {
+  it('calls a cached completion only once in StrictMode', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity } },
+    });
+    client.setQueryData(['task-progress', 'cached'], {
+      status: 'completed',
+      outputFileId: 'out',
+      progress: 100,
+    });
+    const onCompleted = vi.fn();
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        React.StrictMode,
+        null,
+        React.createElement(QueryClientProvider, { client }, children)
+      );
+    const { rerender } = renderHook(
+      () => useTaskProgress('cached', { onCompleted }),
+      { wrapper }
+    );
+    rerender();
+    expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     focusManager.setFocused(undefined);

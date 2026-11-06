@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ImageViewerModal } from '@/components/tools/image-viewer-modal';
 import type {
@@ -30,6 +30,9 @@ export interface ReferenceLibraryGridProps {
   onSelect: (assetId: string | null) => void;
   isLoading?: boolean;
   isError?: boolean;
+  isRequested?: boolean;
+  isRefreshing?: boolean;
+  onLoad?: () => void;
   onRetry?: () => void;
   onFallbackToUpload?: () => void;
   disabled?: boolean;
@@ -45,6 +48,9 @@ export function ReferenceLibraryGrid({
   onSelect,
   isLoading = false,
   isError = false,
+  isRequested = true,
+  isRefreshing = false,
+  onLoad,
   onRetry,
   onFallbackToUpload,
   disabled = false,
@@ -97,6 +103,9 @@ export function ReferenceLibraryGrid({
     role === 'pose' ? filteredPoseGroups.length : filteredStandardItems.length;
   const totalPages = Math.max(1, Math.ceil(totalUnits / pageSize));
   const safePage = Math.min(currentPage, totalPages);
+  useEffect(() => {
+    setCurrentPage(page => Math.min(page, totalPages));
+  }, [totalPages]);
   const startIndex = (safePage - 1) * pageSize;
   const quickPickItems = useMemo(
     () =>
@@ -112,7 +121,24 @@ export function ReferenceLibraryGrid({
     if (nextId) setIsModalOpen(false);
   };
 
-  if (isLoading) {
+  if (!isRequested && items.length === 0) {
+    return (
+      <button
+        type="button"
+        data-testid={`open-library-modal-${role}`}
+        disabled={disabled}
+        onClick={() => {
+          setIsModalOpen(true);
+          onLoad?.();
+        }}
+        className="w-full rounded-lg border border-dashed border-border p-4 text-left text-sm hover:bg-muted/20 disabled:opacity-50"
+      >
+        {r('browse')}
+      </button>
+    );
+  }
+
+  if (isLoading && items.length === 0) {
     return (
       <div
         role="status"
@@ -124,7 +150,7 @@ export function ReferenceLibraryGrid({
     );
   }
 
-  if (isError) {
+  if (isError && items.length === 0) {
     return (
       <div
         role="alert"
@@ -139,7 +165,7 @@ export function ReferenceLibraryGrid({
           {onRetry && (
             <button
               type="button"
-              disabled={disabled}
+              disabled={disabled || isRefreshing}
               onClick={onRetry}
               className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground transition-colors hover:border-foreground disabled:opacity-50"
             >
@@ -161,6 +187,30 @@ export function ReferenceLibraryGrid({
     );
   }
 
+  const refreshControl = onRetry && (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      {isError && (
+        <p role="alert" className="text-destructive">
+          {t('libraryRefreshError')}
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={disabled || isRefreshing}
+        onClick={onRetry}
+        className="rounded-md border border-border bg-background px-3 py-1.5 text-muted-foreground hover:text-foreground disabled:opacity-50"
+      >
+        {t(
+          isRefreshing
+            ? 'libraryRefreshing'
+            : isError
+              ? 'libraryRetry'
+              : 'libraryRefresh'
+        )}
+      </button>
+    </div>
+  );
+
   if (items.length === 0) {
     return (
       <div
@@ -168,6 +218,7 @@ export function ReferenceLibraryGrid({
         className="space-y-3 rounded-md border border-dashed border-border bg-muted/10 p-5 text-sm"
       >
         <p className="text-muted-foreground">{t('libraryEmpty')}</p>
+        {refreshControl}
         {onFallbackToUpload && (
           <>
             <p className="text-muted-foreground">{t('fallbackToUploadHint')}</p>
@@ -209,10 +260,14 @@ export function ReferenceLibraryGrid({
         disabled={disabled}
         optional={optional}
         libraryCountText={libraryCountText}
-        onOpen={() => setIsModalOpen(true)}
+        onOpen={() => {
+          onLoad?.();
+          setIsModalOpen(true);
+        }}
         onZoom={setZoomSrc}
         onSelect={onSelect}
       />
+      {!isModalOpen && refreshControl}
       {isModalOpen && (
         <ReferenceLibraryModal
           role={role}
@@ -226,6 +281,7 @@ export function ReferenceLibraryGrid({
           onPageChange={setCurrentPage}
           onClear={() => onSelect(null)}
         >
+          <div className="px-5 pt-3">{refreshControl}</div>
           <ReferenceLibraryFilters
             role={role}
             itemCount={items.length}

@@ -32,6 +32,18 @@ describe('AiTryOnReferencesController', () => {
     expect(aiTryOnReferencesService.list).toHaveBeenCalledWith('garment', 'en');
   });
 
+  it('marks the public catalog as conditionally cacheable', async () => {
+    const response = { setHeader: vi.fn() };
+    await createController().listReferences(
+      { kind: 'pose', lang: 'zh' } as never,
+      response as never
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Cache-Control',
+      'public, max-age=0, must-revalidate'
+    );
+  });
+
   it('exposes a public GET route under /tasks/ai-try-on/references', () => {
     const prototype = AiTryOnReferencesController.prototype as Record<
       string,

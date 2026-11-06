@@ -28,6 +28,29 @@ afterEach(() => {
 });
 
 describe('useTaskOutput', () => {
+  it('retries the same output and transform without restarting the task', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('offline'))
+      .mockResolvedValue(okResponse());
+    const { result } = renderHook(() => useTaskOutput<File>());
+    await act(async () => {
+      await result.current.download(
+        'original-output',
+        blob => new File([blob], 'result.pdf')
+      );
+    });
+    const setError = vi.fn();
+    await act(async () => {
+      await result.current.retryDownload(setError);
+    });
+    expect(result.current.result?.name).toBe('result.pdf');
+    expect(setError).toHaveBeenCalledWith(null);
+    expect(vi.mocked(fetch).mock.calls.map(call => call[0])).toEqual([
+      expect.stringContaining('original-output'),
+      expect.stringContaining('original-output'),
+    ]);
+  });
   it('goes idle → loading → ready and returns the transformed result', async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>(resolve => {

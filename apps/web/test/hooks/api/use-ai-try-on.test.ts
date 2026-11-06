@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   aiTryOnQueryKeys,
   normalizeAiTryOnReferenceAsset,
@@ -35,9 +35,82 @@ function createWrapper(
 }
 
 describe('useAiTryOnReferences', () => {
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.clearAllMocks();
     localeState.current = 'zh';
+  });
+
+  it('waits for demand, shares simultaneous consumers and cancels the abandoned request', async () => {
+    mockGet.mockImplementation(() => new Promise(() => {}));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = createWrapper(client);
+    const first = renderHook(
+      ({ enabled }) => useAiTryOnReferences('pose', { enabled }),
+      {
+        wrapper,
+        initialProps: { enabled: false },
+      }
+    );
+    expect(mockGet).not.toHaveBeenCalled();
+    first.rerender({ enabled: true });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+    const second = renderHook(() => useAiTryOnReferences('pose'), { wrapper });
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const signal = mockGet.mock.calls[0]?.[1]?.signal;
+    first.unmount();
+    expect(signal?.aborted).toBe(false);
+    second.unmount();
+    expect(signal?.aborted).toBe(true);
+    client.clear();
+  });
+
+  it('reuses fresh data but replaces stale data on remount', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const key = aiTryOnQueryKeys.references('pose', 'zh');
+    client.setQueryData(key, [{ id: 'old' }]);
+    mockGet.mockResolvedValue({
+      data: [{ id: 'new', title: 'Updated' }],
+    } as never);
+    const first = renderHook(() => useAiTryOnReferences('pose'), {
+      wrapper: createWrapper(client),
+    });
+    expect(first.result.current.data?.[0]?.id).toBe('old');
+    expect(mockGet).not.toHaveBeenCalled();
+    first.unmount();
+    client.setQueryData(key, [{ id: 'old' }], {
+      updatedAt: Date.now() - 6 * 60_000,
+    });
+    const second = renderHook(() => useAiTryOnReferences('pose'), {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(() =>
+      expect(second.result.current.data?.[0]?.id).toBe('new')
+    );
+    client.clear();
+  });
+
+  it('refreshes an open library periodically without losing cached data on failure', async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const key = aiTryOnQueryKeys.references('pose', 'zh');
+    client.setQueryData(key, [{ id: 'cached' }]);
+    mockGet.mockResolvedValue({ error: new Error('offline') } as never);
+    const view = renderHook(() => useAiTryOnReferences('pose'), {
+      wrapper: createWrapper(client),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(5 * 60_000 + 10));
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(view.result.current.isError).toBe(true);
+    expect(view.result.current.data?.[0]?.id).toBe('cached');
+    view.unmount();
+    client.clear();
   });
 
   it('requests references by kind and current locale and strips storage bucket/key fields', async () => {
@@ -68,6 +141,7 @@ describe('useAiTryOnReferences', () => {
 
     expect(mockGet).toHaveBeenCalledWith('/tasks/ai-try-on/references', {
       params: { query: { kind: 'person', lang: 'zh' } },
+      signal: expect.any(AbortSignal),
     });
     expect(result.current.data).toEqual([
       {
@@ -117,6 +191,7 @@ describe('useAiTryOnReferences', () => {
 
     expect(mockGet).toHaveBeenCalledWith('/tasks/ai-try-on/references', {
       params: { query: { kind: 'garment', lang: 'en' } },
+      signal: expect.any(AbortSignal),
     });
     expect(
       queryClient.getQueryData(aiTryOnQueryKeys.references('garment', 'en'))
@@ -136,6 +211,27 @@ describe('useAiTryOnReferences', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBe(apiError);
+  });
+
+  it('does not replace cached selections with an empty list on a malformed response', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(aiTryOnQueryKeys.references('pose', 'zh'), [
+      { id: 'cached' },
+    ]);
+    mockGet.mockResolvedValue({ data: { message: 'upstream error' } } as never);
+    const view = renderHook(() => useAiTryOnReferences('pose'), {
+      wrapper: createWrapper(client),
+    });
+    expect(view.result.current.isError).toBe(false);
+    await act(async () => {
+      await view.result.current.refetch();
+    });
+    await waitFor(() => expect(view.result.current.isError).toBe(true));
+    expect(view.result.current.data?.[0]?.id).toBe('cached');
+    view.unmount();
+    client.clear();
   });
 
   it('normalizes fallback fields cleanly', () => {

@@ -4,7 +4,26 @@
     "/tasks": {
       "post": {
         "operationId": "TasksController_create",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "X-Task-Client-Id",
+            "in": "header",
+            "description": "Anonymous browser session UUID; required with Idempotency-Key when unauthenticated",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "UUID for one submission; retained for 24 hours",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -25,6 +44,12 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Key already used with different parameters"
+          },
+          "410": {
+            "description": "The submitted task was deleted"
           }
         },
         "security": [
@@ -174,6 +199,57 @@
           }
         ],
         "summary": "List user tasks",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/submissions/{key}": {
+      "get": {
+        "operationId": "TasksController_getSubmission",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Task-Client-Id",
+            "in": "header",
+            "description": "Anonymous browser session UUID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No receipt for this identity"
+          },
+          "410": {
+            "description": "The submitted task was deleted"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recover a submission receipt within 24 hours",
         "tags": [
           "tasks"
         ]
@@ -511,6 +587,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "UUID for one retry or regeneration; retained for 24 hours",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -523,6 +608,12 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Key already used with different parameters"
+          },
+          "410": {
+            "description": "The submitted task was deleted"
           }
         },
         "security": [
@@ -611,6 +702,9 @@
                 }
               }
             }
+          },
+          "304": {
+            "description": "Catalog unchanged (ETag validation)"
           },
           "400": {
             "description": "Invalid kind or lang"

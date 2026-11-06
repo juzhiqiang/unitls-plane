@@ -76,6 +76,7 @@ mock.module('drizzle-orm', () => ({
   sql,
 }));
 mock.module('@utils-plane/db', () => ({
+  taskSubmissions: {},
   db: { select },
   tasks,
 }));

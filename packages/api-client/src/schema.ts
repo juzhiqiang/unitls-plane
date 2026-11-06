@@ -22,6 +22,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/submissions/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recover a submission receipt within 24 hours */
+        get: operations["TasksController_getSubmission"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/image-generate/models": {
         parameters: {
             query?: never;
@@ -781,7 +798,12 @@ export interface operations {
     TasksController_create: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Anonymous browser session UUID; required with Idempotency-Key when unauthenticated */
+                "X-Task-Client-Id"?: string;
+                /** @description UUID for one submission; retained for 24 hours */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -799,6 +821,58 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskResponseDto"];
                 };
+            };
+            /** @description Key already used with different parameters */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The submitted task was deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_getSubmission: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Anonymous browser session UUID */
+                "X-Task-Client-Id"?: string;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponseDto"];
+                };
+            };
+            /** @description No receipt for this identity */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The submitted task was deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1073,7 +1147,10 @@ export interface operations {
     TasksController_retry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description UUID for one retry or regeneration; retained for 24 hours */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: string;
             };
@@ -1089,6 +1166,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskResponseDto"];
                 };
+            };
+            /** @description Key already used with different parameters */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The submitted task was deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1148,6 +1239,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AiTryOnReferenceDto"][];
                 };
+            };
+            /** @description Catalog unchanged (ETag validation) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid kind or lang */
             400: {

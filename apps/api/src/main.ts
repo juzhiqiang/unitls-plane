@@ -39,6 +39,7 @@ async function bootstrapHttp(role: 'all' | 'api') {
         callback(null, false);
       },
       credentials: true,
+      exposedHeaders: ['Content-Disposition'],
     });
 
     app.useGlobalFilters(new AllExceptionsFilter());

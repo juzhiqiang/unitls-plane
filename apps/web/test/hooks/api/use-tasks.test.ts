@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountQueryKeys, taskQueryKeys } from '@/hooks/api/query-keys';
+import { aiTryOnQueryKeys } from '@/hooks/api/use-ai-try-on';
 import {
   useCreateTask,
   useImageGenerateQuota,
+  useImageGeneratePresets,
   useImageGenerateSessionTasks,
   useImageGenerateSessions,
   useRetryTask,
@@ -23,6 +25,7 @@ const sessionState = vi.hoisted(() => ({
 vi.mock('@/lib/auth-client', () => ({
   useSession: () => sessionState.current,
 }));
+vi.mock('next-intl', () => ({ useLocale: () => 'zh' }));
 
 vi.mock('@/lib/api-client', () => ({
   api: {
@@ -56,6 +59,78 @@ function createWrapper(
 }
 
 describe('task mutations', () => {
+  it('revalidates stale image presets and cancels an abandoned catalog request', async () => {
+    const client = new QueryClient();
+    const key = taskQueryKeys.imageGeneratePresets('zh');
+    client.setQueryData(key, [{ id: 'old' }], {
+      updatedAt: Date.now() - 6 * 60_000,
+    });
+    mockGet.mockImplementationOnce(() => new Promise(() => {}));
+    const view = renderHook(() => useImageGeneratePresets(), {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+    const signal = mockGet.mock.calls[0]?.[1]?.signal;
+    expect(view.result.current.data?.[0]?.id).toBe('old');
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    client.clear();
+  });
+  it('updates task data without invalidating reference, preset or model catalogs', async () => {
+    const client = new QueryClient();
+    const catalogs = [
+      aiTryOnQueryKeys.references('pose', 'zh'),
+      taskQueryKeys.imageGeneratePresets('zh'),
+      taskQueryKeys.imageGenerateModels(),
+    ];
+    const mutable = [
+      ['tasks', 'user-1', { limit: 20 }],
+      taskQueryKeys.imageGenerateQuota('user-1'),
+      taskQueryKeys.imageGenerateSessionTasks('session-1', 'user-1'),
+      accountQueryKeys.summary('user-1'),
+    ];
+    for (const key of [...catalogs, ...mutable]) client.setQueryData(key, []);
+    const { result } = renderHook(() => useCreateTask(), {
+      wrapper: createWrapper(client),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({
+        type: 'compress',
+        inputFileIds: ['catalog-isolation'],
+      });
+    });
+    for (const key of mutable)
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    for (const key of catalogs)
+      expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+    client.clear();
+  });
+  it('stops automatic submission retries after the page unmounts', async () => {
+    let rejectRequest!: (error: Error) => void;
+    mockPost.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject;
+        })
+    );
+    const { result, unmount } = renderHook(() => useCreateTask(), {
+      wrapper: createWrapper(),
+    });
+    const pending = result.current.mutateAsync({
+      type: 'compress',
+      inputFileIds: ['unique-unmount-file'],
+    });
+    const rejected = expect(pending).rejects.toThrow('Account changed');
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    unmount();
+    sessionState.current = {
+      data: { user: { id: 'another-user' } },
+      isPending: false,
+    };
+    rejectRequest(new TypeError('response lost'));
+    await rejected;
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockPost.mockResolvedValue({ data: task, error: undefined } as never);
@@ -81,6 +156,10 @@ describe('task mutations', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/tasks', {
       body: { type: 'pdf_merge', inputFileIds: ['file-1'] },
+      headers: expect.objectContaining({
+        'Idempotency-Key': expect.any(String),
+      }),
+      signal: expect.any(AbortSignal),
     });
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
@@ -106,6 +185,10 @@ describe('task mutations', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/tasks/{id}/retry', {
       params: { path: { id: 'task-1' } },
+      headers: expect.objectContaining({
+        'Idempotency-Key': expect.any(String),
+      }),
+      signal: expect.any(AbortSignal),
     });
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })

@@ -1,4 +1,8 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readBoundedStream } from '../../../../common/resources/bounded-read';
+import { currentResourceLimits } from '../../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../../common/resources/resource-error';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, extname, join } from 'node:path';
 import { buildMarkdownDocumentHtml } from './markdown-document';
@@ -48,9 +52,13 @@ export class DocumentPdfConverter {
               tempDir,
               filter
             );
-            const output = await readFile(outputPath);
+            const output = await readBoundedStream(
+              createReadStream(outputPath),
+              currentResourceLimits().outputBytes
+            );
             return await this.normalizer.normalize(output, markdown);
-          } catch {
+          } catch (error) {
+            if (error instanceof TaskResourceLimitError) throw error;
             // Try the next LibreOffice filter before using the local fallback.
           }
         }
@@ -64,8 +72,12 @@ export class DocumentPdfConverter {
           tempDir,
           'pdf:writer_pdf_Export'
         );
-        return await readFile(outputPath);
-      } catch {
+        return await readBoundedStream(
+          createReadStream(outputPath),
+          currentResourceLimits().outputBytes
+        );
+      } catch (error) {
+        if (error instanceof TaskResourceLimitError) throw error;
         return await this.fallback.renderPlainText(
           extractDocxPlainText(input.buffer)
         );

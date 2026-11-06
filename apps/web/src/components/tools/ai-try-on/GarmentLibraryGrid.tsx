@@ -13,6 +13,9 @@ export interface GarmentLibraryGridProps {
   onSelect: (assetId: string | null) => void;
   isLoading?: boolean;
   isError?: boolean;
+  isRequested?: boolean;
+  isRefreshing?: boolean;
+  onLoad?: () => void;
   onRetry?: () => void;
   onFallbackToUpload?: () => void;
   disabled?: boolean;

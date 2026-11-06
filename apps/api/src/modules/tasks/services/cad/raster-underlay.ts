@@ -1,3 +1,4 @@
+import { assertRasterPixels } from '../../../../common/resources/task-resource-context';
 import { CAD_POINT_TO_UNIT } from '@utils-plane/validators';
 import { pageToCadMatrix, applyMatrix, round, roundPoint } from './geometry';
 import type { MupdfModule } from './pdf-cad-extractor.service';
@@ -54,6 +55,7 @@ export function renderPageRaster(
     requestedDpi
   );
   const scale = dpi / 72;
+  assertRasterPixels(bounds, scale);
   const gray = page.toPixmap(
     mupdf.Matrix.scale(scale, scale),
     mupdf.ColorSpace.DeviceGray,

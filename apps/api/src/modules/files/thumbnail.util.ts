@@ -23,8 +23,12 @@ export const THUMBNAIL_VERSION = 1;
 
 export const THUMBNAIL_CACHE_CONTROL = 'private, max-age=86400';
 
+export function getThumbnailObjectPrefix(fileId: string): string {
+  return `thumbnails/${fileId}/`;
+}
+
 export function getThumbnailObjectKey(fileId: string): string {
-  return `thumbnails/${fileId}/${THUMBNAIL_VERSION}-${THUMBNAIL_MAX_EDGE}.webp`;
+  return `${getThumbnailObjectPrefix(fileId)}${THUMBNAIL_VERSION}-${THUMBNAIL_MAX_EDGE}.webp`;
 }
 
 /** 强 ETag。版本变化后旧客户端缓存会自然失效。 */

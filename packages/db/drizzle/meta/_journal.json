@@ -169,6 +169,13 @@
       "when": 1793609798205,
       "tag": "0023_familiar_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793897386884,
+      "tag": "0024_great_the_professor",
+      "breakpoints": true
     }
   ]
 }

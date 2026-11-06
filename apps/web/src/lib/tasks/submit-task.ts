@@ -1,5 +1,9 @@
 import type { TaskResponseDto } from '@/hooks/api/types';
 import {
+  TASK_SUBMISSION_UNCONFIRMED_MESSAGE,
+  TASK_CONTEXT_CHANGED_MESSAGE,
+} from './recovery-errors';
+import {
   createSubmissionId,
   submissionFingerprint,
 } from './submission-identity';
@@ -13,15 +17,13 @@ import {
 export class TaskSubmissionUnconfirmedError extends Error {
   readonly code = 'TASK_SUBMISSION_UNCONFIRMED';
   constructor(readonly key: string) {
-    super(
-      'Submission could not be confirmed. Check Recent tasks before submitting again.'
-    );
+    super(TASK_SUBMISSION_UNCONFIRMED_MESSAGE);
   }
 }
 
 export class TaskSubmissionContextChangedError extends Error {
   constructor() {
-    super('Account changed. Check the original account’s task history.');
+    super(TASK_CONTEXT_CHANGED_MESSAGE);
   }
 }
 

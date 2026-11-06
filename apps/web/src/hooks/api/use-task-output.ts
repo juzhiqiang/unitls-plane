@@ -40,6 +40,9 @@ export interface UseTaskOutputResult<T> {
     outputFileId: string,
     transform: TaskOutputTransform<T>
   ) => Promise<TaskOutputDownloadResult<T>>;
+  retryDownload: (
+    onError?: (message: string | null) => void
+  ) => Promise<TaskOutputDownloadResult<T>>;
   setResult: (value: T | null) => void;
   reset: () => void;
 }
@@ -71,6 +74,10 @@ export function useTaskOutput<T>(): UseTaskOutputResult<T> {
   const [state, setState] = useState<TaskOutputState>('idle');
   const [result, setResultState] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const lastDownload = useRef<{
+    outputFileId: string;
+    transform: TaskOutputTransform<T>;
+  } | null>(null);
   // 卸载后不再 setState:下载可能比页面活得久。
   //
   // 挂载时**必须**重新置 true。App Router 默认开着 StrictMode(未显式配置
@@ -90,6 +97,7 @@ export function useTaskOutput<T>(): UseTaskOutputResult<T> {
       outputFileId: string,
       transform: TaskOutputTransform<T>
     ): Promise<TaskOutputDownloadResult<T>> => {
+      lastDownload.current = { outputFileId, transform };
       if (!outputFileId) {
         const missing = new Error('Missing output file');
         if (mountedRef.current) {
@@ -128,6 +136,18 @@ export function useTaskOutput<T>(): UseTaskOutputResult<T> {
     []
   );
 
+  const retryDownload = useCallback(
+    async (onError?: (message: string | null) => void) => {
+      const previous = lastDownload.current;
+      const next = previous
+        ? await download(previous.outputFileId, previous.transform)
+        : { result: null, error: new Error('Missing output file') };
+      onError?.(next.error?.message ?? null);
+      return next;
+    },
+    [download]
+  );
+
   const setResult = useCallback((value: T | null) => {
     setResultState(value);
     setState(value === null ? 'idle' : 'ready');
@@ -135,6 +155,7 @@ export function useTaskOutput<T>(): UseTaskOutputResult<T> {
   }, []);
 
   const reset = useCallback(() => {
+    lastDownload.current = null;
     setResultState(null);
     setState('idle');
     setError(null);
@@ -146,8 +167,8 @@ export function useTaskOutput<T>(): UseTaskOutputResult<T> {
     result,
     error,
     download,
+    retryDownload,
     setResult,
     reset,
   };
 }
-

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { TaskSubmitter } from '@/lib/tasks/submit-task';
 import { getTaskScope } from '@/lib/tasks/task-receipts';
 import { useLocale } from 'next-intl';
@@ -124,6 +124,13 @@ export function useCreateTask() {
   const owner = session?.user.id ?? 'anonymous';
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const mutation = useMutation({
     mutationFn: async (task: CreateTaskDto) => {
       if (isPending) throw new Error('Session is loading');
@@ -133,7 +140,7 @@ export function useCreateTask() {
         task.type,
         async (headers, signal) =>
           api.POST('/tasks', { body: task as any, headers, signal }),
-        () => currentOwner.current === owner
+        () => mounted.current && currentOwner.current === owner
       );
     },
     onSuccess: () => {
@@ -150,6 +157,13 @@ export function useRetryTask() {
   const owner = session?.user.id ?? 'anonymous';
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   return useMutation({
     mutationFn: async (taskId: string) => {
       if (isPending) throw new Error('Session is loading');
@@ -163,7 +177,7 @@ export function useRetryTask() {
             headers,
             signal,
           }),
-        () => currentOwner.current === owner
+        () => mounted.current && currentOwner.current === owner
       );
     },
     onSuccess: () => {

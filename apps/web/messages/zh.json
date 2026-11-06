@@ -2413,6 +2413,11 @@
     "task": "任务",
     "download": "下载结果",
     "downloading": "正在取回结果…",
-    "downloadError": "下载失败，已完成的任务仍然可用，请再次下载。"
+    "downloadError": "下载失败，已完成的任务仍然可用，请再次下载。",
+    "waitStopped": "已停止在当前页面等待，任务可能仍在运行，请查看最近任务。",
+    "contextChanged": "页面已离开或账号已切换。请在原账号的最近任务中确认提交结果。",
+    "checkOriginal": "请先确认原任务",
+    "viewRecent": "查看最近任务",
+    "downloadFailedTitle": "结果下载未完成"
   }
 }

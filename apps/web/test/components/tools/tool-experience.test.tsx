@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 import en from '../../../messages/en.json';
@@ -10,6 +10,7 @@ import { ToolCatalogGrid } from '@/components/tools/tool-catalog-grid';
 import { ToolPageShell } from '@/components/tools/tool-page-shell';
 import { ToolStepRail } from '@/components/tools/tool-step-rail';
 import { ToolTrustStrip } from '@/components/tools/tool-trust-strip';
+import { TaskSubmissionUnconfirmedError } from '@/lib/tasks/submit-task';
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -20,6 +21,35 @@ function renderWithIntl(ui: React.ReactElement) {
 }
 
 describe('tool experience components', () => {
+  it('retries output retrieval instead of submitting again', async () => {
+    const resubmit = vi.fn();
+    const download = vi.fn().mockResolvedValue(undefined);
+    renderWithIntl(
+      <FailureRecoveryPanel
+        message="offline"
+        onRetry={resubmit}
+        onRetryDownload={download}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Download result' }));
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    expect(resubmit).not.toHaveBeenCalled();
+  });
+  it('directs unconfirmed submissions to recovery without a resubmit button', () => {
+    const resubmit = vi.fn();
+    renderWithIntl(
+      <FailureRecoveryPanel
+        message={new TaskSubmissionUnconfirmedError('key').message}
+        onRetry={resubmit}
+      />
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Retry' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'View recent tasks' })
+    ).toBeInTheDocument();
+  });
   it('renders processing transparency without requiring color-only meaning', () => {
     renderWithIntl(
       <ToolTrustStrip

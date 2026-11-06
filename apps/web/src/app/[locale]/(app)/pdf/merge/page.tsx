@@ -178,6 +178,9 @@ export default function MergePage() {
 
       {error && (
         <FailureRecoveryPanel
+          onRetryDownload={
+            output.error ? () => output.retryDownload(setError) : undefined
+          }
           message={error}
           onRetry={handleMerge}
           onReset={handleReset}

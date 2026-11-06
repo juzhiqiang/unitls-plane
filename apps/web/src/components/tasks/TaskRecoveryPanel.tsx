@@ -50,7 +50,10 @@ function RecoveryList({
   const query = useTaskRecovery(scope, visible);
   if (!receipts.length) return null;
   return (
-    <details className="mx-4 mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm lg:mx-6">
+    <details
+      id="recent-tasks"
+      className="mx-4 mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm lg:mx-6"
+    >
       <summary className="cursor-pointer font-medium">
         {t('title', { count: receipts.length })}
       </summary>

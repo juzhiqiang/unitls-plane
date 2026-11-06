@@ -1,11 +1,10 @@
 import { api } from '@/lib/api-client';
 import type { TaskStatusDto } from '@/hooks/api/types';
+import { TASK_WAIT_TIMEOUT_MESSAGE } from './tasks/recovery-errors';
 
 export class TaskWaitTimeoutError extends Error {
   constructor(readonly taskId: string) {
-    super(
-      'Stopped waiting. The task may still be running; check Recent tasks for its result.'
-    );
+    super(TASK_WAIT_TIMEOUT_MESSAGE);
     this.name = 'TaskWaitTimeoutError';
   }
 }

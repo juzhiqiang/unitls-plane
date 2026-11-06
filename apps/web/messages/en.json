@@ -2417,6 +2417,11 @@
     "task": "Task",
     "download": "Download result",
     "downloading": "Retrieving result…",
-    "downloadError": "Download failed. The completed task is still available; try downloading again."
+    "downloadError": "Download failed. The completed task is still available; try downloading again.",
+    "waitStopped": "Waiting on this page has stopped. The task may still be running; check Recent tasks.",
+    "contextChanged": "The page was left or the account changed. Check Recent tasks in the original account before submitting again.",
+    "checkOriginal": "Check the original task",
+    "viewRecent": "View recent tasks",
+    "downloadFailedTitle": "Result download incomplete"
   }
 }

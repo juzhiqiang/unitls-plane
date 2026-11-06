@@ -63,6 +63,39 @@ afterEach(() => {
 });
 
 describe('TaskRecoveryPanel', () => {
+  it('preserves the server filename for markdown output', async () => {
+    vi.mocked(api.GET).mockResolvedValue({
+      data: [
+        { taskId: id, status: 'completed', progress: 100, outputFileId: id },
+      ],
+    } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('markdown', {
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Disposition':
+              "inline; filename=report.md; filename*=UTF-8''%E6%8A%A5%E5%91%8A.md",
+          },
+        })
+      )
+    );
+    URL.createObjectURL = vi.fn(() => 'blob:test');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+    render(content());
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Download result' })
+    );
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe(
+      '报告.md'
+    );
+    click.mockRestore();
+  });
   it('restores a queued task and explains background execution', async () => {
     vi.mocked(api.GET).mockResolvedValue({
       data: [{ taskId: id, status: 'pending', progress: 0 }],

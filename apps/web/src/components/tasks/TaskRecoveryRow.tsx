@@ -8,6 +8,7 @@ import { ProcessingProgress } from '@/components/tools/processing-progress';
 import {
   buildFileDownloadUrl,
   triggerBrowserDownload,
+  downloadedFilename,
 } from '@/lib/files/file-download';
 
 const LABEL_KEYS: Record<string, string> = {
@@ -78,6 +79,9 @@ export function TaskRecoveryRow({
             'image/png': 'png',
             'image/jpeg': 'jpg',
             'image/webp': 'webp',
+            'image/avif': 'avif',
+            'application/dxf': 'dxf',
+            'font/eot': 'eot',
             'font/ttf': 'ttf',
             'font/otf': 'otf',
             'font/woff': 'woff',
@@ -87,7 +91,10 @@ export function TaskRecoveryRow({
       const url = URL.createObjectURL(blob);
       triggerBrowserDownload(
         url,
-        `result-${receipt.taskId?.slice(0, 8)}.${extension}`
+        downloadedFilename(
+          response.headers.get('Content-Disposition'),
+          `result-${receipt.taskId?.slice(0, 8)}.${extension}`
+        )
       );
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {

@@ -125,11 +125,13 @@ export class TaskReceiptStore {
     task: Pick<TaskResponseDto, 'id' | 'type'>,
     acknowledged = true
   ): void {
+    const current = this.list(scope).find(row => row.key === receipt.key);
     this.put(scope, {
       ...receipt,
       taskId: task.id,
       type: task.type,
-      acknowledged,
+      // 后台恢复请求可能晚于提交成功返回；已确认状态不能被旧快照降级。
+      acknowledged: acknowledged || current?.acknowledged === true,
     });
   }
 

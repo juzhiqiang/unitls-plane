@@ -56,6 +56,32 @@ function createWrapper(
 }
 
 describe('task mutations', () => {
+  it('stops automatic submission retries after the page unmounts', async () => {
+    let rejectRequest!: (error: Error) => void;
+    mockPost.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject;
+        })
+    );
+    const { result, unmount } = renderHook(() => useCreateTask(), {
+      wrapper: createWrapper(),
+    });
+    const pending = result.current.mutateAsync({
+      type: 'compress',
+      inputFileIds: ['unique-unmount-file'],
+    });
+    const rejected = expect(pending).rejects.toThrow('Account changed');
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    unmount();
+    sessionState.current = {
+      data: { user: { id: 'another-user' } },
+      isPending: false,
+    };
+    rejectRequest(new TypeError('response lost'));
+    await rejected;
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockPost.mockResolvedValue({ data: task, error: undefined } as never);

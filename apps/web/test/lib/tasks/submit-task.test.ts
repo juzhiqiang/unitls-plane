@@ -46,6 +46,25 @@ describe('TaskSubmitter', () => {
     });
     expect(receipts.list('user:a')).toHaveLength(1);
   });
+
+  it('does not let a stale background recovery downgrade an acknowledged receipt', async () => {
+    const receipts = new TaskReceiptStore(() => sessionStorage);
+    receipts.put('user:a', {
+      key: '30303030-3030-4030-8030-303030303030',
+      fingerprint: 'b'.repeat(64),
+      taskId: task.id,
+      type: task.type,
+      startedAt: Date.now(),
+      acknowledged: true,
+    });
+    receipts.confirm(
+      'user:a',
+      { ...receipts.list('user:a')[0]!, acknowledged: false },
+      task,
+      false
+    );
+    expect(receipts.list('user:a')[0]!.acknowledged).toBe(true);
+  });
   it('coalesces concurrent submissions but keeps intentional sequential generation separate', async () => {
     const receipts = new TaskReceiptStore(() => sessionStorage);
     const submitter = new TaskSubmitter(receipts);

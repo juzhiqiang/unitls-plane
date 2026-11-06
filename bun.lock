@@ -21,7 +21,7 @@
     },
     "apps/api": {
       "name": "@utils-plane/api",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1049.0",
         "@aws-sdk/lib-storage": "3.1049.0",
@@ -82,7 +82,7 @@
     },
     "apps/web": {
       "name": "@utils-plane/web",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
@@ -163,7 +163,7 @@
     },
     "packages/api-client": {
       "name": "@utils-plane/api-client",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "openapi-fetch": "^0.17.0",
       },
@@ -173,7 +173,7 @@
     },
     "packages/auth": {
       "name": "@utils-plane/auth",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "@utils-plane/db": "workspace:*",
         "better-auth": "^1.4.3",
@@ -189,7 +189,7 @@
     },
     "packages/db": {
       "name": "@utils-plane/db",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
         "postgres": "^3.4.9",
@@ -202,11 +202,11 @@
     },
     "packages/utils": {
       "name": "@utils-plane/utils",
-      "version": "0.12.0",
+      "version": "0.13.0",
     },
     "packages/validators": {
       "name": "@utils-plane/validators",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "zod": "^3",
       },

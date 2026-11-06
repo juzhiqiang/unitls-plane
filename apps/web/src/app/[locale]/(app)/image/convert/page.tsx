@@ -134,6 +134,7 @@ export default function ConvertPage() {
           );
         } else {
           result = await runImageTask({
+            recoveryScope: createTask.recoveryScope,
             file: item.file,
             type: 'convert',
             inputConfig: {

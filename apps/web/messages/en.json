@@ -2396,5 +2396,27 @@
     "label": "Language",
     "zh": "中文",
     "en": "English"
+  },
+  "TaskRecovery": {
+    "title": "Recent tasks ({count})",
+    "background": "Tasks continue on the server when you leave this page. This tab keeps the latest 100 submissions for 24 hours, including after a refresh.",
+    "pending": "Queued",
+    "processing": "Processing",
+    "completed": "Completed",
+    "failed": "Task failed",
+    "unavailable": "Task is no longer available.",
+    "checking": "Checking task status…",
+    "unconfirmed": "Submission is not yet confirmed. We will keep checking; confirm its status here before submitting again.",
+    "reconnecting": "Connection interrupted. Reconnecting automatically; the task has not been marked as failed.",
+    "refresh": "Check now",
+    "showMore": "Show more",
+    "allTasks": "All tasks",
+    "elapsed": "Elapsed {time}",
+    "hide": "Hide",
+    "hideHint": "Hide this reminder; the task will continue running.",
+    "task": "Task",
+    "download": "Download result",
+    "downloading": "Retrieving result…",
+    "downloadError": "Download failed. The completed task is still available; try downloading again."
   }
 }

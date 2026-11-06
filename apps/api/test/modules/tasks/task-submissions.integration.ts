@@ -23,7 +23,7 @@ let close: (() => Promise<void>) | undefined;
 try {
   await admin.unsafe(`CREATE DATABASE "${databaseName}"`);
   created = true;
-  const migration = Bun.spawn(['bunx', 'drizzle-kit', 'migrate'], {
+  const migration = globalThis.Bun.spawn(['bunx', 'drizzle-kit', 'migrate'], {
     cwd: resolve(root, 'packages/db'),
     env: process.env,
     stdout: 'pipe',
@@ -159,13 +159,11 @@ try {
   const owner = { id: randomUUID(), plan: 'pro_preview', role: 'user' };
   const otherOwner = { ...owner, id: randomUUID() };
   for (const current of [owner, otherOwner])
-    await db
-      .insert(user)
-      .values({
-        ...current,
-        name: 'Submission test',
-        email: `${current.id}@example.invalid`,
-      });
+    await db.insert(user).values({
+      ...current,
+      name: 'Submission test',
+      email: `${current.id}@example.invalid`,
+    });
   const generate = {
     type: 'image_generate',
     inputFileIds: [],
@@ -184,13 +182,11 @@ try {
     'image.generate.dailyCount'
   );
   for (let i = 1; i < limit; i++)
-    await db
-      .insert(tasks)
-      .values({
-        userId: owner.id,
-        type: 'image_generate',
-        status: 'completed',
-      });
+    await db.insert(tasks).values({
+      userId: owner.id,
+      type: 'image_generate',
+      status: 'completed',
+    });
   assert.equal((await submit(generate, owner, ownerKey)).id, generated.id);
   const rejectedKey = { key: randomUUID() };
   await assert.rejects(submit(generate, owner, rejectedKey), statusIs(403));

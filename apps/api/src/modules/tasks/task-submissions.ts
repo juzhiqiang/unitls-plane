@@ -101,16 +101,14 @@ export async function createTaskOnce(
   }
   if (existing) await tx.delete(taskSubmissions).where(condition);
   const task = await create();
-  await tx
-    .insert(taskSubmissions)
-    .values({
-      scope,
-      key,
-      userId,
-      requestHash: hash,
-      taskId: task.id,
-      expiresAt: new Date(now.getTime() + SUBMISSION_RETENTION_MS),
-    });
+  await tx.insert(taskSubmissions).values({
+    scope,
+    key,
+    userId,
+    requestHash: hash,
+    taskId: task.id,
+    expiresAt: new Date(now.getTime() + SUBMISSION_RETENTION_MS),
+  });
   return task;
 }
 

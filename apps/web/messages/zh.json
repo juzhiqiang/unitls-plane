@@ -2392,5 +2392,27 @@
     "label": "语言",
     "zh": "中文",
     "en": "English"
+  },
+  "TaskRecovery": {
+    "title": "最近任务（{count}）",
+    "background": "离开页面后，任务仍会在服务端继续。本标签页保留最近 100 次提交记录 24 小时，刷新后也可找回。",
+    "pending": "排队中",
+    "processing": "处理中",
+    "completed": "已完成",
+    "failed": "任务失败",
+    "unavailable": "任务已不可用。",
+    "checking": "正在查询任务状态…",
+    "unconfirmed": "提交尚未确认，系统会继续查询。再次提交前，请先在这里确认原任务状态。",
+    "reconnecting": "连接中断，正在自动重连；这不代表任务失败。",
+    "refresh": "立即查询",
+    "showMore": "显示更多",
+    "allTasks": "全部任务",
+    "elapsed": "已用时 {time}",
+    "hide": "隐藏",
+    "hideHint": "仅隐藏提示，任务仍会继续执行。",
+    "task": "任务",
+    "download": "下载结果",
+    "downloading": "正在取回结果…",
+    "downloadError": "下载失败，已完成的任务仍然可用，请再次下载。"
   }
 }

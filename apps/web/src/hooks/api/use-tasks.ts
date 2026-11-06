@@ -1,4 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
+import { TaskSubmitter } from '@/lib/tasks/submit-task';
+import { getTaskScope } from '@/lib/tasks/task-receipts';
 import { useLocale } from 'next-intl';
 import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/api-client';
@@ -116,27 +119,52 @@ export function useTaskStatus(taskId: string) {
 
 export function useCreateTask() {
   const queryClient = useQueryClient();
-  return useMutation({
+  const { data: session, isPending } = useSession();
+  const submitter = useRef(new TaskSubmitter());
+  const owner = session?.user.id ?? 'anonymous';
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  const mutation = useMutation({
     mutationFn: async (task: CreateTaskDto) => {
-      const { data, error } = await api.POST('/tasks', { body: task as any });
-      if (error) throw error;
-      return data as TaskResponseDto;
+      if (isPending) throw new Error('Session is loading');
+      return submitter.current.submit(
+        getTaskScope(session?.user.id),
+        { create: task },
+        task.type,
+        async (headers, signal) =>
+          api.POST('/tasks', { body: task as any, headers, signal }),
+        () => currentOwner.current === owner
+      );
     },
     onSuccess: () => {
       refreshTaskQueries(queryClient);
     },
   });
+  return { ...mutation, recoveryScope: getTaskScope(session?.user.id) };
 }
 
 export function useRetryTask() {
   const queryClient = useQueryClient();
+  const { data: session, isPending } = useSession();
+  const submitter = useRef(new TaskSubmitter());
+  const owner = session?.user.id ?? 'anonymous';
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const { data, error } = await api.POST('/tasks/{id}/retry' as any, {
-        params: { path: { id: taskId } } as any,
-      });
-      if (error) throw error;
-      return data as TaskResponseDto;
+      if (isPending) throw new Error('Session is loading');
+      return submitter.current.submit(
+        getTaskScope(session?.user.id),
+        { retry: taskId },
+        'retry',
+        async (headers, signal) =>
+          api.POST('/tasks/{id}/retry', {
+            params: { path: { id: taskId } },
+            headers,
+            signal,
+          }),
+        () => currentOwner.current === owner
+      );
     },
     onSuccess: () => {
       refreshTaskQueries(queryClient);

@@ -6,8 +6,8 @@
 
 ## 实施选择
 
-沿用 Next.js、React
-Query、NestJS、PostgreSQL 和现有任务 outbox，不增加依赖。这些具体实现选择由执行者根据现有架构确定。
+沿用 Next.js、React Query、NestJS、PostgreSQL 和现有任务 outbox，浏览器 SHA-256 显式复用锁文件已有的
+`@noble/hashes@2.2.0`，兼容普通 HTTP 环境。这些具体实现选择由执行者根据现有架构确定。
 
 - 创建与重新生成支持可选 UUID `Idempotency-Key`，旧客户端无 header 时保留现有行为。匿名携带 UUID
   `X-Task-Client-Id`，登录用户以服务端会话 userId 为准，按身份和 key 隔离。

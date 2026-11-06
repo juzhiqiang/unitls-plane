@@ -101,13 +101,15 @@ async function processOnServer(
   config: Record<string, unknown>,
   uploadMutate: (file: File) => Promise<unknown>,
   createTaskMutate: (input: any) => Promise<{ id: string }>,
-  outputType: ImageWatermarkOutputType
+  outputType: ImageWatermarkOutputType,
+  recoveryScope?: string
 ): Promise<File> {
   // 之前是手写的轮询循环加 1s sleep,没有超时、没有中止;统一改走 runImageTask,
   // 它内部用带超时的 waitForTask,并复用 compress/convert 的同一套轮询逻辑。
   const ext = outputType === 'image/jpeg' ? 'jpg' : outputType.split('/')[1];
   const base = file.name.replace(/\.[^.]+$/, '');
   return runImageTask({
+    recoveryScope,
     file,
     type: 'image_watermark',
     inputConfig: config,
@@ -248,7 +250,8 @@ export default function ImageWatermarkPage() {
             },
             f => uploadFile.mutateAsync(f),
             input => createTask.mutateAsync(input) as Promise<{ id: string }>,
-            processingOptions.outputType
+            processingOptions.outputType,
+            createTask.recoveryScope
           );
         }
         fileProgress[i] = 100;

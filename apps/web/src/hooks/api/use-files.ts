@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { api } from '@/lib/api-client';
 import { accountQueryKeys } from './query-keys';
 
@@ -103,15 +104,22 @@ export function useTrashedFiles(
 
 export function useUploadFile() {
   const queryClient = useQueryClient();
+  const uploads = useRef(new WeakMap<File, Promise<unknown>>());
   return useMutation({
     mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      const { data, error } = await api.POST('/files/upload', {
-        body: formData as unknown as undefined,
-      });
-      if (error) throw error;
-      return data;
+      const existing = uploads.current.get(file);
+      if (existing) return existing;
+      const upload = (async () => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const { data, error } = await api.POST('/files/upload', {
+          body: formData as unknown as undefined,
+        });
+        if (error) throw error;
+        return data;
+      })().finally(() => uploads.current.delete(file));
+      uploads.current.set(file, upload);
+      return upload;
     },
     onSuccess: () => {
       refreshActiveFileQueries(queryClient);

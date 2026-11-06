@@ -110,6 +110,7 @@ const withProducerTransaction = vi.fn(
 
 mock.module('@utils-plane/db', () => ({
   taskSubmissions: {},
+  imageGeneratePresets: {},
   cleanupObligations: {
     kind: 'obligation-kind',
     resourceId: 'obligation-resource-id',

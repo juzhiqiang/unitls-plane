@@ -58,7 +58,9 @@
           }
         ],
         "summary": "Create a new task",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       },
       "get": {
         "operationId": "TasksController_list",
@@ -106,7 +108,12 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["pending", "processing", "completed", "failed"]
+              "enum": [
+                "pending",
+                "processing",
+                "completed",
+                "failed"
+              ]
             }
           },
           {
@@ -115,7 +122,11 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["image", "pdf", "font"]
+              "enum": [
+                "image",
+                "pdf",
+                "font"
+              ]
             }
           },
           {
@@ -172,7 +183,11 @@
                       "nullable": true
                     }
                   },
-                  "required": ["tasks", "total", "nextCursor"]
+                  "required": [
+                    "tasks",
+                    "total",
+                    "nextCursor"
+                  ]
                 }
               }
             }
@@ -184,7 +199,9 @@
           }
         ],
         "summary": "List user tasks",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/submissions/{key}": {
@@ -233,7 +250,9 @@
           }
         ],
         "summary": "Recover a submission receipt within 24 hours",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/image-generate/models": {
@@ -264,7 +283,9 @@
           }
         ],
         "summary": "List the configured image generation models",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/image-generate/quota": {
@@ -292,7 +313,9 @@
           }
         ],
         "summary": "Get the daily image generation quota snapshot",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/image-generate/presets": {
@@ -324,7 +347,9 @@
           }
         },
         "summary": "List AI image generation prompt presets",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/image-generate/sessions": {
@@ -355,7 +380,9 @@
           }
         ],
         "summary": "List AI image generation sessions",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/image-generate/sessions/{sessionId}/tasks": {
@@ -395,7 +422,9 @@
           }
         ],
         "summary": "List the tasks of one image generation session",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/image-generate/sessions/{sessionId}": {
@@ -434,7 +463,9 @@
           }
         ],
         "summary": "Delete an image generation session with its files",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/status": {
@@ -467,7 +498,9 @@
           }
         },
         "summary": "Get multiple task statuses (lightweight)",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/{id}": {
@@ -507,7 +540,9 @@
           }
         ],
         "summary": "Get task by ID",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/{id}/status": {
@@ -536,7 +571,9 @@
           }
         },
         "summary": "Get task status (lightweight)",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/tasks/{id}/retry": {
@@ -585,7 +622,9 @@
           }
         ],
         "summary": "Retry a failed task",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/fonts/{fileId}/info": {
@@ -613,7 +652,9 @@
           }
         },
         "summary": "Get font file metadata",
-        "tags": ["fonts"]
+        "tags": [
+          "fonts"
+        ]
       }
     },
     "/tasks/ai-try-on/references": {
@@ -626,7 +667,11 @@
             "in": "query",
             "description": "素材类别：person 人像 / pose 姿势 / garment 服饰",
             "schema": {
-              "enum": ["person", "pose", "garment"],
+              "enum": [
+                "person",
+                "pose",
+                "garment"
+              ],
               "type": "string"
             }
           },
@@ -636,7 +681,10 @@
             "in": "query",
             "description": "标题/描述语言，默认 zh",
             "schema": {
-              "enum": ["zh", "en"],
+              "enum": [
+                "zh",
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -660,7 +708,9 @@
           }
         },
         "summary": "List AI try-on reference library assets",
-        "tags": ["tasks"]
+        "tags": [
+          "tasks"
+        ]
       }
     },
     "/files/upload": {
@@ -673,7 +723,9 @@
           }
         },
         "summary": "Upload a file",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/trash": {
@@ -738,7 +790,11 @@
                       "nullable": true
                     }
                   },
-                  "required": ["files", "total", "nextCursor"]
+                  "required": [
+                    "files",
+                    "total",
+                    "nextCursor"
+                  ]
                 }
               }
             }
@@ -750,7 +806,9 @@
           }
         ],
         "summary": "List trashed files for current user",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/trash/empty": {
@@ -768,7 +826,9 @@
           }
         ],
         "summary": "Empty trash for current user",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/batch-delete": {
@@ -796,7 +856,9 @@
           }
         ],
         "summary": "Batch soft-delete files",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/batch-restore": {
@@ -824,7 +886,9 @@
           }
         ],
         "summary": "Batch restore soft-deleted files",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/batch-permanent-delete": {
@@ -852,7 +916,9 @@
           }
         ],
         "summary": "Batch permanently delete files from trash",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files": {
@@ -933,7 +999,11 @@
                       "nullable": true
                     }
                   },
-                  "required": ["files", "total", "nextCursor"]
+                  "required": [
+                    "files",
+                    "total",
+                    "nextCursor"
+                  ]
                 }
               }
             }
@@ -945,7 +1015,9 @@
           }
         ],
         "summary": "List files for current user",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/{id}": {
@@ -972,7 +1044,9 @@
           }
         ],
         "summary": "Get file by ID",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       },
       "delete": {
         "operationId": "FilesController_remove",
@@ -997,7 +1071,9 @@
           }
         ],
         "summary": "Delete file (soft delete)",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/{id}/download": {
@@ -1028,7 +1104,9 @@
           }
         },
         "summary": "Download file by ID",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/{id}/thumbnail": {
@@ -1059,7 +1137,9 @@
           }
         },
         "summary": "Get a downscaled thumbnail for an image file",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/{id}/restore": {
@@ -1086,7 +1166,9 @@
           }
         ],
         "summary": "Restore a soft-deleted file",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/files/{id}/permanent": {
@@ -1113,7 +1195,9 @@
           }
         ],
         "summary": "Permanently delete a file",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/api/auth/{path}": {
@@ -1125,7 +1209,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "post": {
         "operationId": "AuthController_handle_post",
@@ -1135,7 +1221,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "put": {
         "operationId": "AuthController_handle_put",
@@ -1145,7 +1233,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "delete": {
         "operationId": "AuthController_handle_delete",
@@ -1155,7 +1245,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "patch": {
         "operationId": "AuthController_handle_patch",
@@ -1165,7 +1257,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "options": {
         "operationId": "AuthController_handle_options",
@@ -1175,7 +1269,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "head": {
         "operationId": "AuthController_handle_head",
@@ -1185,7 +1281,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       },
       "search": {
         "operationId": "AuthController_handle_search",
@@ -1195,7 +1293,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/health": {
@@ -1215,7 +1315,9 @@
           }
         },
         "summary": "Service liveness summary",
-        "tags": ["health"]
+        "tags": [
+          "health"
+        ]
       }
     },
     "/health/live": {
@@ -1235,7 +1337,9 @@
           }
         },
         "summary": "Service liveness check",
-        "tags": ["health"]
+        "tags": [
+          "health"
+        ]
       }
     },
     "/health/ready": {
@@ -1265,7 +1369,9 @@
           }
         },
         "summary": "Dependency readiness check",
-        "tags": ["health"]
+        "tags": [
+          "health"
+        ]
       }
     },
     "/account/summary": {
@@ -1289,7 +1395,9 @@
             "bearer": []
           }
         ],
-        "tags": ["account"]
+        "tags": [
+          "account"
+        ]
       }
     },
     "/account": {
@@ -1316,7 +1424,9 @@
             "bearer": []
           }
         ],
-        "tags": ["account"]
+        "tags": [
+          "account"
+        ]
       }
     },
     "/account/export": {
@@ -1341,7 +1451,9 @@
             "bearer": []
           }
         ],
-        "tags": ["account"]
+        "tags": [
+          "account"
+        ]
       }
     }
   },
@@ -1401,7 +1513,10 @@
             "type": "object"
           }
         },
-        "required": ["type", "inputFileIds"]
+        "required": [
+          "type",
+          "inputFileIds"
+        ]
       },
       "TaskResponseDto": {
         "type": "object",
@@ -1441,7 +1556,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "processing", "completed", "failed"]
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ]
           },
           "inputFileIds": {
             "type": "array",
@@ -1480,7 +1600,14 @@
             "type": "string"
           }
         },
-        "required": ["id", "type", "status", "inputFileIds", "progress", "createdAt"]
+        "required": [
+          "id",
+          "type",
+          "status",
+          "inputFileIds",
+          "progress",
+          "createdAt"
+        ]
       },
       "ImageGenerateModelDto": {
         "type": "object",
@@ -1494,7 +1621,11 @@
             "description": "该模型支持的能力（所有服务它的来源的并集）。generate = 文生图，edit = 图生图，inpaint = 局部重绘；缺少 edit 时前端禁用参考图上传",
             "items": {
               "type": "string",
-              "enum": ["generate", "edit", "inpaint"]
+              "enum": [
+                "generate",
+                "edit",
+                "inpaint"
+              ]
             }
           },
           "sizes": {
@@ -1512,7 +1643,12 @@
             "description": "是否接受 sizes 之外的尺寸（所有服务它的来源取或）。为 true 时前端显示可用的「自定义画面比例」入口；创建任务时把解析/合成出的 WxH 放进 inputConfig.size"
           }
         },
-        "required": ["model", "capabilities", "sizes", "customSizes"]
+        "required": [
+          "model",
+          "capabilities",
+          "sizes",
+          "customSizes"
+        ]
       },
       "ImageGenerateQuotaDto": {
         "type": "object",
@@ -1530,7 +1666,11 @@
             "description": "今日剩余张数"
           }
         },
-        "required": ["limit", "used", "remaining"]
+        "required": [
+          "limit",
+          "used",
+          "remaining"
+        ]
       },
       "ImageGeneratePresetDto": {
         "type": "object",
@@ -1556,7 +1696,12 @@
             "description": "排序值，升序展示"
           }
         },
-        "required": ["id", "title", "prompt", "sortOrder"]
+        "required": [
+          "id",
+          "title",
+          "prompt",
+          "sortOrder"
+        ]
       },
       "ImageGenerateSessionDto": {
         "type": "object",
@@ -1583,7 +1728,13 @@
             "description": "会话最近活动时间（末条任务时间，ISO 8601 UTC）"
           }
         },
-        "required": ["sessionId", "title", "taskCount", "createdAt", "updatedAt"]
+        "required": [
+          "sessionId",
+          "title",
+          "taskCount",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "ImageGenerateSessionTasksDto": {
         "type": "object",
@@ -1603,14 +1754,23 @@
             "description": "会话内任务总数（返回条数上限 200）"
           }
         },
-        "required": ["tasks", "total"]
+        "required": [
+          "tasks",
+          "total"
+        ]
       },
       "BatchTaskStatusDto": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["pending", "processing", "completed", "failed", "not_found"]
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed",
+              "not_found"
+            ]
           },
           "progress": {
             "type": "number",
@@ -1632,14 +1792,23 @@
             "format": "uuid"
           }
         },
-        "required": ["status", "progress", "taskId"]
+        "required": [
+          "status",
+          "progress",
+          "taskId"
+        ]
       },
       "TaskStatusDto": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["pending", "processing", "completed", "failed"]
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ]
           },
           "progress": {
             "type": "number",
@@ -1657,7 +1826,10 @@
             "type": "string"
           }
         },
-        "required": ["status", "progress"]
+        "required": [
+          "status",
+          "progress"
+        ]
       },
       "AiTryOnReferenceDto": {
         "type": "object",
@@ -1670,7 +1842,11 @@
           "kind": {
             "type": "string",
             "description": "素材类别",
-            "enum": ["person", "pose", "garment"]
+            "enum": [
+              "person",
+              "pose",
+              "garment"
+            ]
           },
           "title": {
             "type": "string",
@@ -1734,14 +1910,18 @@
             }
           }
         },
-        "required": ["ids"]
+        "required": [
+          "ids"
+        ]
       },
       "LiveHealthDto": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok"]
+            "enum": [
+              "ok"
+            ]
           },
           "timestamp": {
             "type": "string",
@@ -1765,21 +1945,35 @@
             "nullable": true
           }
         },
-        "required": ["status", "timestamp", "startedAt", "release", "buildCommit", "buildTime"]
+        "required": [
+          "status",
+          "timestamp",
+          "startedAt",
+          "release",
+          "buildCommit",
+          "buildTime"
+        ]
       },
       "HealthComponentDto": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "degraded", "error"]
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ]
           },
           "durationMs": {
             "type": "number",
             "minimum": 0
           }
         },
-        "required": ["status", "durationMs"]
+        "required": [
+          "status",
+          "durationMs"
+        ]
       },
       "HealthComponentsDto": {
         "type": "object",
@@ -1800,14 +1994,24 @@
             "$ref": "#/components/schemas/HealthComponentDto"
           }
         },
-        "required": ["database", "redis", "minio", "queues", "libreOffice"]
+        "required": [
+          "database",
+          "redis",
+          "minio",
+          "queues",
+          "libreOffice"
+        ]
       },
       "ReadyHealthDto": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "degraded", "error"]
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ]
           },
           "timestamp": {
             "type": "string",
@@ -1817,7 +2021,11 @@
             "$ref": "#/components/schemas/HealthComponentsDto"
           }
         },
-        "required": ["status", "timestamp", "components"]
+        "required": [
+          "status",
+          "timestamp",
+          "components"
+        ]
       },
       "AccountRecentFileDto": {
         "type": "object",
@@ -1840,7 +2048,13 @@
             "format": "date-time"
           }
         },
-        "required": ["id", "filename", "originalSize", "mimeType", "createdAt"]
+        "required": [
+          "id",
+          "filename",
+          "originalSize",
+          "mimeType",
+          "createdAt"
+        ]
       },
       "AccountSummaryDto": {
         "type": "object",
@@ -1887,7 +2101,9 @@
             "format": "email"
           }
         },
-        "required": ["confirmationEmail"]
+        "required": [
+          "confirmationEmail"
+        ]
       }
     }
   }

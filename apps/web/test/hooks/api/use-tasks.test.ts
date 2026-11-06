@@ -81,6 +81,10 @@ describe('task mutations', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/tasks', {
       body: { type: 'pdf_merge', inputFileIds: ['file-1'] },
+      headers: expect.objectContaining({
+        'Idempotency-Key': expect.any(String),
+      }),
+      signal: expect.any(AbortSignal),
     });
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
@@ -106,6 +110,10 @@ describe('task mutations', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/tasks/{id}/retry', {
       params: { path: { id: 'task-1' } },
+      headers: expect.objectContaining({
+        'Idempotency-Key': expect.any(String),
+      }),
+      signal: expect.any(AbortSignal),
     });
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })

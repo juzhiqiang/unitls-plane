@@ -22,6 +22,9 @@ export function FailureRecoveryPanel({
 }: FailureRecoveryPanelProps) {
   const t = useTranslations('ToolShell.failure');
   const recovery = useTranslations('TaskRecovery');
+  const resourceLimited =
+    errorCode === 'TASK_RESOURCE_LIMIT_EXCEEDED' ||
+    message.startsWith('Task resource limit exceeded:');
   const reason = recoveryMessageKey(message);
   const retrying = useRef(false);
   const [downloading, setDownloading] = useState(false);
@@ -64,11 +67,13 @@ export function FailureRecoveryPanel({
                 : t('title')}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {reason
-              ? recovery(reason)
-              : downloadMode
-                ? recovery('downloadError')
-                : message}
+            {resourceLimited
+              ? recovery('resourceLimit')
+              : reason
+                ? recovery(reason)
+                : downloadMode
+                  ? recovery('downloadError')
+                  : message}
           </p>
           {errorCode && (
             <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-destructive">
@@ -96,6 +101,7 @@ export function FailureRecoveryPanel({
                 {recovery(downloading ? 'downloading' : 'download')}
               </button>
             ) : (
+              !resourceLimited &&
               onRetry && (
                 <button
                   type="button"

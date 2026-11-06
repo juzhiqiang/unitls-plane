@@ -1,3 +1,6 @@
+import { TaskResourceBudgetService } from '../services/task-resource-budget.service';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
+import { DelayedError } from 'bullmq';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
 import { Logger } from '@nestjs/common';
@@ -17,7 +20,9 @@ import { PdfTaskContext } from './pdf/task-context';
 
 /** CAD 契约错误保留自己的错误码，其余归为 PDF_PROCESSING_FAILED。 */
 function failureCodeOf(err: unknown): string {
-  return isCadError(err) ? err.code : 'PDF_PROCESSING_FAILED';
+  return err instanceof TaskResourceLimitError || isCadError(err)
+    ? err.code
+    : 'PDF_PROCESSING_FAILED';
 }
 
 @Processor('pdf-queue', {
@@ -31,12 +36,16 @@ export class PdfProcessor extends WorkerHost {
     private readonly pdfService: PdfService,
     private readonly filesService: FilesService,
     private readonly tasksService: TasksService,
-    private readonly pdfToCadService: PdfToCadService
+    private readonly pdfToCadService: PdfToCadService,
+    private readonly resourceBudget: TaskResourceBudgetService
   ) {
     super();
   }
 
-  async process(job: Job<{ taskId: string }>): Promise<unknown> {
+  async process(
+    job: Job<{ taskId: string }>,
+    token?: string
+  ): Promise<unknown> {
     const { taskId } = job.data;
     this.logger.log(
       `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
@@ -44,20 +53,26 @@ export class PdfProcessor extends WorkerHost {
     const task = await this.tasksService.getById(taskId);
 
     try {
-      await this.tasksService.markProcessing(taskId);
+      return await this.resourceBudget.run(task, job, token, async () => {
+        await this.tasksService.markProcessing(taskId);
 
-      return await dispatchPdfTask(
-        task,
-        new PdfTaskContext(
+        return await dispatchPdfTask(
           task,
-          job,
-          this.pdfService,
-          this.filesService,
-          this.tasksService,
-          this.pdfToCadService
-        )
-      );
+          new PdfTaskContext(
+            task,
+            job,
+            this.pdfService,
+            this.filesService,
+            this.tasksService,
+            this.pdfToCadService
+          )
+        );
+      });
     } catch (err) {
+      if (err instanceof DelayedError) {
+        if (task.status === 'processing') await this.markRetryingSafely(taskId);
+        throw err;
+      }
       // 还有重试机会时只退回 pending:提前写 failed 会让前端停掉轮询,
       // 之后重试成功也没人再看,页面永远停在报错上。见 attempt-outcome.ts。
       if (!shouldRecordFailure(job, err)) {
@@ -77,7 +92,8 @@ export class PdfProcessor extends WorkerHost {
       }
       // 确定性失败(CAD 契约错误:配置非法、DWG 未支持、OCR 缺失、损坏 PDF)重跑结果一样,
       // 用 UnrecoverableError 掐断后续 attempt,避免同一错误反复落库。
-      if (isRetryableError(err)) throw err;
+      if (err instanceof TaskResourceLimitError || isRetryableError(err))
+        throw err;
       throw new UnrecoverableError((err as Error).message);
     }
   }

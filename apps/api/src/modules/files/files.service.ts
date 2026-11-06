@@ -1,4 +1,12 @@
 import {
+  currentTaskResources,
+  readTaskInput,
+  assertTaskImage,
+  assertTaskPdf,
+  assertTaskOutput,
+} from '../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../common/resources/resource-error';
+import {
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -168,6 +176,8 @@ export class FilesService {
     const tempPath = Buffer.isBuffer(file) ? undefined : file.path;
 
     try {
+      if (currentTaskResources())
+        assertTaskOutput(Buffer.isBuffer(file) ? file.length : meta.size);
       if (tempPath && !isUploadTempPath(tempPath)) {
         throw new BadRequestException('Invalid upload temporary file');
       }
@@ -355,7 +365,29 @@ export class FilesService {
   }
 
   async download(storageKey: string): Promise<Buffer> {
-    return this.minioService.download(storageKey);
+    const resources = currentTaskResources();
+    if (!resources) return this.minioService.download(storageKey);
+    const file = resources.files.get(storageKey);
+    if (!file) throw new TaskResourceLimitError('input was not reserved');
+    const controller = new globalThis.AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const stream = await this.minioService.downloadStream(
+        storageKey,
+        controller.signal
+      );
+      const buffer = await readTaskInput(
+        stream,
+        file.originalSize,
+        controller.signal
+      );
+      if (file.mimeType.startsWith('image/')) await assertTaskImage(buffer);
+      if (file.mimeType === 'application/pdf') await assertTaskPdf(buffer);
+      return buffer;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
   }
 
   downloadStream(storageKey: string, signal?: globalThis.AbortSignal) {

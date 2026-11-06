@@ -170,6 +170,7 @@ function ProgressBar({
 
 function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
   const t = useTranslations('TasksTool');
+  const recovery = useTranslations('TaskRecovery');
   const configSummary = formatConfigSummary(task.inputConfig);
 
   return (
@@ -216,7 +217,9 @@ function TaskDetailPanel({ task }: { task: TaskResponseDto }) {
             {t('failureReason')}
           </span>
           <p className="text-[11px] text-destructive/80 break-words">
-            {task.errorMessage || task.errorCode}
+            {task.errorCode === 'TASK_RESOURCE_LIMIT_EXCEEDED'
+              ? recovery('resourceLimit')
+              : task.errorMessage || task.errorCode}
           </p>
           <span className="block text-[10px] font-mono text-destructive/70">
             {task.errorCode}

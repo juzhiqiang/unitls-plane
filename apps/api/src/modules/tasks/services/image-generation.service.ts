@@ -1,3 +1,9 @@
+import {
+  assertTaskImage,
+  currentResourceLimits,
+} from '../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
+import { readBoundedResponse } from '../../../common/resources/bounded-read';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   IMAGE_GENERATE_INPAINT_PROMPT_PREFIX,
@@ -293,7 +299,11 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     } catch (error) {
       // provider 内部抛出的确定性错误(generations_ref 不支持局部重绘、缺参考图等)
       // 原样透传:它们不是网络故障,重试只会原样再失败一遍。
-      if (error instanceof ImageGenerationError) throw error;
+      if (
+        error instanceof ImageGenerationError ||
+        error instanceof TaskResourceLimitError
+      )
+        throw error;
       // fetch 抛错(超时、DNS、连接重置)脱敏成"哪类网络故障"的真实原因后透出,
       // 原文只进日志 —— 这类是瞬时故障,允许重试:实测网关偶发掐断连接,第二次往往就通了。
       const reason = error instanceof Error ? error.message : String(error);
@@ -322,10 +332,18 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
 
     try {
       return await bufferFromGeneratedImagePayload(
-        await response.json(),
+        JSON.parse(
+          (
+            await readBoundedResponse(
+              response,
+              currentResourceLimits().providerResponseBytes
+            )
+          ).toString()
+        ),
         this.fetchImpl
       );
     } catch (error) {
+      if (error instanceof TaskResourceLimitError) throw error;
       this.logger.warn(
         `AI image generation response could not be decoded: ${String(error)}`
       );
@@ -412,7 +430,10 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     buffer: Buffer,
     keepAlpha = false
   ): Promise<Buffer> {
-    const pipeline = sharp(buffer).rotate();
+    await assertTaskImage(buffer, false);
+    const pipeline = sharp(buffer, {
+      limitInputPixels: currentResourceLimits().imagePixels,
+    }).rotate();
     return (keepAlpha ? pipeline : pipeline.flatten({ background: '#ffffff' }))
       .png()
       .toBuffer();
@@ -461,9 +482,9 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
     loaded: Buffer[],
     prompt: string
   ): Promise<Response> {
-    const normalized = await Promise.all(
-      loaded.map(buffer => this.normalizeReference(buffer))
-    );
+    const normalized: Buffer[] = [];
+    for (const buffer of loaded)
+      normalized.push(await this.normalizeReference(buffer));
 
     if (this.editTransport === 'generations_ref') {
       // postGeneration 内部会再走一次 buildImageGenerationPrompt(style 前缀),
@@ -590,8 +611,9 @@ export class OpenAiCompatibleImageGenerationProvider implements ImageGenerationP
 
   private async readBody(response: Response): Promise<string> {
     try {
-      return await response.text();
-    } catch {
+      return (await readBoundedResponse(response, 1024 * 1024)).toString();
+    } catch (error) {
+      if (error instanceof TaskResourceLimitError) throw error;
       return '';
     }
   }

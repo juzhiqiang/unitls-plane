@@ -1,3 +1,8 @@
+import {
+  assertRasterPixels,
+  assertPdfPages,
+  assertTaskOutput,
+} from '../../../../common/resources/task-resource-context';
 import { PDFDocument, type SecurityOptions } from '@cantoo/pdf-lib';
 import { getMupdf } from './mupdf-runtime';
 import type { EncryptOptions, CompressPdfOptions } from './options.type';
@@ -56,16 +61,21 @@ export class PdfSecurityOperations {
 
     const srcDoc = mupdf.Document.openDocument(input, 'application/pdf');
     try {
+      assertPdfPages(srcDoc.countPages());
       const newDoc = await PDFDocument.create();
+      let encodedBytes = 0;
       for (let i = 0; i < srcDoc.countPages(); i++) {
         const page = srcDoc.loadPage(i);
         try {
+          assertRasterPixels(page.getBounds(), scale);
           const pixmap = page.toPixmap(
             mupdf.Matrix.scale(scale, scale),
             mupdf.ColorSpace.DeviceRGB
           );
           try {
             const jpegData = pixmap.asJPEG(quality);
+            encodedBytes += jpegData.length;
+            assertTaskOutput(encodedBytes);
             const jpgImage = await newDoc.embedJpg(Buffer.from(jpegData));
 
             const bounds = page.getBounds();

@@ -1,3 +1,7 @@
+import {
+  assertTaskImage,
+  currentResourceLimits,
+} from '../../../common/resources/task-resource-context';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import sharp from 'sharp';
 import {
@@ -174,13 +178,17 @@ export class ImageService implements OnModuleInit {
     sharp.cache(false);
   }
   async compress(input: Buffer, opts: CompressOptions): Promise<Buffer> {
+    await assertTaskImage(input, false);
     if (opts.maxSizeKB !== undefined) {
       return this.compressToTargetSize(input, opts);
     }
 
     const buf = Buffer.from(input);
     let pipeline = applyImageTransform(
-      sharp(buf, { failOn: 'truncated' }),
+      sharp(buf, {
+        failOn: 'truncated',
+        limitInputPixels: currentResourceLimits().imagePixels,
+      }),
       opts.transform
     );
 
@@ -240,7 +248,10 @@ export class ImageService implements OnModuleInit {
       100
     );
 
-    const metadata = await sharp(input, { failOn: 'truncated' }).metadata();
+    const metadata = await sharp(input, {
+      failOn: 'truncated',
+      limitInputPixels: currentResourceLimits().imagePixels,
+    }).metadata();
     if (!metadata.width || !metadata.height) {
       throw new Error('File is not a valid image');
     }
@@ -262,7 +273,10 @@ export class ImageService implements OnModuleInit {
     ): Promise<Buffer> => {
       let pipeline = applyMetadataPolicy(
         applyImageTransform(
-          sharp(input, { failOn: 'truncated' }),
+          sharp(input, {
+            failOn: 'truncated',
+            limitInputPixels: currentResourceLimits().imagePixels,
+          }),
           opts.transform
         ).resize({
           width,
@@ -337,8 +351,12 @@ export class ImageService implements OnModuleInit {
   }
 
   async convert(input: Buffer, opts: ConvertOptions): Promise<Buffer> {
+    await assertTaskImage(input, false);
     const pipeline = applyImageTransform(
-      sharp(input, { failOn: 'truncated' }),
+      sharp(input, {
+        failOn: 'truncated',
+        limitInputPixels: currentResourceLimits().imagePixels,
+      }),
       opts.transform
     );
 
@@ -367,17 +385,24 @@ export class ImageService implements OnModuleInit {
   }
 
   async watermark(input: Buffer, opts: WatermarkOptions): Promise<Buffer> {
+    await assertTaskImage(input, false);
     const text = opts.text?.trim();
     if (!text) {
       throw new Error('Watermark text is required');
     }
 
     const transformedInput = await applyImageTransform(
-      sharp(input, { failOn: 'truncated' }),
+      sharp(input, {
+        failOn: 'truncated',
+        limitInputPixels: currentResourceLimits().imagePixels,
+      }),
       opts.transform
     ).toBuffer();
 
-    const image = sharp(transformedInput, { failOn: 'truncated' });
+    const image = sharp(transformedInput, {
+      failOn: 'truncated',
+      limitInputPixels: currentResourceLimits().imagePixels,
+    });
     const metadata = await image.metadata();
     if (!metadata.width || !metadata.height) {
       throw new Error('File is not a valid image');
@@ -410,9 +435,10 @@ export class ImageService implements OnModuleInit {
       outline: opts.outline,
     });
 
-    let pipeline = sharp(transformedInput, { failOn: 'truncated' }).composite([
-      { input: Buffer.from(svg), blend: 'over' },
-    ]);
+    let pipeline = sharp(transformedInput, {
+      failOn: 'truncated',
+      limitInputPixels: currentResourceLimits().imagePixels,
+    }).composite([{ input: Buffer.from(svg), blend: 'over' }]);
 
     const outputFormat =
       opts.outputFormat ??
@@ -437,6 +463,9 @@ export class ImageService implements OnModuleInit {
   }
 
   async getMetadata(input: Buffer) {
-    return sharp(input).metadata();
+    await assertTaskImage(input, false);
+    return sharp(input, {
+      limitInputPixels: currentResourceLimits().imagePixels,
+    }).metadata();
   }
 }

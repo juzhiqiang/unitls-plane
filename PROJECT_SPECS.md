@@ -48,6 +48,23 @@ Utils-Plane 是一个全栈文件处理工具平台，覆盖图片、PDF、字�
 - 拼图在 Worker 内使用 64
   MiB 有界解码缓存，超预算输入逐张处理；结果 PDF 缩略图按滚动窗口挂载最多 15–30 项，离窗释放画布。源文件、输出画布和 PDF.js 内部缓存仍有额外内存成本。
 
+### Worker 资源预算（2026-11-06）
+
+- 四个处理队列在每个 Worker 进程共用 `TaskResourceBudgetService`；`*_WORKER_CONCURRENCY`
+  仍是外层并发上限，内部按估算内存和计算权重原子准入。默认
+  `WORKER_MEMORY_BUDGET_MB=1024`、`WORKER_CPU_BUDGET=4`，图片/字体/AI 权重 1，PDF/证件照权重 2。
+- 下载前校验输入归属与体积，估算包含任务类型、累计输入字节、解码像素上限及渲染输出空间。内存不足延后 2–3 秒继续 pending，不消耗业务失败次数；单任务无法放入总预算直接失败。AI 从参考读取至产物上传始终保留预算，资源错误不换源或重新生成。
+- 默认累计输入 128 MiB、最多 100 项，`TASK_MAX_IMAGE_PIXELS=32000000`
+  同时限制单图及任务累计像素（动图包含各帧）；PDF 输入累计最多 500 页。实际下载分块计数，低报文件大小、重复输入与图库参考均不能绕过预算；下载 120 秒超时中止。
+- PDF 转图片最多 100 页，`TASK_MAX_PDF_RENDER_PIXELS=16000000`
+  限制每页栅格像素，编码图片累计和 ZIP/任务产物最多 64
+  MiB；PDF 压缩、Markdown 标准化与 CAD 显式栅格化同样预检尺寸。MuPDF
+  page/pixmap/document 在成功和异常路径释放。
+- AI 来源 JSON 最多 48 MiB、生成图最多 32 MiB、图库参考单项最多 20
+  MiB。base64 在解码前检查，URL 按实际读取字节限制；参考图顺序加载和归一。前端对
+  `TASK_RESOURCE_LIMIT_EXCEEDED` 显示减小文件、分辨率、页数或 DPI 的中英文建议。
+- 这是保守调度预算，不是硬 RSS、CPU 或磁盘隔离：原生库/WASM、PDF/字体内部展开、Office/OCR 子进程、ONNX 常驻模型仍有额外成本。生产应将预算设在容器/主机可用内存以下，按实测预留运行时空间，并用独立 Worker 容器/cgroup 设置硬限制；多副本预算相加，不能当作集群共享额度。
+
 ### API 与任务进程拆分（2026-10-26）
 
 - `PROCESS_ROLE` 支持 `all`、`api`、`worker`，未设置时默认为 `all`，非法值启动失败。`all`

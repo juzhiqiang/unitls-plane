@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
 import { Readable } from 'node:stream';
 
@@ -193,8 +194,13 @@ describe('AiTryOnReferencesService list', () => {
 describe('AiTryOnReferencesService getImageForGeneration', () => {
   it('reads the asset object from the row bucket and key', async () => {
     lookupRows = [referenceRow()];
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: 'white' },
+    })
+      .png()
+      .toBuffer();
     const send = vi.fn(async () => ({
-      Body: Readable.from([Buffer.from('png-bytes')]),
+      Body: Readable.from([png]),
     }));
     const service = stubClient(send);
 
@@ -203,7 +209,7 @@ describe('AiTryOnReferencesService getImageForGeneration', () => {
       'person'
     );
 
-    expect(buffer.toString()).toBe('png-bytes');
+    expect(buffer).toEqual(png);
     expect(eq).toHaveBeenCalledWith(
       table.id,
       '11111111-1111-1111-1111-111111111111'

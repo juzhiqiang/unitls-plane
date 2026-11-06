@@ -18,12 +18,7 @@ async function referencePng(): Promise<Buffer> {
 }
 
 function jsonResponse(body: unknown, status = 200) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  } as unknown as Response;
+  return new Response(JSON.stringify(body), { status });
 }
 
 const config = {
@@ -367,20 +362,15 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
   it('maps a chinese model refusal to the content policy error code', async () => {
     const fetchImpl = vi.fn(
       async () =>
-        ({
-          ok: false,
-          status: 502,
-          json: async () => {
-            throw new Error('not json');
-          },
-          text: async () =>
-            JSON.stringify({
-              error: {
-                message:
-                  '抱歉，我不能帮助生成裸体或露骨色情内容的图片。我可以改为生成这些版本：艺术剪影、时尚人像。',
-              },
-            }),
-        }) as unknown as Response
+        new Response(
+          JSON.stringify({
+            error: {
+              message:
+                '抱歉，我不能帮助生成裸体或露骨色情内容的图片。我可以改为生成这些版本：艺术剪影、时尚人像。',
+            },
+          }),
+          { status: 502 }
+        )
     );
     const provider = new OpenAiCompatibleImageGenerationProvider({
       baseUrl: 'https://api.test',
@@ -402,15 +392,10 @@ describe('OpenAiCompatibleImageGenerationProvider', () => {
   it('reduces an html gateway error page to its title', async () => {
     const fetchImpl = vi.fn(
       async () =>
-        ({
-          ok: false,
-          status: 502,
-          json: async () => {
-            throw new Error('not json');
-          },
-          text: async () =>
-            '<!DOCTYPE html><html><head><title>502: Bad gateway</title></head><body><h1>Bad gateway</h1><p>cloudflare</p></body></html>',
-        }) as unknown as Response
+        new Response(
+          '<!DOCTYPE html><html><head><title>502: Bad gateway</title></head><body><h1>Bad gateway</h1><p>cloudflare</p></body></html>',
+          { status: 502 }
+        )
     );
     const provider = new OpenAiCompatibleImageGenerationProvider({
       baseUrl: 'https://api.test',

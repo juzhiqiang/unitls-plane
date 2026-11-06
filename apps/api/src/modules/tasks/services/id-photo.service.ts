@@ -1,3 +1,4 @@
+import { assertTaskImage } from '../../../common/resources/task-resource-context';
 import { Injectable, Optional } from '@nestjs/common';
 import sharp from 'sharp';
 import {
@@ -58,6 +59,7 @@ export class IdPhotoService {
     input: Buffer,
     rawConfig: IdPhotoTaskConfig
   ): Promise<IdPhotoRenderResult> {
+    await assertTaskImage(input, false);
     const config = idPhotoTaskConfigSchema.parse(rawConfig);
     const preset = idPhotoPresetSpecs[config.preset];
     const metadata = await sharp(input).metadata();
@@ -357,6 +359,7 @@ export class IdPhotoService {
     config: IdPhotoTaskConfig
   ): Promise<IdPhotoRenderResult> {
     const preset = idPhotoPresetSpecs[config.preset];
+    await assertTaskImage(input, false);
     const image = sharp(input)
       .rotate()
       .resize({

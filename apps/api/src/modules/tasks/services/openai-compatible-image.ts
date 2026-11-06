@@ -1,3 +1,17 @@
+import { currentResourceLimits } from '../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
+import { readBoundedResponse } from '../../../common/resources/bounded-read';
+
+function decodeBoundedBase64(value: string): Buffer {
+  const max = currentResourceLimits().generatedImageBytes;
+  if (value.length > Math.ceil(max / 3) * 4)
+    throw new TaskResourceLimitError('generated image byte budget exceeded');
+  const buffer = Buffer.from(value, 'base64');
+  if (buffer.length > max)
+    throw new TaskResourceLimitError('generated image byte budget exceeded');
+  return buffer;
+}
+
 export function normalizeOpenAiCompatibleImageEditUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '');
   if (trimmed.endsWith('/images/edits')) {
@@ -42,7 +56,7 @@ export async function bufferFromGeneratedImagePayload(
   const image =
     data?.b64_json ?? data?.base64 ?? data?.image ?? data?.image_base64;
   if (typeof image === 'string' && image.trim()) {
-    return Buffer.from(image.replace(/^data:[^,]+,/, ''), 'base64');
+    return decodeBoundedBase64(image.replace(/^data:[^,]+,/, ''));
   }
 
   const url = data?.url;
@@ -51,15 +65,16 @@ export async function bufferFromGeneratedImagePayload(
     // data[0].url 字段返回(裸 base64 或带 data: 前缀),而不是一个可下载的 URL。
     // 这种情况直接就地解码,不要再去 fetch 一个根本不是 URL 的值。
     if (/^data:[^,]+,/.test(url)) {
-      return Buffer.from(url.replace(/^data:[^,]+,/, ''), 'base64');
+      return decodeBoundedBase64(url.replace(/^data:[^,]+,/, ''));
     }
     // 裸 base64:不是 URL(无 https?:// 前缀),但能解出非空字节就按 base64 处理。
     // 用 try/catch 兜底:解不出就继续往下走 URL 下载/missing 分支,不在这里硬崩。
     if (!/^https?:\/\//i.test(url)) {
       try {
-        const decoded = Buffer.from(url, 'base64');
+        const decoded = decodeBoundedBase64(url);
         if (decoded.length > 0) return decoded;
-      } catch {
+      } catch (error) {
+        if (error instanceof TaskResourceLimitError) throw error;
         // 不是合法 base64,落到下面的 URL 下载尝试(会因非 URL 失败)或 missing。
       }
     }
@@ -67,7 +82,9 @@ export async function bufferFromGeneratedImagePayload(
     if (/^https?:\/\//i.test(url)) {
       let response: Response;
       try {
-        response = await fetchImpl(url);
+        response = await fetchImpl(url, {
+          signal: globalThis.AbortSignal.timeout(120_000),
+        });
       } catch (error) {
         throw new GeneratedImageDownloadError(
           `Failed to download generated image: ${String(error instanceof Error ? error.message : error)}`
@@ -78,7 +95,10 @@ export async function bufferFromGeneratedImagePayload(
           `Failed to download generated image: ${response.status}`
         );
       }
-      return Buffer.from(await response.arrayBuffer());
+      return readBoundedResponse(
+        response,
+        currentResourceLimits().generatedImageBytes
+      );
     }
   }
 

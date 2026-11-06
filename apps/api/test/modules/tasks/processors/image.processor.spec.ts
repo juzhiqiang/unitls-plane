@@ -1,3 +1,11 @@
+const resourceBudget = {
+  run: async (
+    _task: unknown,
+    _job: unknown,
+    _token: unknown,
+    operation: () => Promise<unknown>
+  ) => operation(),
+};
 import { expect, it, mock, vi } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -58,7 +66,8 @@ it('processes image_id_photo tasks through IdPhotoService', async () => {
     {} as any,
     filesService as any,
     tasksService as any,
-    idPhotoService as any
+    idPhotoService as any,
+    resourceBudget as never
   );
 
   await processor.process({

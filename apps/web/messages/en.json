@@ -1011,7 +1011,8 @@
     "backgroundTransparent": "Transparent",
     "emptyTitle": "Start creating",
     "emptyHint": "Type a prompt below, or start from an idea template.",
-    "quotaRemaining": "{remaining} / {limit} remaining today"
+    "quotaRemaining": "{remaining} / {limit} remaining today",
+    "resourceLimit": "This task exceeds the processing resource limit. Use smaller files or images, fewer pages, or a lower export DPI, then submit again."
   },
   "ImageTryOn": {
     "title": "AI e-commerce try-on",
@@ -2427,6 +2428,7 @@
     "contextChanged": "The page was left or the account changed. Check Recent tasks in the original account before submitting again.",
     "checkOriginal": "Check the original task",
     "viewRecent": "View recent tasks",
-    "downloadFailedTitle": "Result download incomplete"
+    "downloadFailedTitle": "Result download incomplete",
+    "resourceLimit": "This task exceeds the processing resource limit. Use smaller files or images, fewer pages, or a lower export DPI, then submit again."
   }
 }

@@ -1,3 +1,6 @@
+import { TaskResourceBudgetService } from '../services/task-resource-budget.service';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
+import { DelayedError } from 'bullmq';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
@@ -55,12 +58,16 @@ export class ImageProcessor extends WorkerHost {
     private readonly imageService: ImageService,
     private readonly filesService: FilesService,
     private readonly tasksService: TasksService,
-    private readonly idPhotoService: IdPhotoService
+    private readonly idPhotoService: IdPhotoService,
+    private readonly resourceBudget: TaskResourceBudgetService
   ) {
     super();
   }
 
-  async process(job: Job<{ taskId: string }>): Promise<unknown> {
+  async process(
+    job: Job<{ taskId: string }>,
+    token?: string
+  ): Promise<unknown> {
     const { taskId } = job.data;
     this.logger.log(
       `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
@@ -68,21 +75,27 @@ export class ImageProcessor extends WorkerHost {
     const task = await this.tasksService.getById(taskId);
 
     try {
-      await this.tasksService.markProcessing(taskId);
+      return await this.resourceBudget.run(task, job, token, async () => {
+        await this.tasksService.markProcessing(taskId);
 
-      switch (task.type) {
-        case 'compress':
-          return await this.handleCompress(task, job);
-        case 'convert':
-          return await this.handleConvert(task, job);
-        case 'image_watermark':
-          return await this.handleWatermark(task, job);
-        case 'image_id_photo':
-          return await this.handleIdPhoto(task, job);
-        default:
-          throw new Error(`Unknown image task type: ${task.type}`);
-      }
+        switch (task.type) {
+          case 'compress':
+            return await this.handleCompress(task, job);
+          case 'convert':
+            return await this.handleConvert(task, job);
+          case 'image_watermark':
+            return await this.handleWatermark(task, job);
+          case 'image_id_photo':
+            return await this.handleIdPhoto(task, job);
+          default:
+            throw new Error(`Unknown image task type: ${task.type}`);
+        }
+      });
     } catch (err) {
+      if (err instanceof DelayedError) {
+        if (task.status === 'processing') await this.markRetryingSafely(taskId);
+        throw err;
+      }
       // 还有重试机会时只退回 pending:提前写 failed 会让前端停掉轮询,
       // 之后重试成功也没人再看,页面永远停在报错上。见 attempt-outcome.ts。
       if (!shouldRecordFailure(job, err)) {
@@ -91,7 +104,9 @@ export class ImageProcessor extends WorkerHost {
       }
       try {
         const code =
-          err instanceof IdPhotoError ? err.code : 'IMAGE_PROCESSING_FAILED';
+          err instanceof TaskResourceLimitError || err instanceof IdPhotoError
+            ? err.code
+            : 'IMAGE_PROCESSING_FAILED';
         await this.tasksService.markFailed(
           taskId,
           code,
@@ -299,7 +314,9 @@ export class ImageProcessor extends WorkerHost {
       const { taskId } = job.data as { taskId: string };
       await this.tasksService.markFailed(
         taskId,
-        'IMAGE_PROCESSING_FAILED',
+        err instanceof TaskResourceLimitError
+          ? err.code
+          : 'IMAGE_PROCESSING_FAILED',
         err.message
       );
     }

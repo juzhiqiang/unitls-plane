@@ -1011,7 +1011,8 @@
     "backgroundTransparent": "透明",
     "emptyTitle": "开始你的创作",
     "emptyHint": "在下方输入提示词，或从灵感模板开始。",
-    "quotaRemaining": "今日剩余 {remaining} / {limit} 张"
+    "quotaRemaining": "今日剩余 {remaining} / {limit} 张",
+    "resourceLimit": "任务超出资源处理上限，请减小文件或图片分辨率、减少页数或降低导出 DPI 后重新提交。"
   },
   "ImageTryOn": {
     "title": "AI 电商试衣",
@@ -2423,6 +2424,7 @@
     "contextChanged": "页面已离开或账号已切换。请在原账号的最近任务中确认提交结果。",
     "checkOriginal": "请先确认原任务",
     "viewRecent": "查看最近任务",
-    "downloadFailedTitle": "结果下载未完成"
+    "downloadFailedTitle": "结果下载未完成",
+    "resourceLimit": "任务超出资源处理上限，请减小文件或图片分辨率、减少页数或降低导出 DPI 后重新提交。"
   }
 }

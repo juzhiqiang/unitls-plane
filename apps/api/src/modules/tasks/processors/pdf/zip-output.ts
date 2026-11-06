@@ -1,12 +1,25 @@
+import { currentResourceLimits } from '../../../../common/resources/task-resource-context';
+import { TaskResourceLimitError } from '../../../../common/resources/resource-error';
 import * as archiver from 'archiver';
 
 export function streamToBuffer(archive: archiver.Archiver): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let total = 0;
+    const maxBytes = currentResourceLimits().outputBytes;
+    archive.on('data', (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        archive.abort();
+        archive.destroy();
+        reject(new TaskResourceLimitError('ZIP output budget exceeded'));
+        return;
+      }
+      chunks.push(chunk);
+    });
     archive.on('end', () => resolve(Buffer.concat(chunks)));
     archive.on('error', reject);
-    archive.finalize();
+    void archive.finalize().catch(reject);
   });
 }
 

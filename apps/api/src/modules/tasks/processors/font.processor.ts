@@ -1,3 +1,6 @@
+import { TaskResourceBudgetService } from '../services/task-resource-budget.service';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
+import { DelayedError } from 'bullmq';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
@@ -18,12 +21,16 @@ export class FontProcessor extends WorkerHost {
   constructor(
     private readonly fontService: FontService,
     private readonly filesService: FilesService,
-    private readonly tasksService: TasksService
+    private readonly tasksService: TasksService,
+    private readonly resourceBudget: TaskResourceBudgetService
   ) {
     super();
   }
 
-  async process(job: Job<{ taskId: string }>): Promise<unknown> {
+  async process(
+    job: Job<{ taskId: string }>,
+    token?: string
+  ): Promise<unknown> {
     const { taskId } = job.data;
     this.logger.log(
       `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
@@ -31,9 +38,15 @@ export class FontProcessor extends WorkerHost {
     const task = await this.tasksService.getById(taskId);
 
     try {
-      await this.tasksService.markProcessing(taskId);
-      return await this.handleConvert(task, job);
+      return await this.resourceBudget.run(task, job, token, async () => {
+        await this.tasksService.markProcessing(taskId);
+        return await this.handleConvert(task, job);
+      });
     } catch (err) {
+      if (err instanceof DelayedError) {
+        if (task.status === 'processing') await this.markRetryingSafely(taskId);
+        throw err;
+      }
       // 还有重试机会时只退回 pending:提前写 failed 会让前端停掉轮询,
       // 之后重试成功也没人再看,页面永远停在报错上。见 attempt-outcome.ts。
       if (!shouldRecordFailure(job, err)) {
@@ -43,7 +56,9 @@ export class FontProcessor extends WorkerHost {
       try {
         await this.tasksService.markFailed(
           taskId,
-          'FONT_PROCESSING_FAILED',
+          err instanceof TaskResourceLimitError
+            ? err.code
+            : 'FONT_PROCESSING_FAILED',
           (err as Error).message
         );
       } catch (dbErr) {
@@ -116,7 +131,9 @@ export class FontProcessor extends WorkerHost {
       const { taskId } = job.data as { taskId: string };
       await this.tasksService.markFailed(
         taskId,
-        'FONT_PROCESSING_FAILED',
+        err instanceof TaskResourceLimitError
+          ? err.code
+          : 'FONT_PROCESSING_FAILED',
         err.message
       );
     }

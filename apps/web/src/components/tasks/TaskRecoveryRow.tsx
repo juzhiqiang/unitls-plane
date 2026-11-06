@@ -157,7 +157,9 @@ export function TaskRecoveryRow({
       )}
       {state === 'failed' && status?.errorMessage && (
         <p className="break-words text-xs text-destructive">
-          {status.errorMessage}
+          {status.errorCode === 'TASK_RESOURCE_LIMIT_EXCEEDED'
+            ? t('resourceLimit')
+            : status.errorMessage}
         </p>
       )}
       {state === 'completed' && status?.outputFileId && (

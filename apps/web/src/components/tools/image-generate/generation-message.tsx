@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
  * 映射表里的错误码用本地化文案;不在表里的失败优先展示服务端已脱敏的真实原因。
  */
 export const MESSAGE_ERROR_KEYS: Record<string, string> = {
+  TASK_RESOURCE_LIMIT_EXCEEDED: 'resourceLimit',
   AI_IMAGE_DAILY_LIMIT_EXCEEDED: 'quotaExceeded',
   AI_IMAGE_CONTENT_REJECTED: 'contentRejected',
   AI_IMAGE_NOT_CONFIGURED: 'notConfigured',

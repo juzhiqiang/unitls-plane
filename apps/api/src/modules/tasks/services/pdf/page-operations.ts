@@ -1,3 +1,7 @@
+import {
+  assertTaskOutput,
+  assertPdfPages,
+} from '../../../../common/resources/task-resource-context';
 import { BadRequestException } from '@nestjs/common';
 import { PDFDocument, degrees } from '@cantoo/pdf-lib';
 import type {
@@ -25,14 +29,28 @@ export class PdfPageOperations {
 
     this.validateSplitOptions(opts, totalPages);
 
+    const outputPages =
+      opts.mode === 'ranges'
+        ? opts.ranges!.reduce(
+            (total, [start, end]) => total + end - start + 1,
+            0
+          )
+        : opts.mode === 'pages'
+          ? opts.pages!.length
+          : totalPages;
+    assertPdfPages(outputPages);
     const ranges = this.parseRanges(opts, totalPages);
     const outputs: Buffer[] = [];
+    let totalOutputBytes = 0;
 
     for (const range of ranges) {
       const target = await PDFDocument.create();
       const pages = await target.copyPages(src, range);
       pages.forEach(p => target.addPage(p));
-      outputs.push(Buffer.from(await target.save()));
+      const output = Buffer.from(await target.save());
+      totalOutputBytes += output.length;
+      assertTaskOutput(totalOutputBytes);
+      outputs.push(output);
     }
 
     return outputs;
@@ -78,6 +96,7 @@ export class PdfPageOperations {
     }
 
     const target = await PDFDocument.create();
+    assertPdfPages(opts.pageOrder.length);
     const copiedPages = await target.copyPages(src, opts.pageOrder);
     copiedPages.forEach(page => target.addPage(page));
 

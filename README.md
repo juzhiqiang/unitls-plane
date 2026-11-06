@@ -644,3 +644,9 @@ bunx drizzle-kit migrate
 项目已完成基础 monorepo、认证、数据库、文件模块、任务队列、Web 工具页、文件/任务管理、图片长图拼接、GIF/APNG 动图工具、Markdown
 / Word 转 PDF 和关键设计原则页面优化。后续开发应以当前代码和 `PROJECT_SPECS.md`
 为准，避免引用早期 phase 文档中的过时状态。
+
+### 任务资源预算
+
+服务端图片、PDF、字体与 AI 任务除队列并发限制外，共用每个 Worker 的估算内存和计算权重预算。资源不足时继续排队；超大输入、过高解码像素或 PDF 渲染需求会明确提示调整输入。默认与调优边界见
+[PROJECT_SPECS.md](./PROJECT_SPECS.md) 的「Worker 资源预算」，环境变量见
+`.env.example`。预算不是容器硬内存限制，部署需为原生库和常驻模型留出余量。

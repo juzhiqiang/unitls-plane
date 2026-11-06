@@ -21,6 +21,23 @@ function renderWithIntl(ui: React.ReactElement) {
 }
 
 describe('tool experience components', () => {
+  it('explains resource limits and offers replacing the input without a blind retry', () => {
+    renderWithIntl(
+      <FailureRecoveryPanel
+        message="Task resource limit exceeded: input"
+        errorCode="TASK_RESOURCE_LIMIT_EXCEEDED"
+        onRetry={vi.fn()}
+        onReset={vi.fn()}
+      />
+    );
+    expect(screen.getByText(en.TaskRecovery.resourceLimit)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Retry' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Replace file' })
+    ).toBeInTheDocument();
+  });
   it('retries output retrieval instead of submitting again', async () => {
     const resubmit = vi.fn();
     const download = vi.fn().mockResolvedValue(undefined);

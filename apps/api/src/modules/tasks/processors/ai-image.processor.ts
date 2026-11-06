@@ -1,3 +1,6 @@
+import { TaskResourceBudgetService } from '../services/task-resource-budget.service';
+import { TaskResourceLimitError } from '../../../common/resources/resource-error';
+import { DelayedError } from 'bullmq';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Inject, Logger, Optional } from '@nestjs/common';
 import {
@@ -222,6 +225,7 @@ export class AiImageProcessor extends WorkerHost {
     private readonly filesService: FilesService,
     private readonly tasksService: TasksService,
     private readonly imageGenerationService: ImageGenerationService,
+    private readonly resourceBudget: TaskResourceBudgetService,
     @Optional()
     @Inject(AI_TRY_ON_REFERENCE_IMAGE_SOURCE)
     private readonly tryOnReferenceImageSource?: AiTryOnReferenceImageSource
@@ -229,7 +233,10 @@ export class AiImageProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ taskId: string }>): Promise<unknown> {
+  async process(
+    job: Job<{ taskId: string }>,
+    token?: string
+  ): Promise<unknown> {
     const { taskId } = job.data;
     this.logger.log(
       `[START] jobId=${job.id}, taskId=${taskId}, attempt=${job.attemptsMade}`
@@ -237,17 +244,23 @@ export class AiImageProcessor extends WorkerHost {
     const task = await this.tasksService.getById(taskId);
 
     try {
-      await this.tasksService.markProcessing(taskId);
+      return await this.resourceBudget.run(task, job, token, async () => {
+        await this.tasksService.markProcessing(taskId);
 
-      switch (task.type) {
-        case 'image_generate':
-          return await this.handleGenerate(task, job);
-        case 'image_try_on':
-          return await this.handleTryOn(task, job);
-        default:
-          throw new Error(`Unknown AI image task type: ${task.type}`);
-      }
+        switch (task.type) {
+          case 'image_generate':
+            return await this.handleGenerate(task, job);
+          case 'image_try_on':
+            return await this.handleTryOn(task, job);
+          default:
+            throw new Error(`Unknown AI image task type: ${task.type}`);
+        }
+      });
     } catch (err) {
+      if (err instanceof DelayedError) {
+        if (task.status === 'processing') await this.markRetryingSafely(taskId);
+        throw err;
+      }
       throw await this.settleFailedAttempt(taskId, job, err, taskPrompt(task));
     }
   }
@@ -274,7 +287,8 @@ export class AiImageProcessor extends WorkerHost {
     }
 
     await this.markFailedSafely(taskId, err, prompt);
-    if (isRetryableError(err)) return err;
+    if (err instanceof TaskResourceLimitError || isRetryableError(err))
+      return err;
     return new UnrecoverableError(
       err instanceof Error ? err.message : 'Image generation failed'
     );
@@ -301,7 +315,9 @@ export class AiImageProcessor extends WorkerHost {
     err: unknown,
     prompt = ''
   ): Promise<void> {
-    const known = err instanceof ImageGenerationError;
+    const known =
+      err instanceof ImageGenerationError ||
+      err instanceof TaskResourceLimitError;
     if (!known) {
       this.logger.error(
         `AI image task ${taskId} failed unexpectedly: ${String(err)}`
@@ -456,8 +472,9 @@ export class AiImageProcessor extends WorkerHost {
     );
     const files = task.inputFileIds ?? [];
 
-    return Promise.all(
-      orderedBindings.map(async binding => {
+    const result: Buffer[] = [];
+    for (const binding of orderedBindings) {
+      const load = async () => {
         if (binding.source === 'upload') {
           const fileId = files[binding.inputIndex];
           if (!fileId) {
@@ -485,8 +502,10 @@ export class AiImageProcessor extends WorkerHost {
           binding.assetId,
           expectedKind
         );
-      })
-    );
+      };
+      result.push(await load());
+    }
+    return result;
   }
 
   private async loadTryOnPromptMetadata(
@@ -539,9 +558,10 @@ export class AiImageProcessor extends WorkerHost {
         this.filesService.getById(fileId, task.userId ?? null)
       )
     );
-    return Promise.all(
-      files.map(file => this.filesService.download(file.storageKey))
-    );
+    const result: Buffer[] = [];
+    for (const file of files)
+      result.push(await this.filesService.download(file.storageKey));
+    return result;
   }
 
   @OnWorkerEvent('failed')

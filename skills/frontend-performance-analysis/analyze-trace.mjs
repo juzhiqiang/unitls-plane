@@ -9,8 +9,8 @@
 //   --tid <tid | pid:tid>  强制指定主线程(默认根据 TracingStartedInBrowser 与忙碌度自动锁定主页面 CrRendererMain)
 //   --window START-END     钻取相对 trace 起点 START~END 毫秒的时间窗(同时过滤 X 事件与 CPU 采样热点)
 //   --fps <60|120>         目标帧率预算基准(默认 60,即 16.7ms/帧;120Hz 为 8.3ms/帧)
-//   --compare <after.json> 对比改前(主参数)与改后(compare 参数)两份 trace 的核心指标变化
-//   --json                 输出结构化 JSON 结果(便于程序化比对或自动化断言)
+//   --compare <after.json> 对比改前(主参数)与改后(compare 参数)两份 trace 的核心指标变化(带时长归一化与 ±5% 噪声带)
+//   --json                 输出结构化 JSON 结果(Map 已序列化为数组,便于程序化比对或自动化断言)
 
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -38,8 +38,138 @@ function parseArgs(argv) {
   return args;
 }
 
-// 支持常规 JSON.parse,并在超大 Buffer (>512MB 超过 V8 字符串上限) 时回退到逐对象流式扫描
-function parseLargeTraceBuffer(buf) {
+// 单趟增量状态机流式解析:每个字符只扫描一次,跨 chunk 不重扫,且精确锁定顶层数组或 "traceEvents" 数组
+export function parseTraceIncrementally(buf) {
+  const events = [];
+  const decoder = new TextDecoder('utf8');
+  const CHUNK = 16 * 1024 * 1024;
+
+  // 状态:
+  // 'SEEK_ROOT' -> 寻找顶层 '[' 或 '{'
+  // 'SEEK_TRACE_EVENTS_KEY' -> 顶层是 '{',寻找 "traceEvents" 键后的 '['
+  // 'IN_ARRAY' -> 已进入事件数组,按 depth===1 切分每个事件对象 '{...}'
+  let mode = 'SEEK_ROOT';
+  let inString = false;
+  let escape = false;
+  let rootObjDepth = 0;
+  let currentKey = '';
+  let lastString = '';
+  let waitingArrayOpen = false;
+  let objDepth = 0;
+  let objParts = [];
+  let objStartIdx = -1;
+
+  for (let offset = 0; offset < buf.length; offset += CHUNK) {
+    const slice = buf.subarray(offset, Math.min(buf.length, offset + CHUNK));
+    const text = decoder.decode(slice, { stream: offset + CHUNK < buf.length });
+    objStartIdx = objDepth > 0 ? 0 : -1;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text.charCodeAt(i);
+
+      if (escape) {
+        escape = false;
+        if (mode === 'SEEK_TRACE_EVENTS_KEY' && inString && rootObjDepth === 1) {
+          currentKey += text[i];
+        }
+        continue;
+      }
+
+      if (inString) {
+        if (ch === 0x5c /* \ */) {
+          escape = true;
+        } else if (ch === 0x22 /* " */) {
+          inString = false;
+          if (mode === 'SEEK_TRACE_EVENTS_KEY' && rootObjDepth === 1) {
+            lastString = currentKey;
+            currentKey = '';
+          }
+        } else if (mode === 'SEEK_TRACE_EVENTS_KEY' && rootObjDepth === 1 && currentKey.length < 32) {
+          currentKey += text[i];
+        }
+        continue;
+      }
+
+      if (ch === 0x22 /* " */) {
+        inString = true;
+        if (mode === 'SEEK_TRACE_EVENTS_KEY' && rootObjDepth === 1) {
+          currentKey = '';
+        }
+        continue;
+      }
+
+      if (mode === 'SEEK_ROOT') {
+        if (ch === 0x5b /* [ */) {
+          mode = 'IN_ARRAY';
+        } else if (ch === 0x7b /* { */) {
+          mode = 'SEEK_TRACE_EVENTS_KEY';
+          rootObjDepth = 1;
+        }
+        continue;
+      }
+
+      if (mode === 'SEEK_TRACE_EVENTS_KEY') {
+        if (ch === 0x7b /* { */) {
+          rootObjDepth++;
+        } else if (ch === 0x7d /* } */) {
+          rootObjDepth--;
+        } else if (ch === 0x3a /* : */ && rootObjDepth === 1) {
+          waitingArrayOpen = lastString === 'traceEvents';
+        } else if (ch === 0x5b /* [ */ && rootObjDepth === 1 && waitingArrayOpen) {
+          mode = 'IN_ARRAY';
+          waitingArrayOpen = false;
+        } else if (ch !== 0x20 && ch !== 0x09 && ch !== 0x0a && ch !== 0x0d) {
+          if (waitingArrayOpen) waitingArrayOpen = false;
+        }
+        continue;
+      }
+
+      // mode === 'IN_ARRAY'
+      if (objDepth === 0) {
+        if (ch === 0x7b /* { */) {
+          objDepth = 1;
+          objStartIdx = i;
+          objParts = [];
+        } else if (ch === 0x5d /* ] */) {
+          // traceEvents 数组结束
+          break;
+        }
+      } else {
+        if (ch === 0x7b /* { */) {
+          objDepth++;
+        } else if (ch === 0x7d /* } */) {
+          objDepth--;
+          if (objDepth === 0) {
+            objParts.push(text.slice(objStartIdx, i + 1));
+            const rawObj = objParts.length === 1 ? objParts[0] : objParts.join('');
+            objParts = [];
+            objStartIdx = -1;
+            try {
+              events.push(JSON.parse(rawObj));
+            } catch {
+              // 忽略损坏的单条记录
+            }
+          }
+        }
+      }
+    }
+
+    if (mode === 'IN_ARRAY' && objDepth > 0 && objStartIdx >= 0) {
+      objParts.push(text.slice(objStartIdx));
+    }
+  }
+
+  if (!events.length) {
+    throw new Error('无法识别的 trace 格式:未找到有效 traceEvents 数组');
+  }
+  return events;
+}
+
+export function loadTrace(file) {
+  let buf = readFileSync(file);
+  if (file.endsWith('.gz') || (buf[0] === 0x1f && buf[1] === 0x8b)) {
+    buf = gunzipSync(buf);
+  }
   try {
     const json = JSON.parse(buf.toString('utf8'));
     const events = Array.isArray(json) ? json : json.traceEvents;
@@ -48,83 +178,11 @@ function parseLargeTraceBuffer(buf) {
     }
     return events;
   } catch (err) {
-    if (err.code !== 'ERR_STRING_TOO_LONG' && !/Invalid string length/i.test(err.message)) {
-      throw err;
+    if (err.code === 'ERR_STRING_TOO_LONG' || /Invalid string length/i.test(err.message)) {
+      return parseTraceIncrementally(buf);
     }
-    // 超大文件分块扫描顶层事件对象
-    const events = [];
-    const decoder = new TextDecoder('utf8');
-    const CHUNK = 32 * 1024 * 1024;
-    let carry = '';
-    let inString = false;
-    let escape = false;
-    let depth = 0;
-    let objStart = -1;
-    let arrayStarted = false;
-
-    for (let offset = 0; offset < buf.length; offset += CHUNK) {
-      const slice = buf.subarray(offset, Math.min(buf.length, offset + CHUNK));
-      const text = carry + decoder.decode(slice, { stream: offset + CHUNK < buf.length });
-      let lastConsumed = 0;
-
-      for (let i = 0; i < text.length; i++) {
-        const ch = text.charCodeAt(i);
-        if (escape) {
-          escape = false;
-          continue;
-        }
-        if (inString) {
-          if (ch === 0x5c /* \ */) escape = true;
-          else if (ch === 0x22 /* " */) inString = false;
-          continue;
-        }
-        if (ch === 0x22 /* " */) {
-          inString = true;
-          continue;
-        }
-        if (!arrayStarted) {
-          if (ch === 0x5b /* [ */) {
-            arrayStarted = true;
-            lastConsumed = i + 1;
-          }
-          continue;
-        }
-        if (ch === 0x7b /* { */) {
-          if (depth === 0) objStart = i;
-          depth++;
-        } else if (ch === 0x7d /* } */) {
-          depth--;
-          if (depth === 0 && objStart >= 0) {
-            const rawObj = text.slice(objStart, i + 1);
-            try {
-              const ev = JSON.parse(rawObj);
-              if (ev && typeof ev === 'object' && ('ph' in ev || 'name' in ev)) {
-                events.push(ev);
-              }
-            } catch {
-              // 忽略非 traceEvent 的外层元数据对象
-            }
-            objStart = -1;
-            lastConsumed = i + 1;
-          }
-        }
-      }
-      carry = objStart >= 0 ? text.slice(objStart) : text.slice(lastConsumed);
-      if (objStart >= 0) objStart = 0;
-    }
-    if (!events.length) {
-      throw new Error('超大 trace 流式解析未提取到有效事件');
-    }
-    return events;
+    throw err;
   }
-}
-
-export function loadTrace(file) {
-  let buf = readFileSync(file);
-  if (file.endsWith('.gz') || (buf[0] === 0x1f && buf[1] === 0x8b)) {
-    buf = gunzipSync(buf);
-  }
-  return parseLargeTraceBuffer(buf);
 }
 
 const fmtMs = (us) => (us / 1000).toFixed(1) + 'ms';
@@ -137,10 +195,10 @@ function percentile(sortedAsc, p) {
   return sortedAsc[idx];
 }
 
-// Chrome trace 事件名到高层类别的精确映射
-// 注意:RunTask / ThreadControllerImpl::RunTask 是消息循环外壳,归入 System,避免把非 JS 任务误算进 Scripting
-export function categoryOf(name) {
-  if (!name) return 'System';
+// 显式事件类别映射:若返回 null,在栈遍历时将继承父事件的类别(与 Chrome DevTools FlameChart 保持一致,
+// 从而确保 FireAnimationFrame / FunctionCall 内部的 GLES2::ReadPixels、V8.BytecodeBudgetInterrupt 等子事件不会被误算成 System)
+export function explicitCategoryOf(name) {
+  if (!name) return null;
   if (/(MinorGC|MajorGC|GCEvent|V8\.GC|BlinkGC|CppGC|CollectGarbage)/i.test(name)) {
     return 'GC';
   }
@@ -169,7 +227,14 @@ export function categoryOf(name) {
   if (/^(ParseHTML|ResourceSendRequest|ResourceReceiveResponse|ResourceReceivedData|ResourceFinish)$/i.test(name)) {
     return 'Loading';
   }
-  return 'System';
+  if (/^(RunTask|ThreadControllerImpl::RunTask|BeginMainFrame|BeginFrame|DrawFrame)$/i.test(name)) {
+    return 'System';
+  }
+  return null;
+}
+
+export function categoryOf(name, inheritedCat = null) {
+  return explicitCategoryOf(name) || inheritedCat || 'System';
 }
 
 // 判断是否为 JS 执行上下文事件(用于判定同步触发的强制布局 Layout Thrashing)
@@ -195,22 +260,36 @@ function isProfilerArtifact(fnName) {
 // 优先级: shaderCompile > gpuSyncStall > textureUploadDecode > raycast > drawSubmission
 export function classify3DSignal(name) {
   if (!name) return null;
-  if (/(compileShader|linkProgram|ShaderCompile|ProgramLink|getProgramParameter|getShaderParameter|createShaderProgram|createRenderPipeline|createComputePipeline)/i.test(name)) {
+  if (
+    /(compileShader|linkProgram|ShaderCompile|ProgramLink|GLES2::CompileShader|GLES2::LinkProgram|getProgramParameter|getShaderParameter|GLES2::GetShaderiv|GLES2::GetProgramiv|createShaderProgram|createRenderPipeline|createComputePipeline)/i.test(
+      name
+    )
+  ) {
     return 'shaderCompile';
   }
   if (
-    /(readPixels|glReadPixels|glGetError|glFinish|waitSync|clientWaitSync|getBufferSubData|mapAsync)/i.test(name) ||
-    (/^(getError|finish)$/.test(name))
+    /(readPixels|GLES2::ReadPixels|glReadPixels|glGetError|GLES2::GetError|glFinish|GLES2::Finish|CommandBufferHelper::Finish|CommandBufferProxyImpl::WaitForGetOffset|CommandBufferProxyImpl::WaitForTokenInRange|ImplementationBase::WaitForCmd|waitSync|clientWaitSync|getBufferSubData|mapAsync)/i.test(
+      name
+    ) ||
+    /^(getError|finish)$/.test(name)
   ) {
     return 'gpuSyncStall';
   }
-  if (/(texImage2D|texSubImage2D|compressedTexImage2D|texStorage2D|Decode Image|ImageDecodeTask|createImageBitmap|uploadTexture|copyExternalImageToTexture)/i.test(name)) {
+  if (
+    /(texImage2D|texSubImage2D|compressedTexImage2D|texStorage2D|GLES2::TexImage2D|GLES2::TexSubImage2D|GLES2::CompressedTexImage2D|Decode Image|ImageDecodeTask|createImageBitmap|uploadTexture|copyExternalImageToTexture)/i.test(
+      name
+    )
+  ) {
     return 'textureUploadDecode';
   }
   if (/(raycast|intersectObject|intersectObjects|intersectTriangle|bvhcast)/i.test(name)) {
     return 'raycast';
   }
-  if (/(drawElements|drawArrays|drawElementsInstanced|drawArraysInstanced|renderBufferDirect|projectObject|WebGLRenderingContext|WebGL2RenderingContext|GPURenderPassEncoder)/i.test(name)) {
+  if (
+    /(drawElements|drawArrays|drawElementsInstanced|drawArraysInstanced|GLES2::DrawArrays|GLES2::DrawElements|renderBufferDirect|projectObject|WebGLRenderingContext|WebGL2RenderingContext|GPURenderPassEncoder)/i.test(
+      name
+    )
+  ) {
     return 'drawSubmission';
   }
   return null;
@@ -267,6 +346,20 @@ function normalizeEvents(rawEvents) {
 
 const makeThreadKey = (pid, tid) => `${pid ?? 0}:${tid ?? 0}`;
 
+function mapToSortedArray(map, totalUs, limit = 50) {
+  if (!map || typeof map.entries !== 'function') return [];
+  return [...map.entries()]
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([name, us]) => ({
+      name,
+      us,
+      ms: Number((us / 1000).toFixed(2)),
+      pct: totalUs > 0 ? Number(((us / totalUs) * 100).toFixed(2)) : 0,
+    }));
+}
+
 export function analyzeTraceEvents(rawEvents, options = {}) {
   const top = options.top || 15;
   const forcedTid = options.tid ?? null;
@@ -299,10 +392,13 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
       if (compositorTk == null && /^Compositor$/i.test(e.args.name)) compositorTk = tk;
     }
 
-    // 识别浏览器录制的真实目标页面进程 pid (排除插件进程与空白备用进程)
+    // 识别浏览器录制的真实目标页面进程 pid (包括 isOutermostMainFrame / isInPrimaryMainFrame 或 http(s) 页面)
     if (e.name === 'TracingStartedInBrowser' && Array.isArray(e.args?.data?.frames)) {
       for (const f of e.args.data.frames) {
-        if (f.processId && typeof f.url === 'string' && /^https?:\/\//i.test(f.url)) {
+        if (
+          f.processId &&
+          (f.isOutermostMainFrame || f.isInPrimaryMainFrame || (typeof f.url === 'string' && /^https?:\/\//i.test(f.url)))
+        ) {
           candidatePagePids.add(f.processId);
         }
       }
@@ -335,7 +431,7 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
   }
   const spanUs = Math.max(1, traceMax - traceMin);
 
-  // 计算指定线程去重嵌套后的真实忙碌时长(us),复杂度 O(K log K),K 为该线程自身事件数
+  // 计算指定线程去重嵌套后的真实忙碌时长(us)
   const cleanThreadBusyCache = new Map();
   function getCleanThreadBusy(tk) {
     if (!tk) return 0;
@@ -360,10 +456,7 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     return total;
   }
 
-  // 选主线程:
-  // 1) 若指定 --tid (支持 "tid" 或 "pid:tid"),精确匹配
-  // 2) 在所有 CrRendererMain 中,优先选属于 candidatePagePids 且真实忙碌时间最长的线程
-  // 3) 若无 CrRendererMain,选真实忙碌时间最长的线程
+  // 选主线程
   let mainTk = null;
   if (forcedTid != null) {
     const s = String(forcedTid);
@@ -395,7 +488,6 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
   const mainPid = mainMeta.pid;
   const mainTid = mainMeta.tid;
 
-  // 若存在同进程的 Compositor 线程,优先绑定同进程 Compositor
   for (const [tk, m] of threadMeta) {
     if (m.name === 'Compositor' && m.pid === mainPid) {
       compositorTk = tk;
@@ -418,37 +510,12 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     }
   }
 
-  // 2. 解析现代 trace 的 Profile / ProfileChunk (按 pid:id 关联,再归并到线程 tk,保留完整父子调用链)
-  // 修复 P0-3: Profile 的 startTime 绝不被后续 ProfileChunk 的 e.ts 覆盖!
-  const profileById = new Map(); // "pid:id" -> { tk, pid, tid, nodes: Map<id, {callFrame, parent}>, cursorTs, hasExplicitStart, samples }
-  const profileByTk = new Map(); // tk -> state
-
-  const getOrCreateProfile = (pid, tid, profId, startTime, isExplicitStart) => {
-    const tk = makeThreadKey(pid, tid);
-    const idKey = `${pid}:${profId || tid}`;
-    let st = profileById.get(idKey) || profileByTk.get(tk);
-    if (!st) {
-      st = {
-        tk,
-        pid,
-        tid,
-        nodes: new Map(),
-        cursorTs: startTime ?? traceMin,
-        hasExplicitStart: Boolean(isExplicitStart),
-        samples: [],
-      };
-      profileById.set(idKey, st);
-      profileByTk.set(tk, st);
-    } else {
-      if (isExplicitStart && startTime != null && !st.hasExplicitStart) {
-        st.cursorTs = startTime;
-        st.hasExplicitStart = true;
-      }
-      profileById.set(idKey, st);
-      if (!profileByTk.has(tk)) profileByTk.set(tk, st);
-    }
-    return st;
-  };
+  // 2. 解析现代 trace 的 Profile / ProfileChunk
+  // 修复真实 Trace P0-2: Profile 在目标被采样线程(如 CrRendererMain tid=16740)发出,
+  // 而 ProfileChunk 在 V8 采样器线程(tid=19780)发出,两者通过 pid:id 关联。
+  // 绝不能把 ProfileChunk 的采样器线程 tid 写入 profileByTk,否则主线程 Profile 会被复制一份假装成 Worker!
+  const profileById = new Map(); // "pid:id" -> state
+  const profileByTk = new Map(); // targetTk -> state
 
   for (const e of events) {
     if (e.name !== 'Profile' && e.name !== 'ProfileChunk') continue;
@@ -457,14 +524,37 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     const pid = e.pid ?? mainPid;
     const tid = e.tid ?? mainTid;
     const profId = e.id ?? data.id ?? tid;
+    const idKey = `${pid}:${profId}`;
     const explicitStart = typeof data.startTime === 'number' ? data.startTime : null;
-    const st = getOrCreateProfile(
-      pid,
-      tid,
-      profId,
-      explicitStart ?? (e.ts > 0 ? e.ts : traceMin),
-      explicitStart !== null
-    );
+
+    let st = profileById.get(idKey);
+    if (!st) {
+      const tk = makeThreadKey(pid, tid);
+      st = {
+        tk,
+        pid,
+        tid,
+        nodes: new Map(),
+        cursorTs: explicitStart ?? (e.ts > 0 ? e.ts : traceMin),
+        hasExplicitStart: explicitStart !== null,
+        samples: [],
+      };
+      profileById.set(idKey, st);
+      profileByTk.set(tk, st);
+    } else if (e.name === 'Profile') {
+      // 如果 Profile 事件晚于首个 chunk 到达,以 Profile 声明的被采样线程 tid 和 startTime 为准
+      const realTk = makeThreadKey(pid, tid);
+      if (st.tk !== realTk) {
+        profileByTk.delete(st.tk);
+        st.tk = realTk;
+        st.tid = tid;
+        profileByTk.set(realTk, st);
+      }
+      if (explicitStart !== null && !st.hasExplicitStart) {
+        st.cursorTs = explicitStart;
+        st.hasExplicitStart = true;
+      }
+    }
 
     const cp = data.cpuProfile || data;
     if (Array.isArray(cp?.nodes)) {
@@ -486,7 +576,6 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     const samples = cp?.samples;
     const deltas = data.timeDeltas || cp?.timeDeltas;
     if (Array.isArray(samples) && Array.isArray(deltas)) {
-      // 仅当从未收到过 Profile.startTime 且当前无任何 sample 时,才用 chunk 自身 ts 推算起点
       if (!st.hasExplicitStart && st.samples.length === 0 && typeof e.ts === 'number' && e.ts > traceMin) {
         const chunkSum = deltas.reduce((s, d) => s + Math.max(0, d || 0), 0);
         st.cursorTs = Math.max(traceMin, e.ts - chunkSum);
@@ -500,8 +589,9 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     }
   }
 
-  // 主线程 CPU Profile 选择(切勿把已知的 Worker 线程采样误当成主线程采样)
-  const isKnownWorker = (tk) => /Worker|Worklet/i.test(threadName.get(tk) || '');
+  // 主线程 CPU Profile 选择(切勿把已知的 JS Worker 线程采样误当成主线程采样)
+  const isJsWorkerName = (nm) => /^(DedicatedWorker|ServiceWorker|SharedWorker|WorkerThread|AudioWorklet)/i.test(nm || '');
+  const isKnownWorker = (tk) => isJsWorkerName(threadName.get(tk));
   let mainProfileTk = mainTk;
   if (!profileByTk.get(mainProfileTk)?.samples.length) {
     const samePidProfiles = [...profileByTk.entries()]
@@ -570,7 +660,6 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
         gcSampleUs += s.dt;
       }
 
-      // 修复 P0-5: 沿调用栈向上查找祖先帧,确保 Raycaster / renderBufferDirect 的子函数耗时不漏记
       const sig = find3DSignalInCallChain(profState.nodes, s.id);
       if (sig) signals3D[sig] += s.dt;
 
@@ -591,30 +680,30 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
 
   const fullCpuAgg = aggregateProfile(mainProfile);
 
-  // Worker 线程 CPU Profile 聚合(P1: 支持核查 Worker 是否真正在干活及其热点)
+  // Worker 线程 CPU Profile 聚合(仅统计真实 JS Worker/Worklet 线程,排除 CompositorTileWorker 等浏览器内部线程)
   const workerProfiles = [];
   for (const [tk, st] of profileByTk) {
     if (tk === mainProfileTk || !st.samples.length) continue;
     const nm = threadName.get(tk) || '';
-    if (/Worker|DedicatedWorker|ServiceWorker|AudioWorklet/i.test(nm) || st.pid === mainPid) {
+    if (isJsWorkerName(nm)) {
       const agg = aggregateProfile(st);
       if (agg.activeUs > 1000) {
         workerProfiles.push({
           tk,
           tid: st.tid,
-          name: nm || `Thread-${st.tid}`,
+          name: nm,
           activeUs: agg.activeUs,
-          topHotspots: [...agg.byFn.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5),
+          topHotspots: mapToSortedArray(agg.byFn, agg.activeUs, 5),
         });
       }
     }
   }
   workerProfiles.sort((a, b) => b.activeUs - a.activeUs);
 
-  // 3. 主线程 X 事件细粒度统计
+  // 3. 主线程 X 事件细粒度统计(含父类别继承、LongTask 主导子链、GLES2/CommandBuffer 原生 3D 事件去重)
   const catTotals = { Scripting: 0, Rendering: 0, Painting: 0, GC: 0, Loading: 0, System: 0 };
   const selfTime = new Map(); // "url:func" -> self us (无 CPU profile 时兜底)
-  const longTasks = []; // {name, dur, ts}
+  const longTasks = []; // {name, chain, dur, ts}
   const rafDurs = []; // FireAnimationFrame 每次耗时(us)
   let layoutCount = 0;
   let layoutDur = 0;
@@ -623,43 +712,66 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
   let gcCount = 0;
   let gcDur = 0;
 
-  // 3D / GPU / 解码 X 事件统计(跨主线程与 GPU 线程)
+  // 3D / GPU / 解码 X 事件统计(同时覆盖 CPU Profile 与 GLES2/CommandBuffer 原生事件)
   let gpuTaskCount = 0;
   let gpuTaskDur = 0;
   let imageDecodeCount = 0;
   let imageDecodeDur = 0;
   let shaderEventDur = 0;
+  let gpuSyncEventDur = 0;
+  let drawEventDur = 0;
   let hasExplicit3DEvent = false;
+
+  // 从 GPUTask.args.data.used_bytes 提取真实 Chromium GPU 显存趋势
+  const gpuTaskMemValues = [];
 
   for (const e of events) {
     if (e.ph !== 'X' || typeof e.dur !== 'number') continue;
     const tk = makeThreadKey(e.pid ?? 0, e.tid ?? 0);
-    if (/^(GPUTask|CommandBuffer)$/i.test(e.name) || (gpuTk != null && tk === gpuTk)) {
-      if (tk === gpuTk || e.name === 'GPUTask') {
-        gpuTaskCount++;
-        gpuTaskDur += e.dur;
+    if (e.name === 'GPUTask' || (gpuTk != null && tk === gpuTk)) {
+      gpuTaskCount++;
+      gpuTaskDur += e.dur;
+      const usedBytes = e.args?.data?.used_bytes;
+      const rendererPid = e.args?.data?.renderer_pid;
+      if (typeof usedBytes === 'number' && usedBytes > 0 && (!mainPid || !rendererPid || rendererPid === mainPid)) {
+        gpuTaskMemValues.push({ ts: e.ts, bytes: usedBytes });
       }
     }
-    if (/^(Decode Image|ImageDecodeTask|UploadTexture)$/i.test(e.name)) {
+    if (
+      tk !== mainTk &&
+      /^(Decode Image|ImageDecodeTask|UploadTexture|GLES2::TexImage2D|GLES2::TexSubImage2D|GLES2::CompressedTexImage2D)$/i.test(
+        e.name
+      )
+    ) {
       imageDecodeCount++;
       imageDecodeDur += e.dur;
     }
-    if (/(ShaderCompile|ProgramLink|compileShader|linkProgram)/i.test(e.name)) {
+    if (
+      tk !== mainTk &&
+      /(ShaderCompile|ProgramLink|compileShader|linkProgram|GLES2::CompileShader|GLES2::LinkProgram)/i.test(e.name)
+    ) {
       shaderEventDur += e.dur;
       hasExplicit3DEvent = true;
     }
-    if (/(WebGL|WebGPU|Three|Babylon|OffscreenCanvas)/i.test(e.name) || /(webgl|webgpu)/i.test(e.cat || '')) {
+    if (/(WebGL|WebGPU|GLES2::|Three|Babylon|OffscreenCanvas)/i.test(e.name) || /(webgl|webgpu)/i.test(e.cat || '')) {
       hasExplicit3DEvent = true;
     }
   }
 
   const mainX = [...(xByThread.get(mainTk) || [])].sort((a, b) => a.ts - b.ts || b.dur - a.dur);
 
-  // 单趟栈遍历:按 self-time(dur 减去子事件 dur)归类,避免嵌套事件重复计入
+  // 单趟栈遍历:按 self-time(dur 减去子事件 dur)归类,未知子事件继承父事件类别(修复 P0-1)
+  // 同时记录每个节点耗时最长的子链(maxChild),用于展示 LongTask 内部主导调用链(如 RunTask → FireAnimationFrame → GLES2::ReadPixels)
   const stack = [];
+  const formatNodeLabel = (node) => {
+    const d = node.ev.args?.data || {};
+    if (d.functionName) return d.functionName;
+    return node.name;
+  };
+
   const settle = (node) => {
     const self = Math.max(0, node.dur - node.childDur);
-    const cat = categoryOf(node.name);
+    const cat = node.cat;
     catTotals[cat] = (catTotals[cat] || 0) + self;
     if (!hasCpuProfile && (cat === 'Scripting' || node.ev.args?.data?.functionName)) {
       const fn = node.ev.args?.data?.functionName || node.ev.args?.data?.url || node.name;
@@ -668,6 +780,25 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
         const key = (fn || '(anonymous)') + (url ? '  @' + shortUrl(url) : '');
         selfTime.set(key, (selfTime.get(key) || 0) + self);
       }
+    }
+    if (node.isTopLongTask) {
+      const chainParts = [formatNodeLabel(node)];
+      let cur = node.dominantChild;
+      let depth = 0;
+      while (cur && depth < 4 && cur.dur >= node.dur * 0.2) {
+        const lbl = formatNodeLabel(cur);
+        if (lbl !== chainParts[chainParts.length - 1]) {
+          chainParts.push(lbl);
+        }
+        cur = cur.dominantChild;
+        depth++;
+      }
+      longTasks.push({
+        name: node.name,
+        chain: chainParts.join(' → '),
+        dur: node.dur,
+        ts: node.ev.ts,
+      });
     }
   };
 
@@ -679,7 +810,7 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     if (/^(RecalculateStyles|UpdateLayoutTree|ScheduleStyleRecalculation)$/.test(e.name)) {
       styleCount++;
     }
-    if (categoryOf(e.name) === 'GC') {
+    if (explicitCategoryOf(e.name) === 'GC') {
       gcCount++;
       gcDur += e.dur;
     }
@@ -691,17 +822,20 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
       settle(stack.pop());
     }
     const parent = stack[stack.length - 1];
-    if (parent) parent.childDur += e.dur;
-    else if (e.dur > 50000) {
+    const inheritedCat = parent && parent.cat !== 'System' ? parent.cat : null;
+    const resolvedCat = categoryOf(e.name, inheritedCat);
+
+    let isTopLongTask = false;
+    if (parent) {
+      parent.childDur += e.dur;
+    } else if (e.dur > 50000) {
       const fn = e.args?.data?.functionName || '';
       if (!isProfilerArtifact(fn) && !isProfilerArtifact(e.name)) {
-        longTasks.push({ name: e.name, dur: e.dur, ts: e.ts });
+        isTopLongTask = true;
       }
     }
 
-    // 修复 P0-1: 强制同步布局判定
-    // 条件 A: Chrome 在 Layout.args.beginData.stackTrace 或 args.data.stackTrace 记录了触发栈
-    // 条件 B: 调用栈祖先中存在真正的 JS 执行事件(FunctionCall / FireAnimationFrame / EventDispatch / TimerFire 等),而非普通 RunTask
+    // 强制同步布局判定:携带 beginData/data.stackTrace,或处于 JS 执行栈内
     if (e.name === 'Layout') {
       const hasStackTrace =
         (Array.isArray(e.args?.beginData?.stackTrace) && e.args.beginData.stackTrace.length > 0) ||
@@ -712,19 +846,47 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
       }
     }
 
-    stack.push({ name: e.name, end: e.ts + e.dur, childDur: 0, dur: e.dur, ev: e });
+    // 主线程 3D / GPU 纹理解码原生事件去重统计(当外层已计入同类信号时,子事件不重复累加)
+    const sig3d = classify3DSignal(e.name);
+    if (sig3d && !stack.some((anc) => anc.sig3d === sig3d)) {
+      if (sig3d === 'gpuSyncStall') gpuSyncEventDur += e.dur;
+      else if (sig3d === 'shaderCompile') shaderEventDur += e.dur;
+      else if (sig3d === 'drawSubmission') drawEventDur += e.dur;
+      else if (sig3d === 'textureUploadDecode') {
+        imageDecodeCount++;
+        imageDecodeDur += e.dur;
+      }
+    }
+
+    const node = {
+      name: e.name,
+      cat: resolvedCat,
+      sig3d,
+      end: e.ts + e.dur,
+      childDur: 0,
+      dur: e.dur,
+      ev: e,
+      isTopLongTask,
+      dominantChild: null,
+    };
+    if (parent && (!parent.dominantChild || node.dur > parent.dominantChild.dur)) {
+      parent.dominantChild = node;
+    }
+    stack.push(node);
   }
   while (stack.length) settle(stack.pop());
 
-  // 4. 帧率与掉帧统计(修复 P0-9: 区分真实掉帧与静态页面空闲休眠,支持 PipelineReporter 与高刷屏预算)
+  // 4. 帧率与掉帧统计(修复 P0-4: 兼容真实 frame_reporter 与 chrome_frame_reporter,并过滤渲染进程 mainPid)
   let pipelinePresented = 0;
   let pipelineDropped = 0;
   for (const e of events) {
-    if (e.name === 'PipelineReporter' && e.args?.chrome_frame_reporter) {
-      const st = e.args.chrome_frame_reporter.state;
-      if (st === 'STATE_DROPPED') pipelineDropped++;
-      else if (st === 'STATE_PRESENTED_ALL' || st === 'STATE_PRESENTED_PARTIAL') pipelinePresented++;
-    }
+    if (e.name !== 'PipelineReporter') continue;
+    if (mainPid !== 0 && e.pid && e.pid !== mainPid) continue;
+    const rep = e.args?.frame_reporter || e.args?.chrome_frame_reporter;
+    if (!rep) continue;
+    const st = rep.state;
+    if (st === 'STATE_DROPPED') pipelineDropped++;
+    else if (st === 'STATE_PRESENTED_ALL' || st === 'STATE_PRESENTED_PARTIAL') pipelinePresented++;
   }
 
   let frameSource = 'DrawFrame';
@@ -764,11 +926,11 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     }
   }
 
-  const IDLE_GAP_THRESHOLD_US = 250000; // >250ms 且期间无长任务阻塞,视为页面静止/按需渲染休眠
+  const IDLE_GAP_THRESHOLD_US = 250000;
   const frameIntervals = [];
   let idleGapCount = 0;
-  let longFramesBudget = 0; // > frameBudgetUs (如 16.7ms @60Hz 或 8.3ms @120Hz)
-  let severeFrames2x = 0; // > 2 * frameBudgetUs (如 33.3ms @60Hz)
+  let longFramesBudget = 0;
+  let severeFrames2x = 0;
 
   for (let i = 1; i < frameTs.length; i++) {
     const prevTs = frameTs[i - 1];
@@ -787,12 +949,12 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
   }
   frameIntervals.sort((a, b) => a - b);
 
-  // 5. 提取 UpdateCounters (修复 P0-4 & P0-8: 过滤 mainPid,同时兼容 gpuMemoryUsedKB 与 gpuMemoryAllocated)
+  // 5. 提取 UpdateCounters 与 GPUTask.used_bytes 显存趋势 (修复 P0-5)
   const counters = {
     heap: { start: null, min: Infinity, max: -Infinity, end: null },
     nodes: { start: null, min: Infinity, max: -Infinity, end: null },
     listeners: { start: null, min: Infinity, max: -Infinity, end: null },
-    gpuMem: { start: null, min: Infinity, max: -Infinity, end: null },
+    gpuMem: { start: null, min: Infinity, max: -Infinity, end: null, source: null },
   };
   const updateCounterStat = (stat, val) => {
     if (typeof val !== 'number' || !Number.isFinite(val)) return;
@@ -821,45 +983,101 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
         : typeof d.gpuMemoryAllocated === 'number'
           ? d.gpuMemoryAllocated
           : undefined;
-    updateCounterStat(counters.gpuMem, gpuBytes);
+    if (gpuBytes !== undefined) {
+      updateCounterStat(counters.gpuMem, gpuBytes);
+      counters.gpuMem.source = 'UpdateCounters';
+    }
   }
 
-  // 6. 提取 Web Vitals (LCP / CLS / INP) 与慢资源加载信号 (P1)
-  let lcpCandidate = null; // { ts, size, type }
-  let clsScore = 0;
-  let clsCount = 0;
-  const interactions = []; // { dur, type, ts }
+  // 若 UpdateCounters 无 GPU 显存(真实 Chromium 默认情况),使用 CrGpuMain GPUTask.args.data.used_bytes
+  if (counters.gpuMem.start === null && gpuTaskMemValues.length > 0) {
+    gpuTaskMemValues.sort((a, b) => a.ts - b.ts);
+    for (const item of gpuTaskMemValues) {
+      updateCounterStat(counters.gpuMem, item.bytes);
+    }
+    counters.gpuMem.source = 'GPUTask.used_bytes';
+  }
+
+  // 6. 提取 Web Vitals (修复 P0-3 EventTiming b/e 三阶段拆解、P0-6 navigationStart LCP 基准、P0-7 Session Window CLS)
+  const navStartByNavId = new Map();
+  let latestNavStartTs = null;
+  for (const e of events) {
+    if (mainPid !== 0 && e.pid && e.pid !== mainPid) continue;
+    if (/^(navigationStart|MarkNavigationStart)$/i.test(e.name) && typeof e.ts === 'number') {
+      const navId = e.args?.data?.navigationId || e.args?.navigationId;
+      if (navId) navStartByNavId.set(navId, e.ts);
+      if (latestNavStartTs === null || e.ts > latestNavStartTs) latestNavStartTs = e.ts;
+    }
+  }
+
+  let lcpCandidate = null; // { ts, lcpUs, hasNavStart, size, type, nodeName }
+  const layoutShifts = []; // { ts, score }
+  const interactions = []; // { dur, inputDelayUs, processingUs, presentationDelayUs, type, interactionId, ts }
   const reqStartById = new Map();
-  const slowResources = []; // { url, dur, mimeType }
+  const slowResources = [];
 
   for (const e of events) {
     if (mainPid !== 0 && e.pid && e.pid !== mainPid) continue;
     if (e.name === 'largestContentfulPaint::Candidate' && e.args?.data) {
-      const sz = e.args.data.size || 0;
+      const d = e.args.data;
+      const sz = d.size || 0;
       if (!lcpCandidate || sz >= lcpCandidate.size || e.ts >= lcpCandidate.ts) {
+        const navTs = (d.navigationId && navStartByNavId.get(d.navigationId)) ?? latestNavStartTs;
         lcpCandidate = {
           ts: e.ts,
+          lcpUs: navTs != null ? Math.max(0, e.ts - navTs) : e.ts - traceMin,
+          hasNavStart: navTs != null,
           size: sz,
-          type: e.args.data.type || '',
+          type: d.type || '',
+          nodeName: d.nodeName || '',
         };
       }
     } else if (e.name === 'LayoutShift' && e.args?.data) {
-      if (!e.args.data.had_recent_input && typeof e.args.data.score === 'number') {
-        clsScore += e.args.data.score;
-        clsCount++;
+      const d = e.args.data;
+      const score = typeof d.weighted_score_delta === 'number' ? d.weighted_score_delta : d.score;
+      if (!d.had_recent_input && typeof score === 'number') {
+        layoutShifts.push({ ts: e.ts || 0, score });
       }
-    } else if (e.name === 'EventTiming' && typeof e.dur === 'number' && e.dur > 16000) {
-      interactions.push({
-        dur: e.dur,
-        type: e.args?.data?.type || e.args?.type || 'interaction',
-        ts: e.ts,
-      });
-    } else if (e.name === 'EventDispatch' && typeof e.dur === 'number' && e.dur > 50000) {
-      interactions.push({
-        dur: e.dur,
-        type: e.args?.data?.type || 'EventDispatch',
-        ts: e.ts,
-      });
+    } else if (e.name === 'EventTiming') {
+      // 兼容真实 Chromium 异步 EventTiming (ph:'b', args.data.duration 毫秒) 与合成 X 事件 (e.dur 微秒)
+      const d = e.args?.data || e.args || {};
+      if (typeof d.duration === 'number' && d.duration > 16) {
+        const isRealInteraction =
+          (typeof d.interactionId === 'number' && d.interactionId > 0) ||
+          /^(click|keydown|keyup|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend|input)$/i.test(d.type || '');
+        if (isRealInteraction) {
+          const durUs = Math.round(d.duration * 1000);
+          const hasBreakdown =
+            typeof d.timeStamp === 'number' &&
+            typeof d.processingStart === 'number' &&
+            typeof d.processingEnd === 'number';
+          const inputDelayUs = hasBreakdown ? Math.max(0, Math.round((d.processingStart - d.timeStamp) * 1000)) : null;
+          const processingUs = hasBreakdown
+            ? Math.max(0, Math.round((d.processingEnd - d.processingStart) * 1000))
+            : null;
+          const presentationDelayUs =
+            hasBreakdown ? Math.max(0, durUs - inputDelayUs - processingUs) : null;
+          interactions.push({
+            dur: durUs,
+            inputDelayUs,
+            processingUs,
+            presentationDelayUs,
+            type: d.type || 'interaction',
+            interactionId: d.interactionId || 0,
+            ts: e.ts,
+          });
+        }
+      } else if (e.ph === 'X' && typeof e.dur === 'number' && e.dur > 16000) {
+        interactions.push({
+          dur: e.dur,
+          inputDelayUs: null,
+          processingUs: null,
+          presentationDelayUs: null,
+          type: d.type || 'interaction',
+          interactionId: d.interactionId || 0,
+          ts: e.ts,
+        });
+      }
     } else if (e.name === 'ResourceSendRequest' && e.args?.data?.requestId) {
       reqStartById.set(e.args.data.requestId, {
         ts: e.ts,
@@ -879,6 +1097,41 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
       }
     }
   }
+
+  // 若无 EventTiming 命中,再用 >50ms 的 EventDispatch 兜底
+  if (!interactions.length) {
+    for (const e of mainX) {
+      if (e.name === 'EventDispatch' && e.dur > 50000) {
+        interactions.push({
+          dur: e.dur,
+          inputDelayUs: null,
+          processingUs: e.dur,
+          presentationDelayUs: null,
+          type: e.args?.data?.type || 'EventDispatch',
+          interactionId: 0,
+          ts: e.ts,
+        });
+      }
+    }
+  }
+
+  // 计算标准 Session Window CLS (窗口内相邻间隔 <=1s,窗口最大跨度 <=5s,取最大窗口分值)
+  layoutShifts.sort((a, b) => a.ts - b.ts);
+  let maxSessionCls = 0;
+  let curWinStart = -Infinity;
+  let prevShiftTs = -Infinity;
+  let curWinScore = 0;
+  for (const s of layoutShifts) {
+    if (s.ts - prevShiftTs <= 1000000 && s.ts - curWinStart <= 5000000) {
+      curWinScore += s.score;
+    } else {
+      curWinStart = s.ts;
+      curWinScore = s.score;
+    }
+    prevShiftTs = s.ts;
+    if (curWinScore > maxSessionCls) maxSessionCls = curWinScore;
+  }
+
   interactions.sort((a, b) => b.dur - a.dur);
   slowResources.sort((a, b) => b.dur - a.dur);
 
@@ -889,7 +1142,6 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     catTotals.Painting +
     catTotals.GC +
     catTotals.Loading;
-  // 主线程真实非重叠忙碌时长(包含 System 外壳)
   const mainCleanBusy = getCleanThreadBusy(mainTk);
   catTotals.System = Math.max(0, mainCleanBusy - busyMain);
 
@@ -917,22 +1169,52 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
 
   const sig3d = fullCpuAgg.signals3D;
   const totalShaderUs = Math.max(shaderEventDur, sig3d.shaderCompile);
+  const totalGpuSyncStallUs = Math.max(gpuSyncEventDur, sig3d.gpuSyncStall);
+  const totalDrawSubmissionUs = Math.max(drawEventDur, sig3d.drawSubmission);
   const totalTexDecodeUs = Math.max(imageDecodeDur, sig3d.textureUploadDecode);
   const gpuThreadBusy = gpuTk != null ? getCleanThreadBusy(gpuTk) : gpuTaskDur;
   const totalGcUs = Math.max(gcDur, fullCpuAgg.gcSampleUs);
 
-  // 修复 P0-6: 区分明确的 3D 渲染管线信号 vs 普通 2D 合成/解码
   const hasExplicit3DSignals =
     hasExplicit3DEvent ||
     totalShaderUs > 0 ||
-    sig3d.gpuSyncStall > 0 ||
+    totalGpuSyncStallUs > 0 ||
     sig3d.raycast > 0 ||
-    sig3d.drawSubmission > 0;
+    totalDrawSubmissionUs > 0;
   const hasHeavyGpuOrDecode =
     hasExplicit3DSignals ||
     gpuThreadBusy / spanUs > 0.15 ||
     totalTexDecodeUs > 10000 ||
     counters.gpuMem.max > 0;
+
+  let windowDrill = null;
+  if (winStartUs != null && winEndUs != null) {
+    const winCpu = hasCpuProfile ? aggregateProfile(mainProfile, winStartUs, winEndUs) : null;
+    windowDrill = {
+      winStartMs,
+      winEndMs,
+      xEvents: mainX
+        .filter((ev) => ev.ts < winEndUs && ev.ts + ev.dur > winStartUs)
+        .sort((a, b) => b.dur - a.dur)
+        .slice(0, top)
+        .map((ev) => {
+          const d = ev.args?.data || {};
+          const label = d.functionName
+            ? `${d.functionName}${d.url ? ' @' + shortUrl(d.url) : ''}`
+            : ev.name;
+          return {
+            name: ev.name,
+            cat: categoryOf(ev.name),
+            label,
+            dur: ev.dur,
+            ts: ev.ts,
+            offsetMs: Number(((ev.ts - traceMin) / 1000).toFixed(1)),
+          };
+        }),
+      cpuHotspots: winCpu ? mapToSortedArray(winCpu.byFn, winCpu.activeUs, top) : [],
+      cpuActiveUs: winCpu ? winCpu.activeUs : 0,
+    };
+  }
 
   return {
     eventsCount: events.length,
@@ -952,8 +1234,11 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     hasCpuProfile,
     mainProfileTk,
     mainProfileTid: mainProfile?.tid ?? mainTid,
-    fullCpuAgg,
-    selfTime,
+    cpuHotspots: mapToSortedArray(fullCpuAgg.byFn, fullCpuAgg.activeUs, top),
+    cpuActiveUs: fullCpuAgg.activeUs,
+    cpuIdleUs: fullCpuAgg.idleUs,
+    cpuSampledUs: fullCpuAgg.sampledUs,
+    fallbackHotspots: mapToSortedArray(selfTime, spanUs, top),
     workerProfiles,
     rafStats: {
       count: rafDurs.length,
@@ -979,9 +1264,9 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
       hasHeavyGpuOrDecode,
       gpuThreadBusy,
       gpuTaskCount,
-      drawSubmissionUs: sig3d.drawSubmission,
+      drawSubmissionUs: totalDrawSubmissionUs,
       totalShaderUs,
-      gpuSyncStallUs: sig3d.gpuSyncStall,
+      gpuSyncStallUs: totalGpuSyncStallUs,
       raycastUs: sig3d.raycast,
       totalTexDecodeUs,
       imageDecodeCount,
@@ -999,8 +1284,8 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
     counters,
     webVitals: {
       lcpCandidate,
-      clsScore,
-      clsCount,
+      clsScore: maxSessionCls,
+      clsCount: layoutShifts.length,
       worstInteraction: interactions[0] || null,
       slowResources: slowResources.slice(0, 5),
     },
@@ -1013,18 +1298,7 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
         busyUs: getCleanThreadBusy(tk),
       }))
       .sort((a, b) => b.busyUs - a.busyUs),
-    windowDrill:
-      winStartUs != null && winEndUs != null
-        ? {
-            winStartMs,
-            winEndMs,
-            xEvents: mainX
-              .filter((ev) => ev.ts < winEndUs && ev.ts + ev.dur > winStartUs)
-              .sort((a, b) => b.dur - a.dur)
-              .slice(0, top),
-            cpuAgg: hasCpuProfile ? aggregateProfile(mainProfile, winStartUs, winEndUs) : null,
-          }
-        : null,
+    windowDrill,
   };
 }
 
@@ -1044,8 +1318,11 @@ export function formatReport(res, file, top = 15) {
     longTasks,
     hasCpuProfile,
     mainProfileTid,
-    fullCpuAgg,
-    selfTime,
+    cpuHotspots,
+    cpuActiveUs,
+    cpuIdleUs,
+    cpuSampledUs,
+    fallbackHotspots,
     workerProfiles,
     rafStats,
     frameStats,
@@ -1073,10 +1350,10 @@ export function formatReport(res, file, top = 15) {
   }
   line(`  ${'(忙碌合计)'.padEnd(10)} ${fmtMs(busyMain).padStart(10)}  ${pct(busyMain, spanUs)} of 跨度`);
   if ((catTotals.Scripting || 0) / spanUs > 0.5) {
-    line('  ⚠ Scripting 占比过半 → 主线程 CPU-bound,重点查下方 JS self-time 热点');
+    line('  ⚠ Scripting 占比过半 → 主线程 CPU-bound,重点查下方 JS self-time 热点与 GPU 同步等待');
   }
 
-  // Web Vitals 与加载信号 (存在时输出)
+  // Web Vitals 与加载信号
   const hasVitals =
     webVitals.lcpCandidate ||
     webVitals.clsCount > 0 ||
@@ -1085,18 +1362,26 @@ export function formatReport(res, file, top = 15) {
   if (hasVitals) {
     line('\n[Web Vitals 与加载/交互信号]');
     if (webVitals.lcpCandidate) {
-      const lcpMs = webVitals.lcpCandidate.ts - traceMin;
-      const lcpWarn = lcpMs > 2500000 ? ' ⚠ LCP >2.5s' : '';
-      line(`  LCP 候选: @+${fmtMs(lcpMs)} (size=${webVitals.lcpCandidate.size})${lcpWarn}`);
+      const lcp = webVitals.lcpCandidate;
+      if (lcp.hasNavStart) {
+        const lcpWarn = lcp.lcpUs > 2500000 ? ' ⚠ LCP >2.5s' : '';
+        line(`  LCP (相对 navigationStart): ${fmtMs(lcp.lcpUs)} (size=${lcp.size})${lcpWarn}`);
+      } else {
+        line(`  LCP 候选事件: @+${fmtMs(lcp.lcpUs)} (size=${lcp.size}, 录制期无 navigationStart,不作首屏 LCP 判定)`);
+      }
     }
     if (webVitals.clsCount > 0) {
       const clsWarn = webVitals.clsScore > 0.1 ? ' ⚠ CLS >0.1 布局偏移超标' : '';
-      line(`  CLS 累计: ${webVitals.clsScore.toFixed(4)} (${webVitals.clsCount} 次偏移)${clsWarn}`);
+      line(`  CLS (最大会话窗口): ${webVitals.clsScore.toFixed(4)} (${webVitals.clsCount} 次偏移)${clsWarn}`);
     }
     if (webVitals.worstInteraction) {
       const inp = webVitals.worstInteraction;
       const inpWarn = inp.dur > 200000 ? ' ⚠ 慢交互 >200ms (INP 风险)' : '';
-      line(`  最慢交互 (${inp.type}): ${fmtMs(inp.dur)} @+${fmtMs(inp.ts - traceMin)}${inpWarn}`);
+      const breakdown =
+        inp.inputDelayUs != null
+          ? ` [输入延迟 ${fmtMs(inp.inputDelayUs)} + 处理 ${fmtMs(inp.processingUs)} + 呈现 ${fmtMs(inp.presentationDelayUs)}]`
+          : '';
+      line(`  最慢交互 (${inp.type}): ${fmtMs(inp.dur)}${breakdown} @+${fmtMs(inp.ts - traceMin)}${inpWarn}`);
     }
     if (webVitals.slowResources.length > 0) {
       for (const r of webVitals.slowResources.slice(0, 3)) {
@@ -1108,38 +1393,37 @@ export function formatReport(res, file, top = 15) {
 
   line(`\n[Long Tasks >50ms]  共 ${longTasks.length} 个,显示前 ${top}`);
   for (const t of longTasks.slice(0, top)) {
-    line(`  ${fmtMs(t.dur).padStart(9)}  ${t.name}  @+${fmtMs(t.ts - traceMin)}`);
+    line(`  ${fmtMs(t.dur).padStart(9)}  ${t.chain || t.name}  @+${fmtMs(t.ts - traceMin)}`);
   }
   if (!longTasks.length) {
     line(`  (无 >50ms 顶层长任务;若仍掉帧请重点看下方 rAF 帧耗时与 GPU 管线)`);
   }
 
   if (hasCpuProfile) {
-    const { byFn, activeUs, idleUs, sampledUs } = fullCpuAgg;
     const profThreadNote = mainProfileTid !== mainTid ? ` (来自 tid ${mainProfileTid})` : '';
     line(
-      `\n[JS self-time 热点函数 (CPU profile${profThreadNote})]  采样活跃 ${fmtMs(activeUs)} / idle ${pct(idleUs, sampledUs)}  显示前 ${top}`
+      `\n[JS self-time 热点函数 (CPU profile${profThreadNote})]  采样活跃 ${fmtMs(cpuActiveUs)} / idle ${pct(cpuIdleUs, cpuSampledUs)}  显示前 ${top}`
     );
-    const hot = [...byFn.entries()].sort((a, b) => b[1] - a[1]);
-    for (const [k, v] of hot.slice(0, top)) {
-      const flag = activeUs > 0 && v / activeUs > 0.15 ? ' ⚠ 热点' : '';
-      line(`  ${fmtMs(v).padStart(9)}  ${pct(v, activeUs).padStart(6)}  ${k}${flag}`);
+    for (const item of cpuHotspots.slice(0, top)) {
+      const flag = item.pct > 15 ? ' ⚠ 热点' : '';
+      line(`  ${fmtMs(item.us).padStart(9)}  ${(item.pct.toFixed(1) + '%').padStart(6)}  ${item.name}${flag}`);
     }
   } else {
     line(`\n[self-time 热点函数 (X 事件估算)]  显示前 ${top}`);
-    const hot = [...selfTime.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-    for (const [k, v] of hot.slice(0, top)) {
-      line(`  ${fmtMs(v).padStart(9)}  ${pct(v, spanUs).padStart(6)}  ${k}`);
+    for (const item of fallbackHotspots.slice(0, top)) {
+      line(`  ${fmtMs(item.us).padStart(9)}  ${(item.pct.toFixed(1) + '%').padStart(6)}  ${item.name}`);
     }
-    if (!hot.length) line('  (trace 未含函数级数据;录制时请取消勾选 Disable JavaScript samples)');
+    if (!fallbackHotspots.length) {
+      line('  (trace 未含函数级数据;录制时请取消勾选 Disable JavaScript samples)');
+    }
   }
 
   if (workerProfiles.length > 0) {
     line('\n[Web Worker JS 热点]');
     for (const wp of workerProfiles.slice(0, 3)) {
       line(`  Worker tid=${wp.tid} (${wp.name}) 活跃 ${fmtMs(wp.activeUs)}:`);
-      for (const [fnKey, us] of wp.topHotspots.slice(0, 3)) {
-        line(`    ${fmtMs(us).padStart(9)}  ${pct(us, wp.activeUs).padStart(6)}  ${fnKey}`);
+      for (const item of wp.topHotspots.slice(0, 3)) {
+        line(`    ${fmtMs(item.us).padStart(9)}  ${(item.pct.toFixed(1) + '%').padStart(6)}  ${item.name}`);
       }
     }
   }
@@ -1183,8 +1467,9 @@ export function formatReport(res, file, top = 15) {
       `  GPU 进程主线程 (CrGpuMain 命令解码/提交): ${fmtMs(gpu3D.gpuThreadBusy)} (${pct(gpu3D.gpuThreadBusy, spanUs)} of 跨度, GPUTask ${gpu3D.gpuTaskCount} 次)`
     );
     if (gpu3D.drawSubmissionUs > 0) {
+      const denom = cpuActiveUs > 0 ? cpuActiveUs : spanUs;
       line(
-        `  3D 绘制提交 / 场景遍历 (drawCalls/renderBufferDirect 含子调用): ${fmtMs(gpu3D.drawSubmissionUs)} (${pct(gpu3D.drawSubmissionUs, fullCpuAgg.activeUs)} of JS 活跃)`
+        `  3D 绘制提交 / 场景遍历 (drawCalls/renderBufferDirect 含子调用): ${fmtMs(gpu3D.drawSubmissionUs)} (${pct(gpu3D.drawSubmissionUs, denom)})`
       );
     }
     if (gpu3D.totalShaderUs > 0) {
@@ -1193,7 +1478,9 @@ export function formatReport(res, file, top = 15) {
       );
     }
     if (gpu3D.gpuSyncStallUs > 0) {
-      line(`  CPU-GPU 同步等待 (readPixels/getError/finish): ${fmtMs(gpu3D.gpuSyncStallUs)} ⚠ 引发管线停顿(Pipeline Stall)`);
+      line(
+        `  CPU-GPU 同步等待 (readPixels/WaitForCmd/Finish): ${fmtMs(gpu3D.gpuSyncStallUs)} ⚠ 引发管线停顿(Pipeline Stall)`
+      );
     }
     if (gpu3D.raycastUs > 0) {
       line(
@@ -1242,8 +1529,9 @@ export function formatReport(res, file, top = 15) {
   if (counters.gpuMem.start !== null) {
     const gpuDelta = counters.gpuMem.end - counters.gpuMem.start;
     const gpuSign = gpuDelta >= 0 ? '+' : '';
+    const srcLabel = counters.gpuMem.source ? ` [${counters.gpuMem.source}]` : '';
     line(
-      `  GPU 显存: 起点 ${fmtMB(counters.gpuMem.start)} → 峰值 ${fmtMB(counters.gpuMem.max)} → 终点 ${fmtMB(counters.gpuMem.end)} (${gpuSign}${fmtMB(gpuDelta)})`
+      `  GPU 显存${srcLabel}: 起点 ${fmtMB(counters.gpuMem.start)} → 峰值 ${fmtMB(counters.gpuMem.max)} → 终点 ${fmtMB(counters.gpuMem.end)} (${gpuSign}${fmtMB(gpuDelta)})`
     );
   }
 
@@ -1255,12 +1543,14 @@ export function formatReport(res, file, top = 15) {
         ? ' ← 主线程'
         : t.tk === res.gpuTk
           ? ' (GPU 进程主线程)'
-          : /Worker|DedicatedWorker/i.test(t.name)
+          : /^(DedicatedWorker|ServiceWorker|SharedWorker|WorkerThread|AudioWorklet)/i.test(t.name)
             ? ' (worker)'
             : '';
     line(`  tid ${String(t.tid).padStart(7)}  ${pct(t.busyUs, spanUs).padStart(6)}  ${t.name}${mark}`);
   }
-  const workerThreads = threads.filter((t) => t.tk !== res.mainTk && /Worker/i.test(t.name));
+  const workerThreads = threads.filter(
+    (t) => t.tk !== res.mainTk && /^(DedicatedWorker|ServiceWorker|SharedWorker|WorkerThread|AudioWorklet)/i.test(t.name)
+  );
   const workerBusy = workerThreads.reduce((s, t) => s + t.busyUs, 0);
   if (
     workerThreads.length > 0 &&
@@ -1277,22 +1567,17 @@ export function formatReport(res, file, top = 15) {
     if (windowDrill.xEvents.length) {
       line(`  -- 主线程 X 事件 Top ${Math.min(top, windowDrill.xEvents.length)} --`);
       for (const ev of windowDrill.xEvents) {
-        const data = ev.args?.data || {};
-        const label = data.functionName
-          ? `${data.functionName}${data.url ? ' @' + shortUrl(data.url) : ''}`
-          : ev.name;
-        line(`  ${fmtMs(ev.dur).padStart(9)}  [${categoryOf(ev.name)}]  ${label}  @+${fmtMs(ev.ts - traceMin)}`);
+        line(`  ${fmtMs(ev.dur).padStart(9)}  [${ev.cat}]  ${ev.label}  @+${ev.offsetMs.toFixed(1)}ms`);
       }
     } else {
       line('  (该时间窗主线程无 X 事件)');
     }
 
-    if (windowDrill.cpuAgg) {
-      const winHot = [...windowDrill.cpuAgg.byFn.entries()].sort((a, b) => b[1] - a[1]).slice(0, top);
-      if (winHot.length) {
-        line(`  -- 时间窗内 JS 采样 self-time 热点 (活跃 ${fmtMs(windowDrill.cpuAgg.activeUs)}) --`);
-        for (const [k, v] of winHot) {
-          line(`  ${fmtMs(v).padStart(9)}  ${pct(v, windowDrill.cpuAgg.activeUs).padStart(6)}  ${k}`);
+    if (hasCpuProfile) {
+      if (windowDrill.cpuHotspots.length) {
+        line(`  -- 时间窗内 JS 采样 self-time 热点 (活跃 ${fmtMs(windowDrill.cpuActiveUs)}) --`);
+        for (const item of windowDrill.cpuHotspots) {
+          line(`  ${fmtMs(item.us).padStart(9)}  ${(item.pct.toFixed(1) + '%').padStart(6)}  ${item.name}`);
         }
       } else {
         line('  (该时间窗内无非空 JS CPU 采样)');
@@ -1311,7 +1596,7 @@ export function formatReport(res, file, top = 15) {
   const scriptRatio = (catTotals.Scripting || 0) / spanUs;
   if (scriptRatio > 0.5) {
     recs.push(
-      `主线程 Scripting 占比 ${pct(catTotals.Scripting, spanUs)} → CPU-bound。优先优化上方 JS self-time 第一热点;纯计算/解压/编解码挪进 Web Worker,或用 scheduler.yield() 分片让出主线程。`
+      `主线程 Scripting 占比 ${pct(catTotals.Scripting, spanUs)} → CPU-bound(或被同步 GPU 调用阻塞)。优先优化上方 JS self-time 第一热点;纯计算/解压/编解码挪进 Web Worker,或用 scheduler.yield() 分片让出主线程。`
     );
   }
   if (rafStats.count >= 5 && rafStats.p95Us > frameBudgetUs) {
@@ -1336,7 +1621,7 @@ export function formatReport(res, file, top = 15) {
   }
   if (gpu3D.gpuSyncStallUs > 5000) {
     recs.push(
-      `检测到 CPU-GPU 同步等待(readPixels/getError/finish)耗时 ${fmtMs(gpu3D.gpuSyncStallUs)} → 强制刷新命令缓冲并阻塞并行管线。改法:移除渲染循环内的 getError/readPixels;必须读回像素时改用 WebGL2 异步 PBO + fenceSync 或 WebGPU mapAsync。`
+      `检测到 CPU-GPU 同步等待(readPixels/WaitForCmd/Finish)耗时 ${fmtMs(gpu3D.gpuSyncStallUs)} → 强制刷新命令缓冲并阻塞并行管线。改法:移除渲染循环内的 getError/readPixels;必须读回像素时改用 WebGL2 异步 PBO + fenceSync 或 WebGPU mapAsync。`
     );
   }
   if (gpu3D.raycastUs > frameBudgetUs) {
@@ -1354,7 +1639,7 @@ export function formatReport(res, file, top = 15) {
     const sMs = Math.max(0, Math.floor((lt.ts - traceMin) / 1000));
     const eMs = Math.ceil((lt.ts - traceMin + lt.dur) / 1000);
     recs.push(
-      `最长任务 ${fmtMs(lt.dur)} @+${fmtMs(lt.ts - traceMin)} 超过 100ms → 运行 --window ${sMs}-${eMs} 钻取该时间窗内的 JS 采样热点函数,拆分或延后该任务。`
+      `最长任务 ${fmtMs(lt.dur)} (${lt.chain || lt.name}) @+${fmtMs(lt.ts - traceMin)} 超过 100ms → 运行 --window ${sMs}-${eMs} 钻取该时间窗内的 JS 采样热点函数,拆分或延后该任务。`
     );
   }
   if (gcStats.totalGcUs / spanUs > 0.1) {
@@ -1373,7 +1658,7 @@ export function formatReport(res, file, top = 15) {
   }
   if (webVitals.clsScore > 0.1) {
     recs.push(
-      `CLS 累计达 ${webVitals.clsScore.toFixed(3)} (>0.1) → 排查无宽高占位的异步图片/Canvas 容器、晚到字体或顶部动态插入内容。`
+      `CLS (最大会话窗口) 达 ${webVitals.clsScore.toFixed(3)} (>0.1) → 排查无宽高占位的异步图片/Canvas 容器、晚到字体或动态插入内容。`
     );
   }
   if (frameStats.count && frameStats.longFramesBudget > frameStats.count * 0.1 && !recs.length) {
@@ -1393,63 +1678,79 @@ export function formatReport(res, file, top = 15) {
   return out.join('\n');
 }
 
+// 对比报告:支持绝对值与占跨度比例归一化对比,并设置 ±5% 噪声带避免录制时长差异导致误判
 export function formatCompareReport(beforeRes, afterRes, beforeFile, afterFile) {
   const out = [];
   const line = (s) => out.push(s);
-  const deltaStr = (b, a, unitFn = fmtMs, lowerIsBetter = true) => {
-    if (b == null || a == null) return '—';
-    const diff = a - b;
-    const sign = diff > 0 ? '+' : diff < 0 ? '-' : '';
-    const pctDelta = b !== 0 ? ` (${diff >= 0 ? '+' : ''}${((diff / b) * 100).toFixed(1)}%)` : '';
-    const tag =
-      Math.abs(diff) < 1e-6
-        ? ''
-        : (diff < 0 && lowerIsBetter) || (diff > 0 && !lowerIsBetter)
-          ? ' ✅ 改善'
-          : ' ⚠ 退化';
-    return `${unitFn(b)} → ${unitFn(a)} (${sign}${unitFn(Math.abs(diff))}${pctDelta})${tag}`;
+  const NOISE_BAND = 0.05; // 5% 噪声带
+
+  const evalTag = (relChange, lowerIsBetter = true) => {
+    if (!Number.isFinite(relChange) || Math.abs(relChange) < NOISE_BAND) return ' ≈ 持平(±5%内)';
+    const improved = lowerIsBetter ? relChange < 0 : relChange > 0;
+    return improved ? ' ✅ 改善' : ' ⚠ 退化';
   };
 
-  line('='.repeat(74));
-  line('Trace 前后对比 (Before vs After)');
+  const deltaAbsolute = (b, a, unitFn = fmtMs, lowerIsBetter = true) => {
+    if (b == null || a == null) return '—';
+    if (b === 0 && a === 0) return `${unitFn(0)} → ${unitFn(0)} (无变化)`;
+    const diff = a - b;
+    const sign = diff > 0 ? '+' : diff < 0 ? '-' : '';
+    const rel = b !== 0 ? diff / b : a > 0 ? 1 : 0;
+    const pctStr = b !== 0 ? ` (${diff >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%)` : '';
+    return `${unitFn(b)} → ${unitFn(a)} (${sign}${unitFn(Math.abs(diff))}${pctStr})${evalTag(rel, lowerIsBetter)}`;
+  };
+
+  // 对受录制时长影响的累计型耗时,同时对比「占录制跨度百分比」并据此判定改善/退化
+  const deltaSpanNormalized = (bUs, aUs) => {
+    const bRate = beforeRes.spanUs > 0 ? bUs / beforeRes.spanUs : 0;
+    const aRate = afterRes.spanUs > 0 ? aUs / afterRes.spanUs : 0;
+    if (bUs === 0 && aUs === 0) return `0.0ms (0.0%) → 0.0ms (0.0%)`;
+    const rel = bRate > 0 ? (aRate - bRate) / bRate : aRate > 0 ? 1 : 0;
+    const pctStr = bRate > 0 ? ` (占比变化 ${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%)` : '';
+    return `${fmtMs(bUs)} (${(bRate * 100).toFixed(1)}%) → ${fmtMs(aUs)} (${(aRate * 100).toFixed(1)}%)${pctStr}${evalTag(rel, true)}`;
+  };
+
+  line('='.repeat(78));
+  line('Trace 前后对比 (Before vs After, 累计耗时按录制跨度归一化判定, 噪声带 ±5%)');
   line(`  改前 (Before): ${beforeFile} (跨度 ${fmtMs(beforeRes.spanUs)})`);
   line(`  改后 (After) : ${afterFile} (跨度 ${fmtMs(afterRes.spanUs)})`);
-  line('='.repeat(74));
+  line('='.repeat(78));
 
   line('\n[核心指标对比]');
-  line(`  主线程忙碌合计 : ${deltaStr(beforeRes.busyMain, afterRes.busyMain)}`);
-  line(`  Scripting 耗时 : ${deltaStr(beforeRes.catTotals.Scripting, afterRes.catTotals.Scripting)}`);
-  line(`  Rendering 耗时 : ${deltaStr(beforeRes.catTotals.Rendering, afterRes.catTotals.Rendering)}`);
-  line(`  Painting 耗时  : ${deltaStr(beforeRes.catTotals.Painting, afterRes.catTotals.Painting)}`);
-  line(`  GC 总耗时      : ${deltaStr(beforeRes.gcStats.totalGcUs, afterRes.gcStats.totalGcUs)}`);
+  line(`  主线程忙碌占比 : ${deltaSpanNormalized(beforeRes.busyMain, afterRes.busyMain)}`);
+  line(`  Scripting 占比 : ${deltaSpanNormalized(beforeRes.catTotals.Scripting, afterRes.catTotals.Scripting)}`);
+  line(`  Rendering 占比 : ${deltaSpanNormalized(beforeRes.catTotals.Rendering, afterRes.catTotals.Rendering)}`);
+  line(`  Painting 占比  : ${deltaSpanNormalized(beforeRes.catTotals.Painting, afterRes.catTotals.Painting)}`);
+  line(`  GC 耗时占比    : ${deltaSpanNormalized(beforeRes.gcStats.totalGcUs, afterRes.gcStats.totalGcUs)}`);
   line(
-    `  Long Tasks 数  : ${deltaStr(beforeRes.longTasks.length, afterRes.longTasks.length, (v) => `${v}个`)}`
+    `  Long Tasks 数  : ${deltaAbsolute(beforeRes.longTasks.length, afterRes.longTasks.length, (v) => `${v}个`)}`
   );
   line(
-    `  最长单任务     : ${deltaStr(beforeRes.longTasks[0]?.dur || 0, afterRes.longTasks[0]?.dur || 0)}`
+    `  最长单任务     : ${deltaAbsolute(beforeRes.longTasks[0]?.dur || 0, afterRes.longTasks[0]?.dur || 0)}`
   );
   if (beforeRes.rafStats.count > 0 || afterRes.rafStats.count > 0) {
-    line(`  rAF P95 帧耗时 : ${deltaStr(beforeRes.rafStats.p95Us, afterRes.rafStats.p95Us)}`);
+    line(`  rAF P95 帧耗时 : ${deltaAbsolute(beforeRes.rafStats.p95Us, afterRes.rafStats.p95Us)}`);
   }
   if (beforeRes.frameStats.estFps != null && afterRes.frameStats.estFps != null) {
     line(
-      `  估算均值 FPS   : ${deltaStr(beforeRes.frameStats.estFps, afterRes.frameStats.estFps, (v) => `${v}fps`, false)}`
+      `  估算均值 FPS   : ${deltaAbsolute(beforeRes.frameStats.estFps, afterRes.frameStats.estFps, (v) => `${v}fps`, false)}`
     );
-    line(`  P95 帧间隔     : ${deltaStr(beforeRes.frameStats.p95Interval, afterRes.frameStats.p95Interval)}`);
+    line(`  P95 帧间隔     : ${deltaAbsolute(beforeRes.frameStats.p95Interval, afterRes.frameStats.p95Interval)}`);
   }
   if (beforeRes.gpu3D.hasHeavyGpuOrDecode || afterRes.gpu3D.hasHeavyGpuOrDecode) {
-    line(`  CrGpuMain 耗时 : ${deltaStr(beforeRes.gpu3D.gpuThreadBusy, afterRes.gpu3D.gpuThreadBusy)}`);
-    line(`  3D 绘制提交    : ${deltaStr(beforeRes.gpu3D.drawSubmissionUs, afterRes.gpu3D.drawSubmissionUs)}`);
-    line(`  Shader 编译    : ${deltaStr(beforeRes.gpu3D.totalShaderUs, afterRes.gpu3D.totalShaderUs)}`);
-    line(`  Raycaster 拾取 : ${deltaStr(beforeRes.gpu3D.raycastUs, afterRes.gpu3D.raycastUs)}`);
+    line(`  CrGpuMain 占比 : ${deltaSpanNormalized(beforeRes.gpu3D.gpuThreadBusy, afterRes.gpu3D.gpuThreadBusy)}`);
+    line(`  3D 绘制提交    : ${deltaSpanNormalized(beforeRes.gpu3D.drawSubmissionUs, afterRes.gpu3D.drawSubmissionUs)}`);
+    line(`  CPU-GPU 同步等 : ${deltaSpanNormalized(beforeRes.gpu3D.gpuSyncStallUs, afterRes.gpu3D.gpuSyncStallUs)}`);
+    line(`  Shader 编译    : ${deltaAbsolute(beforeRes.gpu3D.totalShaderUs, afterRes.gpu3D.totalShaderUs)}`);
+    line(`  Raycaster 拾取 : ${deltaSpanNormalized(beforeRes.gpu3D.raycastUs, afterRes.gpu3D.raycastUs)}`);
   }
   if (beforeRes.counters.heap.max > 0 && afterRes.counters.heap.max > 0) {
-    line(`  JS Heap 峰值   : ${deltaStr(beforeRes.counters.heap.max, afterRes.counters.heap.max, fmtMB)}`);
+    line(`  JS Heap 峰值   : ${deltaAbsolute(beforeRes.counters.heap.max, afterRes.counters.heap.max, fmtMB)}`);
   }
   if (beforeRes.counters.gpuMem.max > 0 && afterRes.counters.gpuMem.max > 0) {
-    line(`  GPU 显存峰值   : ${deltaStr(beforeRes.counters.gpuMem.max, afterRes.counters.gpuMem.max, fmtMB)}`);
+    line(`  GPU 显存峰值   : ${deltaAbsolute(beforeRes.counters.gpuMem.max, afterRes.counters.gpuMem.max, fmtMB)}`);
   }
-  line('='.repeat(74));
+  line('='.repeat(78));
   return out.join('\n');
 }
 
@@ -1483,7 +1784,6 @@ function main() {
   }
 }
 
-// 仅在直接作为 CLI 脚本执行时运行 main()
 const isMain =
   process.argv[1] &&
   (process.argv[1].endsWith('analyze-trace.mjs') || process.argv[1].endsWith('analyze-trace'));

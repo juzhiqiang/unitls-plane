@@ -658,6 +658,7 @@ export function analyzeTraceEvents(rawEvents, options = {}) {
       }
       if (fn === '(garbage collector)') {
         gcSampleUs += s.dt;
+        continue;
       }
 
       const sig = find3DSignalInCallChain(profState.nodes, s.id);
@@ -1661,7 +1662,7 @@ export function formatReport(res, file, top = 15) {
       `CLS (最大会话窗口) 达 ${webVitals.clsScore.toFixed(3)} (>0.1) → 排查无宽高占位的异步图片/Canvas 容器、晚到字体或动态插入内容。`
     );
   }
-  if (frameStats.count && frameStats.longFramesBudget > frameStats.count * 0.1 && !recs.length) {
+  if (frameStats.count >= 5 && frameStats.longFramesBudget > frameStats.count * 0.1 && !recs.length) {
     recs.push(
       `掉帧 ${frameStats.longFramesBudget}/${frameStats.count} (${pct(frameStats.longFramesBudget, frameStats.count)}) → 建议用 --window 钻取掉帧密集时间段,或结合 Spector.js / renderer.info 检查单帧渲染负载。`
     );
